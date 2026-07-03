@@ -107,6 +107,7 @@ import type { TaskWatchdogServiceDeps, taskWatchdogService } from "../services/t
 import { logger } from "../middleware/logger.js";
 import { conflict, forbidden, HttpError, notFound, unauthorized, unprocessable } from "../errors.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 import {
   assertNoAgentHostWorkspaceCommandMutation,
   collectIssueWorkspaceCommandPaths,
@@ -1326,7 +1327,7 @@ export function issueRoutes(
     if (req.actor.type !== "agent") return false;
     const resolution = await resolveAgentTrustForIssue({
       agentId: req.actor.agentId,
-      runId: req.actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
     }, companyId, issue);
     if (resolution?.kind === "denied") {
       throw forbidden(resolution.detail);
@@ -2058,7 +2059,7 @@ export function issueRoutes(
 
   function requireAgentRunId(req: Request, res: Response) {
     if (req.actor.type !== "agent") return null;
-    const runId = req.actor.runId?.trim();
+    const runId = getRunIdFromCorrelation(req.correlation);
     if (runId) return runId;
     res.status(401).json({ error: "Agent run id required" });
     return null;

@@ -25,6 +25,7 @@ import {
   stopRuntimeServicesForExecutionWorkspace,
 } from "../services/workspace-runtime.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 import {
   assertNoAgentHostWorkspaceCommandMutation,
   collectExecutionWorkspaceCommandPaths,

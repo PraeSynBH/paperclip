@@ -89,7 +89,7 @@ describe("agent local JWT", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
 
-    vi.setSystemTime(new Date("2026-01-01T00:00:05.000Z"));
+    vi.setSystemTime(new Date("2026-01-01T00:01:05.000Z"));
     expect(verifyLocalAgentJwt(token!)).toBeNull();
   });
 
@@ -217,5 +217,86 @@ describe("agent local JWT", () => {
       adapter_type: "claude_local",
       run_id: "run-1",
     });
+  });
+
+  it("accepts tokens within clock skew window after expiry", () => {
+    process.env[ttlEnv] = "60";
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
+
+    // 61 seconds after creation = 1s past expiry, but within 60s clock skew
+    vi.setSystemTime(new Date("2026-01-01T00:01:01.000Z"));
+    expect(verifyLocalAgentJwt(token!)).not.toBeNull();
+  });
+
+  it("rejects tokens beyond clock skew window after expiry", () => {
+    process.env[ttlEnv] = "60";
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
+
+    // 121 seconds after creation = 61s past expiry, beyond 60s clock skew
+    vi.setSystemTime(new Date("2026-01-01T00:02:01.000Z"));
+    expect(verifyLocalAgentJwt(token!)).toBeNull();
+  });
+
+  it("rejects tokens before nbf minus clock skew", () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    // Hand-craft a token with an nbf claim 120s in the future
+    const now = Math.floor(vi.getMockedSystemTime()!.getTime() / 1000);
+    const header = { alg: "HS256", typ: "JWT" };
+    const claims = {
+      sub: "agent-nbf",
+      company_id: "company-1",
+      adapter_type: "claude_local",
+      run_id: "run-nbf",
+      iat: now,
+      exp: now + 3600,
+      nbf: now + 120,
+      iss: "paperclip",
+      aud: "paperclip-api",
+    };
+    const headerB64 = Buffer.from(JSON.stringify(header), "utf8").toString("base64url");
+    const claimsB64 = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
+    const signingInput = `${headerB64}.${claimsB64}`;
+    const { createHmac } = require("node:crypto");
+    const signingKey = createHmac("sha256", process.env[secretEnv]!).update(`jwt:company-1`).digest("hex");
+    const signature = createHmac("sha256", signingKey).update(signingInput).digest("base64url");
+    const token = `${signingInput}.${signature}`;
+
+    // 121s before nbf = 1s beyond 60s clock skew window
+    vi.setSystemTime(new Date("2026-01-01T00:00:57.000Z"));
+    expect(verifyLocalAgentJwt(token)).toBeNull();
+  });
+
+  it("accepts tokens within nbf clock skew window", () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    const now = Math.floor(vi.getMockedSystemTime()!.getTime() / 1000);
+    const header = { alg: "HS256", typ: "JWT" };
+    const claims = {
+      sub: "agent-nbf",
+      company_id: "company-1",
+      adapter_type: "claude_local",
+      run_id: "run-nbf",
+      iat: now,
+      exp: now + 3600,
+      nbf: now + 120,
+      iss: "paperclip",
+      aud: "paperclip-api",
+    };
+    const headerB64 = Buffer.from(JSON.stringify(header), "utf8").toString("base64url");
+    const claimsB64 = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
+    const signingInput = `${headerB64}.${claimsB64}`;
+    const { createHmac } = require("node:crypto");
+    const signingKey = createHmac("sha256", process.env[secretEnv]!).update(`jwt:company-1`).digest("hex");
+    const signature = createHmac("sha256", signingKey).update(signingInput).digest("base64url");
+    const token = `${signingInput}.${signature}`;
+
+    // 61s after issue = 59s before nbf, within 60s clock skew
+    vi.setSystemTime(new Date("2026-01-01T00:01:01.000Z"));
+    const verified = verifyLocalAgentJwt(token);
+    expect(verified).not.toBeNull();
+    expect(verified!.nbf).toBe(now + 120);
   });
 });

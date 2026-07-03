@@ -19,6 +19,7 @@ import {
   secretService,
 } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 import { redactEventPayload } from "../redaction.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
 
@@ -75,7 +76,7 @@ export function approvalRoutes(
 
   async function assertApprovalMutationAllowedByRunContext(req: Request, res: any, companyId: string) {
     if (req.actor.type !== "agent") return true;
-    const runId = req.actor.runId?.trim();
+    const runId = getRunIdFromCorrelation(req.correlation);
     if (!runId || !req.actor.agentId) return true;
 
     const run = await db

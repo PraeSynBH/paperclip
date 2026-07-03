@@ -9,6 +9,8 @@ import type { BetterAuthSessionResult } from "../auth/better-auth.js";
 import { logger } from "./logger.js";
 import { boardAuthService } from "../services/board-auth.js";
 import { ensureHumanRoleDefaultGrants } from "../services/principal-access-compatibility.js";
+import type { AuthContext } from "../auth-context.js";
+import { asAuthRunId } from "../auth-context.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -31,20 +33,15 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
             userEmail: null,
             isInstanceAdmin: true,
             source: "local_implicit",
-          }
-        : { type: "none", source: "none" };
-
-    const runIdHeader = req.header("x-paperclip-run-id");
+          } satisfies AuthContext
+        : { type: "none", source: "none" } satisfies AuthContext;
 
     const authHeader = req.header("authorization");
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       if (opts.deploymentMode === "authenticated" && opts.resolveSession) {
         const cloudTenantActor = await resolveCloudTenantActor(db, req);
         if (cloudTenantActor) {
-          req.actor = {
-            ...cloudTenantActor,
-            runId: runIdHeader ?? undefined,
-          };
+          req.actor = { ...cloudTenantActor };
           next();
           return;
         }
@@ -89,14 +86,12 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
             companyIds: memberships.map((row) => row.companyId),
             memberships,
             isInstanceAdmin: Boolean(roleRow),
-            runId: runIdHeader ?? undefined,
             source: "session",
           };
           next();
           return;
         }
       }
-      if (runIdHeader) req.actor.runId = runIdHeader;
       next();
       return;
     }
@@ -121,7 +116,6 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
           memberships: access.memberships,
           isInstanceAdmin: access.isInstanceAdmin,
           keyId: boardKey.id,
-          runId: runIdHeader || undefined,
           source: "board_key",
         };
         next();
@@ -159,12 +153,16 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
         return;
       }
 
+      req.correlation = {
+        ...req.correlation,
+        clientCorrelationRunId: asAuthRunId(claims.run_id),
+      };
+
       req.actor = {
         type: "agent",
         agentId: claims.sub,
         companyId: claims.company_id,
         keyId: undefined,
-        runId: runIdHeader || claims.run_id || undefined,
         source: "agent_jwt",
       };
       next();
@@ -193,7 +191,6 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
       companyId: key.companyId,
       keyId: key.id,
       keyScope: normalizeAgentApiKeyScope(key.scopeConfig),
-      runId: runIdHeader || undefined,
       source: "agent_key",
     };
 

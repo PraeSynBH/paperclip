@@ -85,6 +85,7 @@ import {
   PLUGIN_SECRET_REFS_DISABLED_MESSAGE,
 } from "../services/plugin-secrets-handler.js";
 import { badRequest, forbidden, notFound, unauthorized, unprocessable } from "../errors.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 
 /** UI slot declaration extracted from plugin manifest */
 type PluginUiSlotDeclaration = NonNullable<NonNullable<PaperclipPluginManifestV1["ui"]>["slots"]>[number];
@@ -645,7 +646,7 @@ export function pluginRoutes(
     if (policy === "required-for-agent-in-progress") {
       if (issue.status !== "in_progress" || issue.assigneeAgentId !== req.actor.agentId) return;
     }
-    const runId = req.actor.runId?.trim();
+    const runId = getRunIdFromCorrelation(req.correlation)?.trim();
     if (!runId) {
       throw unauthorized("Agent run id required");
     }
@@ -717,7 +718,7 @@ export function pluginRoutes(
         type: "agent",
         userId: null,
         agentId: req.actor.agentId ?? null,
-        runId: req.actor.runId ?? null,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         companyId: scopedCompanyId,
       };
     }
@@ -726,7 +727,7 @@ export function pluginRoutes(
         type: "user",
         userId: req.actor.userId ?? null,
         agentId: null,
-        runId: req.actor.runId ?? null,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         companyId: scopedCompanyId,
       };
     }
@@ -734,7 +735,7 @@ export function pluginRoutes(
       type: "system",
       userId: null,
       agentId: null,
-      runId: req.actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       companyId: scopedCompanyId,
     };
   }

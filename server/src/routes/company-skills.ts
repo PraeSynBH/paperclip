@@ -26,6 +26,7 @@ import {
 } from "../services/skills-catalog.js";
 import { forbidden } from "../errors.js";
 import { assertAuthenticated, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 import { getTelemetryClient } from "../telemetry.js";
 
 type SkillTelemetryInput = {

@@ -4,6 +4,7 @@ import { upsertSidebarOrderPreferenceSchema } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { logActivity, sidebarPreferenceService } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 
 function requireBoardUserId(req: Request, res: Response): string | null {
   assertBoard(req);

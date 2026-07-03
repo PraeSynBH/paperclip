@@ -12,12 +12,14 @@ export interface LocalAgentJwtClaims {
   run_id: string;
   iat: number;
   exp: number;
+  nbf?: number;
   iss?: string;
   aud?: string;
   jti?: string;
 }
 
 const JWT_ALGORITHM = "HS256";
+const CLOCK_SKEW_SECONDS = 60;
 
 function parseNumber(value: string | undefined, fallback: number) {
   const parsed = Number(value);
@@ -166,7 +168,10 @@ export function verifyLocalAgentJwt(token: string): LocalAgentJwtClaims | null {
   const companyId = claimedCompanyId;
 
   const now = Math.floor(Date.now() / 1000);
-  if (exp < now) return null;
+  if (exp < now - CLOCK_SKEW_SECONDS) return null;
+
+  const nbf = typeof claims.nbf === "number" ? claims.nbf : undefined;
+  if (nbf !== undefined && now + CLOCK_SKEW_SECONDS < nbf) return null;
 
   const issuer = typeof claims.iss === "string" ? claims.iss : undefined;
   const audience = typeof claims.aud === "string" ? claims.aud : undefined;
@@ -180,6 +185,7 @@ export function verifyLocalAgentJwt(token: string): LocalAgentJwtClaims | null {
     run_id: runId,
     iat,
     exp,
+    ...(nbf !== undefined ? { nbf } : {}),
     ...(issuer ? { iss: issuer } : {}),
     ...(audience ? { aud: audience } : {}),
     jti: typeof claims.jti === "string" ? claims.jti : undefined,

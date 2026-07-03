@@ -283,6 +283,7 @@ export function fileResourceRoutes(db: Db, opts: {
     projectId?: string | null;
     workspaceId?: string | null;
     error: unknown;
+    runId: string | null;
     action?: "issue.file_resource_content_denied" | "issue.file_resource_resolve_denied" | "issue.file_resource_download_denied";
   }) {
     await logActivity(db, {
@@ -293,7 +294,7 @@ export function fileResourceRoutes(db: Db, opts: {
       entityType: "issue",
       entityId: input.issueId,
       agentId: input.actor.agentId,
-      runId: getRunIdFromCorrelation(req.correlation),
+      runId: input.runId,
       details: activityDetails({
         outcome: "denied",
         displayPath: input.displayPath,
@@ -311,6 +312,7 @@ export function fileResourceRoutes(db: Db, opts: {
     query: { workspace: "auto" | "execution" | "project"; mode: "all" | "recent" | "changed" };
     target?: { projectId: string | null; workspaceId: string | null };
     error: unknown;
+    runId: string | null;
   }) {
     await logActivity(db, {
       companyId: input.companyId,
@@ -320,7 +322,7 @@ export function fileResourceRoutes(db: Db, opts: {
       entityType: "issue",
       entityId: input.issueId,
       agentId: input.actor.agentId,
-      runId: getRunIdFromCorrelation(req.correlation),
+      runId: input.runId,
       details: listActivityDetails({
         outcome: "denied",
         workspaceSelector: input.query.workspace,
@@ -346,6 +348,7 @@ export function fileResourceRoutes(db: Db, opts: {
           query: auditQuery,
           target: auditTarget,
           error,
+          runId: getRunIdFromCorrelation(req.correlation) ?? null,
         });
       }
       throw error;
@@ -362,6 +365,7 @@ export function fileResourceRoutes(db: Db, opts: {
         query: auditQuery,
         target: auditTarget,
         error,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     }
@@ -377,6 +381,7 @@ export function fileResourceRoutes(db: Db, opts: {
         query: auditQuery,
         target: auditTarget,
         error,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     }
@@ -392,6 +397,7 @@ export function fileResourceRoutes(db: Db, opts: {
         query,
         target: { projectId: query.projectId, workspaceId: query.workspaceId },
         error,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     }
@@ -430,6 +436,7 @@ export function fileResourceRoutes(db: Db, opts: {
         query,
         target: { projectId: query.projectId, workspaceId: query.workspaceId },
         error,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     } finally {
@@ -452,6 +459,7 @@ export function fileResourceRoutes(db: Db, opts: {
           workspaceId: auditTarget.workspaceId,
           error,
           action: "issue.file_resource_resolve_denied",
+          runId: getRunIdFromCorrelation(req.correlation) ?? null,
         });
       }
       throw error;
@@ -470,6 +478,7 @@ export function fileResourceRoutes(db: Db, opts: {
         workspaceId: auditTarget.workspaceId,
         error,
         action: "issue.file_resource_resolve_denied",
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     }
@@ -486,6 +495,7 @@ export function fileResourceRoutes(db: Db, opts: {
         workspaceId: auditTarget.workspaceId,
         error,
         action: "issue.file_resource_resolve_denied",
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     }
@@ -502,6 +512,7 @@ export function fileResourceRoutes(db: Db, opts: {
         workspaceId: query.workspaceId,
         error,
         action: "issue.file_resource_resolve_denied",
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     }
@@ -539,6 +550,7 @@ export function fileResourceRoutes(db: Db, opts: {
         workspaceId: query.workspaceId,
         error,
         action: "issue.file_resource_resolve_denied",
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     } finally {
@@ -560,6 +572,7 @@ export function fileResourceRoutes(db: Db, opts: {
           projectId: auditTarget.projectId,
           workspaceId: auditTarget.workspaceId,
           error,
+          runId: getRunIdFromCorrelation(req.correlation) ?? null,
         });
       }
       throw error;
@@ -577,6 +590,7 @@ export function fileResourceRoutes(db: Db, opts: {
         projectId: auditTarget.projectId,
         workspaceId: auditTarget.workspaceId,
         error,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     }
@@ -592,6 +606,7 @@ export function fileResourceRoutes(db: Db, opts: {
         projectId: auditTarget.projectId,
         workspaceId: auditTarget.workspaceId,
         error,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     }
@@ -607,6 +622,7 @@ export function fileResourceRoutes(db: Db, opts: {
         projectId: query.projectId,
         workspaceId: query.workspaceId,
         error,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       throw error;
     }
@@ -625,6 +641,7 @@ export function fileResourceRoutes(db: Db, opts: {
             workspaceId: query.workspaceId,
             error,
             action: "issue.file_resource_download_denied",
+            runId: getRunIdFromCorrelation(req.correlation) ?? null,
           });
           throw error;
         }
@@ -673,6 +690,7 @@ export function fileResourceRoutes(db: Db, opts: {
           projectId: query.projectId,
           workspaceId: query.workspaceId,
           error,
+          runId: getRunIdFromCorrelation(req.correlation) ?? null,
         });
         throw error;
       }

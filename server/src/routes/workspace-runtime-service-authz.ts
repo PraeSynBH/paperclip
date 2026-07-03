@@ -5,6 +5,7 @@ import { isUuidLike } from "@paperclipai/shared";
 import type { Request } from "express";
 import { forbidden } from "../errors.js";
 import { assertCompanyAccess } from "./authz.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 import { parseProjectExecutionWorkspacePolicy } from "../services/execution-workspace-policy.js";
 import { isLowTrustRuntimeManagementAllowed } from "../services/low-trust-runtime-containment.js";
 import { resolveCoreTrustPreset, type TrustPresetResolution } from "../services/trust-preset-resolver.js";
@@ -88,7 +89,8 @@ async function assertAgentCanManageRuntimeServicesForWorkspace(
     throw forbidden("Agent key cannot access another company");
   }
 
-  const actorRun = req.actor.runId
+  const runId = getRunIdFromCorrelation(req.correlation);
+  const actorRun = runId
     ? await db
         .select({
           companyId: heartbeatRuns.companyId,
@@ -97,7 +99,7 @@ async function assertAgentCanManageRuntimeServicesForWorkspace(
         })
         .from(heartbeatRuns)
         .where(and(
-          eq(heartbeatRuns.id, req.actor.runId),
+          eq(heartbeatRuns.id, runId),
           eq(heartbeatRuns.companyId, input.companyId),
           eq(heartbeatRuns.agentId, actorAgent.id),
         ))

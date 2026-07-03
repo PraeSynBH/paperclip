@@ -1,5 +1,6 @@
 import type { Request } from "express";
 import { forbidden, unauthorized } from "../errors.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 
 export function assertAuthenticated(req: Request) {
   if (req.actor.type === "none") {
@@ -97,7 +98,7 @@ export function getActorInfo(req: Request): (
       actorType: "agent" as const,
       actorId: req.actor.agentId ?? "unknown-agent",
       agentId: req.actor.agentId ?? null,
-      runId: req.actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       actorSource,
     };
   }
@@ -113,7 +114,7 @@ export function getActorInfo(req: Request): (
     actorType: "user" as const,
     actorId: req.actor.userId ?? "board",
     agentId: null,
-    runId: req.actor.runId ?? null,
+    runId: getRunIdFromCorrelation(req.correlation) ?? null,
     actorSource,
   };
 }

@@ -3,6 +3,7 @@ import type { Db } from "@paperclipai/db";
 import { updateResourceMembershipSchema } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { getActorInfo } from "./authz.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 import { logActivity, resourceMembershipService } from "../services/index.js";
 
 function requireBoardUserId(req: Request, res: Response): string | null {

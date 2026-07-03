@@ -36,4 +36,15 @@ export {
 } from "./embedded-postgres-native.js";
 export { issueRelations } from "./schema/issue_relations.js";
 export { issueReferenceMentions } from "./schema/issue_reference_mentions.js";
+export { heartbeatRuns } from "./schema/heartbeat_runs.js";
+export { heartbeatRunEvents } from "./schema/heartbeat_run_events.js";
+export {
+  createHeartbeatRunValues,
+  createHeartbeatRun,
+  updateHeartbeatRunProcessMetadata,
+} from "./heartbeat.js";
+export type {
+  CreateHeartbeatRunParams,
+  UpdateHeartbeatRunProcessMetadataParams,
+} from "./heartbeat.js";
 export * from "./schema/index.js";

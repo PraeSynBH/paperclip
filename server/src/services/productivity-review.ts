@@ -38,6 +38,12 @@ const MAX_RUNS_FOR_STREAK = 100;
 const MAX_PARENT_WALK_DEPTH = 25;
 export const PRODUCTIVITY_REVIEW_REFRESH_COMMENT_PREFIX = "Productivity review evidence refreshed.";
 
+type VendorQuotaBlock = {
+  runId: string;
+  agentId: string;
+  message: string;
+};
+
 type IssueRow = typeof issues.$inferSelect;
 type AgentRow = typeof agents.$inferSelect;
 type HeartbeatRunRow = typeof heartbeatRuns.$inferSelect;
@@ -76,6 +82,7 @@ type ProductivityReviewEvidence = {
   usageSamples: Array<{ runId: string; usageJson: Record<string, unknown> | null }>;
   nextAction: string | null;
   thresholds: ProductivityReviewThresholds;
+  vendorQuotaBlock: VendorQuotaBlock | null;
   generatedAt: Date;
 };
 
@@ -127,6 +134,43 @@ function truncateInline(value: string | null | undefined, max = 260) {
   if (!value) return "";
   const compact = value.replace(/\s+/g, " ").trim();
   return compact.length <= max ? compact : `${compact.slice(0, max - 3)}...`;
+}
+
+const VENDOR_QUOTA_PATTERNS = [/key limit exceeded/i, /quota limit exceeded/i, /quota exceeded/i];
+
+function asText(value: unknown | null | undefined) {
+  if (value === null || value === undefined) return null;
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  return null;
+}
+
+function findVendorQuotaMessage(run: HeartbeatRunRow) {
+  const resultJson = run.resultJson;
+  const candidates = [
+    asText(run.error),
+    asText(run.stderrExcerpt),
+    asText(run.stdoutExcerpt),
+    asText(resultJson?.error),
+    asText(resultJson?.message),
+    asText(resultJson?.summary),
+    asText(resultJson?.result),
+  ];
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    if (VENDOR_QUOTA_PATTERNS.some((pattern) => pattern.test(candidate))) return candidate;
+  }
+  return null;
+}
+
+function findVendorQuotaBlock(runs: HeartbeatRunRow[]): VendorQuotaBlock | null {
+  for (const run of runs) {
+    const message = findVendorQuotaMessage(run);
+    if (message) {
+      return { runId: run.id, agentId: run.agentId, message };
+    }
+  }
+  return null;
 }
 
 function readPositiveInteger(value: number, fallback: number) {
@@ -475,6 +519,8 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       ? Math.max(0, now.getTime() - activeStartedAt.getTime())
       : null;
 
+    const vendorQuotaBlock = findVendorQuotaBlock(latestRuns);
+
     const noComment = noCommentStreak >= thresholds.noCommentStreakRuns;
     const longActive = elapsedMs !== null && elapsedMs >= thresholds.longActiveMs;
     const highChurn =
@@ -518,6 +564,7 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
         .map((run) => ({ runId: run.id, usageJson: run.usageJson ?? null })),
       nextAction: latestRuns.find((run) => run.nextAction)?.nextAction ?? null,
       thresholds,
+      vendorQuotaBlock,
       generatedAt: now,
     };
   }
@@ -570,7 +617,7 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
     const usage = evidence.usageSamples.length > 0
       ? evidence.usageSamples.map((sample) => `- \`${sample.runId}\`: \`${JSON.stringify(sample.usageJson).slice(0, 500)}\``).join("\n")
       : "- no usage payloads on sampled runs";
-    return [
+    const sections = [
       "Paperclip detected an unusual productivity/progression pattern on an assigned issue.",
       "",
       "## Source",
@@ -612,12 +659,25 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       "",
       usage,
       "",
+    ];
+    if (evidence.vendorQuotaBlock) {
+      sections.push(
+        "## Vendor quota hold",
+        "",
+        `- Run: ${runUiLink({ id: evidence.vendorQuotaBlock.runId, agentId: evidence.vendorQuotaBlock.agentId }, prefix)}`,
+        `- Message: ${truncateInline(evidence.vendorQuotaBlock.message, 500)}`,
+        "- Status: blocked by vendor quota; wait for Vendor Risk / Security Engineering to refresh the OpenRouter capacity before continuing.",
+        "",
+      );
+    }
+    sections.push(
       "## Manager Decision",
       "",
       "- Close as productive if this pattern is expected.",
       "- Continue with a snooze window if the current work should keep running without repeat review spam.",
       "- Request decomposition, reroute, block with an unblock owner, or stop/cancel the source work if the work is inefficient.",
-    ].join("\n");
+    );
+    return sections.join("\n");
   }
 
   function buildRefreshComment(evidence: ProductivityReviewEvidence, prefix: string) {

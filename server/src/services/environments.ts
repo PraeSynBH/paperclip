@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { environmentLeases, environments } from "@paperclipai/db";
 import {
@@ -196,40 +196,46 @@ export function environmentService(db: Db) {
     },
 
     ensureLocalEnvironment: async (_companyId?: string): Promise<Environment> => {
-      const now = new Date();
-      const row = await db
-        .insert(environments)
-        .values({
-          name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
-          description: DEFAULT_LOCAL_ENVIRONMENT_DESCRIPTION,
-          driver: "local",
-          status: "active",
-          config: {},
-          envVars: {},
-          metadata: {
-            managedByPaperclip: true,
-            defaultForInstance: true,
-          },
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing({
-          target: [environments.driver],
-          where: sql`${environments.driver} = 'local'`,
-        })
-        .returning()
-        .then((rows) => rows[0] ?? null);
-      if (row) return toEnvironment(row);
+      const readExisting = async () =>
+        db
+          .select()
+          .from(environments)
+          .where(eq(environments.driver, "local"))
+          .then((rows) => rows[0] ?? null);
 
-      const existing = await db
-        .select()
-        .from(environments)
-        .where(eq(environments.driver, "local"))
-        .then((rows) => rows[0] ?? null);
-      if (!existing) {
-        throw new Error("Failed to ensure local environment");
+      const populateValues = (timestamp: Date) => ({
+        name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
+        description: DEFAULT_LOCAL_ENVIRONMENT_DESCRIPTION,
+        driver: "local",
+        status: "active",
+        config: {},
+        envVars: {},
+        metadata: {
+          managedByPaperclip: true,
+          defaultForInstance: true,
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+
+      const now = new Date();
+      try {
+        const row = await db
+          .insert(environments)
+          .values(populateValues(now))
+          .returning()
+          .then((rows) => rows[0] ?? null);
+        if (row) return toEnvironment(row);
+      } catch (error) {
+        if (!hasConstraintName(error, "environments_local_driver_idx")) {
+          throw error;
+        }
       }
-      return toEnvironment(existing);
+
+      const existing = await readExisting();
+      if (existing) return toEnvironment(existing);
+
+      throw new Error("Failed to ensure local environment");
     },
 
     /**
@@ -284,40 +290,31 @@ export function environmentService(db: Db) {
         return toEnvironment(updated);
       }
 
-      // The partial unique index `environments_managed_sandbox_idx` enforces
-      // "at most one Paperclip-managed sandbox row per instance" at the DB
-      // level. Use ON CONFLICT DO NOTHING keyed on that index so concurrent
-      // callers can race the INSERT; losers re-read the surviving row.
-      const inserted = await db
-        .insert(environments)
-        .values({
-          name: DEFAULT_KUBERNETES_ENVIRONMENT_NAME,
-          description: DEFAULT_KUBERNETES_ENVIRONMENT_DESCRIPTION,
-          driver: "sandbox",
-          status: "active",
-          config: desiredConfig,
-          envVars: {},
-          metadata: desiredMetadata,
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing({
-          target: [environments.driver],
-          where:
-            sql`${environments.driver} = 'sandbox' AND (${environments.metadata} ->> 'managedByPaperclip')::boolean = true`,
-        })
-        .returning()
-        .then((rows) => rows[0] ?? null)
-        .catch((error) => {
-          if (
-            hasConstraintName(error, "environments_name_idx")
-            || hasConstraintName(error, "environments_managed_sandbox_idx")
-          ) {
-            return null;
-          }
+      try {
+        const inserted = await db
+          .insert(environments)
+          .values({
+            name: DEFAULT_KUBERNETES_ENVIRONMENT_NAME,
+            description: DEFAULT_KUBERNETES_ENVIRONMENT_DESCRIPTION,
+            driver: "sandbox",
+            status: "active",
+            config: desiredConfig,
+            envVars: {},
+            metadata: desiredMetadata,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning()
+          .then((rows) => rows[0] ?? null);
+        if (inserted) return toEnvironment(inserted);
+      } catch (error) {
+        if (
+          !hasConstraintName(error, "environments_name_idx")
+          && !hasConstraintName(error, "environments_managed_sandbox_idx")
+        ) {
           throw error;
-        });
-      if (inserted) return toEnvironment(inserted);
+        }
+      }
 
       const winner = await db
         .select()

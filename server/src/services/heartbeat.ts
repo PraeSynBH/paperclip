@@ -54,6 +54,8 @@ import {
   routineRuns,
   routines,
   workspaceOperations,
+  createHeartbeatRunValues,
+  updateHeartbeatRunProcessMetadata,
 } from "@paperclipai/db";
 import { conflict, HttpError, notFound } from "../errors.js";
 import { logger } from "../middleware/logger.js";
@@ -6693,24 +6695,6 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     return Number(row?.maxSeq ?? 0) + 1;
   }
 
-  async function persistRunProcessMetadata(
-    runId: string,
-    meta: { pid: number; processGroupId: number | null; startedAt: string },
-  ) {
-    const startedAt = new Date(meta.startedAt);
-    return db
-      .update(heartbeatRuns)
-      .set({
-        processPid: meta.pid,
-        processGroupId: meta.processGroupId,
-        processStartedAt: Number.isNaN(startedAt.getTime()) ? new Date() : startedAt,
-        updatedAt: new Date(),
-      })
-      .where(eq(heartbeatRuns.id, runId))
-      .returning()
-      .then((rows) => rows[0] ?? null);
-  }
-
   async function clearDetachedRunWarning(runId: string) {
     const updated = await db
       .update(heartbeatRuns)
@@ -10971,7 +10955,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             await recordCurrentHeartbeatRunRuntimeProgress(run, progress, issueId);
           },
           onSpawn: async (meta) => {
-            await persistRunProcessMetadata(run.id, {
+            await updateHeartbeatRunProcessMetadata(db, {
+              runId: run.id,
               pid: meta.pid,
               processGroupId:
                 "processGroupId" in meta && typeof meta.processGroupId === "number"
@@ -13036,17 +13021,19 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
 
         const newRun = await tx
           .insert(heartbeatRuns)
-          .values({
-            companyId: agent.companyId,
-            agentId,
-            invocationSource: source,
-            triggerDetail,
-            status: "queued",
-            wakeupRequestId: wakeupRequest.id,
-            contextSnapshot: enrichedContextSnapshot,
-            sessionIdBefore: sessionBefore,
-            continuationAttempt,
-          })
+          .values(
+            createHeartbeatRunValues({
+              companyId: agent.companyId,
+              agentId,
+              invocationSource: source,
+              triggerDetail,
+              status: "queued",
+              wakeupRequestId: wakeupRequest.id,
+              contextSnapshot: enrichedContextSnapshot,
+              sessionIdBefore: sessionBefore,
+              continuationAttempt,
+            }),
+          )
           .returning()
           .then((rows) => rows[0]);
 

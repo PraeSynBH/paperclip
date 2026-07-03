@@ -383,7 +383,7 @@ function actorForMutation(req: Request): PipelineActor {
   if (req.actor.type === "agent") {
     if (!req.actor.agentId) throw unauthorized();
     if (!getRunIdFromCorrelation(req.correlation)) throw unprocessable("Agent pipeline mutations require a run id", { code: "run_id_required" });
-    return { type: "agent", agentId: req.actor.agentId, runId: getRunIdFromCorrelation(req.correlation) };
+    return { type: "agent", agentId: req.actor.agentId, runId: getRunIdFromCorrelation(req.correlation)! };
   }
   if (req.actor.type === "board") {
     return { type: "user", userId: req.actor.userId ?? "board" };
@@ -636,7 +636,7 @@ async function resolveCasePipelineId(db: Db, input: { companyId: string; caseId:
 
 function activityActorForPipelineRoute(actor: PipelineActor) {
   if (actor.type === "agent") {
-    return { actorType: "agent" as const, actorId: actor.agentId, agentId: actor.agentId, runId: getRunIdFromCorrelation(req.correlation) };
+    return { actorType: "agent" as const, actorId: actor.agentId, agentId: actor.agentId, runId: actor.runId };
   }
   if (actor.type === "user") {
     return { actorType: "user" as const, actorId: actor.userId, agentId: null, runId: null };
@@ -670,7 +670,7 @@ async function sourceTrustForPipelineCaseDocumentWrite(
       .from(heartbeatRuns)
       .where(and(
         eq(heartbeatRuns.companyId, input.companyId),
-        eq(heartbeatRuns.id, getRunIdFromCorrelation(req.correlation)),
+        eq(heartbeatRuns.id, input.actor.runId),
         eq(heartbeatRuns.agentId, input.actor.agentId),
       ))
       .limit(1)
@@ -702,7 +702,7 @@ async function sourceTrustForPipelineCaseDocumentWrite(
       actorType: "agent",
       actorId: input.actor.agentId,
       agentId: input.actor.agentId,
-      runId: getRunIdFromCorrelation(req.correlation),
+      runId: input.actor.runId,
     },
   });
 }
@@ -729,7 +729,7 @@ async function writeRouteEvent(
   },
 ) {
   const actorPatch = input.actor.type === "agent"
-    ? { actorType: "agent", actorAgentId: input.actor.agentId, runId: getRunIdFromCorrelation(req.correlation) }
+    ? { actorType: "agent", actorAgentId: input.actor.agentId, runId: input.actor.runId }
     : input.actor.type === "user"
       ? { actorType: "user", actorUserId: input.actor.userId }
       : { actorType: "system" };

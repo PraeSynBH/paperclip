@@ -593,7 +593,7 @@ export function agentRoutes(
             contextSnapshot: heartbeatRuns.contextSnapshot,
           })
           .from(heartbeatRuns)
-          .where(and(eq(heartbeatRuns.id, getRunIdFromCorrelation(req.correlation)), eq(heartbeatRuns.companyId, agent.companyId)))
+          .where(and(eq(heartbeatRuns.id, getRunIdFromCorrelation(req.correlation)!), eq(heartbeatRuns.companyId, agent.companyId)))
           .then((rows) => rows[0] ?? null)
       : null;
     const runContext = run?.agentId === agent.id ? readObject(run.contextSnapshot) : null;
