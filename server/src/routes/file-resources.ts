@@ -292,7 +292,7 @@ export function fileResourceRoutes(db: Db, opts: {
       entityType: "issue",
       entityId: input.issueId,
       agentId: input.actor.agentId,
-      runId: input.actor.runId,
+      runId: input.getRunIdFromCorrelation(req.correlation),
       details: activityDetails({
         outcome: "denied",
         displayPath: input.displayPath,
@@ -319,7 +319,7 @@ export function fileResourceRoutes(db: Db, opts: {
       entityType: "issue",
       entityId: input.issueId,
       agentId: input.actor.agentId,
-      runId: input.actor.runId,
+      runId: input.getRunIdFromCorrelation(req.correlation),
       details: listActivityDetails({
         outcome: "denied",
         workspaceSelector: input.query.workspace,
@@ -405,7 +405,7 @@ export function fileResourceRoutes(db: Db, opts: {
         entityType: "issue",
         entityId: req.params.issueId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         details: listActivityDetails({
           outcome: result.state === "available" ? "success" : "unavailable",
           workspaceSelector: result.query.workspace,
@@ -514,7 +514,7 @@ export function fileResourceRoutes(db: Db, opts: {
         entityType: "issue",
         entityId: req.params.issueId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         details: activityDetails({
           outcome: "success",
           workspaceKind: result.workspaceKind,
@@ -636,7 +636,7 @@ export function fileResourceRoutes(db: Db, opts: {
           entityType: "issue",
           entityId: req.params.issueId,
           agentId: actor.agentId,
-          runId: actor.runId,
+          runId: getRunIdFromCorrelation(req.correlation) ?? null,
           details: activityDetails({
             outcome: "success",
             workspaceKind: result.resource.workspaceKind,
@@ -685,7 +685,7 @@ export function fileResourceRoutes(db: Db, opts: {
         entityType: "issue",
         entityId: req.params.issueId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         details: activityDetails({
           outcome: "success",
           workspaceKind: result.resource.workspaceKind,

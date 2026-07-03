@@ -44,7 +44,7 @@ export function routineRoutes(
         actorId: actor.actorId,
         agentId: actor.agentId,
         userId: actor.actorType === "user" ? actor.actorId : null,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       },
     };
   }
@@ -67,7 +67,7 @@ export function routineRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         action: "routine.document_annotation_remapped",
         entityType: "routine",
         entityId: routineId,
@@ -131,7 +131,7 @@ export function routineRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "routine.revision_created",
       entityType: "routine",
       entityId: input.routineId,
@@ -159,7 +159,7 @@ export function routineRoutes(
     const created = await svc.create(companyId, req.body, {
       agentId: req.actor.type === "agent" ? req.actor.agentId : null,
       userId: req.actor.type === "board" ? req.actor.userId ?? "board" : null,
-      runId: req.actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
     });
     const actor = getActorInfo(req);
     await logActivity(db, {
@@ -167,7 +167,7 @@ export function routineRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "routine.created",
       entityType: "routine",
       entityId: created.id,
@@ -262,7 +262,7 @@ export function routineRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         action: "routine.document_annotation_thread_created",
         entityType: "routine",
         entityId: routine.id,
@@ -302,7 +302,7 @@ export function routineRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         action: "routine.document_annotation_comment_added",
         entityType: "routine",
         entityId: routine.id,
@@ -340,7 +340,7 @@ export function routineRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         action: thread.status === "resolved"
           ? "routine.document_annotation_thread_resolved"
           : "routine.document_annotation_thread_reopened",
@@ -387,7 +387,7 @@ export function routineRoutes(
     const updated = await svc.update(routine.id, req.body, {
       agentId: req.actor.type === "agent" ? req.actor.agentId : null,
       userId: req.actor.type === "board" ? req.actor.userId ?? "board" : null,
-      runId: req.actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
     });
     const actor = getActorInfo(req);
     await logActivity(db, {
@@ -395,7 +395,7 @@ export function routineRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "routine.updated",
       entityType: "routine",
       entityId: routine.id,
@@ -425,7 +425,7 @@ export function routineRoutes(
     const result = await svc.restoreRevision(routine.id, req.params.revisionId as string, {
       agentId: req.actor.type === "agent" ? req.actor.agentId : null,
       userId: req.actor.type === "board" ? req.actor.userId ?? "board" : null,
-      runId: req.actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
     });
     const actor = getActorInfo(req);
     await logActivity(db, {
@@ -433,7 +433,7 @@ export function routineRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "routine.revision_restored",
       entityType: "routine",
       entityId: routine.id,
@@ -471,7 +471,7 @@ export function routineRoutes(
     const created = await svc.createTrigger(routine.id, req.body, {
       agentId: req.actor.type === "agent" ? req.actor.agentId : null,
       userId: req.actor.type === "board" ? req.actor.userId ?? "board" : null,
-      runId: req.actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
     });
     const actor = getActorInfo(req);
     await logActivity(db, {
@@ -479,7 +479,7 @@ export function routineRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "routine.trigger_created",
       entityType: "routine_trigger",
       entityId: created.trigger.id,
@@ -511,7 +511,7 @@ export function routineRoutes(
     const updated = await svc.updateTrigger(trigger.id, req.body, {
       agentId: req.actor.type === "agent" ? req.actor.agentId : null,
       userId: req.actor.type === "board" ? req.actor.userId ?? "board" : null,
-      runId: req.actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
     });
     const actor = getActorInfo(req);
     await logActivity(db, {
@@ -519,7 +519,7 @@ export function routineRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "routine.trigger_updated",
       entityType: "routine_trigger",
       entityId: trigger.id,
@@ -552,7 +552,7 @@ export function routineRoutes(
     const deleted = await svc.deleteTrigger(trigger.id, {
       agentId: req.actor.type === "agent" ? req.actor.agentId : null,
       userId: req.actor.type === "board" ? req.actor.userId ?? "board" : null,
-      runId: req.actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
     });
     const actor = getActorInfo(req);
     await logActivity(db, {
@@ -560,7 +560,7 @@ export function routineRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "routine.trigger_deleted",
       entityType: "routine_trigger",
       entityId: trigger.id,
@@ -596,7 +596,7 @@ export function routineRoutes(
       const rotated = await svc.rotateTriggerSecret(trigger.id, {
         agentId: req.actor.type === "agent" ? req.actor.agentId : null,
         userId: req.actor.type === "board" ? req.actor.userId ?? "board" : null,
-        runId: req.actor.runId ?? null,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       });
       const actor = getActorInfo(req);
       await logActivity(db, {
@@ -604,7 +604,7 @@ export function routineRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         action: "routine.trigger_secret_rotated",
         entityType: "routine_trigger",
         entityId: trigger.id,
@@ -639,7 +639,7 @@ export function routineRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "routine.run_triggered",
       entityType: "routine_run",
       entityId: run.id,

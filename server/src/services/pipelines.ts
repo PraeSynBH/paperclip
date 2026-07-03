@@ -237,11 +237,11 @@ function nowDate() {
   return new Date();
 }
 
-function documentActorFields(actor: PipelineActor) {
+function documentActorFields(actor: PipelineActor, runId: string | null) {
   return {
     agentId: actor.type === "agent" ? actor.agentId : null,
     userId: actor.type === "user" ? actor.userId : null,
-    runId: actor.type === "agent" ? actor.runId : null,
+    runId: actor.type === "agent" ? runId : null,
   };
 }
 
@@ -549,10 +549,10 @@ function withDefaultWorkingChildrenGateConfig(
   };
 }
 
-function routineActorPatch(actor: PipelineActor) {
+function routineActorPatch(actor: PipelineActor, runId: string | null) {
   if (actor.type === "agent") {
-    assertActorProvenance(actor);
-    return { agentId: actor.agentId, userId: null, runId: actor.runId };
+    assertActorProvenance(runId);
+    return { agentId: actor.agentId, userId: null, runId };
   }
   if (actor.type === "user") {
     return { agentId: null, userId: actor.userId, runId: null };
@@ -560,10 +560,10 @@ function routineActorPatch(actor: PipelineActor) {
   return { agentId: null, userId: null, runId: null };
 }
 
-function eventActorPatch(actor: PipelineActor) {
+function eventActorPatch(actor: PipelineActor, runId: string | null) {
   if (actor.type === "agent") {
-    assertActorProvenance(actor);
-    return { actorType: "agent", actorAgentId: actor.agentId, runId: actor.runId };
+    assertActorProvenance(runId);
+    return { actorType: "agent", actorAgentId: actor.agentId, runId };
   }
   if (actor.type === "user") {
     return { actorType: "user", actorUserId: actor.userId };
@@ -571,16 +571,16 @@ function eventActorPatch(actor: PipelineActor) {
   return { actorType: "system" };
 }
 
-function eventActorPayload(actor: PipelineActor) {
-  if (actor.type === "agent") return { type: "agent", agentId: actor.agentId, runId: actor.runId };
+function eventActorPayload(actor: PipelineActor, runId: string | null) {
+  if (actor.type === "agent") return { type: "agent", agentId: actor.agentId, runId };
   if (actor.type === "user") return { type: "user", userId: actor.userId };
   return { type: "system" };
 }
 
-function activityActorPatch(actor: PipelineActor) {
+function activityActorPatch(actor: PipelineActor, runId: string | null) {
   if (actor.type === "agent") {
-    assertActorProvenance(actor);
-    return { actorType: "agent" as const, actorId: actor.agentId, agentId: actor.agentId, runId: actor.runId };
+    assertActorProvenance(runId);
+    return { actorType: "agent" as const, actorId: actor.agentId, agentId: actor.agentId, runId };
   }
   if (actor.type === "user") {
     return { actorType: "user" as const, actorId: actor.userId, agentId: null, runId: null };
@@ -588,8 +588,8 @@ function activityActorPatch(actor: PipelineActor) {
   return { actorType: "system" as const, actorId: "pipeline-automation", agentId: null, runId: null };
 }
 
-function assertActorProvenance(actor: PipelineActor) {
-  if (actor.type === "agent" && !actor.runId) {
+function assertActorProvenance(runId: string | null) {
+  if (runId === null) {
     throw unprocessable("Agent pipeline mutations require a run id", { code: "run_id_required" });
   }
 }
@@ -3931,8 +3931,8 @@ export function pipelineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeu
             .then((rows) => rows[0] ?? null);
           if (existingByRequestKey) return { case: existingByRequestKey, created: false };
         }
-        const automationAttempt = input.actor.type === "agent"
-          ? await resolveAutomationAttemptForActorRun(tx, input.companyId, input.actor.runId)
+        const automationAttempt = input.runId
+          ? await resolveAutomationAttemptForActorRun(tx, input.companyId, input.runId)
           : null;
         const blockedByCaseKeyMap = await resolveBlockerCaseKeys(tx, {
           companyId: input.companyId,
@@ -3979,7 +3979,7 @@ export function pipelineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeu
             terminalAt: isTerminalKind(stage.kind) ? nowDate() : null,
             createdByUserId: input.actor.type === "user" ? input.actor.userId : null,
             createdByAgentId: input.actor.type === "agent" ? input.actor.agentId : null,
-            originRunId: input.actor.type === "agent" ? input.actor.runId : null,
+            originRunId: input.runId,
           })
           .onConflictDoNothing()
           .returning();
@@ -4775,7 +4775,7 @@ export function pipelineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeu
           rationale: input.rationale,
           confidence: input.confidence,
           suggestedByAgentId: input.actor.type === "agent" ? input.actor.agentId : undefined,
-          runId: input.actor.type === "agent" ? input.actor.runId : undefined,
+          runId: input.runId ?? undefined,
           createdAt: nowDate().toISOString(),
         };
         const superseded = existing.pendingSuggestion ?? null;

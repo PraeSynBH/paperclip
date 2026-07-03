@@ -584,7 +584,7 @@ export function agentRoutes(
     if (req.actor.type !== "agent" || req.actor.agentId !== agent.id) {
       return { kind: "standard" as const };
     }
-    const run = req.actor.type === "agent" && req.actor.runId
+    const run = req.actor.type === "agent" && getRunIdFromCorrelation(req.correlation)
       ? await db
           .select({
             companyId: heartbeatRuns.companyId,
@@ -592,7 +592,7 @@ export function agentRoutes(
             contextSnapshot: heartbeatRuns.contextSnapshot,
           })
           .from(heartbeatRuns)
-          .where(and(eq(heartbeatRuns.id, req.actor.runId), eq(heartbeatRuns.companyId, agent.companyId)))
+          .where(and(eq(heartbeatRuns.id, getRunIdFromCorrelation(req.correlation)), eq(heartbeatRuns.companyId, agent.companyId)))
           .then((rows) => rows[0] ?? null)
       : null;
     const runContext = run?.agentId === agent.id ? readObject(run.contextSnapshot) : null;
@@ -1797,7 +1797,7 @@ export function agentRoutes(
         entityType: "agent",
         entityId: updated.id,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         details: {
           adapterType: updated.adapterType,
           desiredSkills,
@@ -2122,7 +2122,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "agent.config_rolled_back",
       entityType: "agent",
       entityId: updated.id,
@@ -2336,7 +2336,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "agent.hire_created",
       entityType: "agent",
       entityId: agent.id,
@@ -2366,7 +2366,7 @@ export function agentRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
         action: "approval.created",
         entityType: "approval",
         entityId: approval.id,
@@ -2459,7 +2459,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "agent.created",
       entityType: "agent",
       entityId: agent.id,
@@ -2543,7 +2543,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "agent.permissions_updated",
       entityType: "agent",
       entityId: agent.id,
@@ -2621,7 +2621,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "agent.instructions_path_updated",
       entityType: "agent",
       entityId: agent.id,
@@ -2684,7 +2684,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "agent.instructions_bundle_updated",
       entityType: "agent",
       entityId: existing.id,
@@ -2752,7 +2752,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "agent.instructions_file_updated",
       entityType: "agent",
       entityId: existing.id,
@@ -2788,7 +2788,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "agent.instructions_file_deleted",
       entityType: "agent",
       entityId: existing.id,
@@ -2941,7 +2941,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "agent.updated",
       entityType: "agent",
       entityId: agent.id,
@@ -3358,7 +3358,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "heartbeat.invoked",
       entityType: "heartbeat_run",
       entityId: run.id,
@@ -3449,7 +3449,7 @@ export function agentRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
       action: "heartbeat.invoked",
       entityType: "heartbeat_run",
       entityId: run.id,
@@ -3659,7 +3659,7 @@ export function agentRoutes(
       evaluationIssueId,
       reason,
       snoozedUntil,
-      createdByRunId: req.actor.runId ?? null,
+      createdByRunId: getRunIdFromCorrelation(req.correlation) ?? null,
     });
 
     res.json(row);
