@@ -14,6 +14,7 @@ import {
   deriveAgentUrlKey,
   isUuidLike,
   normalizeIssueIdentifier,
+  reassignAgentIssuesSchema,
   resetAgentSessionSchema,
   testAdapterEnvironmentSchema,
   type AgentDesiredSkillEntry,
@@ -3161,6 +3162,41 @@ export function agentRoutes(
     });
 
     res.json(agent);
+  });
+
+  router.post("/agents/:id/reassign-issues", validate(reassignAgentIssuesSchema), async (req, res) => {
+    assertBoard(req);
+    const id = req.params.id as string;
+    const existing = await getAccessibleAgent(req, res, id);
+    if (!existing) return;
+
+    const result = await svc.reassignIssues(id, {
+      assigneeAgentId: req.body.assigneeAgentId ?? null,
+      assigneeUserId: req.body.assigneeUserId ?? null,
+    });
+    if (!result) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    await logActivity(db, {
+      companyId: result.agent.companyId,
+      actorType: "user",
+      actorId: req.actor.userId ?? "board",
+      action: "agent.issues_reassigned",
+      entityType: "agent",
+      entityId: result.agent.id,
+      details: {
+        reassignedCount: result.reassignedCount,
+        assigneeAgentId: req.body.assigneeAgentId ?? null,
+        assigneeUserId: req.body.assigneeUserId ?? null,
+      },
+    });
+
+    res.json({
+      agent: result.agent,
+      reassignedCount: result.reassignedCount,
+    });
   });
 
   router.delete("/agents/:id", async (req, res) => {

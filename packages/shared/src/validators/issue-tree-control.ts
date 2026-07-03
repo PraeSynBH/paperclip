@@ -42,3 +42,27 @@ export const releaseIssueTreeHoldSchema = z
   .strict();
 
 export type ReleaseIssueTreeHold = z.infer<typeof releaseIssueTreeHoldSchema>;
+
+export const overrideReleaseIssueTreeHoldSchema = z
+  .object({
+    reason: z.string().trim().min(1).max(1000).optional().nullable(),
+    metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  })
+  .strict();
+
+export type OverrideReleaseIssueTreeHold = z.infer<typeof overrideReleaseIssueTreeHoldSchema>;
+
+export const reassignAgentIssuesSchema = z
+  .object({
+    assigneeAgentId: z.string().uuid().optional().nullable(),
+    assigneeUserId: z.string().uuid().optional().nullable(),
+    reason: z.string().trim().min(1).max(1000).optional().nullable(),
+    releasePauseHolds: z.boolean().optional().default(false),
+  })
+  .strict()
+  .refine(
+    (data) => data.assigneeAgentId || data.assigneeUserId,
+    { message: "At least one of assigneeAgentId or assigneeUserId is required" },
+  );
+
+export type ReassignAgentIssues = z.infer<typeof reassignAgentIssuesSchema>;
