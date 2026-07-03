@@ -1,0 +1,63 @@
+schema_version: 1
+wave:
+  number: 1
+  earliest: '2026-07-15'
+  population: low-risk existing
+  projects:
+  - proj-123
+rollback_bundle_policy_id: '1111111111111111111111111111111111111111111111111111111111111111'
+active_bundle_policy_id: '2222222222222222222222222222222222222222222222222222222222222222'
+invariant_check:
+  verdict: ALLOW
+  evidence_run_id: d183b169-c20c-4f92-a501-4cb196cbb9dd
+  verified_at: '2026-07-02T22:00:00Z'
+  verified_by: security-engineering
+re_permits:
+- id: RR-W1-001
+  class: PRIVACY
+  surface: phi:export
+  active_threshold: 0.0
+  rollback_threshold: 0.5
+  re_permit_reason: 'Fixture: valid PRIVACY re-permit with dual control.'
+  compensating_control: v1_floor
+  v1_floor_cite: tests/test_cedar_threshold.py::test_phi_escalates_at_any_taint
+  blast_radius_classification: medium
+  affects_tenants: []
+  author: security-engineering
+  approver: privacy-lead
+- id: RR-W1-002
+  class: REGULATED
+  surface: financial:export
+  active_threshold: 0.0
+  rollback_threshold: 0.25
+  re_permit_reason: 'Fixture: valid REGULATED re-permit with compliance-lead dual
+    control.'
+  compensating_control: capability_kill
+  blast_radius_classification: high
+  affects_tenants: []
+  author: security-engineering
+  approver: ciso
+dual_control_signatures:
+- signer: ciso
+  signer_id: ciso-01
+  signature_hex: '0000000000000000000000000000000000000000000000000000000000000000'
+  signed_at: '2026-07-02T22:30:00Z'
+  required_for_classes:
+  - PRIVACY
+  - REGULATED
+  - HIGH_BLAST
+- signer: privacy-lead
+  signer_id: privacy-01
+  signature_hex: '1111111111111111111111111111111111111111111111111111111111111111'
+  signed_at: '2026-07-02T22:30:00Z'
+  required_for_classes:
+  - PRIVACY
+- signer: compliance-lead
+  signer_id: compliance-01
+  signature_hex: '2222222222222222222222222222222222222222222222222222222222222222'
+  signed_at: '2026-07-02T22:30:00Z'
+  required_for_classes:
+  - REGULATED
+audit_chain:
+  worm_record_id: 99cffc91-9ca2-4270-b2f9-ed0a67f4167d
+  manifest_policy_id: b864afee6b880137910826c2d6649ad471c173803f26cb9a6ac208eb8aad6b6b

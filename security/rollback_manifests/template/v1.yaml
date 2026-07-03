@@ -1,0 +1,58 @@
+# Source of truth: RAM-159 §4.3 (pre-wave rollback re-permit manifest template)
+#
+# All real rollback manifests must be generated from this schema so reviewers
+# can trust the structure when they inspect `security/rollback_manifests/`. Keep
+# this file in sync with the manifest generator and the verifier described in
+# `tools/verify_rollback_manifest.py`.
+
+schema_version: 1
+
+wave:
+  number: 0  # increment for each wave (RAM-159 §4.2)
+  earliest: "2026-01-01"  # ISO 8601 date when the wave can start
+  population: "low-risk existing"  # short description of the enrolled population
+  projects: []  # list the project IDs that will be affected by this wave
+
+rollback_bundle_policy_id: "0000000000000000000000000000000000000000000000000000000000000000"
+active_bundle_policy_id: "1111111111111111111111111111111111111111111111111111111111111111"
+
+invariant_check:
+  verdict: "ALLOW"  # ALLOW / BLOCK / MONITOR / etc. as defined in RAM-159 §4.1
+  evidence_run_id: "00000000-0000-0000-0000-000000000000"  # UUID attached to the invariant run
+  verified_at: "2026-01-01T00:00:00Z"  # ISO 8601 Zulu timestamp recording the check
+  verified_by: "security-engineering"  # the agent or person who performed the run
+
+re_permits:
+  - id: "RR-W0-000"  # unique re-permit identifier (combine wave/project metadata)
+    class: "REGULATED"  # one of REGULATED / PRIVACY / LOW_BLAST / MEDIUM_BLAST / HIGH_BLAST / BENIGN
+    surface: "example:surface"  # surface that needs re-permit (targetful identifier)
+    active_threshold: 0.0  # active rollout threshold as TCP-style fraction (0.0-1.0)
+    rollback_threshold: 0.25  # rollback threshold must be > active_threshold
+    re_permit_reason: "Describe why this surface needs a re-permit."
+    compensating_control: "capability_kill"  # fallback control used if this re-permit is rejected
+    v1_floor_cite: "docs/ram-159#v1-floor"  # optional reference to the v1 floor test that justified the waiver
+    blast_radius_classification: "medium"  # low / medium / high (RAM-159 §4.1)
+    affects_tenants: []  # list tenant IDs (use [] if the wave is tenant-agnostic)
+    author: "security-engineering"  # agent/person who drafted the re-permits
+    approver: "ciso"  # agent/person who signed off on the re-permit (must differ from author unless class is BENIGN)
+
+dual_control_signatures:
+  - signer: "ciso"
+    signer_id: "ciso-agent-001"
+    signature_hex: "0000000000000000000000000000000000000000000000000000000000000000"
+    signed_at: "2026-01-01T01:00:00Z"
+    required_for_classes: ["REGULATED", "PRIVACY", "HIGH_BLAST"]
+  - signer: "privacy-lead"
+    signer_id: "privacy-agent-001"
+    signature_hex: "0000000000000000000000000000000000000000000000000000000000000000"
+    signed_at: "2026-01-01T01:10:00Z"
+    required_for_classes: ["PRIVACY"]
+  - signer: "compliance-lead"
+    signer_id: "compliance-agent-001"
+    signature_hex: "0000000000000000000000000000000000000000000000000000000000000000"
+    signed_at: "2026-01-01T01:20:00Z"
+    required_for_classes: ["REGULATED"]
+
+audit_chain:
+  worm_record_id: "00000000-0000-0000-0000-000000000000"  # WORM storage record (RAM-159 §5.3)
+  manifest_policy_id: "0000000000000000000000000000000000000000000000000000000000000000"  # content address for the YAML

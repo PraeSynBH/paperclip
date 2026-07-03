@@ -1,0 +1,47 @@
+schema_version: 1
+
+wave:
+  number: 1
+  earliest: "2026-07-15"
+  population: "low-risk existing"
+  projects: []
+
+rollback_bundle_policy_id: "1111111111111111111111111111111111111111111111111111111111111111"
+active_bundle_policy_id:    "2222222222222222222222222222222222222222222222222222222222222222"
+
+invariant_check:
+  verdict: ALLOW
+  evidence_run_id: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+  verified_at: "2026-07-02T22:00:00Z"
+  verified_by: "security-engineering"
+
+re_permits:
+  - id: "RR-W1-904"
+    class: "PRIVACY"
+    surface: "phi:export"
+    active_threshold: 0.0
+    rollback_threshold: 0.5
+    re_permit_reason: "FIXTURE (NEGATIVE): author == approver on a non-BENIGN re-permit (SoD bypass)."
+    compensating_control: "v1_floor"
+    v1_floor_cite: "tests/test_cedar_threshold.py::test_phi_escalates_at_any_taint"
+    blast_radius_classification: "medium"
+    affects_tenants: []
+    author: "ciso"
+    approver: "ciso"
+
+dual_control_signatures:
+  - signer: "ciso"
+    signer_id: "ciso-agent-001"
+    signature_hex: "0000000000000000000000000000000000000000000000000000000000000000"
+    signed_at: "2026-07-02T22:30:00Z"
+    required_for_classes: ["PRIVACY", "REGULATED", "HIGH_BLAST"]
+
+  - signer: "privacy-lead"
+    signer_id: "privacy-agent-001"
+    signature_hex: "0000000000000000000000000000000000000000000000000000000000000000"
+    signed_at: "2026-07-02T22:30:00Z"
+    required_for_classes: ["PRIVACY"]
+
+audit_chain:
+  worm_record_id: "11111111-2222-3333-4444-555555555555"
+  manifest_policy_id: "0000000000000000000000000000000000000000000000000000000000000000"
