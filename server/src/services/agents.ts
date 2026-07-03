@@ -642,6 +642,79 @@ export function agentService(db: Db) {
       return getById(id);
     },
 
+    reassignIssues: async (id: string, input: { assigneeAgentId?: string | null; assigneeUserId?: string | null }) => {
+      const existing = await getById(id);
+      if (!existing) return null;
+      if (existing.status !== "terminated") {
+        throw conflict("Agent must be terminated before reassigning issues");
+      }
+
+      const openIssues = await db
+        .select({ id: issues.id, status: issues.status })
+        .from(issues)
+        .where(
+          and(
+            eq(issues.companyId, existing.companyId),
+            eq(issues.assigneeAgentId, id),
+            notInArray(issues.status, ["done", "cancelled"]),
+          ),
+        );
+
+      if (openIssues.length === 0) {
+        return { reassignedCount: 0, agent: existing };
+      }
+
+      const inProgressIssueIds = openIssues
+        .filter((issue) => issue.status === "in_progress")
+        .map((issue) => issue.id);
+      const otherIssueIds = openIssues
+        .filter((issue) => issue.status !== "in_progress")
+        .map((issue) => issue.id);
+
+      await db.transaction(async (tx) => {
+        const now = new Date();
+
+        if (inProgressIssueIds.length > 0) {
+          await tx
+            .update(issues)
+            .set({
+              assigneeAgentId: input.assigneeAgentId ?? null,
+              assigneeUserId: input.assigneeUserId ?? null,
+              status: "todo",
+              checkoutRunId: null,
+              executionRunId: null,
+              executionAgentNameKey: null,
+              executionLockedAt: null,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(issues.companyId, existing.companyId),
+                inArray(issues.id, inProgressIssueIds),
+              ),
+            );
+        }
+
+        if (otherIssueIds.length > 0) {
+          await tx
+            .update(issues)
+            .set({
+              assigneeAgentId: input.assigneeAgentId ?? null,
+              assigneeUserId: input.assigneeUserId ?? null,
+              updatedAt: now,
+            })
+            .where(
+              and(
+                eq(issues.companyId, existing.companyId),
+                inArray(issues.id, otherIssueIds),
+              ),
+            );
+        }
+      });
+
+      return { reassignedCount: openIssues.length, agent: existing };
+    },
+
     remove: async (id: string) => {
       const existing = await getById(id);
       if (!existing) return null;
