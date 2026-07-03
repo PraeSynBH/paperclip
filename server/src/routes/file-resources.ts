@@ -14,6 +14,7 @@ import { HttpError, unprocessable } from "../errors.js";
 import { workspaceFileResourceService } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
 import { logActivity } from "../services/activity-log.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 
 export type WorkspaceFileResourceService = {
   getIssue(issueId: string): Promise<{ companyId: string }>;
@@ -292,7 +293,7 @@ export function fileResourceRoutes(db: Db, opts: {
       entityType: "issue",
       entityId: input.issueId,
       agentId: input.actor.agentId,
-      runId: input.getRunIdFromCorrelation(req.correlation),
+      runId: getRunIdFromCorrelation(req.correlation),
       details: activityDetails({
         outcome: "denied",
         displayPath: input.displayPath,
@@ -319,7 +320,7 @@ export function fileResourceRoutes(db: Db, opts: {
       entityType: "issue",
       entityId: input.issueId,
       agentId: input.actor.agentId,
-      runId: input.getRunIdFromCorrelation(req.correlation),
+      runId: getRunIdFromCorrelation(req.correlation),
       details: listActivityDetails({
         outcome: "denied",
         workspaceSelector: input.query.workspace,

@@ -82,6 +82,8 @@ import {
   summarizePipelineCaseOutputsForContext,
 } from "../services/pipeline-case-outputs.js";
 
+import { getRunIdFromCorrelation } from "../auth-context.js";
+
 /** Per-stage instructions document keys look like `stage-instructions:{stageId}`. */
 const STAGE_INSTRUCTIONS_PREFIX = "stage-instructions:";
 type PipelineRouteDb = Db | Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -668,7 +670,7 @@ async function sourceTrustForPipelineCaseDocumentWrite(
       .from(heartbeatRuns)
       .where(and(
         eq(heartbeatRuns.companyId, input.companyId),
-        eq(heartbeatRuns.id, input.getRunIdFromCorrelation(req.correlation)),
+        eq(heartbeatRuns.id, getRunIdFromCorrelation(req.correlation)),
         eq(heartbeatRuns.agentId, input.actor.agentId),
       ))
       .limit(1)

@@ -18,6 +18,7 @@ import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { forbidden, unauthorized } from "../errors.js";
 import { getTelemetryClient } from "../telemetry.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 
 export function routineRoutes(
   db: Db,
