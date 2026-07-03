@@ -380,10 +380,14 @@ export {
   createIssueTreeHoldSchema,
   issueTreeControlModeSchema,
   issueTreeHoldReleasePolicySchema,
+  overrideReleaseIssueTreeHoldSchema,
   previewIssueTreeControlSchema,
+  reassignAgentIssuesSchema,
   releaseIssueTreeHoldSchema,
   type CreateIssueTreeHold,
+  type OverrideReleaseIssueTreeHold,
   type PreviewIssueTreeControl,
+  type ReassignAgentIssues,
   type ReleaseIssueTreeHold,
 } from "./issue-tree-control.js";
 
