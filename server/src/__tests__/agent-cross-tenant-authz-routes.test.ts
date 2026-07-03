@@ -1,6 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 
 vi.unmock("http");
 vi.unmock("node:http");
@@ -157,14 +158,14 @@ vi.mock("../routes/authz.js", async () => {
         actorType: "agent" as const,
         actorId: req.actor.agentId ?? "unknown-agent",
         agentId: req.actor.agentId ?? null,
-        runId: req.actor.runId ?? null,
+        runId: getRunIdFromCorrelation(req.correlation) ?? null,
       };
     }
     return {
       actorType: "user" as const,
       actorId: req.actor.userId ?? "board",
       agentId: null,
-      runId: req.actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
     };
   }
 

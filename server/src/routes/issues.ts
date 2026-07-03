@@ -2258,7 +2258,7 @@ export function issueRoutes(
   ) {
     if (req.actor.type !== "agent") return false;
     if (
-      req.actor.runId &&
+      getRunIdFromCorrelation(req.correlation) &&
       !(await assertTaskWatchdogIssueMutationAllowed(req, res, issue, { allowWatchdogIssue: false }))
     ) {
       return true;
@@ -2516,7 +2516,7 @@ export function issueRoutes(
 
   async function loadActorRunContext(req: Request, companyId: string) {
     if (req.actor.type !== "agent") return null;
-    const runId = req.actor.runId?.trim();
+    const runId = getRunIdFromCorrelation(req.correlation)?.trim();
     if (!runId) return null;
     const run = await db
       .select({
@@ -2625,7 +2625,7 @@ export function issueRoutes(
 
     const requestedRunId = input.createdByRunId ?? null;
     if (req.actor.type === "agent") {
-      const actorRunId = req.actor.runId?.trim() || null;
+      const actorRunId = getRunIdFromCorrelation(req.correlation)?.trim() || null;
       if (requestedRunId && requestedRunId !== actorRunId) {
         res.status(403).json({ error: "createdByRunId must match the authenticated agent run" });
         return undefined;
@@ -3251,7 +3251,7 @@ export function issueRoutes(
       const trustResolution = req.actor.type === "agent"
         ? await resolveAgentTrustForIssue({
             agentId: req.actor.agentId,
-            runId: req.actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
           }, companyId, null)
         : null;
       if (trustResolution?.kind === "denied") {
