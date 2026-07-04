@@ -80,6 +80,7 @@ import {
   companyService,
   companySearchService,
   executionWorkspaceService,
+  forceReassignService,
   goalService,
   heartbeatService,
   issueApprovalService,
@@ -1314,6 +1315,7 @@ export function issueRoutes(
   const documentAnnotationsSvc = documentAnnotationService(db);
   const issueReferencesSvc = issueReferenceService(db);
   const issueThreadInteractionsSvc = issueThreadInteractionService(db);
+  const forceReassignSvc = forceReassignService(db);
   const taskWatchdogFactory: TaskWatchdogServiceFactory | undefined = Object.prototype.hasOwnProperty.call(
     serviceIndex,
     "taskWatchdogService",
@@ -7227,6 +7229,157 @@ export function issueRoutes(
     });
 
     res.json(result);
+  });
+
+  router.post("/issues/:id/force-reassign", async (req, res) => {
+    const id = req.params.id as string;
+    const existing = await svc.getById(id);
+    if (!existing) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, existing.companyId);
+
+    const decision = await access.decide({
+      actor: req.actor,
+      action: "issue:force_reassign",
+      resource: {
+        type: "issue",
+        companyId: existing.companyId,
+        issueId: existing.id,
+      },
+    });
+    if (!decision.allowed) {
+      res.status(403).json({ error: decision.explanation ?? "Forbidden" });
+      return;
+    }
+
+    const body = req.body as Record<string, unknown> | undefined;
+    const expectedVersion = typeof body?.expectedVersion === "number" ? body.expectedVersion : null;
+    const fromAssigneeAgentId = typeof body?.fromAssigneeAgentId === "string" ? body.fromAssigneeAgentId : null;
+    const assigneeAgentId = typeof body?.assigneeAgentId === "string" ? body.assigneeAgentId : null;
+    const assigneeUserId = typeof body?.assigneeUserId === "string" ? body.assigneeUserId : null;
+    const idempotencyKey = typeof body?.idempotencyKey === "string" ? body.idempotencyKey : null;
+    const reason = typeof body?.reason === "string" ? body.reason : null;
+    const metadata = body?.metadata && typeof body.metadata === "object" && !Array.isArray(body.metadata)
+      ? body.metadata as Record<string, unknown>
+      : null;
+
+    const actor = getActorInfo(req);
+
+    try {
+      const result = await forceReassignSvc.forceReassign({
+        issueId: id,
+        companyId: existing.companyId,
+        fromAssigneeAgentId,
+        newAssigneeAgentId: assigneeAgentId,
+        newAssigneeUserId: assigneeUserId,
+        expectedVersion,
+        idempotencyKey,
+        reason,
+        metadata,
+        actor: {
+          type: actor.actorType === "agent" ? "agent" : "board",
+          actorId: actor.actorId,
+          agentId: actor.agentId,
+          userId: actor.actorType === "user" ? actor.actorId : null,
+          runId: getRunIdFromCorrelation(req.correlation),
+        },
+      });
+
+      await logActivity(db, {
+        companyId: existing.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: getRunIdFromCorrelation(req.correlation),
+        action: "issue.force_reassign",
+        entityType: "issue",
+        entityId: result.issue.id,
+        details: {
+          previousAssigneeAgentId: result.fromAssigneeAgentId,
+          previousAssigneeUserId: result.fromAssigneeUserId,
+          newAssigneeAgentId: assigneeAgentId,
+          newAssigneeUserId: assigneeUserId,
+          version: result.newVersion,
+          orphaned: result.orphaned,
+          orphanedReason: result.orphanedReason,
+          auditRecordId: result.auditRecordId,
+          reason,
+        },
+      });
+
+      const commentBody = [
+        `**Force-reassigned** by ${actor.actorType === "agent" ? `agent \`${actor.agentId ?? "unknown"}\`` : "board operator"}.`,
+        reason ? `\n**Reason:** ${reason}` : "",
+        `\n**Previous assignee:** ${result.fromAssigneeAgentId || result.fromAssigneeUserId || "none"}`,
+        `\n**New assignee:** ${assigneeAgentId || assigneeUserId || "none"}`,
+        result.orphaned ? `\n**Orphaned:** yes (${result.orphanedReason})` : "",
+        `\n**Audit record:** \`${result.auditRecordId}\``,
+      ]
+        .filter(Boolean)
+        .join("\n");
+
+      await db
+        .insert(issueComments)
+        .values({
+          id: randomUUID(),
+          companyId: existing.companyId,
+          issueId: existing.id,
+          authorType: "system",
+          authorId: "system",
+          body: commentBody,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .catch(() => null);
+
+      const { publishLiveEvent } = serviceIndex;
+      publishLiveEvent({
+        companyId: existing.companyId,
+        type: "activity.logged",
+        payload: {
+          type: "security.issue.force_reassign",
+          action: "issue.force_reassign",
+          entityType: "issue",
+          entityId: existing.id,
+          previousAssigneeAgentId: result.fromAssigneeAgentId,
+          newAssigneeAgentId: assigneeAgentId,
+          newAssigneeUserId: assigneeUserId,
+          version: result.newVersion,
+          orphaned: result.orphaned,
+          auditRecordId: result.auditRecordId,
+        },
+      });
+
+      res.json({
+        issueId: result.issue.id,
+        previousVersion: result.previousVersion,
+        newVersion: result.newVersion,
+        fromAssigneeAgentId: result.fromAssigneeAgentId,
+        fromAssigneeUserId: result.fromAssigneeUserId,
+        newAssigneeAgentId: assigneeAgentId,
+        newAssigneeUserId: assigneeUserId,
+        orphaned: result.orphaned,
+        orphanedReason: result.orphanedReason,
+        auditRecordId: result.auditRecordId,
+        idempotent: result.reassignedIdemKeyRecorded,
+      });
+    } catch (error: unknown) {
+      if (error && typeof error === "object" && "status" in error) {
+        const err = error as { status: number; message: string; body?: unknown };
+        if (err.status === 200 && err.body) {
+          res.status(200).json(err.body);
+          return;
+        }
+        const errBody = err.status >= 200 && err.status < 600
+          ? { error: err.message, details: (error as Record<string, unknown>).details }
+          : { error: "Internal server error" };
+        res.status(err.status >= 200 && err.status < 600 ? err.status : 500).json(errBody);
+        return;
+      }
+      res.status(500).json({ error: "Internal server error" });
+    }
   });
 
   router.get("/issues/:id/comments", async (req, res) => {

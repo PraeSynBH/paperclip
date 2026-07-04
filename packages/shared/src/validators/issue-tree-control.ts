@@ -66,3 +66,17 @@ export const reassignAgentIssuesSchema = z
   );
 
 export type ReassignAgentIssues = z.infer<typeof reassignAgentIssuesSchema>;
+
+export const forceReassignSchema = z
+  .object({
+    expectedVersion: z.number().int().min(0).optional().nullable(),
+    fromAssigneeAgentId: z.string().uuid().optional().nullable(),
+    assigneeAgentId: z.string().uuid().optional().nullable(),
+    assigneeUserId: z.string().uuid().optional().nullable(),
+    idempotencyKey: z.string().trim().min(1).max(128).optional().nullable(),
+    reason: z.string().trim().min(1).max(2000).optional().nullable(),
+    metadata: z.record(z.string(), z.unknown()).optional().nullable(),
+  })
+  .strict();
+
+export type ForceReassign = z.infer<typeof forceReassignSchema>;
