@@ -7999,6 +7999,7 @@ export function issueRoutes(
     await logExpiredRequestConfirmations({
       issue: currentIssue,
       interactions: expiredInteractions,
+      correlation: req.correlation,
       actor,
       source: "issue.comment",
     });
