@@ -378,6 +378,7 @@ export {
 
 export {
   createIssueTreeHoldSchema,
+  forceReassignSchema,
   issueTreeControlModeSchema,
   issueTreeHoldReleasePolicySchema,
   overrideReleaseIssueTreeHoldSchema,
@@ -385,6 +386,7 @@ export {
   reassignAgentIssuesSchema,
   releaseIssueTreeHoldSchema,
   type CreateIssueTreeHold,
+  type ForceReassign,
   type OverrideReleaseIssueTreeHold,
   type PreviewIssueTreeControl,
   type ReassignAgentIssues,

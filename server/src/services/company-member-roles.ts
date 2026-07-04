@@ -34,6 +34,7 @@ export function grantsForHumanRole(
         { permissionKey: "users:manage_permissions", scope: null },
         { permissionKey: "tasks:assign", scope: null },
         { permissionKey: "joins:approve", scope: null },
+        { permissionKey: "issue:force_reassign", scope: null },
       ];
     case "admin":
       return [
@@ -43,6 +44,7 @@ export function grantsForHumanRole(
         { permissionKey: "users:invite", scope: null },
         { permissionKey: "tasks:assign", scope: null },
         { permissionKey: "joins:approve", scope: null },
+        { permissionKey: "issue:force_reassign", scope: null },
       ];
     case "operator":
       return [{ permissionKey: "tasks:assign", scope: null }];
