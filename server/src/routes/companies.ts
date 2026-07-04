@@ -32,6 +32,7 @@ import {
 } from "../services/index.js";
 import type { StorageService } from "../storage/types.js";
 import { assertBoard, assertCompanyAccess, assertInstanceAdmin, getActorInfo } from "./authz.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 import { COMPANY_IMPORT_ROUTE_PATH } from "./company-import-paths.js";
 
 export function companyRoutes(db: Db, storage?: StorageService) {
@@ -282,7 +283,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
       const operation = async () => {
         const importBody = companyPortabilityImportSchema.parse(rawImportBody);
         assertImportTargetAccess(req, importBody.target);
-        const activity = importedCompanyActivityContext(actor, importBody.include ?? null);
+        const activity = importedCompanyActivityContext(actor, importBody.include ?? null, getRunIdFromCorrelation(req.correlation));
         const result = await portability.importBundle(importBody, boardUserId);
         await logImportedCompanyActivity(db, activity, result);
         return result;
@@ -296,7 +297,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
 
     const importBody = companyPortabilityImportSchema.parse(rawImportBody);
     assertImportTargetAccess(req, importBody.target);
-    const activity = importedCompanyActivityContext(actor, importBody.include ?? null);
+    const activity = importedCompanyActivityContext(actor, importBody.include ?? null, getRunIdFromCorrelation(req.correlation));
     const result = await portability.importBundle(importBody, boardUserId);
     await logImportedCompanyActivity(db, activity, result);
     res.json(result);
@@ -357,7 +358,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
       entityType: "company",
       entityId: result.company.id,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "company.imported",
       details: {
         include: body.include ?? null,
@@ -474,7 +475,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "company.updated",
         entityType: "company",
         entityId: companyId,
@@ -499,7 +500,7 @@ export function companyRoutes(db: Db, storage?: StorageService) {
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "company.branding_updated",
       entityType: "company",
       entityId: companyId,
@@ -618,12 +619,13 @@ async function runImportJob(
 function importedCompanyActivityContext(
   actor: ReturnType<typeof getActorInfo>,
   include: unknown,
+  runId: string | null | undefined,
 ): ImportedCompanyActivityContext {
   return {
     actorType: actor.actorType,
     actorId: actor.actorId,
     agentId: actor.agentId,
-    runId: actor.runId,
+    runId,
     include,
   };
 }

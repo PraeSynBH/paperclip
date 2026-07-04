@@ -1247,9 +1247,11 @@ export function issueRoutes(
 
   async function resolveRunIssueWorkspaceInheritanceSource(
     companyId: string,
+    correlation: Request["correlation"],
     actor: ReturnType<typeof getActorInfo>,
   ): Promise<string | null> {
-    if (actor.actorType !== "agent" || !actor.agentId || !actor.runId) return null;
+    const inheritanceRunId = getRunIdFromCorrelation(correlation);
+    if (actor.actorType !== "agent" || !actor.agentId || !inheritanceRunId) return null;
     const run = await db
       .select({
         agentId: heartbeatRuns.agentId,
@@ -1257,7 +1259,7 @@ export function issueRoutes(
       })
       .from(heartbeatRuns)
       .where(and(
-        eq(heartbeatRuns.id, actor.runId),
+        eq(heartbeatRuns.id, inheritanceRunId),
         eq(heartbeatRuns.companyId, companyId),
       ))
       .then((rows) => rows[0] ?? null);
@@ -1348,13 +1350,14 @@ export function issueRoutes(
 
   async function shouldRedactLowTrustForHeartbeatContext(
     issue: { id: string; companyId: string; projectId?: string | null; executionPolicy?: unknown },
+    correlation: Request["correlation"],
     actor: ReturnType<typeof getActorInfo>,
   ) {
     // Board users are trusted reviewers and intentionally receive raw quarantined output for promotion decisions.
     if (actor.actorType !== "agent") return false;
     const resolution = await resolveAgentTrustForIssue({
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(correlation),
     }, issue.companyId, issue);
     if (resolution?.kind === "denied") {
       throw forbidden(resolution.detail);
@@ -1437,6 +1440,7 @@ export function issueRoutes(
   async function cancelScheduledRetrySupersededByComment(input: {
     scheduledRetryRunId: string | null | undefined;
     issue: { id: string; companyId: string };
+    correlation: Request["correlation"];
     actor: ReturnType<typeof getActorInfo>;
   }) {
     const scheduledRetryRunId = readNonEmptyString(input.scheduledRetryRunId);
@@ -1450,7 +1454,7 @@ export function issueRoutes(
         actorType: input.actor.actorType,
         actorId: input.actor.actorId,
         agentId: input.actor.agentId,
-        runId: input.actor.runId,
+        runId: getRunIdFromCorrelation(input.correlation),
         action: "heartbeat.cancelled",
         entityType: "heartbeat_run",
         entityId: cancelledRunId,
@@ -1714,7 +1718,7 @@ export function issueRoutes(
         actorId: actor.actorId,
         agentId: actor.agentId,
         userId: actor.actorType === "user" ? actor.actorId : null,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
       },
     };
   }
@@ -1820,6 +1824,7 @@ export function issueRoutes(
   async function logExpiredRequestConfirmations(input: {
     issue: { id: string; companyId: string; identifier?: string | null };
     interactions: Array<{ id: string; kind: string; status: string; result?: unknown }>;
+    correlation: Request["correlation"];
     actor: ReturnType<typeof getActorInfo>;
     source: string;
   }) {
@@ -1829,7 +1834,7 @@ export function issueRoutes(
         actorType: input.actor.actorType,
         actorId: input.actor.actorId,
         agentId: input.actor.agentId,
-        runId: input.actor.runId,
+        runId: getRunIdFromCorrelation(input.correlation),
         action: "issue.thread_interaction_expired",
         entityType: "issue",
         entityId: input.issue.id,
@@ -2168,7 +2173,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.checkout_lock_adopted",
         entityType: "issue",
         entityId: issue.id,
@@ -2364,6 +2369,7 @@ export function issueRoutes(
   }
 
   async function blockWatchdogParentOnCurrentChild(input: {
+    correlation: Request["correlation"];
     actor: ReturnType<typeof getActorInfo>;
     watchdogParentIssueId: string | null | undefined;
     currentChildIssueId: string | null | undefined;
@@ -2389,7 +2395,7 @@ export function issueRoutes(
       actorType: input.actor.actorType,
       actorId: input.actor.actorId,
       agentId: input.actor.agentId,
-      runId: input.actor.runId,
+      runId: getRunIdFromCorrelation(input.correlation),
       action: "issue.task_watchdog_followups_serialized",
       entityType: "issue",
       entityId: watchdogParent.id,
@@ -3303,7 +3309,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "label.created",
       entityType: "label",
       entityId: label.id,
@@ -3331,7 +3337,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "label.deleted",
       entityType: "label",
       entityId: removed.id,
@@ -3401,7 +3407,7 @@ export function issueRoutes(
       actor: getActorInfo(req),
       activeRecoveryAction,
     });
-    const redactLowTrust = await shouldRedactLowTrustForHeartbeatContext(issue, getActorInfo(req));
+    const redactLowTrust = await shouldRedactLowTrustForHeartbeatContext(issue, req.correlation, getActorInfo(req));
     const safeWakeComment =
       wakeComment && wakeComment.issueId === issue.id
         ? redactLowTrust
@@ -3608,7 +3614,7 @@ export function issueRoutes(
       actor: {
         agentId: actor.agentId,
         userId: actor.actorType === "user" ? actor.actorId : null,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
       },
     });
     await logActivity(db, {
@@ -3616,7 +3622,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: created ? "issue.watchdog_created" : "issue.watchdog_updated",
       entityType: "issue",
       entityId: issue.id,
@@ -3627,7 +3633,7 @@ export function issueRoutes(
         instructionsChanged: (existingWatchdog?.instructions ?? null) !== (watchdog.instructions ?? null),
       },
     });
-    await queueTaskWatchdogEvaluation(issue, actor.runId);
+    await queueTaskWatchdogEvaluation(issue, getRunIdFromCorrelation(req.correlation));
     res.json(watchdog);
   });
 
@@ -3648,7 +3654,7 @@ export function issueRoutes(
     const disabled = await taskWatchdogsSvc.disableForIssue(issue.companyId, issue.id, {
       agentId: actor.agentId,
       userId: actor.actorType === "user" ? actor.actorId : null,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
     });
     if (disabled) {
       await logActivity(db, {
@@ -3656,7 +3662,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.watchdog_removed",
         entityType: "issue",
         entityId: issue.id,
@@ -3667,7 +3673,7 @@ export function issueRoutes(
         },
       });
     }
-    await queueTaskWatchdogEvaluation(issue, actor.runId);
+    await queueTaskWatchdogEvaluation(issue, getRunIdFromCorrelation(req.correlation));
     res.json({ ok: true });
   });
 
@@ -3785,7 +3791,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.updated",
         entityType: "issue",
         entityId: result.issue.id,
@@ -3806,7 +3812,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.recovery_action_resolved",
       entityType: "issue",
       entityId: result.issue.id,
@@ -3923,7 +3929,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "external_object.refresh_requested",
       entityType: "issue",
       entityId: issue.id,
@@ -4032,7 +4038,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.document_annotation_thread_created",
         entityType: "issue",
         entityId: issue.id,
@@ -4117,7 +4123,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.document_annotation_comment_added",
         entityType: "issue",
         entityId: issue.id,
@@ -4169,7 +4175,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: thread.status === "resolved"
           ? "issue.document_annotation_thread_resolved"
           : "issue.document_annotation_thread_reopened",
@@ -4216,7 +4222,7 @@ export function issueRoutes(
       baseRevisionId: req.body.baseRevisionId ?? null,
       createdByAgentId: actor.agentId ?? null,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
-      createdByRunId: actor.runId ?? null,
+      createdByRunId: getRunIdFromCorrelation(req.correlation) ?? null,
       sourceTrust,
       lockedDocumentStrategy: req.actor.type === "agent" ? "create_new_document" : "conflict",
     });
@@ -4243,7 +4249,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: result.created ? "issue.document_created" : "issue.document_updated",
       entityType: "issue",
       entityId: issue.id,
@@ -4268,7 +4274,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.document_annotation_remapped",
         entityType: "issue",
         entityId: issue.id,
@@ -4301,6 +4307,7 @@ export function issueRoutes(
       await logExpiredRequestConfirmations({
         issue,
         interactions: expiredInteractions,
+        correlation: req.correlation,
         actor,
         source: "issue.document_updated",
       });
@@ -4348,7 +4355,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.document_locked",
         entityType: "issue",
         entityId: issue.id,
@@ -4391,7 +4398,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.document_unlocked",
         entityType: "issue",
         entityId: issue.id,
@@ -4470,7 +4477,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.document_restored",
         entityType: "issue",
         entityId: issue.id,
@@ -4496,7 +4503,7 @@ export function issueRoutes(
           actorType: actor.actorType,
           actorId: actor.actorId,
           agentId: actor.agentId,
-          runId: actor.runId,
+          runId: getRunIdFromCorrelation(req.correlation),
           action: "issue.document_annotation_remapped",
           entityType: "issue",
           entityId: issue.id,
@@ -4528,6 +4535,7 @@ export function issueRoutes(
       await logExpiredRequestConfirmations({
         issue,
         interactions: expiredInteractions,
+        correlation: req.correlation,
         actor,
         source: "issue.document_restored",
       });
@@ -4576,7 +4584,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.document_deleted",
       entityType: "issue",
       entityId: issue.id,
@@ -4607,6 +4615,7 @@ export function issueRoutes(
     await logExpiredRequestConfirmations({
       issue,
       interactions: expiredInteractions,
+      correlation: req.correlation,
       actor,
       source: "issue.document_deleted",
     });
@@ -4654,7 +4663,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.work_product_created",
       entityType: "issue",
       entityId: issue.id,
@@ -4776,7 +4785,7 @@ export function issueRoutes(
             },
           },
           sourceTrust: promotionTrust,
-          createdByRunId: actor.runId ?? null,
+          createdByRunId: getRunIdFromCorrelation(req.correlation) ?? null,
         })
         .returning()
         .then((rows) => rows[0] ?? null);
@@ -4791,7 +4800,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.low_trust_output_promoted",
       entityType: "issue",
       entityId: issue.id,
@@ -4859,7 +4868,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.work_product_updated",
       entityType: "issue",
       entityId: existing.issueId,
@@ -4900,7 +4909,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.work_product_deleted",
       entityType: "issue",
       entityId: existing.issueId,
@@ -4938,7 +4947,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.read_marked",
       entityType: "issue",
       entityId: issue.id,
@@ -4970,7 +4979,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.read_unmarked",
       entityType: "issue",
       entityId: issue.id,
@@ -5002,7 +5011,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.inbox_archived",
       entityType: "issue",
       entityId: issue.id,
@@ -5034,7 +5043,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.inbox_unarchived",
       entityType: "issue",
       entityId: issue.id,
@@ -5079,7 +5088,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.approval_linked",
       entityType: "issue",
       entityId: issue.id,
@@ -5111,7 +5120,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.approval_unlinked",
       entityType: "issue",
       entityId: issue.id,
@@ -5167,7 +5176,7 @@ export function issueRoutes(
     const actor = getActorInfo(req);
     const runWorkspaceInheritanceSourceIssueId = hasExplicitIssueWorkspaceCreateSelection(rawCreateBody)
       ? null
-      : await resolveRunIssueWorkspaceInheritanceSource(companyId, actor);
+      : await resolveRunIssueWorkspaceInheritanceSource(companyId, req.correlation, actor);
     const createBody = {
       ...rawCreateBody,
       parentId: effectiveParentId,
@@ -5183,18 +5192,18 @@ export function issueRoutes(
             sourceIssue: watchdogProductBugFollowUp.sourceIssue,
             watchdogIssue: watchdogProductBugFollowUp.watchdogIssue,
             stopFingerprint: watchdogProductBugFollowUp.scope.stopFingerprint,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
           }),
           projectId: rawCreateBody.projectId ?? watchdogProductBugFollowUp.sourceIssue.projectId,
           goalId: rawCreateBody.goalId ?? watchdogProductBugFollowUp.sourceIssue.goalId,
           billingCode: rawCreateBody.billingCode ?? watchdogProductBugFollowUp.sourceIssue.billingCode,
           originKind: TASK_WATCHDOG_PRODUCT_BUG_ORIGIN_KIND,
           originId: watchdogProductBugFollowUp.sourceIssue.id,
-          originRunId: actor.runId,
+          originRunId: getRunIdFromCorrelation(req.correlation),
           originFingerprint: [
             TASK_WATCHDOG_PRODUCT_BUG_ORIGIN_KIND,
             watchdogProductBugFollowUp.sourceIssue.id,
-            actor.runId ?? randomUUID(),
+            getRunIdFromCorrelation(req.correlation) ?? randomUUID(),
           ].join(":"),
         }
         : {}),
@@ -5236,7 +5245,7 @@ export function issueRoutes(
       ...(sourceTrust ? { sourceTrust } : {}),
       createdByAgentId: actor.agentId,
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
-      watchdogActorRunId: actor.runId,
+      watchdogActorRunId: getRunIdFromCorrelation(req.correlation),
     });
     await issueReferencesSvc.syncIssue(issue.id);
     await externalObjectsSvc.syncIssueSafely(issue.id);
@@ -5251,7 +5260,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.created",
       entityType: "issue",
       entityId: issue.id,
@@ -5286,7 +5295,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.monitor_scheduled",
         entityType: "issue",
         entityId: issue.id,
@@ -5309,7 +5318,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.watchdog_created",
         entityType: "issue",
         entityId: issue.id,
@@ -5331,7 +5340,7 @@ export function issueRoutes(
       requestedByActorType: actor.actorType,
       requestedByActorId: actor.actorId,
     });
-    await queueTaskWatchdogEvaluation(issue, actor.runId);
+    await queueTaskWatchdogEvaluation(issue, getRunIdFromCorrelation(req.correlation));
 
     res.status(201).json({
       ...issue,
@@ -5406,7 +5415,7 @@ export function issueRoutes(
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
       actorAgentId: actor.agentId,
       actorUserId: actor.actorType === "user" ? actor.actorId : null,
-      watchdogActorRunId: actor.runId,
+      watchdogActorRunId: getRunIdFromCorrelation(req.correlation),
     });
     await externalObjectsSvc.syncIssueSafely(issue.id);
 
@@ -5415,7 +5424,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.child_created",
       entityType: "issue",
       entityId: issue.id,
@@ -5442,7 +5451,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.monitor_scheduled",
         entityType: "issue",
         entityId: issue.id,
@@ -5466,7 +5475,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.watchdog_created",
         entityType: "issue",
         entityId: issue.id,
@@ -5492,11 +5501,12 @@ export function issueRoutes(
       });
     }
     await blockWatchdogParentOnCurrentChild({
+      correlation: req.correlation,
       actor,
       watchdogParentIssueId: serializationContext?.watchdogParentIssueId,
       currentChildIssueId: currentSerializedChild?.id ?? issue.id,
     });
-    await queueTaskWatchdogEvaluation(issue, actor.runId);
+    await queueTaskWatchdogEvaluation(issue, getRunIdFromCorrelation(req.correlation));
 
     res.status(201).json(issue);
   });
@@ -5598,7 +5608,7 @@ export function issueRoutes(
       children: normalizedChildren,
       actorAgentId: actor.agentId,
       actorUserId: actor.actorType === "user" ? actor.actorId : null,
-      actorRunId: actor.runId ?? null,
+      actorRunId: getRunIdFromCorrelation(req.correlation) ?? null,
     });
 
     await logActivity(db, {
@@ -5606,7 +5616,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.accepted_plan_decomposition_updated",
       entityType: "issue",
       entityId: sourceIssue.id,
@@ -5634,7 +5644,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.child_created",
         entityType: "issue",
         entityId: issue.id,
@@ -5661,7 +5671,7 @@ export function issueRoutes(
           actorType: actor.actorType,
           actorId: actor.actorId,
           agentId: actor.agentId,
-          runId: actor.runId,
+          runId: getRunIdFromCorrelation(req.correlation),
           action: "issue.monitor_scheduled",
           entityType: "issue",
           entityId: issue.id,
@@ -5691,7 +5701,7 @@ export function issueRoutes(
           requestedByActorId: actor.actorId,
         });
       }
-      await queueTaskWatchdogEvaluation(issue, actor.runId);
+      await queueTaskWatchdogEvaluation(issue, getRunIdFromCorrelation(req.correlation));
     }
     await blockWatchdogParentOnCurrentChild({
       actor,
@@ -5721,7 +5731,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId ?? null,
-      runId: actor.runId ?? null,
+      runId: getRunIdFromCorrelation(req.correlation) ?? null,
     });
 
     res.json({ ok: true });
@@ -5871,7 +5881,7 @@ export function issueRoutes(
             assigneeAgentId: requestedAssigneeAgentId,
             actorType: actor.actorType,
             actorId: actor.actorId,
-            actorRunId: actor.runId,
+            actorRunId: getRunIdFromCorrelation(req.correlation),
             checkoutRunId: existing.checkoutRunId,
             executionRunId: existing.executionRunId,
           })) ||
@@ -5921,7 +5931,7 @@ export function issueRoutes(
             actorType: actor.actorType,
             actorId: actor.actorId,
             agentId: actor.agentId,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
             action: "heartbeat.cancelled",
             entityType: "heartbeat_run",
             entityId: cancelled.id,
@@ -5961,6 +5971,7 @@ export function issueRoutes(
       cancelledScheduledRetryRunId = await cancelScheduledRetrySupersededByComment({
         scheduledRetryRunId: scheduledRetryForHumanComment?.runId,
         issue: existing,
+        correlation: req.correlation,
         actor,
       });
     }
@@ -6101,7 +6112,7 @@ export function issueRoutes(
             actorUserId: actor.actorType === "user" ? actor.actorId : null,
             outcome: decision.outcome,
             body: decision.body,
-            createdByRunId: actor.runId ?? null,
+            createdByRunId: getRunIdFromCorrelation(req.correlation) ?? null,
           });
 
           return updated;
@@ -6152,7 +6163,7 @@ export function issueRoutes(
             actorType: actor.actorType,
             actorId: actor.actorId,
             agentId: actor.agentId,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
             action: "heartbeat.cancelled",
             entityType: "heartbeat_run",
             entityId: cancelled.id,
@@ -6166,7 +6177,7 @@ export function issueRoutes(
           actorType: actor.actorType,
           actorId: actor.actorId,
           agentId: actor.agentId,
-          runId: actor.runId,
+          runId: getRunIdFromCorrelation(req.correlation),
           action: "heartbeat.cancel_failed",
           entityType: "heartbeat_run",
           entityId: runToCancelForCancelledStatus.id,
@@ -6203,9 +6214,9 @@ export function issueRoutes(
     }
     await routinesSvc.syncRunStatusForIssue(issue.id);
 
-    if (actor.runId) {
-      await heartbeat.reportRunActivity(actor.runId).catch((err) =>
-        logger.warn({ err, runId: actor.runId }, "failed to clear detached run warning after issue activity"));
+    if (getRunIdFromCorrelation(req.correlation)) {
+      await heartbeat.reportRunActivity(getRunIdFromCorrelation(req.correlation)).catch((err) =>
+        logger.warn({ err, runId: getRunIdFromCorrelation(req.correlation) }, "failed to clear detached run warning after issue activity"));
     }
 
     // Build activity details with previous values for changed fields
@@ -6276,7 +6287,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.updated",
       entityType: "issue",
       entityId: issue.id,
@@ -6319,7 +6330,7 @@ export function issueRoutes(
             actorType: actor.actorType,
             actorId: actor.actorId,
             agentId: actor.agentId,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
             action: "issue.successful_run_handoff_resolved",
             entityType: "issue",
             entityId: issue.id,
@@ -6349,7 +6360,7 @@ export function issueRoutes(
           actorType: actor.actorType,
           actorId: actor.actorId,
           agentId: actor.agentId,
-          runId: actor.runId,
+          runId: getRunIdFromCorrelation(req.correlation),
           action: "issue.blockers_updated",
           entityType: "issue",
           entityId: issue.id,
@@ -6377,7 +6388,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.reviewers_updated",
         entityType: "issue",
         entityId: issue.id,
@@ -6397,7 +6408,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.approvers_updated",
         entityType: "issue",
         entityId: issue.id,
@@ -6420,7 +6431,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.monitor_scheduled",
         entityType: "issue",
         entityId: issue.id,
@@ -6442,7 +6453,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.monitor_cleared",
         entityType: "issue",
         entityId: issue.id,
@@ -6478,7 +6489,7 @@ export function issueRoutes(
       comment = await svc.addComment(id, commentBody, {
         agentId: actor.agentId ?? undefined,
         userId: actor.actorType === "user" ? actor.actorId : undefined,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
       }, {
         sourceTrust: await sourceTrustForActorWrite(issue, actor),
       });
@@ -6502,7 +6513,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.comment_added",
         entityType: "issue",
         entityId: issue.id,
@@ -6541,6 +6552,7 @@ export function issueRoutes(
       await logExpiredRequestConfirmations({
         issue,
         interactions: expiredInteractions,
+        correlation: req.correlation,
         actor,
         source: "issue.comment",
       });
@@ -6778,7 +6790,7 @@ export function issueRoutes(
       }
     })();
 
-    await queueTaskWatchdogEvaluation(issue, actor.runId);
+    await queueTaskWatchdogEvaluation(issue, getRunIdFromCorrelation(req.correlation));
     res.json({ ...issueResponse, comment });
   });
 
@@ -6813,13 +6825,13 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.deleted",
       entityType: "issue",
       entityId: issue.id,
     });
 
-    await queueTaskWatchdogEvaluation(existing, actor.runId);
+    await queueTaskWatchdogEvaluation(existing, getRunIdFromCorrelation(req.correlation));
     res.json(issue);
   });
 
@@ -6876,7 +6888,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.checked_out",
       entityType: "issue",
       entityId: issue.id,
@@ -6935,7 +6947,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.released",
       entityType: "issue",
       entityId: released.id,
@@ -6974,7 +6986,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.admin_force_release",
       entityType: "issue",
       entityId: result.issue.id,
@@ -7040,6 +7052,7 @@ export function issueRoutes(
     await logExpiredRequestConfirmations({
       issue,
       interactions: expiredInteractions,
+      correlation: req.correlation,
       actor,
       source: "issue.interactions.catchup_superseded_by_comment",
     });
@@ -7080,7 +7093,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.thread_interaction_created",
       entityType: "issue",
       entityId: issue.id,
@@ -7122,7 +7135,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: interaction.status === "expired"
           ? "issue.thread_interaction_expired"
           : "issue.thread_interaction_accepted",
@@ -7149,7 +7162,7 @@ export function issueRoutes(
           actorType: actor.actorType,
           actorId: actor.actorId,
           agentId: actor.agentId,
-          runId: actor.runId,
+          runId: getRunIdFromCorrelation(req.correlation),
           action: "issue.updated",
           entityType: "issue",
           entityId: issue.id,
@@ -7229,7 +7242,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: interaction.status === "expired"
           ? "issue.thread_interaction_expired"
           : "issue.thread_interaction_rejected",
@@ -7286,7 +7299,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.thread_interaction_answered",
         entityType: "issue",
         entityId: issue.id,
@@ -7339,7 +7352,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.thread_interaction_cancelled",
         entityType: "issue",
         entityId: issue.id,
@@ -7437,7 +7450,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.comment_cancelled",
         entityType: "issue",
         entityId: issue.id,
@@ -7472,7 +7485,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         agentId: actor.agentId,
         userId: actor.actorType === "user" ? actor.actorId : null,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
       },
       {
         afterTombstone: async (deletedComment, tx) => {
@@ -7483,7 +7496,7 @@ export function issueRoutes(
             actorId: actor.actorId,
             agentId: actor.agentId,
             userId: actor.actorType === "user" ? actor.actorId : null,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
           }, tx);
           await Promise.all(
             annotationCleanup.deletedCommentIds.map((annotationCommentId) =>
@@ -7506,7 +7519,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.comment_deleted",
       entityType: "issue",
       entityId: issue.id,
@@ -7518,7 +7531,7 @@ export function issueRoutes(
         deletedByType: actor.actorType,
         deletedByAgentId: actor.actorType === "agent" ? actor.agentId : null,
         deletedByUserId: actor.actorType === "user" ? actor.actorId : null,
-        deletedByRunId: actor.runId,
+        deletedByRunId: getRunIdFromCorrelation(req.correlation),
         deletedAt: deleted.deletedAt,
         deletedAnnotationCommentIds: annotationCleanup.deletedCommentIds,
         resolvedAnnotationThreadIds: annotationCleanup.resolvedThreadIds,
@@ -7686,7 +7699,7 @@ export function issueRoutes(
           assigneeAgentId: issue.assigneeAgentId,
           actorType: actor.actorType,
           actorId: actor.actorId,
-          actorRunId: actor.runId,
+          actorRunId: getRunIdFromCorrelation(req.correlation),
           checkoutRunId: issue.checkoutRunId,
           executionRunId: issue.executionRunId,
         }) ||
@@ -7718,6 +7731,7 @@ export function issueRoutes(
         ? await cancelScheduledRetrySupersededByComment({
             scheduledRetryRunId: scheduledRetryForHumanComment?.runId,
             issue,
+            correlation: req.correlation,
             actor,
           })
         : null;
@@ -7735,7 +7749,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "issue.updated",
         entityType: "issue",
         entityId: currentIssue.id,
@@ -7776,7 +7790,7 @@ export function issueRoutes(
             actorType: actor.actorType,
             actorId: actor.actorId,
             agentId: actor.agentId,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
             action: "heartbeat.cancelled",
             entityType: "heartbeat_run",
             entityId: cancelled.id,
@@ -7852,7 +7866,7 @@ export function issueRoutes(
             {
               agentId: actor.agentId ?? undefined,
               userId: actor.actorType === "user" ? actor.actorId : undefined,
-              runId: actor.runId,
+              runId: getRunIdFromCorrelation(req.correlation),
             },
             commentOptions,
             tx,
@@ -7873,7 +7887,7 @@ export function issueRoutes(
               actorUserId: actor.actorType === "user" ? actor.actorId : null,
               outcome: transition.decision.outcome,
               body: transition.decision.body,
-              createdByRunId: actor.runId ?? null,
+              createdByRunId: getRunIdFromCorrelation(req.correlation) ?? null,
             });
           }
 
@@ -7896,7 +7910,7 @@ export function issueRoutes(
           actorType: actor.actorType,
           actorId: actor.actorId,
           agentId: actor.agentId,
-          runId: actor.runId,
+          runId: getRunIdFromCorrelation(req.correlation),
           action: "issue.updated",
           entityType: "issue",
           entityId: currentIssue.id,
@@ -7920,7 +7934,7 @@ export function issueRoutes(
       comment = await svc.addComment(id, req.body.body, {
         agentId: actor.agentId ?? undefined,
         userId: actor.actorType === "user" ? actor.actorId : undefined,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
       }, {
         authorType: req.body.authorType ?? (actor.actorType === "agent" ? "agent" : "user"),
         presentation: req.body.presentation ?? null,
@@ -7937,9 +7951,9 @@ export function issueRoutes(
       commentReferenceSummaryAfter,
     );
 
-    if (actor.runId) {
-      await heartbeat.reportRunActivity(actor.runId).catch((err) =>
-        logger.warn({ err, runId: actor.runId }, "failed to clear detached run warning after issue comment"));
+    if (getRunIdFromCorrelation(req.correlation)) {
+      await heartbeat.reportRunActivity(getRunIdFromCorrelation(req.correlation)).catch((err) =>
+        logger.warn({ err, runId: getRunIdFromCorrelation(req.correlation) }, "failed to clear detached run warning after issue comment"));
     }
 
     await logActivity(db, {
@@ -7947,7 +7961,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.comment_added",
       entityType: "issue",
       entityId: currentIssue.id,
@@ -8177,7 +8191,7 @@ export function issueRoutes(
       }
     })();
 
-    await queueTaskWatchdogEvaluation(currentIssue, actor.runId);
+    await queueTaskWatchdogEvaluation(currentIssue, getRunIdFromCorrelation(req.correlation));
     res.status(201).json(comment);
   });
 
@@ -8210,7 +8224,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.feedback_vote_saved",
       entityType: "issue",
       entityId: issue.id,
@@ -8230,7 +8244,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "company.feedback_data_sharing_updated",
         entityType: "company",
         entityId: issue.companyId,
@@ -8251,7 +8265,7 @@ export function issueRoutes(
             actorType: actor.actorType,
             actorId: actor.actorId,
             agentId: actor.agentId,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
             action: "instance.settings.general_updated",
             entityType: "instance_settings",
             entityId: settings.id,
@@ -8369,7 +8383,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.attachment_added",
       entityType: "issue",
       entityId: issueId,
@@ -8477,7 +8491,7 @@ export function issueRoutes(
       actorType: actor.actorType,
       actorId: actor.actorId,
       agentId: actor.agentId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
       action: "issue.attachment_removed",
       entityType: "issue",
       entityId: removed.issueId,

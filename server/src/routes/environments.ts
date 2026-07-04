@@ -33,6 +33,7 @@ import { secretService } from "../services/secrets.js";
 import { listReadyPluginEnvironmentDrivers } from "../services/plugin-environment-driver.js";
 import { getConfiguredSecretProvider } from "../secrets/configured-provider.js";
 import { assertBoardOrgAccess, getActorInfo } from "./authz.js";
+import { getRunIdFromCorrelation } from "../auth-context.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
 import { environmentService } from "../services/environments.js";
 import { executionWorkspaceService } from "../services/execution-workspaces.js";
@@ -106,6 +107,7 @@ export function environmentRoutes(
 
   async function logInstanceEnvironmentActivity(input: {
     actor: ReturnType<typeof getActorInfo>;
+    runId: string | null | undefined;
     action: string;
     entityId: string;
     details: Record<string, unknown>;
@@ -118,7 +120,7 @@ export function environmentRoutes(
           actorType: input.actor.actorType,
           actorId: input.actor.actorId,
           agentId: input.actor.agentId,
-          runId: input.actor.runId,
+          runId: input.runId,
           action: input.action,
           entityType: "environment",
           entityId: input.entityId,
@@ -311,6 +313,7 @@ export function environmentRoutes(
       });
       await logInstanceEnvironmentActivity({
         actor,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "environment.custom_image_setup.started",
         entityId: result.session.environmentId,
         details: setupSessionActivityDetails(result.session),
@@ -350,6 +353,7 @@ export function environmentRoutes(
       });
       await logInstanceEnvironmentActivity({
         actor,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "environment.custom_image_setup.finished",
         entityId: result.session.environmentId,
         details: {
@@ -378,6 +382,7 @@ export function environmentRoutes(
       });
       await logInstanceEnvironmentActivity({
         actor,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "environment.custom_image_setup.cancelled",
         entityId: cancelled.environmentId,
         details: setupSessionActivityDetails(cancelled),
@@ -682,7 +687,7 @@ export function environmentRoutes(
           actorType: actor.actorType,
           actorId: actor.actorId,
           actorSource: actor.actorSource,
-          heartbeatRunId: actor.runId,
+          heartbeatRunId: getRunIdFromCorrelation(req.correlation),
         },
         pluginWorkerManager: options.pluginWorkerManager,
       });
@@ -709,6 +714,7 @@ export function environmentRoutes(
       });
       await logInstanceEnvironmentActivity({
         actor,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "environment.probed_unsaved",
         entityId: "unsaved",
         details: {

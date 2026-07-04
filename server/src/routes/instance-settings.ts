@@ -57,7 +57,7 @@ export function instanceSettingsRoutes(db: Db) {
             actorType: actor.actorType,
             actorId: actor.actorId,
             agentId: actor.agentId,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
             action: "instance.settings.updated",
             entityType: "instance_settings",
             entityId: updated.id,
@@ -94,7 +94,7 @@ export function instanceSettingsRoutes(db: Db) {
             actorType: actor.actorType,
             actorId: actor.actorId,
             agentId: actor.agentId,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
             action: "instance.settings.general_updated",
             entityType: "instance_settings",
             entityId: updated.id,
@@ -132,7 +132,7 @@ export function instanceSettingsRoutes(db: Db) {
             actorType: actor.actorType,
             actorId: actor.actorId,
             agentId: actor.agentId,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
             action: "instance.settings.experimental_updated",
             entityType: "instance_settings",
             entityId: updated.id,
@@ -165,7 +165,7 @@ export function instanceSettingsRoutes(db: Db) {
       assertCanManageInstanceSettings(req);
       const actor = getActorInfo(req);
       const result = await heartbeat.reconcileIssueGraphLiveness({
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         force: true,
         lookbackHours: req.body.lookbackHours,
       });
@@ -177,7 +177,7 @@ export function instanceSettingsRoutes(db: Db) {
             actorType: actor.actorType,
             actorId: actor.actorId,
             agentId: actor.agentId,
-            runId: actor.runId,
+            runId: getRunIdFromCorrelation(req.correlation),
             action: "instance.settings.issue_graph_liveness_auto_recovery_run",
             entityType: "instance_settings",
             entityId: "default",

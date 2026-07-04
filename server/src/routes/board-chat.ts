@@ -185,7 +185,7 @@ export function boardChatRoutes(
     await issueSvc.addComment(resolvedIssueId, message, {
       agentId: actor.agentId ?? undefined,
       userId: actor.agentId ? undefined : actor.actorId,
-      runId: actor.runId,
+      runId: getRunIdFromCorrelation(req.correlation),
     });
 
     // Build conversation history from recent comments (oldest first).
