@@ -51,7 +51,7 @@ export function inboxDismissalRoutes(db: Db) {
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: actor.runId,
+        runId: getRunIdFromCorrelation(req.correlation),
         action: "inbox.dismissed",
         entityType: "company",
         entityId: companyId,

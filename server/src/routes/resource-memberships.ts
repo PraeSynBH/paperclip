@@ -32,7 +32,7 @@ async function logMembershipChange(
     actorType: actor.actorType,
     actorId: actor.actorId,
     agentId: actor.agentId,
-    runId: actor.runId,
+    runId: getRunIdFromCorrelation(req.correlation),
     action: `resource_membership.${input.state}`,
     entityType: input.resourceType,
     entityId: input.resourceId,

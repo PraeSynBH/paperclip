@@ -634,9 +634,9 @@ async function resolveCasePipelineId(db: Db, input: { companyId: string; caseId:
   return row.pipelineId;
 }
 
-function activityActorForPipelineRoute(actor: PipelineActor) {
+function activityActorForPipelineRoute(actor: PipelineActor, runId: string | null) {
   if (actor.type === "agent") {
-    return { actorType: "agent" as const, actorId: actor.agentId, agentId: actor.agentId, runId: actor.runId };
+    return { actorType: "agent" as const, actorId: actor.agentId, agentId: actor.agentId, runId };
   }
   if (actor.type === "user") {
     return { actorType: "user" as const, actorId: actor.userId, agentId: null, runId: null };
@@ -657,6 +657,7 @@ async function sourceTrustForPipelineCaseDocumentWrite(
     companyId: string;
     caseId: string;
     actor: PipelineActor;
+    runId: string;
   },
 ) {
   if (input.actor.type !== "agent") return null;
@@ -670,7 +671,7 @@ async function sourceTrustForPipelineCaseDocumentWrite(
       .from(heartbeatRuns)
       .where(and(
         eq(heartbeatRuns.companyId, input.companyId),
-        eq(heartbeatRuns.id, input.actor.runId),
+        eq(heartbeatRuns.id, input.runId),
         eq(heartbeatRuns.agentId, input.actor.agentId),
       ))
       .limit(1)
@@ -702,7 +703,7 @@ async function sourceTrustForPipelineCaseDocumentWrite(
       actorType: "agent",
       actorId: input.actor.agentId,
       agentId: input.actor.agentId,
-      runId: input.actor.runId,
+      runId: input.runId,
     },
   });
 }
@@ -725,11 +726,12 @@ async function writeRouteEvent(
     caseId: string;
     type: string;
     actor: PipelineActor;
+    runId: string | null;
     payload?: Record<string, unknown>;
   },
 ) {
   const actorPatch = input.actor.type === "agent"
-    ? { actorType: "agent", actorAgentId: input.actor.agentId, runId: input.actor.runId }
+    ? { actorType: "agent", actorAgentId: input.actor.agentId, runId: input.runId }
     : input.actor.type === "user"
       ? { actorType: "user", actorUserId: input.actor.userId }
       : { actorType: "system" };
@@ -1600,7 +1602,7 @@ export function pipelineRoutes(db: Db, options: Parameters<typeof pipelineServic
     const pipelineId = await resolveCasePipelineId(db, { companyId, caseId });
     await assertPipelineWriteAccess(req, { access, companyId, pipelineId });
     const actor = actorForMutation(req);
-    const sourceTrust = await sourceTrustForPipelineCaseDocumentWrite(db, { companyId, caseId, actor });
+    const sourceTrust = await sourceTrustForPipelineCaseDocumentWrite(db, { companyId, caseId, actor, runId: getRunIdFromCorrelation(req.correlation)! });
 
     const result = await db.transaction(async (tx) => {
       const existing = await tx
@@ -1759,7 +1761,7 @@ export function pipelineRoutes(db: Db, options: Parameters<typeof pipelineServic
     }
     await logActivity(db, {
       companyId,
-      ...activityActorForPipelineRoute(actor),
+      ...activityActorForPipelineRoute(actor, getRunIdFromCorrelation(req.correlation)),
       action: result.created ? "pipeline.case_document_created" : "pipeline.case_document_updated",
       entityType: "pipeline_case",
       entityId: caseId,
@@ -1872,7 +1874,7 @@ export function pipelineRoutes(db: Db, options: Parameters<typeof pipelineServic
     ));
     await logActivity(db, {
       companyId,
-      ...activityActorForPipelineRoute(actor),
+      ...activityActorForPipelineRoute(actor, getRunIdFromCorrelation(req.correlation)),
       action: "pipeline.case_document_restored",
       entityType: "pipeline_case",
       entityId: caseId,
@@ -2062,6 +2064,7 @@ export function pipelineRoutes(db: Db, options: Parameters<typeof pipelineServic
         caseId,
         type: "conversation_opened",
         actor,
+        runId: getRunIdFromCorrelation(req.correlation),
         payload: { issueId: issue!.id },
       });
       return { issue: issue!, created: true };
@@ -2112,6 +2115,7 @@ export function pipelineRoutes(db: Db, options: Parameters<typeof pipelineServic
           caseId,
           type: "issue_linked",
           actor,
+          runId: getRunIdFromCorrelation(req.correlation),
           payload: { issueId: req.body.issueId, role: req.body.role },
         });
         return created!;
@@ -2156,6 +2160,7 @@ export function pipelineRoutes(db: Db, options: Parameters<typeof pipelineServic
         caseId,
         type: "issue_unlinked",
         actor,
+        runId: getRunIdFromCorrelation(req.correlation),
         payload: { issueId: removed.issueId, role: removed.role, linkId: removed.id },
         });
       return removed;
