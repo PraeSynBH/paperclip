@@ -1102,6 +1102,21 @@ export function issueTreeControlService(db: Db) {
     return holds.map((hold) => toHold(hold, membersByHoldId.get(hold.id) ?? []));
   }
 
+  async function listActivePauseHoldsByCompany(companyId: string) {
+    const holds = await db
+      .select()
+      .from(issueTreeHolds)
+      .where(
+        and(
+          eq(issueTreeHolds.companyId, companyId),
+          eq(issueTreeHolds.status, "active"),
+          eq(issueTreeHolds.mode, "pause"),
+        ),
+      )
+      .orderBy(asc(issueTreeHolds.createdAt), asc(issueTreeHolds.id));
+    return holds.map((hold) => toHold(hold));
+  }
+
   async function releaseHold(
     companyId: string,
     rootIssueId: string,
@@ -1191,6 +1206,7 @@ export function issueTreeControlService(db: Db) {
     restoreIssueStatusesForHold,
     getHold,
     listHolds,
+    listActivePauseHoldsByCompany,
     getActivePauseHoldGate,
     releaseHold,
     cancelUnclaimedWakeupsForTree,

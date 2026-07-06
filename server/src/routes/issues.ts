@@ -7283,7 +7283,7 @@ export function issueRoutes(
           actorId: actor.actorId,
           agentId: actor.agentId,
           userId: actor.actorType === "user" ? actor.actorId : null,
-          runId: getRunIdFromCorrelation(req.correlation),
+          runId: actor.runId,
         },
       });
 
@@ -7292,7 +7292,7 @@ export function issueRoutes(
         actorType: actor.actorType,
         actorId: actor.actorId,
         agentId: actor.agentId,
-        runId: getRunIdFromCorrelation(req.correlation),
+        runId: actor.runId,
         action: "issue.force_reassign",
         entityType: "issue",
         entityId: result.issue.id,
@@ -7326,8 +7326,7 @@ export function issueRoutes(
           id: randomUUID(),
           companyId: existing.companyId,
           issueId: existing.id,
-          authorType: "system",
-          authorId: "system",
+          authorType: "system" as const,
           body: commentBody,
           createdAt: new Date(),
           updatedAt: new Date(),

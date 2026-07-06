@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { and, desc, eq, gte, inArray, lt, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lt, ne, not, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   agents,
@@ -656,7 +656,7 @@ export function agentService(db: Db) {
           and(
             eq(issues.companyId, existing.companyId),
             eq(issues.assigneeAgentId, id),
-            notInArray(issues.status, ["done", "cancelled"]),
+            not(inArray(issues.status, ["done", "cancelled"])),
           ),
         );
 

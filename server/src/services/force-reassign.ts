@@ -144,16 +144,13 @@ export async function detectOrphan(
   });
 
   const chainInvalid =
-    eligibility.orgChainHealth.chainValid === false ||
-    eligibility.orgChainHealth.ancestorTerminated === true ||
-    eligibility.orgChainHealth.ancestorMissing === true ||
-    eligibility.orgChainHealth.depthExceeded === true;
+    eligibility.orgChainHealth.status === "invalid_org_chain";
 
   if (chainInvalid && !eligibility.invokable) {
     return {
       orphaned: true,
       matchedCondition: "management_chain_broken",
-      detail: `Management chain is broken: ${eligibility.orgChainHealth.breakReason ?? "invokable check failed"}`,
+      detail: `Management chain is broken: ${eligibility.orgChainHealth.repairGuidance ?? eligibility.orgChainHealth.reason ?? "invokable check failed"}`,
       fromChainSnapshot: snapshot,
     };
   }
@@ -404,15 +401,15 @@ export function forceReassignService(db: Db) {
       if (issue.checkoutRunId) {
         await txDb
           .update(heartbeatRuns)
-          .set({ status: "cancelled", completedAt: new Date() })
-          .where(eq(heartbeatRuns.id, issue.checkoutRunId))
+.set({ status: "cancelled", finishedAt: new Date() })
+        .where(eq(heartbeatRuns.id, issue.checkoutRunId))
           .catch(() => null);
       }
       if (issue.executionRunId && issue.executionRunId !== issue.checkoutRunId) {
         await txDb
           .update(heartbeatRuns)
-          .set({ status: "cancelled", completedAt: new Date() })
-          .where(eq(heartbeatRuns.id, issue.executionRunId))
+.set({ status: "cancelled", finishedAt: new Date() })
+        .where(eq(heartbeatRuns.id, issue.executionRunId))
           .catch(() => null);
       }
 
