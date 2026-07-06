@@ -7,6 +7,8 @@ import type { Db } from "@paperclipai/db";
 import type { DeploymentMode } from "@paperclipai/shared";
 import { instanceSettingsService, issueService } from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import { emit } from "../logging/index.js";
+import { redactLogRecord } from "@paperclipai/shared/security";
 
 /**
  * Strip structured action signals (`%%ACTIONS%%{...}%%/ACTIONS%%`) from a
@@ -347,7 +349,8 @@ export function boardChatRoutes(
     });
 
     proc.stderr.on("data", (data: Buffer) => {
-      console.error("[board/chat/stream stderr]", data.toString());
+      const redacted = String(redactLogRecord(data.toString()).redacted);
+      emit("info", "[board/chat/stream stderr]", { stderr: redacted });
     });
 
     proc.on("close", async (exitCode) => {
@@ -383,7 +386,10 @@ export function boardChatRoutes(
     proc.on("error", (err) => {
       clearTimeout(timeout);
       releaseSlot();
-      console.error("[board/chat/stream spawn error]", err);
+      const errInfo = err instanceof Error
+        ? { name: err.name, message: err.message, stack: err.stack }
+        : err;
+      emit("error", "[board/chat/stream spawn error]", { err: redactLogRecord(errInfo).redacted });
       if (res.writable) {
         res.write(
           `data: ${JSON.stringify({

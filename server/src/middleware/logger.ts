@@ -5,7 +5,7 @@ import { pinoHttp } from "pino-http";
 import { readConfigFile } from "../config-file.js";
 import { resolveDefaultLogsDir, resolveHomeAwarePath } from "../home-paths.js";
 import { shouldSilenceHttpSuccessLog } from "./http-log-policy.js";
-import { redactSensitive } from "./redact-sensitive.js";
+import { redact, redactQueryString } from "@paperclipai/shared/security";
 
 function resolveServerLogDir(): string {
   const envOverride = process.env.PAPERCLIP_LOG_DIR?.trim();
@@ -56,35 +56,53 @@ export const httpLogger = pinoHttp({
     if (res.statusCode >= 400) return "warn";
     return "info";
   },
+  /**
+   * Express middleware logger powered by pino-http. Successful requests log the
+   * method, URL and status code with the URL query string redacted. Error
+   * responses (4xx/5xx) attach redacted copies of the request body, params,
+   * query, and URL so that PII does not survive in logs even when the
+   * pattern-based redactor misses a value.
+   */
   customSuccessMessage(req, res) {
-    return `${req.method} ${req.url} ${res.statusCode}`;
+    return `${req.method} ${redactQueryString(req.url ?? "")} ${res.statusCode}`;
   },
   customErrorMessage(req, res, err) {
     const ctx = (res as any).__errorContext;
     const errMsg = ctx?.error?.message || err?.message || (res as any).err?.message || "unknown error";
-    return `${req.method} ${req.url} ${res.statusCode} — ${errMsg}`;
+    return `${req.method} ${redactQueryString(req.url ?? "")} ${res.statusCode} — ${errMsg}`;
   },
+  /**
+   * Attach extra properties to HTTP log lines. For 2xx/3xx responses we keep
+   * this empty so the allowlisted `url` field remains the only URL signal.
+   * For 4xx/5xx responses we attach the request body, params, query, and a
+   * redacted copy of the URL where every query-string value is replaced with
+   * `[REDACTED]`. This prevents URL-borne PII (custom IDs, tokens, etc.) from
+   * surviving in error logs even when the pattern engine does not catch them.
+   */
   customProps(req, res) {
     if (res.statusCode >= 400) {
       const ctx = (res as any).__errorContext;
       if (ctx) {
         return {
           errorContext: ctx.error,
-          reqBody: redactSensitive(ctx.reqBody),
-          reqParams: redactSensitive(ctx.reqParams),
-          reqQuery: redactSensitive(ctx.reqQuery),
+          reqBody: redact(ctx.reqBody).redacted,
+          reqParams: redact(ctx.reqParams).redacted,
+          reqQuery: redact(ctx.reqQuery).redacted,
+          reqUrl: redactQueryString(req.url ?? ""),
         };
       }
-      const props: Record<string, unknown> = {};
+      const props: Record<string, unknown> = {
+        reqUrl: redactQueryString(req.url ?? ""),
+      };
       const { body, params, query } = req as any;
       if (body && typeof body === "object" && Object.keys(body).length > 0) {
-        props.reqBody = redactSensitive(body);
+        props.reqBody = redact(body).redacted;
       }
       if (params && typeof params === "object" && Object.keys(params).length > 0) {
-        props.reqParams = redactSensitive(params);
+        props.reqParams = redact(params).redacted;
       }
       if (query && typeof query === "object" && Object.keys(query).length > 0) {
-        props.reqQuery = redactSensitive(query);
+        props.reqQuery = redact(query).redacted;
       }
       if ((req as any).route?.path) {
         props.routePath = (req as any).route.path;

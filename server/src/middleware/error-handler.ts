@@ -5,7 +5,7 @@ import { HttpError } from "../errors.js";
 import { trackErrorHandlerCrash } from "@paperclipai/shared/telemetry";
 import { getTelemetryClient } from "../telemetry.js";
 import { COMPANY_IMPORT_API_PATH } from "../routes/company-import-paths.js";
-import { logger } from "./logger.js";
+import { emit } from "../logging/log-formation.js";
 import {
   recordResponsibleUserDenialOnActiveRun,
 } from "../services/responsible-user-denial-run-outcomes.js";
@@ -57,14 +57,11 @@ function recordResponsibleUserDenialFromHttpError(
     companyId: req.actor.companyId ?? null,
     code: details?.code,
   }).catch((recordErr) => {
-    logger.warn(
-      {
-        err: recordErr,
-        runId: req.actor?.runId ?? null,
-        agentId: req.actor?.type === "agent" ? req.actor.agentId ?? null : null,
-      },
-      "failed to record responsible-user denial on heartbeat run",
-    );
+    emit("warn", "failed to record responsible-user denial on heartbeat run", {
+      err: recordErr,
+      runId: req.actor?.runId ?? null,
+      agentId: req.actor?.type === "agent" ? req.actor.agentId ?? null : null,
+    });
   });
 }
 

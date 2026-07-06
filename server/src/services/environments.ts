@@ -213,23 +213,17 @@ export function environmentService(db: Db) {
           createdAt: now,
           updatedAt: now,
         })
-        .onConflictDoNothing({
+        .onConflictDoUpdate({
           target: [environments.driver],
-          where: sql`${environments.driver} = 'local'`,
+          targetWhere: sql`${environments.driver} = 'local'`,
+          set: { driver: sql`EXCLUDED.driver` },
         })
         .returning()
         .then((rows) => rows[0] ?? null);
-      if (row) return toEnvironment(row);
-
-      const existing = await db
-        .select()
-        .from(environments)
-        .where(eq(environments.driver, "local"))
-        .then((rows) => rows[0] ?? null);
-      if (!existing) {
+      if (!row) {
         throw new Error("Failed to ensure local environment");
       }
-      return toEnvironment(existing);
+      return toEnvironment(row);
     },
 
     /**
@@ -286,8 +280,8 @@ export function environmentService(db: Db) {
 
       // The partial unique index `environments_managed_sandbox_idx` enforces
       // "at most one Paperclip-managed sandbox row per instance" at the DB
-      // level. Use ON CONFLICT DO NOTHING keyed on that index so concurrent
-      // callers can race the INSERT; losers re-read the surviving row.
+      // level. Use ON CONFLICT DO UPDATE (no-op set) so RETURNING always
+      // produces a row even when a concurrent caller wins the race.
       const inserted = await db
         .insert(environments)
         .values({
@@ -301,10 +295,11 @@ export function environmentService(db: Db) {
           createdAt: now,
           updatedAt: now,
         })
-        .onConflictDoNothing({
+        .onConflictDoUpdate({
           target: [environments.driver],
-          where:
+          targetWhere:
             sql`${environments.driver} = 'sandbox' AND (${environments.metadata} ->> 'managedByPaperclip')::boolean = true`,
+          set: { driver: sql`EXCLUDED.driver` },
         })
         .returning()
         .then((rows) => rows[0] ?? null)

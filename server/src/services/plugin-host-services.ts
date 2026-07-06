@@ -71,6 +71,8 @@ import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { logger } from "../middleware/logger.js";
+import { emit } from "../logging/log-formation.js";
+import { redact } from "@paperclipai/shared/security";
 import { getTelemetryClient } from "../telemetry.js";
 import { accessService } from "./access.js";
 import { authorizationService, type AuthorizationActor } from "./authorization.js";
@@ -372,6 +374,19 @@ const PINO_RESERVED_KEYS = new Set([
   "v",
 ]);
 
+/** Extract a plain, redactable record from an unknown error for fallback logging. */
+function redactError(err: unknown): unknown {
+  if (err instanceof Error) {
+    return redact({
+      name: err.name,
+      message: err.message,
+      stack: err.stack,
+      cause: err.cause,
+    }).redacted;
+  }
+  return redact(err).redacted;
+}
+
 /** Truncate a string to `max` characters, appending a marker if truncated. */
 function truncStr(s: string, max: number): string {
   if (s.length <= max) return s;
@@ -453,9 +468,13 @@ export async function flushPluginLogBuffer(): Promise<void> {
       await dbInstance.insert(pluginLogs).values(values);
     } catch (err) {
       try {
-        logger.warn({ err, count: values.length }, "Failed to batch-persist plugin logs to DB");
+        emit(
+          "warn",
+          "[plugin-host-services] Failed to batch-persist plugin logs to DB",
+          { count: values.length, err: redactError(err) },
+        );
       } catch {
-        console.error("[plugin-host-services] Batch log flush failed:", err);
+        // Swallowed — log flushing must never crash the process.
       }
     }
   }
@@ -464,7 +483,15 @@ export async function flushPluginLogBuffer(): Promise<void> {
 /** Interval handle for the periodic log flush. */
 const _logFlushInterval = setInterval(() => {
   flushPluginLogBuffer().catch((err) => {
-    console.error("[plugin-host-services] Periodic log flush error:", err);
+    try {
+      emit(
+        "error",
+        "[plugin-host-services] Periodic log flush error",
+        { err: redactError(err) },
+      );
+    } catch {
+      // Swallowed — log flushing must never crash the process.
+    }
   });
 }, LOG_BUFFER_FLUSH_INTERVAL_MS);
 
@@ -1278,7 +1305,15 @@ export function buildHostServices(
         });
         if (_logBuffer.length >= LOG_BUFFER_FLUSH_SIZE) {
           flushPluginLogBuffer().catch((err) => {
-            console.error("[plugin-host-services] Triggered metric flush failed:", err);
+            try {
+              emit(
+                "error",
+                "[plugin-host-services] Triggered metric flush failed",
+                { err: redactError(err) },
+              );
+            } catch {
+              // Swallowed — log flushing must never crash the process.
+            }
           });
         }
       },
@@ -1327,7 +1362,15 @@ export function buildHostServices(
         });
         if (_logBuffer.length >= LOG_BUFFER_FLUSH_SIZE) {
           flushPluginLogBuffer().catch((err) => {
-            console.error("[plugin-host-services] Triggered log flush failed:", err);
+            try {
+              emit(
+                "error",
+                "[plugin-host-services] Triggered log flush failed",
+                { err: redactError(err) },
+              );
+            } catch {
+              // Swallowed — log flushing must never crash the process.
+            }
           });
         }
       },
@@ -2751,7 +2794,15 @@ export function buildHostServices(
 
       // Flush any buffered log entries synchronously-as-possible on dispose.
       flushPluginLogBuffer().catch((err) => {
-        console.error("[plugin-host-services] dispose() log flush failed:", err);
+        try {
+          emit(
+            "error",
+            "[plugin-host-services] dispose() log flush failed",
+            { err: redactError(err) },
+          );
+        } catch {
+          // Swallowed — log flushing must never crash the process.
+        }
       });
     },
   };

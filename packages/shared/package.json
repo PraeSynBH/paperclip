@@ -15,6 +15,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./telemetry": "./src/telemetry/index.ts",
+    "./security": "./src/security/index.ts",
     "./*": "./src/*.ts"
   },
   "publishConfig": {
@@ -27,6 +28,10 @@
       "./telemetry": {
         "types": "./dist/telemetry/index.d.ts",
         "import": "./dist/telemetry/index.js"
+      },
+      "./security": {
+        "types": "./dist/security/index.d.ts",
+        "import": "./dist/security/index.js"
       },
       "./*": {
         "types": "./dist/*.d.ts",
