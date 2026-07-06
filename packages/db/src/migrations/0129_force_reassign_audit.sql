@@ -35,3 +35,15 @@ CREATE UNIQUE INDEX "force_reassign_idempotency_scope_key_idx"
 
 ALTER TABLE "issues"
   ADD COLUMN "version" integer NOT NULL DEFAULT 0;
+
+ALTER TABLE "issues"
+  ADD COLUMN "assignee_uninvokable" boolean NOT NULL DEFAULT false;
+
+ALTER TABLE "issues"
+  ADD COLUMN "assignee_uninvokable_at" timestamp with time zone;
+
+ALTER TABLE "issues"
+  ADD COLUMN "assignee_uninvokable_reason" text;
+
+CREATE INDEX "issues_company_assignee_uninvokable_idx"
+  ON "issues" ("company_id", "assignee_uninvokable", "status");
