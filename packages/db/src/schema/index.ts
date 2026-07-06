@@ -83,6 +83,13 @@ export { financeEvents } from "./finance_events.js";
 export { approvals } from "./approvals.js";
 export { approvalComments } from "./approval_comments.js";
 export { activityLog } from "./activity_log.js";
+export { issueDecisionOwners } from "./issue_decision_owners.js";
+export {
+  issueAccessGrants,
+  issueAccessGrantAudit,
+  ISSUE_ACCESS_GRANT_CAPABILITIES,
+  type IssueAccessGrantCapability,
+} from "./issue_access_grants.js";
 export { companySecretProviderConfigs } from "./company_secret_provider_configs.js";
 export { companySecrets } from "./company_secrets.js";
 export { companySecretVersions } from "./company_secret_versions.js";
