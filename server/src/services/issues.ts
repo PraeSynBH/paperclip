@@ -2303,6 +2303,10 @@ const issueListSelect = {
   hiddenAt: issues.hiddenAt,
   createdAt: issues.createdAt,
   updatedAt: issues.updatedAt,
+  version: issues.version,
+  assigneeUninvokable: issues.assigneeUninvokable,
+  assigneeUninvokableAt: issues.assigneeUninvokableAt,
+  assigneeUninvokableReason: issues.assigneeUninvokableReason,
 };
 
 function withActiveRuns(
