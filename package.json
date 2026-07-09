@@ -1,0 +1,26 @@
+{
+  "name": "aira",
+  "version": "0.1.0",
+  "description": "Aira – ISO 27001 Continuous Monitoring & AI Integration Platform",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "drata:test": "tsx src/drata/test-connectivity.ts",
+    "drata:sync": "tsx src/drata/sync.ts",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.1083.0",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.1",
+    "tsx": "^4.23.0",
+    "typescript": "^5.9.3"
+  }
+}

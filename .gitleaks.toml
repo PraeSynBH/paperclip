@@ -1,0 +1,55 @@
+title = "Aira Gitleaks Config"
+
+[allowlist]
+  description = "Allowed patterns"
+
+  paths = [
+    '''docs/supplier-risk-assessment-aws-github-phase0\.md''',
+    '''src/ai/guardrails\.ts''',
+  ]
+
+  regexes = [
+    '''(?:sk-[a-zA-Z0-9]{32,}|AKIA[0-9A-Z]{16}|eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+)''',
+  ]
+
+  [[rules]]
+    id = "generic-api-key"
+    description = "Generic API Key"
+    regex = '''(?i)(?:api[_-]?key|apikey|secret|token|password|credential)[\s]*[=:][\s]*['"]?[a-zA-Z0-9_\-+/=]{16,}['"]?'''
+    tags = ["key", "api"]
+
+  [[rules]]
+    id = "drata-api-key"
+    description = "Drata API Key"
+    regex = '''sk_[a-zA-Z0-9]{32,}'''
+    tags = ["drata", "key"]
+
+  [[rules]]
+    id = "aws-access-key"
+    description = "AWS Access Key ID"
+    regex = '''(?<![A-Z0-9])[A-Z0-9]{20}(?![A-Z0-9])'''
+    tags = ["aws", "key"]
+
+  [[rules]]
+    id = "aws-secret-key"
+    description = "AWS Secret Access Key"
+    regex = '''(?i)aws[_-]?(?:secret|access)[\s]*[=:][\s]*['"]?[A-Za-z0-9\/+=]{40}['"]?'''
+    tags = ["aws", "secret"]
+
+  [[rules]]
+    id = "github-token"
+    description = "GitHub Personal Access Token"
+    regex = '''(?:ghp_[a-zA-Z0-9]{36}|github_pat_[a-zA-Z0-9_]{36,})'''
+    tags = ["github", "token"]
+
+  [[rules]]
+    id = "google-api-key"
+    description = "Google / Gemini API Key"
+    regex = '''AIza[0-9A-Za-z\-_]{35}'''
+    tags = ["google", "key"]
+
+  [[rules]]
+    id = "openrouter-api-key"
+    description = "OpenRouter API Key"
+    regex = '''sk-or-[a-zA-Z0-9]{32,}'''
+    tags = ["openrouter", "key"]
