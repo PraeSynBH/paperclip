@@ -1,0 +1,34 @@
+# Code Owners
+
+# These owners are automatically requested for review when
+# someone opens a pull request that touches files in these paths.
+# Last rule matching a path wins.
+
+# Global owners — required for all changes
+* @rambur/ciso @rambur/security-engineering
+
+# ISMS policy documents — requires CISO approval
+/policies/ @rambur/ciso
+
+# AI governance module — security-critical
+/src/ai/ @rambur/ciso @rambur/security-engineering
+
+# Drata integration — handles compliance data
+/src/drata/ @rambur/security-engineering
+
+# ISO 27001 control mapping
+/src/iso27001/ @rambur/security-engineering
+
+# Training records — personnel data
+/training/ @rambur/ciso
+
+# CI/CD pipeline changes
+/.github/workflows/ @rambur/security-engineering
+/.github/ @rambur/security-engineering
+
+# Documentation
+/docs/ @rambur/security-engineering
+
+# Package manifests — supply chain
+/package.json @rambur/security-engineering
+/package-lock.json @rambur/security-engineering

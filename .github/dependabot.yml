@@ -1,5 +1,6 @@
 version: 2
 updates:
+  # npm dependencies — weekly security and version updates
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
@@ -7,16 +8,30 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "America/Chicago"
-    versioning-strategy: "auto"
-    commit-message:
-      prefix: "deps"
-      prefix-development: "deps(dev)"
-      include: "scope"
+    # Raise pull requests for both security and version updates
+    open-pull-requests-limit: 10
+    # Group all updates into a single PR to reduce noise
+    groups:
+      all-dependencies:
+        patterns:
+          - "*"
+    # Labels for PRs
     labels:
       - "dependencies"
       - "security"
-    open-pull-requests-limit: 10
-    allow:
-      - dependency-type: "direct"
-    assignees:
-      - "securityengineering"
+    # Auto-merge patch updates after CI passes
+    # (disabled by default — enable after team review)
+    # reviewers:
+    #   - "rambur/security-engineering"
+
+  # GitHub Actions — weekly updates
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Chicago"
+    labels:
+      - "dependencies"
+      - "ci"

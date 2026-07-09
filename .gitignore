@@ -1,2 +1,10 @@
 .DS_Store
 .placeholder
+node_modules/
+dist/
+data/
+.env
+*.env.local
+*.env.*.local
+.gitleaks-report.json
+.gitleaks-report.sarif
