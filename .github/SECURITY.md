@@ -54,9 +54,10 @@ We will not pursue legal action against researchers who:
 
 | Control | Status |
 |---------|--------|
-| Branch protection (PR reviews, signed commits) | Pending GitHub org setup |
+| Branch protection (PR reviews, signed commits) | Documented (BRANCH-PROTECTION.md), pending org setup |
 | Signed commits | Required per CONTRIBUTING |
 | Secret scanning push protection | Pending GitHub org setup |
+| Code scanning (CodeQL) | Enabled via `.github/workflows/codeql.yml` |
 | npm audit (dependency scanning) | CI enforced |
 | Dependabot (automated dependency updates) | Configured |
 | CODEOWNERS (mandatory review paths) | Enforced |
@@ -71,6 +72,7 @@ We will not pursue legal action against researchers who:
 - A.8.7 — Protection against malware (dependency scanning)
 - A.8.8 — Management of technical vulnerabilities (this policy, Dependabot)
 - A.8.9 — Configuration management (branch protection rules)
+- A.8.28 — Secure coding (CodeQL code scanning, gitleaks secret scanning)
 - A.8.25 — Secure development lifecycle (CI security checks, signed commits)
 
 Last reviewed: 2026-07-09

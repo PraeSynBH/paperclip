@@ -26,14 +26,11 @@ rules:
     strict: true
     # Require branches to be up to date before merging
     contexts:
-      - "npm audit"
-      - "TypeScript typecheck"
-      - "gitleaks secret scan"
-      - "Build"
       - "Security Checks / npm-audit"
       - "Security Checks / typecheck"
       - "Security Checks / gitleaks"
       - "Security Checks / build"
+      - "CodeQL / Analyze"
 
   # 4. Block force pushes
   allow_force_pushes: false
