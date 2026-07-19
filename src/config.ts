@@ -1,6 +1,11 @@
 import "dotenv/config";
 import { getSecretValue } from "./secrets/aws.js";
 
+export interface GcpConfig {
+  projectId: string;
+  organizationId: string;
+}
+
 export interface AiraConfig {
   drata: {
     apiKey: string;
@@ -14,6 +19,7 @@ export interface AiraConfig {
     apiKey: string;
     baseUrl: string;
   };
+  gcp: GcpConfig;
   dataDir: string;
   aws: {
     region: string;
@@ -48,6 +54,10 @@ export async function loadConfig(): Promise<AiraConfig> {
       apiKey: await resolve("OPENROUTER_API_KEY", "OPENROUTER_API_KEY", ""),
       baseUrl: "https://openrouter.ai/api/v1",
     },
+    gcp: {
+      projectId: await resolve("GCP_PROJECT_ID", "GCP_PROJECT_ID", ""),
+      organizationId: await resolve("GCP_ORGANIZATION_ID", "GCP_ORGANIZATION_ID", ""),
+    },
     dataDir: process.env.DATA_DIR ?? "./data",
     aws: {
       region: awsRegion,
@@ -70,6 +80,10 @@ export const config: AiraConfig = {
   openrouter: {
     apiKey: process.env.OPENROUTER_API_KEY ?? "",
     baseUrl: "https://openrouter.ai/api/v1",
+  },
+  gcp: {
+    projectId: process.env.GCP_PROJECT_ID ?? "",
+    organizationId: process.env.GCP_ORGANIZATION_ID ?? "",
   },
   dataDir: process.env.DATA_DIR ?? "./data",
   aws: {

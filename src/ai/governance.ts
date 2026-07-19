@@ -2,11 +2,21 @@ import type {
   AiGovernanceConfig,
   ContentFilterRule,
   DataClassificationRule,
-  AiProvider,
 } from "./types.js";
-import { ContentGuardrails } from "./guardrails.js";
+import { ContentGuardrails, CONTENT_FILTER_RULES } from "./guardrails.js";
 import { CostMonitor } from "./cost-monitor.js";
 import { MigrationAdapter } from "./adapter.js";
+import { GeminiClient } from "./gemini-client.js";
+import { SecureAiPipeline } from "./pipeline.js";
+import { AuditLogger } from "./audit-log.js";
+import { RateLimiter } from "./rate-limiter.js";
+import { OutputValidator } from "./output-validator.js";
+import { ToolAuthorizer } from "./tool-auth.js";
+import type { PipelineConfig, PipelineResult } from "./pipeline.js";
+import type { OpenAiChatRequest, OpenAiChatResponse } from "./format-adapter.js";
+import type { AgentRole } from "./tool-auth.js";
+import { JitAccessManager } from "./jit-access.js";
+import { config, loadConfig } from "../config.js";
 
 const DEFAULT_GOVERNANCE_CONFIG: AiGovernanceConfig = {
   providers: [
@@ -59,7 +69,7 @@ const DEFAULT_GOVERNANCE_CONFIG: AiGovernanceConfig = {
     { pattern: "\\b(?:4[0-9]{12}(?:[0-9]{3})?|5[1-5][0-9]{14})\\b", classification: "regulated", action: "block" },
     { pattern: "\\b(sk-[a-zA-Z0-9]{32,})\\b", classification: "confidential", action: "block" },
   ],
-  contentFilters: [],
+  contentFilters: CONTENT_FILTER_RULES,
   migrationPlan: {
     strategy: "parallel-canary",
     canaryAgentIds: ["aad16410", "168e1f8b"],
@@ -89,9 +99,21 @@ export class AiGovernanceEngine {
   public readonly guardrails: ContentGuardrails;
   public readonly costMonitor: CostMonitor;
   public readonly migrationAdapter: MigrationAdapter;
+  public readonly pipeline: SecureAiPipeline;
+  public readonly auditLogger: AuditLogger;
+  public readonly rateLimiter: RateLimiter;
+  public readonly outputValidator: OutputValidator;
+  public readonly toolAuthorizer: ToolAuthorizer;
+  public readonly jitAccessManager: JitAccessManager;
 
-  constructor(config: AiGovernanceConfig = DEFAULT_GOVERNANCE_CONFIG) {
-    this.guardrails = new ContentGuardrails(config.contentFilters.length > 0 ? config.contentFilters : undefined, config.dataClassificationRules);
+  constructor(
+    config: AiGovernanceConfig = DEFAULT_GOVERNANCE_CONFIG,
+    geminiClient?: GeminiClient,
+  ) {
+    this.guardrails = new ContentGuardrails(
+      config.contentFilters.length > 0 ? config.contentFilters : undefined,
+      config.dataClassificationRules,
+    );
     this.costMonitor = new CostMonitor(
       config.budgetConfig.defaultMonthlyLimit,
       config.budgetConfig.dailyCostLimit,
@@ -99,9 +121,57 @@ export class AiGovernanceEngine {
       config.budgetConfig.perAgentCostLimit,
     );
     this.migrationAdapter = new MigrationAdapter(config.migrationPlan);
+    this.auditLogger = new AuditLogger({ logToConsole: false });
+    this.rateLimiter = new RateLimiter();
+    this.outputValidator = new OutputValidator({
+      htmlSanitization: true,
+      scriptSanitization: true,
+      hallucinationDetection: true,
+    });
+    this.toolAuthorizer = new ToolAuthorizer();
+    this.jitAccessManager = new JitAccessManager(undefined, this.auditLogger);
+
+    const client = geminiClient ?? new GeminiClient({
+      apiKey: "", // No static key — must be injected via createGovernanceEngine
+    });
+
+    this.pipeline = new SecureAiPipeline({
+      geminiClient: client,
+      guardrails: this.guardrails,
+      costMonitor: this.costMonitor,
+      auditLogger: this.auditLogger,
+      rateLimiter: this.rateLimiter,
+      outputValidator: this.outputValidator,
+      toolAuthorizer: this.toolAuthorizer,
+      jitAccessManager: this.jitAccessManager,
+    });
   }
 
-  static getProviderById(config: AiGovernanceConfig, providerId: string): AiProvider | undefined {
+  async chat(
+    request: OpenAiChatRequest,
+    agentId: string,
+    projectId: string,
+    agentRole?: AgentRole,
+  ): Promise<PipelineResult> {
+    return this.pipeline.process(request, agentId, projectId, agentRole);
+  }
+
+  static getProviderById(config: AiGovernanceConfig, providerId: string) {
     return config.providers.find(p => p.id === providerId);
   }
+
+  getConfig(): AiGovernanceConfig {
+    return DEFAULT_GOVERNANCE_CONFIG;
+  }
 }
+
+export async function createGovernanceEngine(): Promise<AiGovernanceEngine> {
+  const cfg = await loadConfig();
+  const geminiClient = new GeminiClient({
+    apiKey: cfg.googleAi.apiKey,
+    baseUrl: cfg.googleAi.baseUrl,
+  });
+  return new AiGovernanceEngine(DEFAULT_GOVERNANCE_CONFIG, geminiClient);
+}
+
+export { DEFAULT_GOVERNANCE_CONFIG };

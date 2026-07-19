@@ -24,6 +24,41 @@ jobs:
       - run: npm audit --audit-level=high
         continue-on-error: false
 
+  # SBOM — CycloneDX bill of materials (OWASP LLM05)
+  # Captures both npm packages AND implicit API dependencies
+  # (Google Generative Language API, OpenRouter REST API)
+  sbom:
+    name: SBOM generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run sbom
+      - name: Validate SBOM — implicit API deps present
+        run: |
+          python3 -c "
+          import json
+          with open('sbom.cdx.json') as f:
+              sbom = json.load(f)
+          implicit = [c['name'] for c in sbom['components'] if c.get('purl','').startswith('pkg:generic/')]
+          required = ['google-generative-language-api', 'openrouter-api', 'aws-secrets-manager-api']
+          missing = [r for r in required if r not in implicit]
+          if missing:
+              print(f'SBOM validation FAILED: missing implicit deps: {missing}')
+              exit(1)
+          print(f'SBOM validated: {len(sbom[\"components\"])} components, {len(implicit)} implicit API deps')
+          "
+      - name: Upload SBOM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.cdx.json
+          retention-days: 90
+
   # TypeScript type checking (catches type-level issues)
   typecheck:
     name: TypeScript typecheck

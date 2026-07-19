@@ -1,0 +1,1386 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "serialNumber": "urn:uuid:86ff0079-9ce0-4360-b58a-979c3ddcdf47",
+  "metadata": {
+    "timestamp": "2026-07-19T03:07:35.342Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "npm",
+          "version": "11.12.1"
+        },
+        {
+          "type": "application",
+          "name": "cyclonedx-npm",
+          "group": "@cyclonedx",
+          "version": "6.0.0",
+          "author": "Jan Kowalleck",
+          "description": "Create CycloneDX Software Bill of Materials (SBOM) from NPM projects.",
+          "licenses": [
+            {
+              "license": {
+                "id": "Apache-2.0"
+              }
+            }
+          ],
+          "externalReferences": [
+            {
+              "url": "git+https://github.com/CycloneDX/cyclonedx-node-npm.git",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\""
+            },
+            {
+              "url": "https://github.com/CycloneDX/cyclonedx-node-npm#readme",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "https://github.com/CycloneDX/cyclonedx-node-npm/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "name": "cyclonedx-library",
+          "group": "@cyclonedx",
+          "version": "10.1.0",
+          "author": "Jan Kowalleck",
+          "description": "Core functionality of CycloneDX for JavaScript (Node.js or WebBrowser).",
+          "licenses": [
+            {
+              "license": {
+                "id": "Apache-2.0"
+              }
+            }
+          ],
+          "externalReferences": [
+            {
+              "url": "git+https://github.com/CycloneDX/cyclonedx-javascript-library.git",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\""
+            },
+            {
+              "url": "https://github.com/CycloneDX/cyclonedx-javascript-library#readme",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "https://github.com/CycloneDX/cyclonedx-javascript-library/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            }
+          ]
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "name": "aira",
+      "version": "0.1.0",
+      "bom-ref": "aira@0.1.0",
+      "description": "Aira \u2013 ISO 27001 Continuous Monitoring & AI Integration Platform",
+      "purl": "pkg:npm/aira@0.1.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": ""
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "client-secrets-manager",
+      "group": "@aws-sdk",
+      "version": "3.1084.0",
+      "bom-ref": "aira@0.1.0|@aws-sdk/client-secrets-manager@3.1084.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/client-secrets-manager@3.1084.0",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/client-secrets-manager/-/client-secrets-manager-3.1084.0.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "0f6a1ccfe43402376af514df016036298c77689c1d2c86e207c875498deb5130bcd49c082f611d2748ac1afea01d3b48fda5db40d4b4905db483eb6e2b1b9716"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/client-secrets-manager"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dotenv",
+      "version": "16.6.1",
+      "bom-ref": "aira@0.1.0|dotenv@16.6.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-2-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/dotenv@16.6.1",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b81ab87a05874dc4eddf76bbdafa521b4cf71e73ee225e8da98713aca120d9ace81329768695b4cea971cacab6a4af47943207c87c9a91e61a627480c1df1ba3"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/dotenv"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "core",
+      "group": "@aws-sdk",
+      "version": "3.975.1",
+      "bom-ref": "aira@0.1.0|@aws-sdk/core@3.975.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/core@3.975.1",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/core/-/core-3.975.1.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f2a87fe8461bee197f67055f42e7e16cc119b3581021cec66ddac87f87a9ad027b72fd38dbeef89c4ea5dd80dfc963736fd88f5dbf1f4726121e4348939784e9"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/core"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-node",
+      "group": "@aws-sdk",
+      "version": "3.972.66",
+      "bom-ref": "aira@0.1.0|@aws-sdk/credential-provider-node@3.972.66",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-node@3.972.66",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-node/-/credential-provider-node-3.972.66.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "7feaa3457669cfbb20cdb738401fba9cb29fc8a1604515f359d5dbb0a3effd58554721ec0f2ab8c81582fc1ef9040269148714788d9747fde075627aefbcc1e0"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/credential-provider-node"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "types",
+      "group": "@aws-sdk",
+      "version": "3.974.0",
+      "bom-ref": "aira@0.1.0|@aws-sdk/types@3.974.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/types@3.974.0",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/types/-/types-3.974.0.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "40806bc3dd020e6e0ed14688233914e83ac575e27311bd956b910f115a7295d8fab0727107a72c8614ad26e859c64df04773e68c9958b233e663590d6fe28606"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/types"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "core",
+      "group": "@smithy",
+      "version": "3.29.2",
+      "bom-ref": "aira@0.1.0|@smithy/core@3.29.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40smithy/core@3.29.2",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@smithy/core/-/core-3.29.2.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "0d7524eb25340b5435b58bc9875542b65f10381712a19a4ac234cf9314fa0383144181ef81e2860722fc9ab11dc67be175ff67ab91b2ce645be67fef3e0bb72f"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@smithy/core"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fetch-http-handler",
+      "group": "@smithy",
+      "version": "5.6.4",
+      "bom-ref": "aira@0.1.0|@smithy/fetch-http-handler@5.6.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40smithy/fetch-http-handler@5.6.4",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@smithy/fetch-http-handler/-/fetch-http-handler-5.6.4.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "a6c9ecb7b35959d004bc9bf25bc619104ef13553322eb4057c7b72ad516bc4dcb2f9d296910faba82ea8239661c53869532f5149f12c8609b7e33a9b3b1cec47"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@smithy/fetch-http-handler"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "node-http-handler",
+      "group": "@smithy",
+      "version": "4.9.4",
+      "bom-ref": "aira@0.1.0|@smithy/node-http-handler@4.9.4",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40smithy/node-http-handler@4.9.4",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@smithy/node-http-handler/-/node-http-handler-4.9.4.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "04d4e8a7f7d23a9b66a1593c83e79fc070a87c5877ee0ef43961801444b54de0002636b52b968023cad3136e844d273993c210b966369002283e56b4d4d818ac"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@smithy/node-http-handler"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "types",
+      "group": "@smithy",
+      "version": "4.16.0",
+      "bom-ref": "aira@0.1.0|@smithy/types@4.16.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40smithy/types@4.16.0",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@smithy/types/-/types-4.16.0.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "69551a6f39410666343dfbd580b29048e18520be7fed1e78244dee0fd6b9032fe34840fad5292e01c09810d357273614bc9d4d3eb58ed0ffab0171c291b0542b"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@smithy/types"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tslib",
+      "version": "2.8.1",
+      "bom-ref": "aira@0.1.0|tslib@2.8.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "0BSD",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/tslib@2.8.1",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "a0916ef781d06fe29576e49440bef09e99aa9df98bb0e03f9c087a6fa107d30084a0ad3f98f79753a737c0a0d5f373243ae1cf447b525ca294f7d2016b34bfdb"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/tslib"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "xml-builder",
+      "group": "@aws-sdk",
+      "version": "3.972.34",
+      "bom-ref": "aira@0.1.0|@aws-sdk/xml-builder@3.972.34",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/xml-builder@3.972.34",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/xml-builder/-/xml-builder-3.972.34.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c078562f5cbbb0ddde9c103c3ceacfa503398c2726bb6a33ca16d17a2e1cf0e8d5704684b3ac8bb9c2dafe995ae39ee0812ff2b2ecbb6e8b1a833dc76899195c"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/xml-builder"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lambda-invoke-store",
+      "group": "@aws",
+      "version": "0.3.0",
+      "bom-ref": "aira@0.1.0|@aws/lambda-invoke-store@0.3.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws/lambda-invoke-store@0.3.0",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws/lambda-invoke-store/-/lambda-invoke-store-0.3.0.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b25e019baca230d62b64a92aa8315637451f9d68654bc8af2b1ad897eeadd2008baeaafccb707622a6596c54647da555a7b0bf6da029ca1ef53fe2de135036b1"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws/lambda-invoke-store"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "signature-v4",
+      "group": "@smithy",
+      "version": "5.6.3",
+      "bom-ref": "aira@0.1.0|@smithy/signature-v4@5.6.3",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40smithy/signature-v4@5.6.3",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@smithy/signature-v4/-/signature-v4-5.6.3.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f2a54a2b3aa1ee7685dbb78f9b1d129147e718fff0048f5dc9a7809a11efa299db22522d500981fdee8f90f094deb45bdaff4163c0f81195d2a3275289b6adbf"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@smithy/signature-v4"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "bowser",
+      "version": "2.14.1",
+      "bom-ref": "aira@0.1.0|bowser@2.14.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/bowser@2.14.1",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/bowser/-/bowser-2.14.1.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b733e3cc2c7280029614e24fd35d68c451ece7b1f3221384ada70880078f138a6a0772e29002ca9d2cd4c94e0c1acf7f882114b879402538d373933ebbb6041a"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/bowser"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-env",
+      "group": "@aws-sdk",
+      "version": "3.972.57",
+      "bom-ref": "aira@0.1.0|@aws-sdk/credential-provider-env@3.972.57",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-env@3.972.57",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-env/-/credential-provider-env-3.972.57.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "d517c9685ed25b54ce9ef34653b91a623c147f91f7b1f9beb329c61f56c785196a727c42b77b3379b1f7766284c98e2db8671b43a7dfcd44fcf5c462b4157c39"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/credential-provider-env"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-http",
+      "group": "@aws-sdk",
+      "version": "3.972.59",
+      "bom-ref": "aira@0.1.0|@aws-sdk/credential-provider-http@3.972.59",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-http@3.972.59",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-http/-/credential-provider-http-3.972.59.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b110a4a538859c2750bee69156343a495a07bba8bb454a6ead5a3573817cd475a13ef509ed6769e4c36d49d5f53b6f4235773c7a6dcee66e768428d5b400fd48"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/credential-provider-http"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-ini",
+      "group": "@aws-sdk",
+      "version": "3.973.1",
+      "bom-ref": "aira@0.1.0|@aws-sdk/credential-provider-ini@3.973.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-ini@3.973.1",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-ini/-/credential-provider-ini-3.973.1.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "e9df07e99021dd93ca67a7ded671b63967991193edb7dadabe80f575eccf74fb6c4a4251a311809c5487c0a4f713f4dee9f1c4df4cd1ce357a4c3d76aef17ac9"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/credential-provider-ini"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-process",
+      "group": "@aws-sdk",
+      "version": "3.972.57",
+      "bom-ref": "aira@0.1.0|@aws-sdk/credential-provider-process@3.972.57",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-process@3.972.57",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-process/-/credential-provider-process-3.972.57.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "4e255086e534a5b84864051969c6cf1cccb3ac87621fe967c7e3cc63f3eefdbf77749aeadf0759c33509d133e9bcdc5aa9b1ecc49bd0656dff87f6de2e22aaed"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/credential-provider-process"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-sso",
+      "group": "@aws-sdk",
+      "version": "3.973.1",
+      "bom-ref": "aira@0.1.0|@aws-sdk/credential-provider-sso@3.973.1",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-sso@3.973.1",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-sso/-/credential-provider-sso-3.973.1.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "ddfa13654278f36d488fad17ecadcd26ba3282264b9db0666ab37e4fffced9c8e42126a7f74cc494ddcd066812943ad343b1aceb3ff23bc57b87ad1035c0d91d"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/credential-provider-sso"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-web-identity",
+      "group": "@aws-sdk",
+      "version": "3.972.63",
+      "bom-ref": "aira@0.1.0|@aws-sdk/credential-provider-web-identity@3.972.63",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-web-identity@3.972.63",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-web-identity/-/credential-provider-web-identity-3.972.63.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f2a64b16133af5e29c4b7ee6e39f5cb4f474e508a6c9c9bfef838f562a1eeb035969b313e78198870063bb4f89eb9e9190c6ac3526b0590bbe73c0a605edd351"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/credential-provider-web-identity"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-imds",
+      "group": "@smithy",
+      "version": "4.4.7",
+      "bom-ref": "aira@0.1.0|@smithy/credential-provider-imds@4.4.7",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40smithy/credential-provider-imds@4.4.7",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@smithy/credential-provider-imds/-/credential-provider-imds-4.4.7.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "50430b3a8034165e2e601c61ea5d2e3741fa1097bf03cf4e19e0cd4ed790797a49db405ca5f22be3094263da5e9758c40141c0c5a630baaad896b29d5c4d4629"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@smithy/credential-provider-imds"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-login",
+      "group": "@aws-sdk",
+      "version": "3.972.63",
+      "bom-ref": "aira@0.1.0|@aws-sdk/credential-provider-login@3.972.63",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-login@3.972.63",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-login/-/credential-provider-login-3.972.63.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "19111646b323d179cd28c6956bf31aba86ae8b6eaa0441eeef5596a976f064ebbf8c540e9cf6634dfeeed0ab46282f1519ae9552cf640d61a0a1caca34b4bdbf"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/credential-provider-login"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "nested-clients",
+      "group": "@aws-sdk",
+      "version": "3.997.31",
+      "bom-ref": "aira@0.1.0|@aws-sdk/nested-clients@3.997.31",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/nested-clients@3.997.31",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/nested-clients/-/nested-clients-3.997.31.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "0431d3a7072c6471013442733a0fc1d41905609c405d8e7475abbf372556b37779d45d16808506496668b7f3acf8ddcaa4385779a5e7cf7ee659f7c0bddb9113"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/nested-clients"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "token-providers",
+      "group": "@aws-sdk",
+      "version": "3.1083.0",
+      "bom-ref": "aira@0.1.0|@aws-sdk/token-providers@3.1083.0",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/token-providers@3.1083.0",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/token-providers/-/token-providers-3.1083.0.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b34c282a7c6e1eb1312dce4bd80ac81f904c91ba271cfb6dfb985204cf28927a7d33a413b949a602627613411dcc218e36b3bef3e0033eabefe945f49cd71cec"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/token-providers"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "signature-v4-multi-region",
+      "group": "@aws-sdk",
+      "version": "3.996.39",
+      "bom-ref": "aira@0.1.0|@aws-sdk/signature-v4-multi-region@3.996.39",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40aws-sdk/signature-v4-multi-region@3.996.39",
+      "externalReferences": [
+        {
+          "url": "https://registry.npmjs.org/@aws-sdk/signature-v4-multi-region/-/signature-v4-multi-region-3.996.39.tgz",
+          "type": "distribution",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f3eb2b5ea60817c29830b0b817130b10ce4493b9143626c9bb54789bcfdf52184d608659cf6ea81ad2a40abf08fc7886d9f150c41bda1a04194f8fe6a910929c"
+            }
+          ],
+          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@aws-sdk/signature-v4-multi-region"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "name": "google-generative-language-api",
+      "version": "v1beta",
+      "description": "Google Generative Language API (Gemini) \u2014 implicit REST dependency. Used via raw fetch() in src/ai/gemini-client.ts. Not an npm package. API key auth via x-goog-api-key header.",
+      "purl": "pkg:generic/google-generative-language-api@v1beta",
+      "externalReferences": [
+        {
+          "type": "documentation",
+          "url": "https://ai.google.dev/gemini-api/docs"
+        },
+        {
+          "type": "website",
+          "url": "https://generativelanguage.googleapis.com/v1beta"
+        },
+        {
+          "type": "security-contact",
+          "url": "https://cloud.google.com/security"
+        },
+        {
+          "type": "certification",
+          "comment": "ISO 27001, SOC 2, SOC 3 \u2014 Google Cloud compliance"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "09ab8699085327f16bf0ab92ccb1513a46f998197b0323511793d7461eb9f186"
+        }
+      ],
+      "properties": [
+        {
+          "name": "auth_method",
+          "value": "API key (x-goog-api-key header)"
+        },
+        {
+          "name": "transport",
+          "value": "HTTPS (TLS 1.3)"
+        },
+        {
+          "name": "endpoint_base",
+          "value": "https://generativelanguage.googleapis.com/v1beta"
+        },
+        {
+          "name": "models_used",
+          "value": "gemini-2.5-pro, gemini-2.5-flash"
+        },
+        {
+          "name": "code_path",
+          "value": "src/ai/gemini-client.ts"
+        },
+        {
+          "name": "config_path",
+          "value": "src/config.ts (googleAi)"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "name": "openrouter-api",
+      "version": "v1",
+      "description": "OpenRouter REST API \u2014 implicit dependency. Referenced in src/config.ts as a fallback provider. API key auth via Bearer token. Currently referenced but not actively called in the codebase.",
+      "purl": "pkg:generic/openrouter-api@v1",
+      "externalReferences": [
+        {
+          "type": "documentation",
+          "url": "https://openrouter.ai/docs"
+        },
+        {
+          "type": "website",
+          "url": "https://openrouter.ai/api/v1"
+        },
+        {
+          "type": "security-contact",
+          "url": "mailto:support@openrouter.ai"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "cf0b2c71dda45f29ffffad90ccf47b2879460852b6accec15fb9dfcdad2e9d5f"
+        }
+      ],
+      "properties": [
+        {
+          "name": "auth_method",
+          "value": "Bearer token (Authorization header)"
+        },
+        {
+          "name": "transport",
+          "value": "HTTPS (TLS 1.3)"
+        },
+        {
+          "name": "endpoint_base",
+          "value": "https://openrouter.ai/api/v1"
+        },
+        {
+          "name": "models_mapped",
+          "value": "deepseek/deepseek-v4-pro \u2192 gemini-2.5-pro, minimax/minimax-m3 \u2192 gemini-2.5-flash, moonshotai/kimi-k2.7-code \u2192 gemini-2.5-pro, openai/gpt-5.5 \u2192 gemini-2.5-pro"
+        },
+        {
+          "name": "code_path",
+          "value": "src/config.ts (openrouter), src/ai/types.ts (mappings)"
+        },
+        {
+          "name": "status",
+          "value": "REFERENCED \u2014 not actively called. Pending migration from OpenRouter to Gemini via src/ai/adapter.ts MigrationAdapter."
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "name": "aws-secrets-manager-api",
+      "version": "2017-10-17",
+      "description": "AWS Secrets Manager REST API \u2014 used via @aws-sdk/client-secrets-manager npm package. Stores API keys for Gemini and OpenRouter. Credentials via AWS IAM.",
+      "purl": "pkg:generic/aws-secrets-manager@2017-10-17",
+      "externalReferences": [
+        {
+          "type": "documentation",
+          "url": "https://docs.aws.amazon.com/secretsmanager/"
+        },
+        {
+          "type": "website",
+          "url": "https://secretsmanager.us-east-1.amazonaws.com"
+        },
+        {
+          "type": "certification",
+          "comment": "SOC 1/2/3, ISO 27001, PCI DSS \u2014 AWS compliance"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-256",
+          "content": "8d2417bd6efd8e7253b605bf51f195edaf810a79faf63112e18ad390484da18e"
+        }
+      ],
+      "properties": [
+        {
+          "name": "auth_method",
+          "value": "AWS IAM (SigV4)"
+        },
+        {
+          "name": "transport",
+          "value": "HTTPS (TLS 1.3)"
+        },
+        {
+          "name": "config_path",
+          "value": "src/config.ts (aws), src/secrets/aws.ts"
+        },
+        {
+          "name": "stored_secrets",
+          "value": "GEMINI_API_KEY, OPENROUTER_API_KEY, DRATA_API_KEY, GCP_PROJECT_ID, GCP_ORGANIZATION_ID"
+        },
+        {
+          "name": "npm_package",
+          "value": "@aws-sdk/client-secrets-manager@^3.1083.0"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "aira@0.1.0",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/client-secrets-manager@3.1084.0",
+        "aira@0.1.0|dotenv@16.6.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/client-secrets-manager@3.1084.0",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/credential-provider-node@3.972.66",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/fetch-http-handler@5.6.4",
+        "aira@0.1.0|@smithy/node-http-handler@4.9.4",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|dotenv@16.6.1"
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/core@3.975.1",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@aws-sdk/xml-builder@3.972.34",
+        "aira@0.1.0|@aws/lambda-invoke-store@0.3.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/signature-v4@5.6.3",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|bowser@2.14.1",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/credential-provider-node@3.972.66",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/credential-provider-env@3.972.57",
+        "aira@0.1.0|@aws-sdk/credential-provider-http@3.972.59",
+        "aira@0.1.0|@aws-sdk/credential-provider-ini@3.973.1",
+        "aira@0.1.0|@aws-sdk/credential-provider-process@3.972.57",
+        "aira@0.1.0|@aws-sdk/credential-provider-sso@3.973.1",
+        "aira@0.1.0|@aws-sdk/credential-provider-web-identity@3.972.63",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/credential-provider-imds@4.4.7",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/types@3.974.0",
+      "dependsOn": [
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@smithy/core@3.29.2",
+      "dependsOn": [
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@smithy/fetch-http-handler@5.6.4",
+      "dependsOn": [
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@smithy/node-http-handler@4.9.4",
+      "dependsOn": [
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@smithy/types@4.16.0",
+      "dependsOn": [
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|tslib@2.8.1"
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/xml-builder@3.972.34",
+      "dependsOn": [
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws/lambda-invoke-store@0.3.0"
+    },
+    {
+      "ref": "aira@0.1.0|@smithy/signature-v4@5.6.3",
+      "dependsOn": [
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|bowser@2.14.1"
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/credential-provider-env@3.972.57",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/credential-provider-http@3.972.59",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/fetch-http-handler@5.6.4",
+        "aira@0.1.0|@smithy/node-http-handler@4.9.4",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/credential-provider-ini@3.973.1",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/credential-provider-env@3.972.57",
+        "aira@0.1.0|@aws-sdk/credential-provider-http@3.972.59",
+        "aira@0.1.0|@aws-sdk/credential-provider-login@3.972.63",
+        "aira@0.1.0|@aws-sdk/credential-provider-process@3.972.57",
+        "aira@0.1.0|@aws-sdk/credential-provider-sso@3.973.1",
+        "aira@0.1.0|@aws-sdk/credential-provider-web-identity@3.972.63",
+        "aira@0.1.0|@aws-sdk/nested-clients@3.997.31",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/credential-provider-imds@4.4.7",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/credential-provider-process@3.972.57",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/credential-provider-sso@3.973.1",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/nested-clients@3.997.31",
+        "aira@0.1.0|@aws-sdk/token-providers@3.1083.0",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/credential-provider-web-identity@3.972.63",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/nested-clients@3.997.31",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@smithy/credential-provider-imds@4.4.7",
+      "dependsOn": [
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/credential-provider-login@3.972.63",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/nested-clients@3.997.31",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/nested-clients@3.997.31",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/signature-v4-multi-region@3.996.39",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/fetch-http-handler@5.6.4",
+        "aira@0.1.0|@smithy/node-http-handler@4.9.4",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/token-providers@3.1083.0",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/core@3.975.1",
+        "aira@0.1.0|@aws-sdk/nested-clients@3.997.31",
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/core@3.29.2",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "aira@0.1.0|@aws-sdk/signature-v4-multi-region@3.996.39",
+      "dependsOn": [
+        "aira@0.1.0|@aws-sdk/types@3.974.0",
+        "aira@0.1.0|@smithy/signature-v4@5.6.3",
+        "aira@0.1.0|@smithy/types@4.16.0",
+        "aira@0.1.0|tslib@2.8.1"
+      ]
+    }
+  ],
+  "tools": [
+    {
+      "vendor": "cyclonedx",
+      "name": "cyclonedx-npm",
+      "version": "latest"
+    },
+    {
+      "vendor": "aira",
+      "name": "generate-sbom.sh",
+      "version": "1.0.0",
+      "description": "Combined SBOM generator adding implicit API dependencies to npm SBOM"
+    }
+  ]
+}

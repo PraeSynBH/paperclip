@@ -11,9 +11,13 @@
     "dev": "tsx watch src/index.ts",
     "drata:test": "tsx src/drata/test-connectivity.ts",
     "drata:sync": "tsx src/drata/sync.ts",
+    "drata:roster": "tsx src/drata/build-deployment-roster.ts",
+    "drata:enrollment": "tsx src/drata/enrollment-monitor.ts",
+    "drata:cleanup": "tsx src/drata/cleanup-stale-devices.ts",
     "evidence:collect": "tsx src/evidence/collect.ts",
     "evidence:manifest": "tsx src/evidence/collect.ts",
     "evidence:gcp:iam": "bash scripts/collect-gcp-evidence.sh",
+    "sbom": "bash scripts/generate-sbom.sh",
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/"
   },
@@ -22,6 +26,7 @@
     "dotenv": "^16.4.7"
   },
   "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "^6.0.0",
     "@types/node": "^22.20.1",
     "tsx": "^4.23.0",
     "typescript": "^5.9.3"
