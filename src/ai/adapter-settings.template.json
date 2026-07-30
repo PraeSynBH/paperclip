@@ -1,0 +1,203 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://aira.rambur.com/schemas/adapter-settings.template.json",
+  "title": "Aira AI Adapter Settings Template",
+  "description": "Reference template for AI provider adapter configuration. NOT wired into runtime code — this is a schema/seed for operator configuration.",
+  "type": "object",
+  "properties": {
+    "provider": {
+      "type": "string",
+      "description": "Primary AI provider identifier",
+      "enum": ["gemini", "openrouter", "anthropic", "mistral"],
+      "default": "gemini"
+    },
+    "apiKey": {
+      "type": "object",
+      "description": "API key resolution — use secret_ref for production, literal for dev only",
+      "properties": {
+        "secret_ref": {
+          "type": "string",
+          "description": "Paperclip company secret ID (production). Example: 'f5e463da-f703-4857-92a4-1936f23a2595'",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+        },
+        "env_var": {
+          "type": "string",
+          "description": "Environment variable name that holds the key. Example: 'GEMINI_API_KEY'"
+        },
+        "literal": {
+          "type": "string",
+          "description": "DEVELOPMENT ONLY — literal API key. NEVER commit to VCS."
+        }
+      },
+      "oneOf": [
+        { "required": ["secret_ref"] },
+        { "required": ["env_var"] },
+        { "required": ["literal"] }
+      ]
+    },
+    "baseUrl": {
+      "type": "string",
+      "description": "API base URL for the provider",
+      "format": "uri",
+      "default": "https://generativelanguage.googleapis.com/v1beta"
+    },
+    "authType": {
+      "type": "string",
+      "description": "Authentication method the CLI should use",
+      "enum": ["api-key", "oauth", "service-account"],
+      "default": "api-key"
+    },
+    "safetySettings": {
+      "type": "array",
+      "description": "Content safety filter thresholds per harm category",
+      "items": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "enum": [
+              "HARM_CATEGORY_HARASSMENT",
+              "HARM_CATEGORY_HATE_SPEECH",
+              "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              "HARM_CATEGORY_DANGEROUS_CONTENT"
+            ]
+          },
+          "threshold": {
+            "type": "string",
+            "enum": [
+              "HARM_BLOCK_THRESHOLD_UNSPECIFIED",
+              "BLOCK_LOW_AND_ABOVE",
+              "BLOCK_MEDIUM_AND_ABOVE",
+              "BLOCK_ONLY_HIGH",
+              "BLOCK_NONE"
+            ],
+            "default": "BLOCK_LOW_AND_ABOVE"
+          }
+        },
+        "required": ["category", "threshold"]
+      },
+      "default": [
+        { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_LOW_AND_ABOVE" },
+        { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_LOW_AND_ABOVE" },
+        { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_LOW_AND_ABOVE" },
+        { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_LOW_AND_ABOVE" }
+      ]
+    },
+    "modelMappings": {
+      "type": "object",
+      "description": "Maps OpenRouter model identifiers to this provider's model identifiers",
+      "patternProperties": {
+        "^openrouter/": {
+          "type": "object",
+          "properties": {
+            "targetModel": {
+              "type": "string",
+              "description": "Target model ID on this provider"
+            },
+            "tier": {
+              "type": "string",
+              "description": "Model tier for agent role assignment",
+              "enum": ["leadership", "ic"]
+            }
+          },
+          "required": ["targetModel", "tier"]
+        }
+      },
+      "default": {
+        "openrouter/deepseek/deepseek-v4-pro": { "targetModel": "gemini-2.5-pro", "tier": "leadership" },
+        "openrouter/minimax/minimax-m3": { "targetModel": "gemini-2.5-flash", "tier": "ic" },
+        "openrouter/moonshotai/kimi-k2.7-code": { "targetModel": "gemini-2.5-pro", "tier": "leadership" },
+        "openrouter/openai/gpt-5.5": { "targetModel": "gemini-2.5-pro", "tier": "leadership" }
+      }
+    },
+    "fallbackConfig": {
+      "type": "object",
+      "description": "Fallback configuration when the primary provider fails",
+      "properties": {
+        "fallbackProvider": {
+          "type": "string",
+          "description": "Provider to fall back to",
+          "default": "openrouter"
+        },
+        "fallbackCommand": {
+          "type": "string",
+          "description": "Shell command for the fallback adapter wrapper",
+          "default": "/Users/benh/.paperclip/bin/opencode-with-key.sh"
+        },
+        "fallbackApiKey": {
+          "type": "object",
+          "description": "API key for the fallback provider",
+          "properties": {
+            "env_var": {
+              "type": "string",
+              "default": "OPENROUTER_API_KEY"
+            },
+            "secret_ref": {
+              "type": "string"
+            }
+          }
+        },
+        "fallbackThresholds": {
+          "type": "object",
+          "description": "Thresholds that trigger fallback during canary migration",
+          "properties": {
+            "maxErrorRateIncrease": {
+              "type": "number",
+              "description": "Max increase in error rate vs. baseline",
+              "default": 0.05,
+              "minimum": 0,
+              "maximum": 1
+            },
+            "maxLatencyDegradationPercent": {
+              "type": "number",
+              "description": "Max acceptable latency increase (percentage)",
+              "default": 50,
+              "minimum": 0
+            },
+            "minParityScore": {
+              "type": "number",
+              "description": "Minimum output quality parity (0-1 scale)",
+              "default": 0.85,
+              "minimum": 0,
+              "maximum": 1
+            },
+            "maxCostIncreasePercent": {
+              "type": "number",
+              "description": "Max acceptable cost increase (percentage)",
+              "default": 30,
+              "minimum": 0
+            }
+          }
+        }
+      }
+    },
+    "validationSuite": {
+      "type": "object",
+      "description": "Canary validation test suite configuration",
+      "properties": {
+        "requiredSampleCount": {
+          "type": "integer",
+          "description": "Minimum number of parity evaluation samples per agent",
+          "default": 100,
+          "minimum": 10
+        },
+        "taskCategories": {
+          "type": "array",
+          "description": "Task categories for parity evaluation prompts",
+          "items": {
+            "type": "string"
+          },
+          "default": ["coding", "analysis", "creative", "compliance"]
+        },
+        "minPassRate": {
+          "type": "number",
+          "description": "Minimum pass rate to allow migration (0-1 scale)",
+          "default": 0.90,
+          "minimum": 0,
+          "maximum": 1
+        }
+      }
+    }
+  },
+  "required": ["provider", "apiKey", "baseUrl", "authType", "modelMappings", "fallbackConfig"]
+}
