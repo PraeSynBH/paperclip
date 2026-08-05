@@ -109,7 +109,7 @@ there is no window and nothing to remember.
 | Route wiring (both create paths) | `server/src/routes/issues.ts` |
 | Unit tests (15) | `server/src/__tests__/issue-assignee-fallback.test.ts` |
 | Live HTTP verification | `scripts/rbr767-verify.sh` |
-| One-time orphan sweep | `scripts/rbr767-sweep.sh` (dry run by default; `APPLY=1` to write) |
+| One-time orphan sweep | `server/src/scripts/rbr767-sweep.ts` (dry run by default; `--apply` to write) |
 
 `scripts/rbr767-verify.sh` stands up a throwaway company with a real org chart and
 exercises the behaviour over real HTTP: unassigned create, omitted assignee fields,

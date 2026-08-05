@@ -94,9 +94,18 @@ async function main() {
     console.log(`${issue.identifier} [${issue.status}/${issue.priority}] -> ${owner}`);
 
     if (apply) {
+      // Guard the write against drift since the initial select: only land the fallback
+      // owner if the issue is still unassigned and still non-terminal. Otherwise a
+      // concurrent explicit assignment or a completion/cancellation between the SELECT and
+      // this UPDATE would get silently overwritten.
       await db.update(issues)
         .set({ assigneeAgentId: result.assigneeAgentId, updatedAt: new Date() })
-        .where(eq(issues.id, issue.id));
+        .where(and(
+          eq(issues.id, issue.id),
+          isNull(issues.assigneeAgentId),
+          isNull(issues.assigneeUserId),
+          notInArray(issues.status, TERMINAL),
+        ));
     }
   }
 
