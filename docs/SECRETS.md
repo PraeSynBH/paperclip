@@ -17,6 +17,45 @@ Aira uses a **defense-in-depth** secrets strategy:
 | Drata API Key | `DRATA_API_KEY` | `DRATA_API_KEY` | Drata API v2 authentication |
 | Gemini API Key | `GEMINI_API_KEY` | `GEMINI_API_KEY` | Google Gemini (Vertex AI) API |
 | OpenRouter API Key | `OPENROUTER_API_KEY` | `OPENROUTER_API_KEY` | OpenRouter fallback AI provider |
+| Compliance mailbox | `COMPLIANCE_MAILBOX_PASSWORD` | `COMPLIANCE_MAILBOX_PASSWORD` | `ben.hamilton@aira.io` IMAP/SMTP app password (RBR-759 / RBR-766) |
+
+> **Compliance mailbox (RBR-759, retargeted by RBR-766).** The dispatch address is
+> `ben.hamilton@aira.io` — a Workspace user on the certified domain, per the CEO decision on
+> RBR-398. `security@aira.io` is an alias/group with no IMAP mailbox;
+> its conversion stays on RBR-759 as the permanent home and is off the critical path.
+> In production the password is injected by Paperclip from a
+> company secret via `secret_ref` onto the agent's `adapterConfig.env` — it is not read
+> from a `.env` literal. `scripts/compliance_mailbox.py` also accepts
+> `COMPLIANCE_MAILBOX_PASSWORD_CMD` (a command that prints the secret) and falls back to
+> AWS Secrets Manager. Use a Google Workspace **App Password**, not the account password, so
+> it is revocable on its own and grants no admin console access.
+> See `docs/compliance-role-mailbox-rbr759.md`.
+
+### Fastest way to supply it (RBR-775)
+
+```bash
+./scripts/store_compliance_mailbox_password.sh
+```
+
+Prompts once with terminal echo disabled, strips the spaces Google puts in the
+displayed value, stores it in the macOS Keychain at the exact coordinates
+`COMPLIANCE_MAILBOX_PASSWORD_CMD` already expects, and then runs the live
+`selftest` so you find out immediately whether the mailbox is genuinely send-
+and read-capable. It never accepts the password as a command-line argument
+(argv is world-readable via `ps` and lands in shell history) and never writes it
+to a `.env` file. Covered by `scripts/test_store_compliance_mailbox_password.py`.
+
+That is the **local/host** path, and it is enough to unblock dispatch on this
+machine. The **durable** path is still the Paperclip company secret
+`COMPLIANCE_MAILBOX_PASSWORD` bound onto the CTO agent's `adapterConfig.env` as
+a `secret_ref`, which is what lets unattended agent runs resolve it. Do both.
+
+> **Note on diagnosing a failure.** Google returns `[AUTHENTICATIONFAILED] Invalid credentials`
+> both for a real mailbox with a wrong password *and* for an address that does not exist —
+> verified against a control address that was never created. So a `selftest` failure does
+> **not** by itself prove the password is wrong. Use
+> `python3 scripts/compliance_mailbox.py probe <address>`; only `Lookup failed` is
+> conclusive (it means alias/group, not mailbox).
 
 All three keys are stored in a single AWS Secrets Manager JSON secret named `aira/secrets`:
 

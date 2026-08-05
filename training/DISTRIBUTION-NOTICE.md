@@ -71,4 +71,4 @@ Direct questions to the Awareness Agent ([@Awareness](/RBR/agents/awareness)) or
 ---
 
 **Current status as of 2026-07-09:**
-1/9 personnel fully complete (Awareness Agent). 8/9 personnel not started. 1 role (ISMS Owner) not yet appointed.
+5/9 personnel fully complete (Awareness Agent plus the active cohort: CISO, Compliance, Security Engineering, SecOps). CTO/Engineering Lead, Staff Engineer, and ISMS Owner slots remain unappointed; training assignments will be attached as soon as those roles are designated. Completion records live in `training/records/attendance.csv`.

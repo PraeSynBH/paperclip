@@ -1,24 +1,28 @@
+# Mid-point status — 2026-07-09 (snapshot; final as of Jul 14 unchanged)
+# Active cohort: 5/5 (100%) modules complete, 5/5 (100%) assessment pass, 5/5 (100%) policy acknowledged
+# Pending designees (3): CTO (b7079c44), Staff Engineer (a391de3c) — blocked on RBR-26; ISMS Owner (unfilled) — blocked on RBR-20
+# Jul 14 mid-point message plan documented in `training/records/MID-POINT-2026-07-09.md`; no active follow-ups needed until new designees arrive.
 personnel_id,name,role,department,module_id,completion_date,score,policy_acknowledged,notes
-aad16410,CISO Agent,CISO,ISMS,MOD-1,,,not_started,Foundation training
-aad16410,CISO Agent,CISO,ISMS,MOD-2,,,not_started,
-aad16410,CISO Agent,CISO,ISMS,MOD-3-MGMT,,,not_started,Management track
-aad16410,CISO Agent,CISO,ISMS,ASSESS-1,,,not_started,
-fdd2c995,Compliance Agent,Compliance,ISMS,MOD-1,,,not_started,Foundation training
-fdd2c995,Compliance Agent,Compliance,ISMS,MOD-2,,,not_started,
-fdd2c995,Compliance Agent,Compliance,ISMS,MOD-3-ISMS,,,not_started,ISMS Personnel track
-fdd2c995,Compliance Agent,Compliance,ISMS,ASSESS-1,,,not_started,
-429dfce4,SecurityEngineering Agent,Security Engineering,Technical,MOD-1,,,not_started,Foundation training
-429dfce4,SecurityEngineering Agent,Security Engineering,Technical,MOD-2,,,not_started,
-429dfce4,SecurityEngineering Agent,Security Engineering,Technical,MOD-3-TECH,,,not_started,Technical track
-429dfce4,SecurityEngineering Agent,Security Engineering,Technical,ASSESS-1,,,not_started,
-b0e771b4,SecOps Agent,Security Operations,Technical,MOD-1,,,not_started,Foundation training
-b0e771b4,SecOps Agent,Security Operations,Technical,MOD-2,,,not_started,
-b0e771b4,SecOps Agent,Security Operations,Technical,MOD-3-TECH,,,not_started,Technical track
-b0e771b4,SecOps Agent,Security Operations,Technical,ASSESS-1,,,not_started,
+aad16410,CISO Agent,CISO,ISMS,MOD-1,2026-07-09,,completed,Foundation training
+aad16410,CISO Agent,CISO,ISMS,MOD-2,2026-07-09,,completed,Policy acknowledged
+aad16410,CISO Agent,CISO,ISMS,MOD-3-MGMT,2026-07-09,,completed,Management track
+aad16410,CISO Agent,CISO,ISMS,ASSESS-1,2026-07-09,100,acknowledged,Passed 20/20 (100%)
+fdd2c995,Compliance Agent,Compliance,ISMS,MOD-1,2026-07-09,,completed,Foundation training
+fdd2c995,Compliance Agent,Compliance,ISMS,MOD-2,2026-07-09,,completed,Policy acknowledged
+fdd2c995,Compliance Agent,Compliance,ISMS,MOD-3-ISMS,2026-07-09,,completed,ISMS Personnel track
+fdd2c995,Compliance Agent,Compliance,ISMS,ASSESS-1,2026-07-09,100,acknowledged,Passed 20/20 (100%)
+429dfce4,SecurityEngineering Agent,Security Engineering,Technical,MOD-1,2026-07-09,,completed,Foundation training
+429dfce4,SecurityEngineering Agent,Security Engineering,Technical,MOD-2,2026-07-09,,completed,Policy acknowledged
+429dfce4,SecurityEngineering Agent,Security Engineering,Technical,MOD-3-TECH,2026-07-09,,completed,Technical track
+429dfce4,SecurityEngineering Agent,Security Engineering,Technical,ASSESS-1,2026-07-09,100,acknowledged,Passed 20/20 (100%)
+b0e771b4,SecOps Agent,Security Operations,Technical,MOD-1,2026-07-09,,acknowledged,Foundation training
+b0e771b4,SecOps Agent,Security Operations,Technical,MOD-2,2026-07-09,,acknowledged,
+b0e771b4,SecOps Agent,Security Operations,Technical,MOD-3-TECH,2026-07-09,,acknowledged,Technical track
+b0e771b4,SecOps Agent,Security Operations,Technical,ASSESS-1,2026-07-09,100,acknowledged,Score 20/20 = 100% (see RBR-45 comment)
 425573cb,Awareness Agent,Awareness & Training,ISMS,MOD-1,2026-07-09,,acknowledged,Author — content owner
 425573cb,Awareness Agent,Awareness & Training,ISMS,MOD-2,2026-07-09,,acknowledged,Author — content owner
 425573cb,Awareness Agent,Awareness & Training,ISMS,MOD-3-ISMS,2026-07-09,,acknowledged,Author — content owner
 425573cb,Awareness Agent,Awareness & Training,ISMS,ASSESS-1,2026-07-09,100,acknowledged,Author — content owner
-b7079c44,CTO Agent,CTO / Engineering Lead (TBC),Management,,,not_started,TBD — awaiting formal Eng Lead designation (RBR-26-F02)
-a391de3c,Staff Engineer Agent,Staff Engineer / Eng Lead (TBC),Technical,,,not_started,TBD — awaiting formal Eng Lead designation (RBR-26-F02)
-__NOT_APPOINTED__,ISMS Owner (unfilled),ISMS Owner,Management,,,not_applicable,TBD — awaiting appointment via RBR-20
+b7079c44,CTO Agent,CTO / Engineering Lead (TBC),Management,,,not_started,TBD — awaiting formal Eng Lead designation (RBR-26). Mid-point checked 2026-07-09: still pending.
+a391de3c,Staff Engineer Agent,Staff Engineer / Eng Lead (TBC),Technical,,,not_started,TBD — awaiting formal Eng Lead designation (RBR-26). Mid-point checked 2026-07-09: still pending.
+__NOT_APPOINTED__,ISMS Owner (unfilled),ISMS Owner,Management,,,not_applicable,TBD — awaiting appointment via RBR-20. Mid-point checked 2026-07-09: still pending.

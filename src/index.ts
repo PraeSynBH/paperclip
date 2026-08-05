@@ -20,7 +20,47 @@ export {
   type DeviceComplianceStats,
 } from "./evidence/index.js";
 export { config, loadConfig, assertConfig, assertConfigSync, type AiraConfig } from "./config.js";
-export { AiGovernanceEngine, ContentGuardrails, MigrationAdapter, CostMonitor } from "./ai/index.js";
+export {
+  AiGovernanceEngine,
+  createGovernanceEngine,
+  DEFAULT_GOVERNANCE_CONFIG,
+  ContentGuardrails,
+  MigrationAdapter,
+  CostMonitor,
+  GeminiClient,
+  GeminiApiError,
+  GeminiRateLimitError,
+  createGeminiClient,
+  getCachedGeminiClient,
+  FormatAdapter,
+  SecureAiPipeline,
+  PipelineBlockedError,
+  JitAccessManager,
+} from "./ai/index.js";
+export type {
+  PipelineResult,
+  PipelineConfig,
+  OpenAiMessage,
+  OpenAiToolCall,
+  OpenAiChatRequest,
+  OpenAiChatResponse,
+  OpenAiChoice,
+  OpenAiTool,
+  GeminiClientConfig,
+  GeminiGenerateRequest,
+  GeminiGenerateResponse,
+  GeminiContent,
+  GeminiPart,
+  GeminiCandidate,
+  GeminiSafetySetting,
+  GeminiTool,
+  GeminiFunctionDeclaration,
+  JitSession,
+  JitSessionConfig,
+  JitSessionSummary,
+  JitAccessResult,
+  JitDataScope,
+} from "./ai/index.js";
 export * from "./ai/types.js";
 export {
   getSecret,
