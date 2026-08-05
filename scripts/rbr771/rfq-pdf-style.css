@@ -1,0 +1,47 @@
+/* PDF stylesheet for the ISO 27001 certification RFQ packets.
+ *
+ * Restored under RBR-780. Consumed by scripts/rbr771/regenerate-all-rfq-pdfs.sh
+ * via pandoc --pdf-engine=weasyprint.
+ *
+ * The `tr { break-inside: avoid }` rule below is RBR-771 AC5 and is load-bearing:
+ * without it the Company Overview table splits a row across a page break and the
+ * attribute ends up on a different page from its value. Do not remove it.
+ */
+
+@page {
+  size: A4;
+  margin: 2cm;
+}
+
+body {
+  font-family: Helvetica, Arial, sans-serif;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+h1 {
+  font-size: 1.8em;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th,
+td {
+  padding: 0.3em 0.5em;
+  vertical-align: top;
+  text-align: left;
+}
+
+/* RBR-771 AC5 — keep every Company Overview row intact on one page. */
+tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+thead {
+  display: table-header-group;
+}
