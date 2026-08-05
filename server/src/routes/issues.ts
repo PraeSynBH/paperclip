@@ -165,6 +165,7 @@ import {
   SVG_CONTENT_TYPE,
 } from "../attachment-types.js";
 import { queueIssueAssignmentWakeup } from "../services/issue-assignment-wakeup.js";
+import { resolveIssueAssigneeFallbackFromDb } from "../services/issue-assignee-fallback.js";
 import {
   ISSUE_BLOCKERS_RESOLVED_WAKE_REASON,
   buildIssueBlockersResolvedWakeIdempotencyKey,
@@ -7585,6 +7586,31 @@ export function issueRoutes(
       assigneeAgentId: normalizedAssigneeAgentId ?? null,
     });
     const actor = getActorInfo(req);
+    // The parent rung of the fallback ladder needs the parent's assignee. Agent actors
+    // already loaded it above for authorization; load it here for other actor types.
+    if (!createParent && effectiveParentId) {
+      const parentForFallback = await svc.getById(effectiveParentId);
+      if (parentForFallback && parentForFallback.companyId === companyId) {
+        createParent = parentForFallback;
+      }
+    }
+    // An issue with no agent and no user assignee is picked up by no heartbeat, ever --
+    // it is invisible work. Route it to a deterministic, wakeable owner at creation time.
+    const assigneeFallback = await resolveIssueAssigneeFallbackFromDb(db, {
+      companyId,
+      assigneeAgentId: normalizedAssigneeAgentId ?? null,
+      assigneeUserId: rawCreateBody.assigneeUserId as string | null | undefined,
+      parentAssigneeAgentId: createParent?.assigneeAgentId ?? null,
+      createdByAgentId: actor.agentId ?? null,
+    });
+    if (!assigneeFallback.applied && assigneeFallback.reason === "no_invokable_owner") {
+      res.status(422).json({
+        error: "Cannot create an unassigned issue: no invokable fallback owner is available in this company",
+        details: { candidatesConsidered: assigneeFallback.candidatesConsidered },
+      });
+      return;
+    }
+    const fallbackAssigneeAgentId = assigneeFallback.applied ? assigneeFallback.assigneeAgentId : null;
     const runWorkspaceInheritanceSourceIssueId = hasExplicitIssueWorkspaceCreateSelection(rawCreateBody)
       ? null
       : await resolveRunIssueWorkspaceInheritanceSource(companyId, actor);
@@ -7592,6 +7618,7 @@ export function issueRoutes(
       ...rawCreateBody,
       parentId: effectiveParentId,
       ...(normalizedAssigneeAgentId !== undefined ? { assigneeAgentId: normalizedAssigneeAgentId } : {}),
+      ...(fallbackAssigneeAgentId ? { assigneeAgentId: fallbackAssigneeAgentId } : {}),
       ...(runWorkspaceInheritanceSourceIssueId
         ? { inheritExecutionWorkspaceFromIssueId: runWorkspaceInheritanceSourceIssueId }
         : {}),
@@ -7711,6 +7738,13 @@ export function issueRoutes(
           }
           : {}),
         ...buildCreateIssueActivityStatusDetails(issue, res),
+        ...(assigneeFallback.applied
+          ? {
+            assigneeFallbackApplied: true,
+            assigneeFallbackReason: assigneeFallback.reason,
+            assigneeFallbackAgentId: assigneeFallback.assigneeAgentId,
+          }
+          : {}),
         ...(Array.isArray(req.body.blockedByIssueIds) ? { blockedByIssueIds: req.body.blockedByIssueIds } : {}),
         ...summarizeIssueReferenceActivityDetails({
           addedReferencedIssues: referenceDiff.addedReferencedIssues.map(summarizeIssueRelationForActivity),
@@ -7805,9 +7839,24 @@ export function issueRoutes(
       parentIssueId: parent.id,
       assigneeAgentId: normalizedAssigneeAgentId ?? null,
     });
+    const childAssigneeFallback = await resolveIssueAssigneeFallbackFromDb(db, {
+      companyId: parent.companyId,
+      assigneeAgentId: normalizedAssigneeAgentId ?? null,
+      assigneeUserId: sanitizedBody.assigneeUserId as string | null | undefined,
+      parentAssigneeAgentId: parent.assigneeAgentId ?? null,
+      createdByAgentId: getActorInfo(req).agentId ?? null,
+    });
+    if (!childAssigneeFallback.applied && childAssigneeFallback.reason === "no_invokable_owner") {
+      res.status(422).json({
+        error: "Cannot create an unassigned issue: no invokable fallback owner is available in this company",
+        details: { candidatesConsidered: childAssigneeFallback.candidatesConsidered },
+      });
+      return;
+    }
     const createBody = {
       ...sanitizedBody,
       ...(normalizedAssigneeAgentId !== undefined ? { assigneeAgentId: normalizedAssigneeAgentId } : {}),
+      ...(childAssigneeFallback.applied ? { assigneeAgentId: childAssigneeFallback.assigneeAgentId } : {}),
     };
     if (!(await assertCheapRecoveryIssueAssigneeProfileAllowed(req, res, parent, createBody))) return;
     const childAssignmentScope = {
