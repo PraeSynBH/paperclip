@@ -1,0 +1,34 @@
+group,issue,interactionId,action,reason
+DANGEROUS,RBR-660,14704166,decline,Authorizes unenumerated 188-device purge vs stale 9-device keep-list; would delete active-employee machines
+DANGEROUS,RBR-592,3156ea58,decline,"Same unenumerated 188 purge, no device IDs behind the number"
+DANGEROUS,RBR-654,b6147205,decline,Third conflicting count (189) for the same unenumerated device set
+D1 cert body,RBR-398,dcd5d531,ANSWER,LIVE - sender identity + dispatch route + timeline. Collapses 8 queue items
+D1 cert body,RBR-398,ff50d6d3,decline,"Jul 14 deadline, 22+ days expired"
+D1 cert body,RBR-381,323ffcc4,decline,"Duplicate of dcd5d531, Jul 14 deadline expired"
+D1 cert body,RBR-381,207bf716,decline,suggest_tasks duplicate of the sender-contact ask
+D1 cert body,RBR-382,39f0cdc5,decline,"Duplicate sender-contact ask, Jul 11"
+D1 cert body,RBR-189,f979963a,decline,"Duplicate sender-contact ask, Jul 11"
+D1 cert body,RBR-216,7b6ea891,decline,'Send by July 14?' - expired
+D1 cert body,RBR-217,8e37093b,decline,'Dispatch by Aug 8?' - subsumed by dcd5d531
+D2 device purge,RBR-730,c7698716,ACCEPT,"LIVE - 193 enumerated IDs, CEO-verified: 0 overlap w/ keeplist, 0 CURRENT_EMPLOYEE, rule reproduces list exactly"
+D2 device purge,RBR-730,ec543c23,decline,Superseded 190-device version
+D2 device purge,RBR-654,f062d616,decline,"RBR-660 recovery-state question, superseded"
+D2 device purge,RBR-654,0028cc61,decline,"Auth-boundary PATCH request, superseded"
+D3 gemini key,RBR-714,da38b032,ACCEPT,LIVE - store GEMINI_API_KEY secret. ~60s. Only real blocker
+D3 gemini key,RBR-126,21b98c12,decline,"Asks for GCP project+Vertex+SA the migration never uses. CEO error, retracted"
+D3 gemini key,RBR-127,84e161f9,decline,Restates retracted 'CTO stalled' framing
+D4 gcp evidence,RBR-70,36f28e68,ANSWER,"LIVE - GCP project ID + read-only SA, full security-reviewed spec attached"
+D4 gcp evidence,RBR-72,99f17ad0,decline,Bare restatement of RBR-70
+D4 gcp evidence,RBR-74,a3670d83,decline,Bare restatement of RBR-70
+D4 gcp evidence,RBR-485,f78218ca,decline,'By Jul 15?' - expired restatement of RBR-70
+D5 drata scopes,RBR-572,a0d67625,ANSWER,LIVE - expand scopes for Custom Connections
+D5 drata scopes,RBR-705,90c6ab86,ACCEPT,LIVE - create write-scope key for evidence upload
+D5 drata scopes,RBR-19,d5b2fad4,decline,Read-scope key already exists and works
+D5 drata scopes,RBR-155,c56a62ec,decline,Read-scope key already exists and works
+D6 endpoint budget,RBR-91,c8e3e747,ACCEPT,"LIVE - Jamf Pro $10-15K/yr, 119 macOS, closes NC-009"
+D6 endpoint budget,RBR-92,698d777a,ACCEPT,"LIVE - Win11 Pro + M365 ~$9.2K one-time, re-derived from live Drata"
+D6 endpoint budget,RBR-88,0a604ccf,decline,"MDM evaluation acceptance, superseded by actual budget ask"
+D6 endpoint budget,RBR-596,41c268ba,decline,"Empty payload, duplicate of RBR-91"
+D7 isms owner,RBR-20,dc010c67,HOLD,"Do not approve as written - says 'Arrowhead project', wrong ISMS scope. CEO to correct"
+D7 isms owner,RBR-20,88897f65,decline,"Duplicate of dc010c67, same plan revision 0ec1772c"
+D8 junk,RBR-365,e9425de6,decline,Payload is literally the string 'Test'. 25 days old

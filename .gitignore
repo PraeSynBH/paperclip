@@ -20,6 +20,10 @@ __pycache__/
 graphify-out/
 heartbeat-comments/
 
+# Per-issue agent working plans. Scratch that goes stale the moment the
+# issue closes; the durable record is the issue thread and the commits.
+plans/
+
 # ── Nested working repos, NOT submodules ────────────────────────────
 # These carry their own .git dir. `git add` on them would create a
 # gitlink to a commit no other clone can resolve, which is worse than
