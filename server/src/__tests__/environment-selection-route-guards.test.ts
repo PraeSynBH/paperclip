@@ -110,6 +110,16 @@ vi.mock("../services/issue-assignment-wakeup.js", () => ({
   queueIssueAssignmentWakeup: vi.fn(),
 }));
 
+// This suite exercises environment/driver validation on issue create with a fake `{}`
+// db handle (see createIssueApp below). The RBR-767 assignee-fallback ladder queries the
+// real DB when no explicit assignee is supplied, which would throw against that fake
+// handle and turn every case here into an unrelated 500. Stub it out so these tests keep
+// testing what they're meant to test; assignee-fallback itself is covered by
+// issue-assignee-fallback.test.ts and issue-unassigned-fallback-routes.test.ts.
+vi.mock("../services/issue-assignee-fallback.js", () => ({
+  resolveIssueAssigneeFallbackFromDb: vi.fn(async () => ({ applied: false, reason: "explicit" })),
+}));
+
 function buildApp(routerFactory: (app: express.Express) => void) {
   const app = express();
   app.use(express.json());
