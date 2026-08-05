@@ -51,17 +51,17 @@ describe("resolveIssueAssigneeFallback", () => {
 
   it("treats empty-string assignees as unassigned", () => {
     const result = resolve({ assigneeAgentId: "", assigneeUserId: "", createdByAgentId: STAFF });
-    expect(result).toEqual({ applied: true, assigneeAgentId: CTO, reason: "creator_manager" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: CTO, reason: "creator_manager", degraded: false });
   });
 
   it("rung 1: inherits the parent issue's assignee", () => {
     const result = resolve({ parentAssigneeAgentId: CISO, createdByAgentId: STAFF });
-    expect(result).toEqual({ applied: true, assigneeAgentId: CISO, reason: "parent" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: CISO, reason: "parent", degraded: false });
   });
 
   it("rung 2: falls back to the creator's manager when there is no parent", () => {
     const result = resolve({ createdByAgentId: STAFF });
-    expect(result).toEqual({ applied: true, assigneeAgentId: CTO, reason: "creator_manager" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: CTO, reason: "creator_manager", degraded: false });
   });
 
   it("skips a non-invokable parent assignee and continues down the ladder", () => {
@@ -70,7 +70,7 @@ describe("resolveIssueAssigneeFallback", () => {
       createdByAgentId: STAFF,
       companyAgents: roster({ [CISO]: agent(CISO, CEO, "terminated") }),
     });
-    expect(result).toEqual({ applied: true, assigneeAgentId: CTO, reason: "creator_manager" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: CTO, reason: "creator_manager", degraded: false });
   });
 
   it("walks past a paused manager to the next invokable ancestor", () => {
@@ -78,18 +78,18 @@ describe("resolveIssueAssigneeFallback", () => {
       createdByAgentId: STAFF,
       companyAgents: roster({ [CTO]: agent(CTO, CEO, "paused") }),
     });
-    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "creator_manager" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "creator_manager", degraded: false });
   });
 
   it("rung 3: assigns the creator when it has no invokable manager", () => {
     // A root-level agent has no manager at all, so the creator itself is the owner.
     const result = resolve({ createdByAgentId: CEO });
-    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "creator" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "creator", degraded: false });
   });
 
   it("rung 4: falls back to the company root for a user-created issue with no parent", () => {
     const result = resolve({ createdByAgentId: null });
-    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "company_root" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "company_root", degraded: false });
   });
 
   it("never returns a terminated agent even when it is the creator", () => {
@@ -102,7 +102,7 @@ describe("resolveIssueAssigneeFallback", () => {
         [CTO]: agent(CTO, CEO, "terminated"),
       }),
     });
-    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "creator_manager" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "creator_manager", degraded: false });
   });
 
   it("never returns a pending_approval agent", () => {
@@ -111,18 +111,28 @@ describe("resolveIssueAssigneeFallback", () => {
       createdByAgentId: null,
       companyAgents: roster({ [CISO]: agent(CISO, CEO, "pending_approval") }),
     });
-    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "company_root" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: CEO, reason: "company_root", degraded: false });
   });
 
-  it("survives a reporting cycle without hanging", () => {
-    // a -> b -> a, with no root at all.
+  it("still assigns an owner when a reporting cycle leaves nothing invokable", () => {
+    // a -> b -> a, with no root at all. Fail visible: we must not refuse the create just
+    // because the org chart is malformed. Deterministic ID sort picks the owner.
     const cyclic = [agent("a", "b"), agent("b", "a")];
     const result = resolve({ createdByAgentId: "a", companyAgents: cyclic });
-    expect(result.applied).toBe(false);
-    expect(result.reason).toBe("no_invokable_owner");
+    expect(result.applied).toBe(true);
+    expect(result).toMatchObject({
+      applied: true,
+      assigneeAgentId: "a",
+      degraded: true,
+      degradedReason: "no_invokable_owner",
+    });
   });
 
-  it("reports no_invokable_owner when nothing in the company is wakeable", () => {
+  it("fails VISIBLE, not closed: assigns the root and flags it when nothing is wakeable", () => {
+    // The whole roster is terminated. The old behaviour rejected the create outright, which
+    // meant a degraded roster produced a company-wide write outage -- precisely when someone
+    // needs to file an escalation. An issue that exists with a warning flag beats an issue
+    // that was never created.
     const result = resolve({
       createdByAgentId: STAFF,
       companyAgents: roster({
@@ -132,8 +142,55 @@ describe("resolveIssueAssigneeFallback", () => {
         [CISO]: agent(CISO, CEO, "terminated"),
       }),
     });
-    expect(result.applied).toBe(false);
-    expect(result.reason).toBe("no_invokable_owner");
+    expect(result).toEqual({
+      applied: true,
+      // The root is still the company's owner of last resort even when it cannot be woken.
+      assigneeAgentId: CEO,
+      reason: "company_root",
+      degraded: true,
+      degradedReason: "no_invokable_owner",
+      candidatesConsidered: [`creator:${STAFF}`],
+    });
+  });
+
+  it("assigns a paused root rather than refusing: pausing is reversible", () => {
+    const result = resolve({
+      createdByAgentId: null,
+      companyAgents: roster({
+        [CEO]: agent(CEO, null, "paused"),
+        [CTO]: agent(CTO, CEO, "paused"),
+        [STAFF]: agent(STAFF, CTO, "paused"),
+        [CISO]: agent(CISO, CEO, "paused"),
+      }),
+    });
+    expect(result).toMatchObject({
+      applied: true,
+      assigneeAgentId: CEO,
+      degraded: true,
+      degradedReason: "no_invokable_owner",
+    });
+  });
+
+  it("rejects ONLY the genuine impossibility: a company with zero agents", () => {
+    // No row could name an owner even in principle. This is the single case that refuses.
+    const result = resolve({ createdByAgentId: null, companyAgents: [] });
+    expect(result).toEqual({ applied: false, reason: "no_agents_in_company" });
+  });
+
+  it("never reports a degraded result without naming an owner", () => {
+    // Guards the core invariant: `degraded` must always still carry an assignee, otherwise
+    // we would have reintroduced the invisible issue we set out to eliminate.
+    const rosters: AgentOrgRow[][] = [
+      roster({ [CEO]: agent(CEO, null, "terminated"), [CTO]: agent(CTO, CEO, "terminated"),
+        [STAFF]: agent(STAFF, CTO, "terminated"), [CISO]: agent(CISO, CEO, "terminated") }),
+      [agent("a", "b"), agent("b", "a")],
+      [agent("solo", null, "paused")],
+    ];
+    for (const companyAgents of rosters) {
+      const result = resolve({ createdByAgentId: null, companyAgents });
+      expect(result.applied).toBe(true);
+      if (result.applied) expect(result.assigneeAgentId).toBeTruthy();
+    }
   });
 
   it("is deterministic: the same input always yields the same owner", () => {
@@ -148,6 +205,6 @@ describe("resolveIssueAssigneeFallback", () => {
   it("picks a stable root when the roster has several managerless agents", () => {
     const multiRoot = [agent("zzz-root", null), agent("aaa-root", null)];
     const result = resolve({ createdByAgentId: null, companyAgents: multiRoot });
-    expect(result).toEqual({ applied: true, assigneeAgentId: "aaa-root", reason: "company_root" });
+    expect(result).toEqual({ applied: true, assigneeAgentId: "aaa-root", reason: "company_root", degraded: false });
   });
 });

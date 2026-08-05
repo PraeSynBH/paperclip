@@ -1,0 +1,2 @@
+ALTER TABLE "issues" ADD COLUMN "assignee_fallback_reason" text;--> statement-breakpoint
+CREATE INDEX "issues_company_assignee_fallback_reason_idx" ON "issues" USING btree ("company_id","assignee_fallback_reason") WHERE "issues"."assignee_fallback_reason" is not null;

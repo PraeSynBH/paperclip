@@ -24,8 +24,31 @@ import { evaluateAgentInvokability, type AgentOrgRow } from "./agent-invokabilit
  *   3. `creator` -- the creating agent itself, when it has no invokable manager.
  *   4. `company_root` -- the company root agent (`reportsTo IS NULL`), i.e. the CEO.
  *
- * If no rung yields an invokable agent the caller must reject the create loudly rather
- * than silently minting an invisible issue.
+ * ## Fail visible, never fail closed
+ *
+ * When every rung misses we still create the issue. Rejecting the create would mean "the
+ * roster is degraded, therefore no new issue may be filed" -- which slams the door shut at
+ * exactly the moment someone needs to file an escalation, an incident, or a blocker. That
+ * converts a silent failure into a loud, total, company-wide write outage and calls it a
+ * safety improvement.
+ *
+ * Weigh the two failure modes honestly:
+ *   - Invisible issue: the work exists, is queryable, and is recoverable the moment anyone
+ *     looks. Bad, but recoverable.
+ *   - Rejected create: the work never exists. The caller gets an error, moves on, and the
+ *     content is gone. There is nothing to recover, because nothing was written.
+ *
+ * An issue that exists with a warning flag beats an issue that was never created. Always.
+ *
+ * So at the bottom of the ladder we assign the company root even when it is not currently
+ * invokable -- an owner who is merely paused is still an owner, and pausing is reversible --
+ * and mark the result `degraded` with `degradedReason: "no_invokable_owner"`. That flag is
+ * persisted first-class on the issue so a degraded roster produces a *worklist*
+ * (`scripts/rbr767-sweep.ts`) rather than an outage.
+ *
+ * The caller rejects for exactly one case: `no_agents_in_company`, a company with zero
+ * agents, where no row could name an owner even in principle. That is a genuine
+ * impossibility, not a degraded state.
  *
  * Backlog is deliberately NOT excluded. A backlog issue still gets a deterministic owner;
  * it simply does not generate an assignment wake (existing behaviour for `status: backlog`).
@@ -39,10 +62,34 @@ export type IssueAssigneeFallbackReason =
   | "creator"
   | "company_root";
 
+/**
+ * Why a fallback landed on an owner that is not currently invokable. Persisted first-class
+ * on the issue so the sweep can find these without scraping activity text.
+ */
+export type IssueAssigneeDegradedReason = "no_invokable_owner";
+
 export type IssueAssigneeFallbackResult =
+  /** An explicit assignee was supplied; the ladder did not run. */
   | { applied: false; reason: "explicit" }
-  | { applied: true; assigneeAgentId: string; reason: IssueAssigneeFallbackReason }
-  | { applied: false; reason: "no_invokable_owner"; candidatesConsidered: string[] };
+  /** A rung produced a genuinely invokable owner. The healthy path. */
+  | { applied: true; assigneeAgentId: string; reason: IssueAssigneeFallbackReason; degraded: false }
+  /**
+   * No rung was invokable, but the company has agents. We still assign -- fail visible,
+   * never fail closed -- and flag the issue for the sweep.
+   */
+  | {
+    applied: true;
+    assigneeAgentId: string;
+    reason: IssueAssigneeFallbackReason;
+    degraded: true;
+    degradedReason: IssueAssigneeDegradedReason;
+    candidatesConsidered: string[];
+  }
+  /**
+   * The company has zero agents. No row could name an owner even in principle, so there is
+   * nothing to degrade to. This is the only case in which the caller rejects the create.
+   */
+  | { applied: false; reason: "no_agents_in_company" };
 
 export type IssueAssigneeFallbackInput = {
   companyId: string;
@@ -93,13 +140,32 @@ function findNearestInvokableManager(
 /**
  * The company root agent: the unique agent with no manager. When several exist (or the
  * roster is malformed) the ID sort keeps selection deterministic across calls.
+ *
+ * Returns both the invokable root (preferred) and a deterministic degraded root to fall
+ * back onto. A paused root is still the company's owner of last resort, so it is a valid
+ * degraded assignee even though it cannot be woken right now.
  */
-function findCompanyRootAgent(companyAgents: AgentOrgRow[]): string | null {
+function findCompanyRootAgents(companyAgents: AgentOrgRow[]): {
+  invokable: string | null;
+  any: string | null;
+} {
   const roots = companyAgents
     .filter((row) => !row.reportsTo)
     .map((row) => row.id)
     .sort();
-  return roots.find((id) => isInvokable(id, companyAgents)) ?? null;
+  return {
+    invokable: roots.find((id) => isInvokable(id, companyAgents)) ?? null,
+    any: roots[0] ?? null,
+  };
+}
+
+/**
+ * Deterministic owner of last resort when the company has agents but none are invokable
+ * and there is no root row at all (malformed roster: every agent has a manager, i.e. the
+ * `reportsTo` graph is entirely cyclic). Sorting by ID keeps this stable across calls.
+ */
+function findAnyAgent(companyAgents: AgentOrgRow[]): string | null {
+  return companyAgents.map((row) => row.id).sort()[0] ?? null;
 }
 
 export function resolveIssueAssigneeFallback(
@@ -113,6 +179,7 @@ export function resolveIssueAssigneeFallback(
 
   const { companyAgents } = input;
   const candidatesConsidered: string[] = [];
+  const roots = findCompanyRootAgents(companyAgents);
 
   const rungs: Array<{ reason: IssueAssigneeFallbackReason; agentId: string | null }> = [
     { reason: "parent", agentId: input.parentAssigneeAgentId ?? null },
@@ -123,18 +190,36 @@ export function resolveIssueAssigneeFallback(
         : null,
     },
     { reason: "creator", agentId: input.createdByAgentId ?? null },
-    { reason: "company_root", agentId: findCompanyRootAgent(companyAgents) },
+    { reason: "company_root", agentId: roots.invokable },
   ];
 
   for (const rung of rungs) {
     if (!rung.agentId) continue;
     candidatesConsidered.push(`${rung.reason}:${rung.agentId}`);
     if (isInvokable(rung.agentId, companyAgents)) {
-      return { applied: true, assigneeAgentId: rung.agentId, reason: rung.reason };
+      return { applied: true, assigneeAgentId: rung.agentId, reason: rung.reason, degraded: false };
     }
   }
 
-  return { applied: false, reason: "no_invokable_owner", candidatesConsidered };
+  // Every rung missed. Fail visible, never fail closed: still name an owner so the issue
+  // gets written, and flag it so the sweep can route it once the roster recovers. A paused
+  // or terminated root is still the company's owner of last resort -- pausing is reversible,
+  // and a flagged issue with a stale owner is strictly better than no issue at all.
+  const degradedOwner = roots.any ?? findAnyAgent(companyAgents);
+  if (degradedOwner) {
+    return {
+      applied: true,
+      assigneeAgentId: degradedOwner,
+      reason: "company_root",
+      degraded: true,
+      degradedReason: "no_invokable_owner",
+      candidatesConsidered,
+    };
+  }
+
+  // Zero agents in the company: no row could name an owner even in principle. This is a
+  // genuine impossibility rather than a degraded state, and the only case the caller rejects.
+  return { applied: false, reason: "no_agents_in_company" };
 }
 
 export async function loadCompanyAgentOrgRows(db: Db, companyId: string): Promise<AgentOrgRow[]> {

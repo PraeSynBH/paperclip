@@ -110,16 +110,6 @@ vi.mock("../services/issue-assignment-wakeup.js", () => ({
   queueIssueAssignmentWakeup: vi.fn(),
 }));
 
-// This suite exercises environment/driver validation on issue create with a fake `{}`
-// db handle (see createIssueApp below). The RBR-767 assignee-fallback ladder queries the
-// real DB when no explicit assignee is supplied, which would throw against that fake
-// handle and turn every case here into an unrelated 500. Stub it out so these tests keep
-// testing what they're meant to test; assignee-fallback itself is covered by
-// issue-assignee-fallback.test.ts and issue-unassigned-fallback-routes.test.ts.
-vi.mock("../services/issue-assignee-fallback.js", () => ({
-  resolveIssueAssigneeFallbackFromDb: vi.fn(async () => ({ applied: false, reason: "explicit" })),
-}));
-
 function buildApp(routerFactory: (app: express.Express) => void) {
   const app = express();
   app.use(express.json());
@@ -146,9 +136,41 @@ function createProjectApp() {
   return projectServer;
 }
 
+/**
+ * Minimal db handle for the issue router.
+ *
+ * This suite tests environment/driver validation, not assignee routing, and previously
+ * passed a bare `{}` here. The RBR-767 fallback ladder now runs on every create that omits
+ * an explicit assignee and reads the company roster, which threw against `{}` and turned
+ * these cases into unrelated 500s.
+ *
+ * The fix is a real (if tiny) roster rather than mocking the resolver away: stubbing
+ * `resolveIssueAssigneeFallbackFromDb` out of this suite would mean the create path here no
+ * longer resembles production, and any future ordering defect between the environment guard
+ * and the resolver would pass unnoticed. One idle root agent is enough for the ladder to
+ * resolve cleanly and stay out of the way.
+ */
+const ISSUE_APP_ROOT_AGENT = "99999999-9999-4999-8999-999999999999";
+
+function makeIssueDb() {
+  return {
+    select: () => ({
+      from: () => ({
+        where: async () => [{
+          id: ISSUE_APP_ROOT_AGENT,
+          companyId: "company-1",
+          name: "Root",
+          reportsTo: null,
+          status: "idle",
+        }],
+      }),
+    }),
+  } as any;
+}
+
 function createIssueApp() {
   issueServer ??= buildApp((expressApp) => {
-    expressApp.use("/api", issueRoutes({} as any, {} as any));
+    expressApp.use("/api", issueRoutes(makeIssueDb(), {} as any));
   }).listen(0);
   return issueServer;
 }

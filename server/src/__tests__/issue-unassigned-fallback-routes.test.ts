@@ -327,20 +327,134 @@ describe("RBR-767: unassigned issues cannot be created invisible", { timeout: 12
     expect(res.body.assigneeAgentId).toBe(CISO);
   });
 
-  it("fails loudly with 422 when the company has no invokable owner at all", async () => {
-    roster.rows = [
-      agent(CEO, null, "terminated"),
-      agent(CTO, CEO, "terminated"),
-      agent(STAFF, CTO, "terminated"),
-    ];
+  // RBR-796 §2: fail VISIBLE, never fail CLOSED.
+  //
+  // The first cut of this route rejected the create with 422 when no rung of the ladder was
+  // invokable. Read that failure mode out loud: "the roster is degraded, therefore no new
+  // issue may be filed." The moment every agent is paused or erroring is precisely the moment
+  // someone needs to file an escalation or an incident -- so that behaviour converted a silent
+  // failure into a total company-wide write outage and called it a safety improvement.
+  //
+  // An issue that exists with a warning flag beats an issue that was never created. Always.
+  describe("degraded roster: fail visible, never fail closed", () => {
+    beforeEach(() => {
+      roster.rows = [
+        agent(CEO, null, "terminated"),
+        agent(CTO, CEO, "terminated"),
+        agent(STAFF, CTO, "terminated"),
+      ];
+    });
 
-    const res = await request(await createApp(STAFF))
-      .post("/api/companies/company-1/issues")
-      .send({ title: "Nobody can own this", status: "todo", assigneeAgentId: null });
+    it("still creates the issue when no rung of the ladder is invokable", async () => {
+      const res = await request(await createApp(STAFF))
+        .post("/api/companies/company-1/issues")
+        .send({ title: "Filed while the roster is down", status: "todo", assigneeAgentId: null });
 
-    expect(res.status).toBe(422);
-    expect(String(res.body?.error)).toMatch(/no invokable fallback owner/i);
-    // Loud failure means nothing was written.
-    expect(mockIssueService.create).not.toHaveBeenCalled();
+      // The create SUCCEEDS. The work is written down.
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      // And it names an owner: the company root, even though it is not currently wakeable.
+      // A paused owner is still an owner, and pausing is reversible.
+      expect(res.body.assigneeAgentId).toBe(CEO);
+      expect(mockIssueService.create).toHaveBeenCalled();
+    });
+
+    it("persists the first-class degraded flag so the sweep can find the row", async () => {
+      await request(await createApp(STAFF))
+        .post("/api/companies/company-1/issues")
+        .send({ title: "Degraded and flagged", status: "todo", assigneeAgentId: null });
+
+      // The flag is the sweep input. Without it the row has a non-null assignee and the
+      // unassigned query would never see it -- the issue would be silently stranded on a
+      // paused owner, which is the exact invisibility this work exists to kill.
+      expect(mockIssueService.create).toHaveBeenCalledWith(
+        "company-1",
+        expect.objectContaining({
+          assigneeAgentId: CEO,
+          assigneeFallbackReason: "no_invokable_owner",
+        }),
+      );
+    });
+
+    it("records the degraded fallback in the issue.created activity details", async () => {
+      await request(await createApp(STAFF))
+        .post("/api/companies/company-1/issues")
+        .send({ title: "Degraded and audited", status: "todo", assigneeAgentId: null });
+
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          action: "issue.created",
+          details: expect.objectContaining({
+            assigneeFallbackApplied: true,
+            assigneeFallbackDegraded: true,
+            assigneeFallbackDegradedReason: "no_invokable_owner",
+          }),
+        }),
+      );
+    });
+
+    it("a child issue is created degraded rather than refused", async () => {
+      mockIssueService.getById.mockResolvedValue(makeIssue({
+        id: "parent-1",
+        title: "Parent issue",
+        status: "in_progress",
+        assigneeAgentId: null,
+      }));
+
+      const res = await request(await createApp(STAFF))
+        .post("/api/issues/parent-1/children")
+        .send({ title: "Child filed while the roster is down", status: "todo", assigneeAgentId: null });
+
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(res.body.assigneeAgentId).toBe(CEO);
+      expect(mockIssueService.createChild).toHaveBeenCalledWith(
+        "parent-1",
+        expect.objectContaining({
+          assigneeAgentId: CEO,
+          assigneeFallbackReason: "no_invokable_owner",
+        }),
+      );
+    });
+
+    it("no 422 body ever leaks the candidate roster", async () => {
+      const res = await request(await createApp(STAFF))
+        .post("/api/companies/company-1/issues")
+        .send({ title: "No roster leak", status: "todo", assigneeAgentId: null });
+
+      const serialized = JSON.stringify(res.body);
+      expect(serialized).not.toMatch(/candidatesConsidered/);
+      expect(serialized).not.toMatch(/creator:|creator_manager:|company_root:|parent:/);
+    });
+  });
+
+  // The 422 survives for exactly one case: a company with zero agents, where no row could
+  // name an owner even in principle. That is a genuine impossibility, not a degraded state.
+  describe("zero agents: the only genuine impossibility", () => {
+    beforeEach(() => {
+      roster.rows = [];
+    });
+
+    it("rejects with 422 when the company has no agents at all", async () => {
+      const res = await request(await createApp(null))
+        .post("/api/companies/company-1/issues")
+        .send({ title: "Nobody exists to own this", status: "todo", assigneeAgentId: null });
+
+      expect(res.status).toBe(422);
+      expect(String(res.body?.error)).toMatch(/no agents to own it/i);
+      expect(res.body?.details?.reason).toBe("no_agents_in_company");
+      expect(mockIssueService.create).not.toHaveBeenCalled();
+    });
+
+    it("the zero-agent 422 body carries no agent identifiers", async () => {
+      const res = await request(await createApp(null))
+        .post("/api/companies/company-1/issues")
+        .send({ title: "Clean refusal", status: "todo", assigneeAgentId: null });
+
+      const serialized = JSON.stringify(res.body);
+      expect(serialized).not.toMatch(/candidatesConsidered/);
+      for (const agentIdentifier of [CEO, CTO, STAFF, CISO]) {
+        expect(serialized).not.toContain(agentIdentifier);
+      }
+    });
   });
 });
