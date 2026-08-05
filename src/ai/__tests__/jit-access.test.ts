@@ -300,4 +300,57 @@ describe("JitAccessManager", () => {
       assert.ok(delta >= DEFAULT_SESSION_DURATION_MS - 1000);
     });
   });
+
+  // Salvaged from the RBR-166 Python implementation (see RBR-769 adjudication).
+  // The Python SessionManager ran a background sweeper thread; this manager
+  // expired sessions only lazily, so an abandoned session stayed silently
+  // "active" and emitted no audit event until something touched it.
+  describe("expiry sweeper (salvaged from RBR-166)", () => {
+    it("does not emit an expiry audit event on its own without a sweep", async () => {
+      const { manager, auditLogger } = createJitManager({ defaultSessionDurationMs: 20 });
+      manager.startSession("agent-1", "customer-a", SCOPES);
+
+      await new Promise(resolve => setTimeout(resolve, 60));
+
+      // Nothing has touched the session, so lazy expiry has not fired.
+      const types = auditLogger.getEntries().map(e => e.eventType);
+      assert.ok(!types.includes("jit.session_expired"));
+    });
+
+    it("sweepExpiredSessions expires abandoned sessions and emits the audit event", async () => {
+      const { manager, auditLogger } = createJitManager({ defaultSessionDurationMs: 20 });
+      manager.startSession("agent-1", "customer-a", SCOPES);
+
+      await new Promise(resolve => setTimeout(resolve, 60));
+
+      assert.equal(manager.sweepExpiredSessions(), 1);
+
+      const types = auditLogger.getEntries().map(e => e.eventType);
+      assert.ok(types.includes("jit.session_expired"));
+
+      // Sweeping again is idempotent.
+      assert.equal(manager.sweepExpiredSessions(), 0);
+    });
+
+    it("leaves unexpired sessions alone", () => {
+      const { manager } = createJitManager({ defaultSessionDurationMs: 60_000 });
+      manager.startSession("agent-1", "customer-a", SCOPES);
+
+      assert.equal(manager.sweepExpiredSessions(), 0);
+      assert.equal(manager.getActiveSessions().length, 1);
+    });
+
+    it("startSweeper expires sessions on an interval and stops cleanly", async () => {
+      const { manager, auditLogger } = createJitManager({ defaultSessionDurationMs: 10 });
+      manager.startSession("agent-1", "customer-a", SCOPES);
+
+      const stop = manager.startSweeper(25);
+      await new Promise(resolve => setTimeout(resolve, 90));
+      stop();
+
+      const types = auditLogger.getEntries().map(e => e.eventType);
+      assert.ok(types.includes("jit.session_expired"));
+      assert.equal(manager.getActiveSessions().length, 0);
+    });
+  });
 });
