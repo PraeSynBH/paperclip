@@ -1,18 +1,18 @@
 # Supplier Management Policy
 
 **Document ID:** AIS-ISMS-POL-003
-**Version:** 1.0
+**Version:** 1.1
 **Effective Date:** [Pending ISMS Owner approval]
 **Review Cycle:** Annual
 **Classification:** Internal
 
 ## 1. Purpose
 
-This policy defines the framework for identifying, assessing, managing, and monitoring information security risks associated with Rambur's suppliers and service providers.
+This policy defines the framework for identifying, assessing, managing, and monitoring information security risks associated with Rambur's suppliers and service providers. It includes AI service providers (large language model APIs, machine learning infrastructure) under the same risk management framework, in alignment with ISO/IEC 42001:2023 A.13.2 (Supplier AI services).
 
 ## 2. Scope
 
-This policy applies to all third-party suppliers, vendors, contractors, and service providers who access, process, store, or transmit Rambur information assets, or whose services could impact the confidentiality, integrity, or availability of Rambur's information.
+This policy applies to all third-party suppliers, vendors, contractors, and service providers who access, process, store, or transmit Rambur information assets, or whose services could impact the confidentiality, integrity, or availability of Rambur's information. This scope explicitly includes AI service providers: Google Gemini API, OpenRouter API, and any future AI/ML service providers integrated into Rambur's systems.
 
 ## 3. Policy Statements
 
@@ -71,7 +71,25 @@ Supplier agreements shall include, as applicable:
 - Cloud service configuration shall align with Rambur security baselines
 - A documented cloud exit plan shall exist for Critical-tier cloud services
 
-### 3.7 Supplier Offboarding (A.5.19)
+### 3.7 AI Service Providers (ISO 42001 A.13.2)
+
+AI service providers (LLM APIs, ML infrastructure, AI platforms) shall be assessed under the same tiered framework as other suppliers with the following additional requirements:
+
+- **Pre-engagement assessment**: AI service providers shall be evaluated for: AI-specific certifications (ISO 42001, NIST AI RMF alignment), model training data practices, prompt/response data handling, safety filter capabilities, and AI incident response capability
+- **Contractual requirements**: AI provider agreements shall include: data use restrictions (no training on Rambur prompts), data residency guarantees, API key management obligations, and model deprecation notice periods
+- **Infrastructure attestations**: AI service providers hosting on certified infrastructure (e.g., GCP ISO 42001:2023 certified data centers) shall have their attestations verified and documented
+- **Budget controls**: AI service usage shall be governed by documented budget thresholds with hard limits and kill-switches for cost containment
+- **Fallback and continuity**: Critical AI services shall have a documented fallback provider and migration plan (e.g., Gemini → OpenRouter fallback with automated cutover at defined thresholds)
+- **Ongoing monitoring**: AI providers shall be monitored for: certification status, model changes, safety incidents, API deprecation notices, and cost anomalies
+
+**Current AI service providers in scope:**
+
+| Provider | Service | Tier | Attestation | Budget Control |
+|----------|---------|------|-------------|---------------|
+| Google Gemini API | AI inference (`gemini-2.5-pro`, `gemini-2.5-flash`) | Critical | GCP ISO 42001:2023 | $5,000/mo hard limit + $250/day limit |
+| OpenRouter API | AI inference (fallback) | High | Provider self-attestation | $2,000/mo hard limit |
+
+### 3.8 Supplier Offboarding (A.5.19)
 
 - Upon contract termination, suppliers shall:
   - Return or securely destroy all Rambur data within 30 days
@@ -84,25 +102,28 @@ Supplier agreements shall include, as applicable:
 |------|---------------|
 | ISMS Owner | Risk acceptance for non-compliant suppliers |
 | Vendor Risk Agent | Supplier assessments, risk register maintenance |
-| CISO | Supplier risk framework, escalation |
-| Engineering Lead | Technical integration review, access revocation |
+| CISO | Supplier risk framework, escalation, AI service provider risk decisions |
+| AI Governance Engineer | AI service provider assessment, model lifecycle oversight, AI-specific due diligence |
+| Engineering Lead | Technical integration review, access revocation, API key management |
 | Procurement/Management | Contractual clause inclusion |
 
 ## 5. Mapped Controls
 
 | Control | Description | Policy Section |
 |---------|-------------|---------------|
-| A.5.19 | Information security in supplier relationships | 3.1, 3.2, 3.7 |
+| A.5.19 | Information security in supplier relationships | 3.1, 3.2, 3.8 |
 | A.5.20 | Addressing infoSec within supplier agreements | 3.2, 3.3 |
 | A.5.21 | Managing infoSec in ICT supply chain | 3.4 |
 | A.5.22 | Monitoring and review of supplier services | 3.5 |
 | A.5.23 | Information security for cloud services | 3.6 |
+| ISO 42001 A.13.2 | Supplier AI services | 3.7 |
 
 ## 6. Document Control
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | Jul 2026 | Compliance Agent (RBR-27) | Initial draft for ISO 27001:2022 certification |
+| 1.1 | Jul 2026 | Compliance Agent (RBR-148) | Added AI service provider assessment framework, Gemini/OpenRouter to supplier scope, ISO 42001 A.13.2 cross-reference (F05) |
 
 ## 7. Approval
 

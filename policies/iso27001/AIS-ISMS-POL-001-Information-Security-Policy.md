@@ -1,18 +1,18 @@
 # Information Security Policy
 
 **Document ID:** AIS-ISMS-POL-001
-**Version:** 1.0
+**Version:** 1.1
 **Effective Date:** [Pending ISMS Owner approval]
 **Review Cycle:** Annual or upon significant change
 **Classification:** Internal
 
 ## 1. Purpose
 
-This policy establishes the overarching information security management system (ISMS) for Rambur, Inc. and defines management commitment, roles, and the framework for all topic-specific security policies.
+This policy establishes the overarching information security management system (ISMS) for Rambur, Inc. and defines management commitment, roles, and the framework for all topic-specific security policies. It also establishes the foundation for AI governance alignment, ensuring the ISMS policy framework incorporates artificial intelligence system controls in accordance with ISO/IEC 42001:2023.
 
 ## 2. Scope
 
-This policy applies to all Rambur personnel, contractors, and third parties who access or handle Rambur information assets. It covers all information systems, networks, applications, and data regardless of location or hosting model.
+This policy applies to all Rambur personnel, contractors, and third parties who access or handle Rambur information assets. It covers all information systems, networks, applications, and data regardless of location or hosting model. This scope includes Aira's AI subsystem (`src/ai/`), which integrates with Google Gemini and OpenRouter APIs for AI-augmented agent workflows.
 
 ## 3. Policy Statements
 
@@ -29,11 +29,12 @@ Senior management shall:
 - Ensure ISMS objectives are established and aligned with business objectives
 - Conduct management reviews of the ISMS at planned intervals, no less than annually
 
-### 3.3 Policy Framework (A.5.1)
+### 3.3 Policy Framework (A.5.1, ISO 42001 A.5.3)
 
 This policy is the parent document for all topic-specific policies. All subsidiary policies must:
 - Align with this policy's objectives
 - Map to applicable ISO 27001:2022 Annex A controls
+- Cross-reference applicable ISO/IEC 42001:2023 AI management system controls where AI systems are in scope
 - Be reviewed and approved by the ISMS Owner
 - Be reviewed at least annually
 
@@ -44,9 +45,10 @@ The following ISMS roles are established:
 | Role | Responsibility |
 |------|---------------|
 | ISMS Owner | Overall ISMS accountability, policy approval, resource allocation |
-| CISO | Security strategy, risk management, compliance oversight |
-| Engineering Lead | Technical control implementation, secure development |
-| Compliance Agent | Control mapping, audit readiness, evidence collection |
+| CISO | Security strategy, risk management, compliance oversight, AI governance direction |
+| Engineering Lead | Technical control implementation, secure development, AI system governance |
+| Compliance Agent | Control mapping, audit readiness, evidence collection, AI control cross-referencing |
+| AI Governance Engineer | AI system risk assessment, guardrail maintenance, model lifecycle governance (ISO 42001 A.6.2) |
 | All Personnel | Adhere to policies, report security events, complete training |
 
 ### 3.5 Segregation of Duties (A.5.3)
@@ -90,6 +92,11 @@ This policy and all topic-specific policies shall be:
 | Business Continuity Policy | AIS-ISMS-POL-008 |
 | Risk Assessment Methodology | AIS-ISMS-PROC-001 |
 | Statement of Applicability | AIS-ISMS-SOA-001 |
+| AI Governance Control Mapping | Aira-ISO27001/docs/ai-governance/control-mapping.md (RBR-112) |
+| AI System Description | Aira-ISO27001/docs/ai-governance/ai-system-description.md |
+| AI Governance Policy (Drata) | Pending local export — F04, blocked on RBR-19 |
+| AI Risk Management Policy (Drata) | Pending local export — F04, blocked on RBR-19 |
+| AI System Development Policy (Drata) | Pending local export — F04, blocked on RBR-19 |
 
 ## 5. Mapped Controls
 
@@ -101,12 +108,16 @@ This policy and all topic-specific policies shall be:
 | A.5.4 | Management responsibilities | 3.2, 3.6 |
 | A.6.4 | Disciplinary process | 3.7 |
 | A.5.36 | Compliance with policies and standards | 3.8 |
+| ISO 42001 A.5.3 | AI policy alignment with ISMS | 3.3, 3.4, 4 |
+| ISO 42001 A.5.4 | AI responsibilities and authorities | 3.4 |
+| ISO 42001 A.6.2 | AI roles and responsibilities | 3.4 |
 
 ## 6. Document Control
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 1.0 | Jul 2026 | Compliance Agent (RBR-27) | Initial draft for ISO 27001:2022 certification |
+| 1.1 | Jul 2026 | Compliance Agent (RBR-148) | Added AI governance scope, roles, and ISO 42001 A.5.3 cross-reference (F05) |
 
 ## 7. Approval
 
