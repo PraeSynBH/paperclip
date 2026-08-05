@@ -54,6 +54,7 @@ import {
   linkIssueApprovalSchema,
   issueDocumentKeySchema,
   ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY,
+  ISSUE_THREAD_INTERACTION_PENDING_SOFT_CAP,
   ISSUE_WATCHDOG_DISCOVERY_KINDS,
   TASK_WATCHDOG_PRODUCT_BUG_ORIGIN_KIND,
   rejectIssueThreadInteractionSchema,
@@ -10050,6 +10051,16 @@ export function issueRoutes(
       userId: actor.actorType === "user" ? actor.actorId : null,
     });
 
+    // RBR-791 item 4: more than a couple of simultaneously pending asks on one
+    // issue is almost always an agent-behaviour bug, not a genuine need for
+    // that many board decisions. Creation is deliberately not blocked (the
+    // issue's stated non-goal is to leave "what agents may ask" alone) — the
+    // breach is surfaced in the activity log so the pattern is attributable to
+    // an agent and a run instead of quietly inflating the board queue.
+    const pendingAfterCreate = (await issueThreadInteractionService(db).listForIssue(issue.id))
+      .filter((entry) => entry.status === "pending");
+    const pendingSoftCapExceeded = pendingAfterCreate.length > ISSUE_THREAD_INTERACTION_PENDING_SOFT_CAP;
+
     await logActivity(db, {
       companyId: issue.companyId,
       actorType: actor.actorType,
@@ -10068,8 +10079,27 @@ export function issueRoutes(
         addresseeAgentId: interaction.addresseeAgentId ?? null,
         requestedResolverPolicy: interaction.requestedResolverPolicy,
         effectiveResolverPolicy: interaction.effectiveResolverPolicy,
+        pendingInteractionCount: pendingAfterCreate.length,
+        ...(pendingSoftCapExceeded
+          ? {
+              pendingInteractionSoftCap: ISSUE_THREAD_INTERACTION_PENDING_SOFT_CAP,
+              pendingInteractionSoftCapExceeded: true,
+            }
+          : {}),
       },
     });
+
+    if (pendingSoftCapExceeded) {
+      logger.warn({
+        issueId: issue.id,
+        identifier: issue.identifier,
+        interactionId: interaction.id,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        pendingInteractionCount: pendingAfterCreate.length,
+        softCap: ISSUE_THREAD_INTERACTION_PENDING_SOFT_CAP,
+      }, "issue exceeds the pending issue-thread interaction soft cap");
+    }
 
     if (interaction.addresseeAgentId) {
       void heartbeat.wakeup(interaction.addresseeAgentId, {
