@@ -14,9 +14,13 @@
  *      worktree or in history. `npm run <script>` is dead on arrival for
  *      everyone including the author. This was `drata:sync` (RBR-786).
  *
- * Both are invisible to `tsc --noEmit` and to `npm run build`, because
- * neither compiler ever resolves an npm script's argv. That is why this needs
- * to be its own check.
+ *   3. COMMAND NOT FOUND — the script's *binary* does not resolve, so it
+ *      exits 127. `"lint": "eslint src/"` with eslint absent from
+ *      devDependencies (RBR-786).
+ *
+ * All three are invisible to `tsc --noEmit` and to `npm run build`, because
+ * neither ever resolves an npm script's argv. That is why this needs to be
+ * its own check.
  *
  * Usage:
  *   npm run check:paths          # exit 1 on any violation
@@ -42,11 +46,14 @@ const RUNTIME_EXTENSIONS = [".ts", ".tsx", ".js", ".mjs", ".cjs", ".sh", ".py"];
  */
 const IGNORED_PREFIXES = ["dist/", "build/", "node_modules/", "data/"];
 
+/** Shell builtins and control words that are never a resolvable binary. */
+const SHELL_WORDS = new Set(["cd", "echo", "exit", "set", "export", "true", "false"]);
+
 interface Violation {
   script: string;
   command: string;
   path: string;
-  reason: "not-on-disk" | "not-in-git" | "not-a-file";
+  reason: "not-on-disk" | "not-in-git" | "not-a-file" | "command-not-found";
 }
 
 /** Every path git knows about, as a set of repo-relative paths. */
@@ -90,6 +97,39 @@ function isIgnored(path: string): boolean {
   return IGNORED_PREFIXES.some((prefix) => path.startsWith(prefix));
 }
 
+/**
+ * The executable each `&&`/`||`/`;`/`|` segment invokes.
+ *
+ * A script can also be dead because the *binary* is missing, not just its
+ * arguments — `"lint": "eslint src/"` with eslint absent from devDependencies
+ * exits 127 for everyone. Same dangling-reference class as a missing file,
+ * and equally invisible to tsc and to `npm run build`.
+ */
+function extractCommands(command: string): string[] {
+  return command
+    .split(/&&|\|\||[;|]/)
+    .map((segment) => segment.trim().split(/\s+/)[0] ?? "")
+    .map((token) => token.replace(/^['"]|['"]$/g, ""))
+    // Skip env-var prefixes (FOO=bar cmd) and shell words.
+    .filter((token) => token && !token.includes("=") && !SHELL_WORDS.has(token));
+}
+
+/** npm puts node_modules/.bin first on PATH, so resolve there before the system. */
+function commandResolves(command: string): boolean {
+  if (command.includes("/")) return existsSync(resolve(REPO_ROOT, command));
+  if (existsSync(resolve(REPO_ROOT, "node_modules/.bin", command))) return true;
+  try {
+    // `command -v` needs a shell, but passing argv with shell:true is a
+    // DEP0190 injection footgun — inline the (already-validated) token instead.
+    execFileSync("/bin/sh", ["-c", `command -v -- "$1"`, "sh", command], {
+      stdio: "ignore",
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function main(): void {
   const pkgPath = resolve(REPO_ROOT, "package.json");
   const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as {
@@ -102,6 +142,13 @@ function main(): void {
   let checked = 0;
 
   for (const [script, command] of Object.entries(scripts)) {
+    for (const binary of extractCommands(command)) {
+      checked += 1;
+      if (!commandResolves(binary)) {
+        violations.push({ script, command, path: binary, reason: "command-not-found" });
+      }
+    }
+
     for (const path of extractPaths(command)) {
       if (isIgnored(path)) continue;
       checked += 1;
@@ -157,6 +204,13 @@ function main(): void {
         break;
       case "not-a-file":
         console.error("    problem: path resolves to a directory, not a file.");
+        break;
+      case "command-not-found":
+        console.error(
+          "    problem: command does not resolve — not in node_modules/.bin " +
+            "and not on PATH. `npm run` exits 127. Add it to devDependencies, " +
+            "or remove the script entry.",
+        );
         break;
     }
     console.error("");
