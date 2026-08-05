@@ -3105,6 +3105,10 @@ const issueListSelect = {
   reviewPolicy: issues.reviewPolicy,
   assigneeAgentId: issues.assigneeAgentId,
   assigneeUserId: issues.assigneeUserId,
+  // Degraded-roster marker (RBR-796). Selected on the list path so a board or sweep can
+  // see which rows landed on an owner that was not invokable at creation time without a
+  // second round trip. NULL on the healthy path.
+  assigneeFallbackReason: issues.assigneeFallbackReason,
   checkoutRunId: issues.checkoutRunId,
   executionRunId: issues.executionRunId,
   executionAgentNameKey: issues.executionAgentNameKey,
