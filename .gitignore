@@ -24,6 +24,10 @@ heartbeat-comments/
 # issue closes; the durable record is the issue thread and the commits.
 plans/
 
+# Transient PDF-rendering temp files (RFQ packet generation) that land in
+# the repo root and are never cleaned up by the tool that creates them.
+toPdfViaTempFile*
+
 # ── Nested working repos, NOT submodules ────────────────────────────
 # These carry their own .git dir. `git add` on them would create a
 # gitlink to a commit no other clone can resolve, which is worse than
