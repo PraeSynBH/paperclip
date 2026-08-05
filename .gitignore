@@ -8,3 +8,26 @@ data/
 *.env.*.local
 .gitleaks-report.json
 .gitleaks-report.sarif
+.gstack/
+
+# ── Local agent/tool scratch (RBR-786 triage) ───────────────────────
+# Not compliance evidence, not source. Machine-local or regenerable.
+.claude/
+.envrc
+.paperclip/
+__pycache__/
+*.pyc
+graphify-out/
+heartbeat-comments/
+
+# ── Nested working repos, NOT submodules ────────────────────────────
+# These carry their own .git dir. `git add` on them would create a
+# gitlink to a commit no other clone can resolve, which is worse than
+# leaving them untracked. Promote to a real submodule deliberately if
+# they ever need to be referenced from here.
+Aira-Architecture/
+Aira-ISO27001/
+Aira-Program-Management/
+
+# ── Binary office docs with no diffable history value ───────────────
+PasswordManagement/

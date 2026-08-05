@@ -10,7 +10,6 @@
     "start": "node dist/index.js",
     "dev": "tsx watch src/index.ts",
     "drata:test": "tsx src/drata/test-connectivity.ts",
-    "drata:sync": "tsx src/drata/sync.ts",
     "drata:roster": "tsx src/drata/build-deployment-roster.ts",
     "drata:enrollment": "tsx src/drata/enrollment-monitor.ts",
     "drata:cleanup": "tsx src/drata/cleanup-stale-devices.ts",
@@ -22,7 +21,9 @@
     "evidence:gcp:iam": "bash scripts/collect-gcp-evidence.sh",
     "sbom": "bash scripts/generate-sbom.sh",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "check:paths": "tsx scripts/check-referenced-paths.ts",
+    "hooks:install": "bash scripts/install-git-hooks.sh"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.1083.0",
