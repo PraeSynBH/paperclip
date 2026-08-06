@@ -44,7 +44,10 @@ describeEmbeddedPostgres("finalizeAgentStatus: concurrent pause survives run fin
   beforeAll(async () => {
     tempDb = await startEmbeddedPostgresTestDatabase("heartbeat-finalize-agent-status-pause-race-");
     db = createDb(tempDb.connectionString);
-  }, 60_000);
+    // No inline hook budget here on purpose (RBR-912): an inline
+    // `beforeAll(fn, ms)` silently overrides both the config `hookTimeout` and
+    // `--hookTimeout`. Budgets live in server/vitest.config.ts.
+  });
 
   afterEach(async () => {
     await db.delete(heartbeatRunEvents);
