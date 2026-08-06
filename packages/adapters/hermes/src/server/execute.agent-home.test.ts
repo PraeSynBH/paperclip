@@ -55,18 +55,19 @@ vi.mock("node:fs/promises", () => ({
 import { execute, resolveAgentHomeEnv } from "./execute.js";
 import * as serverUtils from "@paperclipai/adapter-utils/server-utils";
 
-const COMPANY = "5cb37f67-a875-4073-ba4f-f8f942cb0775";
+const COMPANY = "00000000-0000-4000-8000-000000000c00";
 const INSTANCE_ROOT = "/tmp/paperclip-test/instances/default";
 
 /**
- * Agent ids from the original report, so the regression reads as the real
- * incident. `OVERSIGHT` is the read-only oversight agent whose home leaked into
- * every other agent's environment. `OTHER` is an ordinary third agent, included
- * because a general defect means non-reporting agents cross-write too.
+ * Three distinct agents, enough to show the defect is general rather than
+ * specific to one pair. `OVERSIGHT` stands for a read-only oversight agent,
+ * whose home is the one that leaked into every other agent's environment.
+ * `OTHER` is an ordinary third agent, included because a general defect means
+ * agents with no part in the report cross-write too.
  */
-const REPORTER = "53c28b5d-342d-4801-bd18-9f343f7bc695";
-const OVERSIGHT = "168e1f8b-cf2d-41f3-94b7-124c517aac39";
-const OTHER = "b7079c44-d677-4640-89e7-1e2cfc49bbe0";
+const REPORTER = "00000000-0000-4000-8000-0000000000a1";
+const OVERSIGHT = "00000000-0000-4000-8000-0000000000a2";
+const OTHER = "00000000-0000-4000-8000-0000000000a3";
 
 function homeOf(agentId: string): string {
   return `${INSTANCE_ROOT}/companies/${COMPANY}/agents/${agentId}`;
