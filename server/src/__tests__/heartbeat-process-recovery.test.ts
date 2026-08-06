@@ -105,6 +105,16 @@ import {
   SUCCESSFUL_RUN_MISSING_STATE_REASON,
 } from "../services/recovery/index.ts";
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
+/**
+ * RBR-912 / RBR-918 / RBR-925: embedded-Postgres bootstrap on a cold cache far
+ * exceeds the 20s inline `beforeAll` budget this suite used to carry. When the
+ * hook timed out, Vitest reported the whole file as `skipped` (72 skipped, zero
+ * executed) and the run still exited in a way that reads as "not failing" —
+ * green-by-skip. A skipped test is not a passing test, so the budget is raised
+ * to a value that lets bootstrap actually finish and the assertions actually
+ * run. Tracked properly (shared helper + preflight) in RBR-912.
+ */
+const EMBEDDED_POSTGRES_BOOTSTRAP_TIMEOUT_MS = 300_000;
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
 
 if (!embeddedPostgresSupport.supported) {
@@ -288,7 +298,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
   beforeAll(async () => {
     tempDb = await startEmbeddedPostgresTestDatabase("paperclip-heartbeat-recovery-");
     db = createDb(tempDb.connectionString);
-  }, 20_000);
+  }, EMBEDDED_POSTGRES_BOOTSTRAP_TIMEOUT_MS);
 
   afterEach(async () => {
     vi.clearAllMocks();
@@ -653,6 +663,19 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     livenessState?: "completed" | "advanced" | "plan_only" | "empty_response" | "blocked" | "failed" | "needs_followup" | null;
     runErrorCode?: string | null;
     runError?: string | null;
+    /**
+     * RBR-905: mark the seeded issue as recovery-origin so the sweep takes the
+     * `escalateStrandedRecoveryIssueInPlace` branch instead of the normal
+     * `escalateStrandedAssignedIssue` funnel. The two paths write independently,
+     * so a guard on one does not cover the other.
+     */
+    originKind?: string | null;
+    /**
+     * RBR-905: real timestamps from the production specimen. Defaults keep the
+     * long-standing 2026-03-19 fixture clock for every existing caller.
+     */
+    runStartedAt?: Date;
+    runFinishedAt?: Date;
   }) {
     const companyId = randomUUID();
     const agentId = randomUUID();
@@ -660,7 +683,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     const wakeupRequestId = randomUUID();
     const rootIssueId = randomUUID();
     const issueId = randomUUID();
-    const now = new Date("2026-03-19T00:00:00.000Z");
+    const now = input.runStartedAt ?? new Date("2026-03-19T00:00:00.000Z");
+    const finishedAt = input.runFinishedAt ?? new Date("2026-03-19T00:05:00.000Z");
     const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 
     await db.insert(companies).values({
@@ -694,7 +718,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       status: input.runStatus === "cancelled" ? "cancelled" : "failed",
       runId,
       claimedAt: now,
-      finishedAt: new Date("2026-03-19T00:05:00.000Z"),
+      finishedAt,
       error: input.runStatus === "succeeded"
         ? null
         : ("runError" in input ? input.runError : "run failed before issue advanced"),
@@ -718,8 +742,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
         ...(input.runSource ? { source: input.runSource } : {}),
       },
       startedAt: now,
-      finishedAt: new Date("2026-03-19T00:05:00.000Z"),
-      updatedAt: new Date("2026-03-19T00:05:00.000Z"),
+      finishedAt,
+      updatedAt: finishedAt,
       errorCode: input.runStatus === "succeeded"
         ? null
         : ("runErrorCode" in input ? input.runErrorCode : "process_lost"),
@@ -757,6 +781,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
         issueNumber: input.activePauseHold ? 2 : 1,
         identifier: `${issuePrefix}-${input.activePauseHold ? 2 : 1}`,
         startedAt: input.status === "in_progress" ? now : null,
+        ...(input.originKind ? { originKind: input.originKind } : {}),
       },
     ]);
 
@@ -4459,5 +4484,187 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
 
     const runs = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
     expect(runs).toHaveLength(1);
+  });
+
+  // RBR-884: A run cancelled with `issue_terminal_status` or `issue_cancelled`
+  // is a *success* signal — the agent completed its work (or the issue was
+  // deliberately closed) and the runtime correctly stopped the run. The
+  // stranded-issue recovery sweep must not treat it as a lost execution path.
+  //
+  // `retryReason` is set so that on pre-fix code this drives the sweep all the
+  // way through `didAutomaticRecoveryFail` into a real `blocked` escalation.
+  it.each([
+    { errorCode: "issue_terminal_status", label: "issue_terminal_status (issue reached done)" },
+    { errorCode: "issue_cancelled", label: "issue_cancelled (issue was deliberately cancelled)" },
+  ] as const)("does not escalate a run cancelled with $label", async ({ errorCode }) => {
+    const { companyId, agentId, issueId } = await seedStrandedIssueFixture({
+      status: "in_progress",
+      runStatus: "cancelled",
+      runErrorCode: errorCode,
+      retryReason: "issue_continuation_needed",
+    });
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reconcileStrandedAssignedIssues();
+    expect(result.terminalStatusExempted).toBe(1);
+    expect(result.escalated).toBe(0);
+    expect(result.continuationRequeued).toBe(0);
+    expect(result.dispatchRequeued).toBe(0);
+    expect(result.issueIds).toEqual([]);
+
+    // The issue must remain in_progress with its assignee intact — the sweep
+    // did not move it to `blocked` or hand it to a recovery owner.
+    const issue = await db.select().from(issues).where(eq(issues.id, issueId)).then((rows) => rows[0] ?? null);
+    expect(issue?.status).toBe("in_progress");
+    expect(issue?.assigneeAgentId).toBe(agentId);
+
+    // No recovery actions or recovery issues were created.
+    const recoveryActions = await db
+      .select()
+      .from(issueRecoveryActions)
+      .where(eq(issueRecoveryActions.sourceIssueId, issueId));
+    expect(recoveryActions).toHaveLength(0);
+
+    const recoveryIssues = await db
+      .select()
+      .from(issues)
+      .where(and(eq(issues.companyId, companyId), eq(issues.originKind, "stranded_issue_recovery")));
+    expect(recoveryIssues).toHaveLength(0);
+
+    // No system comments were posted.
+    const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
+    expect(comments).toHaveLength(0);
+  });
+
+  // RBR-905: the production specimen, asserted as a named fixture.
+  //
+  // RBR-898 (`c1d8dbfe-a0ea-40d0-8588-8b4877b31e59`) was a real compliance
+  // deliverable, not a synthetic case. Observed timeline:
+  //
+  //   06:53:17Z  CISO posts the deliverable            -> issue goes `done`
+  //   06:59:17Z  sweep writes `blocked`, cause `issue_terminal_status`,
+  //              `previousStatus: in_progress`, and reassigns to the CEO as
+  //              recovery owner                        <- 6m00s after completion
+  //   06:59:20Z  `issue.recovery_action_resolved / source_revalidation` fires
+  //              2.6s later and does not undo the write
+  //   07:02:00Z  CEO manually restores `done`
+  //
+  // The two details that make this a regression case rather than a duplicate of
+  // the case above:
+  //
+  //  1. `previousStatus: in_progress` while the row had been `done` for six
+  //     minutes. The sweep decided from a stale candidate snapshot, so a guard
+  //     keyed on the *issue* row cannot see the completion. This fixture keeps the
+  //     issue row at `in_progress` on purpose — that is what the sweep read — and
+  //     asserts the guard still holds, because it keys off the freshly-read run
+  //     row (`errorCode: issue_terminal_status`) instead.
+  //  2. The revert reached past `status` into `assigneeAgentId`. A status-only fix
+  //     would still leave finished work re-owned by whoever recovery picked, so
+  //     the assignee assertion is load-bearing, not decorative.
+  //
+  // Asserting `terminalStatusExempted === 1` rather than merely "nothing changed"
+  // pins *why* nothing changed. A recency or invokability exemption would leave
+  // the row untouched too and would let a regression through unnoticed.
+  it("RBR-905 specimen: does not revert or reassign a delivered issue 6min after completion", async () => {
+    const completedAt = new Date("2026-08-06T06:53:17.736Z");
+    const sweepAt = new Date("2026-08-06T06:59:17.780Z");
+    expect(sweepAt.getTime() - completedAt.getTime()).toBe(6 * 60 * 1000 + 44);
+
+    const { companyId, agentId, issueId } = await seedStrandedIssueFixture({
+      // The status the sweep's stale candidate snapshot carried
+      // (`previousStatus: in_progress` in the production activity row).
+      status: "in_progress",
+      runStatus: "cancelled",
+      runErrorCode: "issue_terminal_status",
+      retryReason: "issue_continuation_needed",
+      runStartedAt: new Date("2026-08-06T06:40:46.000Z"),
+      runFinishedAt: completedAt,
+    });
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reconcileStrandedAssignedIssues();
+
+    // The success path must be classified as success, not as a lost run.
+    expect(result.terminalStatusExempted).toBe(1);
+    expect(result.escalated).toBe(0);
+    expect(result.continuationRequeued).toBe(0);
+    expect(result.dispatchRequeued).toBe(0);
+    expect(result.issueIds).toEqual([]);
+
+    const issue = await db.select().from(issues).where(eq(issues.id, issueId)).then((rows) => rows[0] ?? null);
+    // AC1: no revert to `blocked`.
+    expect(issue?.status).toBe("in_progress");
+    // AC1: no reassignment to a recovery owner.
+    expect(issue?.assigneeAgentId).toBe(agentId);
+
+    // AC1: no phantom recovery action to later require a revert.
+    const recoveryActions = await db
+      .select()
+      .from(issueRecoveryActions)
+      .where(eq(issueRecoveryActions.sourceIssueId, issueId));
+    expect(recoveryActions).toHaveLength(0);
+
+    // AC1: no nested recovery issue — the population RBR-812 is cleaning up.
+    const recoveryIssues = await db
+      .select()
+      .from(issues)
+      .where(and(eq(issues.companyId, companyId), eq(issues.originKind, "stranded_issue_recovery")));
+    expect(recoveryIssues).toHaveLength(0);
+
+    expect(await db.select().from(issueComments).where(eq(issueComments.issueId, issueId))).toHaveLength(0);
+
+    // The production defect is identifiable by its activity row. Assert the
+    // sweep wrote no recovery-sourced mutation at all, so the specimen cannot
+    // reappear in the log under a different shape.
+    const activity = await db.select().from(activityLog).where(eq(activityLog.entityId, issueId));
+    const recoveryWrites = activity.filter((row) => {
+      const source = row.details?.source;
+      return typeof source === "string" && source.startsWith("recovery.");
+    });
+    expect(recoveryWrites).toEqual([]);
+  });
+
+  // RBR-905: the same specimen against a recovery-origin issue.
+  //
+  // The sweep short-circuits recovery-origin issues into
+  // `escalateStrandedRecoveryIssueInPlace`, which writes `blocked` directly and
+  // never passes through the `escalateStrandedAssignedIssue` funnel. A guard on
+  // the funnel alone leaves this path live, and this is the path that produces
+  // the self-feeding recovery-issue chain, so it gets its own case.
+  it("RBR-905 specimen: does not escalate a recovery-origin issue whose run stopped with issue_terminal_status", async () => {
+    const { companyId, agentId, issueId } = await seedStrandedIssueFixture({
+      status: "in_progress",
+      runStatus: "cancelled",
+      runErrorCode: "issue_terminal_status",
+      retryReason: "issue_continuation_needed",
+      originKind: "stranded_issue_recovery",
+    });
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reconcileStrandedAssignedIssues();
+    expect(result.terminalStatusExempted).toBe(1);
+    expect(result.escalated).toBe(0);
+    expect(result.issueIds).toEqual([]);
+
+    const issue = await db.select().from(issues).where(eq(issues.id, issueId)).then((rows) => rows[0] ?? null);
+    expect(issue?.status).toBe("in_progress");
+    expect(issue?.assigneeAgentId).toBe(agentId);
+
+    expect(await db.select().from(issueComments).where(eq(issueComments.issueId, issueId))).toHaveLength(0);
+
+    const activity = await db.select().from(activityLog).where(eq(activityLog.entityId, issueId));
+    const recoveryWrites = activity.filter((row) => {
+      const source = row.details?.source;
+      return typeof source === "string" && source.startsWith("recovery.");
+    });
+    expect(recoveryWrites).toEqual([]);
+
+    // The recovery-origin path is the one that manufactures chains: assert it
+    // did not mint a nested recovery issue alongside the seeded one.
+    const recoveryIssues = await db
+      .select()
+      .from(issues)
+      .where(and(eq(issues.companyId, companyId), eq(issues.originKind, "stranded_issue_recovery")));
+    expect(recoveryIssues.map((row) => row.id)).toEqual([issueId]);
   });
 });
