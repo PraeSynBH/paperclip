@@ -128,9 +128,12 @@ _Last verified live: 2026-08-06 (SecurityEngineering, RBR-19)._
 | `GET /risks` (top-level) | 404 | Not in key scope |
 | `GET /workspaces/{id}/risks` | 404 | Not in key scope (same failure on both path shapes) |
 
-**RBR-19 scope-expansion status: 5 of 6 originally-requested scopes are now live.** Controls,
+**RBR-19 scope-expansion status: 4 of 6 originally-requested scopes are now live.** Controls,
 frameworks, monitoring-tests, and evidence are all `200` (workspace-scoped, per RBR-861/RBR-883/
-RBR-860). Only two gaps remain open, and they are distinct root causes, not one blocked ticket:
+RBR-860). Notably, none of those four needed an actual Drata dashboard scope change — all four
+were client-side wrong-path bugs (flat path instead of `/workspaces/{id}/...`, or wrong resource
+name for evidence). Only two gaps remain open, and they are distinct root causes, not one blocked
+ticket:
 
 - **`/risks`** — still `404` on both the flat and workspace-scoped path. This is a genuine
   missing scope grant (or the account has no Risk Management module enabled) — same failure

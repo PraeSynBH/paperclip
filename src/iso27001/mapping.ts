@@ -30,10 +30,27 @@ export function mapDrataToIso(
   });
 }
 
+/** Drata's own name for the ISO 27001:2022 framework in `requirements[].frameworkName`. */
+const ISO_27001_2022_FRAMEWORK_NAME = "ISO 27001:2022";
+
 function findMatchingDrataControls(
   isoControl: IsoControl,
   controls: DrataControl[]
 ): DrataControl[] {
+  // Prefer Drata's own authoritative ISO 27001:2022 linkage: `expand[]=requirements`
+  // returns, for each control, the exact Annex A codes (e.g. "A.5.6") it is mapped
+  // to under `frameworkName`/`name`. This is curated by Drata directly and is a
+  // strictly stronger signal than the free-text tag heuristic below — several
+  // controls (e.g. "Communication with Security and Privacy Organizations" for
+  // A.5.6, "Employee/Disclosure Process" for A.6.8) don't share vocabulary with
+  // our hand-written tags at all, so relying on tags alone under-reports coverage.
+  const exactMatches = controls.filter((control) =>
+    (control.requirements ?? []).some(
+      (req) => req.frameworkName === ISO_27001_2022_FRAMEWORK_NAME && req.name === isoControl.id
+    )
+  );
+  if (exactMatches.length > 0) return exactMatches;
+
   const matched = new Set<DrataControl>();
 
   for (const tag of isoControl.drataControlTags) {

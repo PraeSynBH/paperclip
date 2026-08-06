@@ -107,17 +107,49 @@ export interface DrataMonitoringTest {
   evidence?: DrataEvidence[];
 }
 
+/** A single stored artifact behind an evidence-library entry. */
+export interface DrataEvidenceVersion {
+  id: number;
+  source: string;
+  type: string;
+  /** True for the version currently backing the evidence entry. */
+  current: boolean;
+  createdAt: string;
+}
+
+/** Renewal cadence for an evidence-library entry. */
+export interface DrataEvidenceRenewalSchema {
+  id: number;
+  renewalDate: string | null;
+  /** e.g. NONE | MONTHLY | QUARTERLY | ANNUALLY */
+  renewalScheduleType: string;
+}
+
+/**
+ * Evidence-library entry, as returned by
+ * `GET /workspaces/{id}/evidence-library` (RBR-883).
+ *
+ * The legacy flat `/evidence` shape (`status` / `renewalDate` /
+ * `lastCollectedAt` / `collectionMethod` / `workspaceId`) does not exist on
+ * this route — freshness comes from the `current` entry in `versions[]` and
+ * renewal from `renewalSchema`. Use the helpers in `./helpers.js`.
+ */
 export interface DrataEvidence {
   id: number;
   name: string;
   description: string | null;
-  status: "active" | "inactive" | "archived";
-  renewalDate: string | null;
-  lastCollectedAt: string | null;
-  collectionMethod: string;
-  workspaceId: number;
+  implementationGuidance?: string | null;
+  evidenceTemplateCode?: string | null;
   createdAt: string;
   updatedAt: string;
+  /** `expand[]=renewalSchemaAndVersions` */
+  versions?: DrataEvidenceVersion[];
+  /** `expand[]=renewalSchemaAndVersions` */
+  renewalSchema?: DrataEvidenceRenewalSchema;
+  /** `expand[]=controls` */
+  controls?: DrataControl[];
+  /** `expand[]=user` — owner, not requested by default. */
+  user?: DrataUser;
 }
 
 export interface DrataPersonnel {

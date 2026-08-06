@@ -1,4 +1,4 @@
-import type { DrataControl, DrataUser } from "./types.js";
+import type { DrataControl, DrataEvidence, DrataUser } from "./types.js";
 
 /**
  * Readiness for a Drata control.
@@ -42,4 +42,41 @@ export function controlOwners(control: DrataControl): DrataUser[] {
   const owners = control.owners;
   if (!owners) return [];
   return Array.isArray(owners) ? owners : owners.data ?? [];
+}
+
+/**
+ * Collection timestamp for an evidence-library entry.
+ *
+ * `GET /workspaces/{id}/evidence-library` carries no flat `lastCollectedAt`.
+ * Freshness is the `createdAt` of the version flagged `current: true` under
+ * `expand[]=renewalSchemaAndVersions`; fall back to the newest version, then
+ * to the entry's own `updatedAt`. See RBR-883.
+ */
+export function evidenceCollectedAt(evidence: DrataEvidence): string | null {
+  const versions = evidence.versions ?? [];
+  const current = versions.find((v) => v.current);
+  if (current?.createdAt) return current.createdAt;
+
+  const newest = versions
+    .map((v) => v.createdAt)
+    .filter((d): d is string => Boolean(d))
+    .sort()
+    .pop();
+  return newest ?? evidence.updatedAt ?? null;
+}
+
+/**
+ * Renewal date for an evidence-library entry. Lives under `renewalSchema`
+ * (`expand[]=renewalSchemaAndVersions`); `renewalScheduleType: "NONE"` means
+ * the entry never expires and `renewalDate` is null.
+ */
+export function evidenceRenewalDate(evidence: DrataEvidence): string | null {
+  return evidence.renewalSchema?.renewalDate ?? null;
+}
+
+/** Control IDs an evidence-library entry links to (`expand[]=controls`). */
+export function evidenceControlIds(evidence: DrataEvidence): number[] {
+  return (evidence.controls ?? [])
+    .map((c) => c.id)
+    .filter((id): id is number => typeof id === "number");
 }

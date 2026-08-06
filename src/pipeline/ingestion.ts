@@ -1,5 +1,6 @@
 import type { DrataControl, DrataEvidence, DrataMonitoringTest } from "../drata/types.js";
 import { DrataClient } from "../drata/client.js";
+import { evidenceCollectedAt, evidenceControlIds, evidenceRenewalDate } from "../drata/helpers.js";
 
 /**
  * Drata v2 monitoring tests no longer carry a flat `controlId`; the linked
@@ -77,8 +78,11 @@ export class EvidenceIngestionPipeline {
     }
 
     for (const ev of evidence) {
-      const record = this.evidenceToRecord(ev);
+      const record = this.evidenceToRecord(ev, controlMap);
       batch.records.push(record);
+      for (const controlId of evidenceControlIds(ev)) {
+        if (controlMap.has(controlId)) coveredControls.add(controlId);
+      }
     }
 
     batch.stats.total = batch.records.length;
@@ -123,18 +127,33 @@ export class EvidenceIngestionPipeline {
     };
   }
 
-  private evidenceToRecord(ev: DrataEvidence): EvidenceRecord {
-    const status = this.determineStatus(ev.lastCollectedAt, ev.renewalDate);
+  private evidenceToRecord(
+    ev: DrataEvidence,
+    controlMap: Map<number, DrataControl>
+  ): EvidenceRecord {
+    const collectedAt = evidenceCollectedAt(ev);
+    const renewalDate = evidenceRenewalDate(ev);
+    const status = this.determineStatus(collectedAt, renewalDate);
+    // `expand[]=controls` returns every control the entry is linked to; the
+    // flat record carries the first one and `run()` credits all of them.
+    const [primaryControlId] = evidenceControlIds(ev);
+    const control =
+      primaryControlId !== undefined ? controlMap.get(primaryControlId) : undefined;
     return {
       id: `drata-evidence-${ev.id}`,
       source: "drata",
       sourceId: ev.id,
-      controlId: 0,
-      controlName: "Unknown",
+      controlId: primaryControlId ?? 0,
+      controlName:
+        control?.name ??
+        ev.controls?.[0]?.name ??
+        (primaryControlId !== undefined
+          ? `Control #${primaryControlId}`
+          : "Unmapped control"),
       evidenceType: "uploaded_evidence",
       status,
-      collectedAt: ev.lastCollectedAt,
-      renewalDate: ev.renewalDate,
+      collectedAt,
+      renewalDate,
       rawData: ev as unknown as Record<string, unknown>,
     };
   }

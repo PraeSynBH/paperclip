@@ -206,16 +206,24 @@ export class DrataClient {
     );
   }
 
-  // Evidence Library
-  // NOTE: intentionally NOT workspace-scoped — `/workspaces/{id}/evidence`
-  // returns "Multiple artifacts are not enabled for this account" (a plan /
-  // entitlement gap), not a wrong-path 404. See RBR-860.
+  // Evidence Library (workspace-scoped)
+  // The resource is `/workspaces/{id}/evidence-library`. Both `/evidence` and
+  // `/workspaces/{id}/evidence` 404 — the latter with a misleading "Multiple
+  // artifacts are not enabled for this account" body, which is Drata's generic
+  // message for a removed/renamed route, not an entitlement check. See RBR-883
+  // (diagnosed in RBR-876; same bug class as RBR-861).
   async listEvidence(params?: DrataListParams) {
-    return this.request<DrataListResponse<DrataEvidence>>("/evidence", params);
+    return this.request<DrataListResponse<DrataEvidence>>(
+      await this.workspacePath("/evidence-library"),
+      params
+    );
   }
 
   async getAllEvidence() {
-    return this.fetchAll<DrataEvidence>("/evidence");
+    // v2 expand enum: user,controls,renewalSchemaAndVersions.
+    return this.fetchAll<DrataEvidence>(await this.workspacePath("/evidence-library"), {
+      expand: ["controls", "renewalSchemaAndVersions"],
+    });
   }
 
   // Personnel
