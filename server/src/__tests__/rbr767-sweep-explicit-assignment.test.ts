@@ -21,7 +21,7 @@ import { issueService } from "../services/issues.js";
 import { runRbr767Sweep } from "../scripts/rbr767-sweep.js";
 
 /**
- * RBR-814: the sweep must not steal an explicit assignment.
+ * RBR-813: the sweep must not steal an explicit assignment.
  *
  * `scripts/rbr767-sweep.ts` re-routes on
  *   `isNull(assignee) OR isNotNull(assigneeFallbackReason)`.
@@ -33,18 +33,22 @@ import { runRbr767Sweep } from "../scripts/rbr767-sweep.js";
  * next sweep -- every sweep, for the life of the row -- overwrote their assignment with a
  * ladder-computed fallback owner.
  *
- * The fix, per the CEO's direction on RBR-814, is one change and one only: make the
- * predicate's premise true rather than deleting the predicate. The shared
- * `issueService.update` path clears the flag whenever an explicit assignee lands, so a
- * row that someone deliberately took is no longer in the sweep's worklist at all. The
- * `isNotNull` branch stays exactly as it is, because rows that really are degraded carry
- * an assignee by construction and the unassigned-only branch would miss every one of
- * them.
+ * The primary fix, per the CEO's direction, is to make the predicate's premise true
+ * rather than to delete the predicate. The shared `issueService.update` path clears the
+ * flag whenever an explicit assignee lands, so a row that someone deliberately took is no
+ * longer in the sweep's worklist at all. The `isNotNull` branch stays exactly as it is,
+ * because rows that really are degraded carry an assignee by construction and the
+ * unassigned-only branch would miss every one of them.
  *
- * The narrower sweep WHERE (pin the UPDATE to the snapshot the SELECT read) is the
- * explicitly-rejected alternative on RBR-814 -- "do not do both" -- and is tracked
- * separately. This file therefore asserts behaviour through the real sweep entrypoint
- * only, never against a copy of its predicate.
+ * RBR-813 AC2 additionally pins the sweep's UPDATE to the assignee its own SELECT read
+ * (a compare-and-swap). That is not a substitute for the clear and not a competing
+ * design: it closes the one window the clear cannot, where a reassignment lands *after*
+ * the scan and *before* the write, on a row that was legitimately flagged when scanned.
+ * (RBR-814 framed these as alternatives -- "do not do both" -- but RBR-814 was cancelled
+ * as a duplicate and RBR-813 is canonical, and it requires both.)
+ *
+ * Every assertion here runs through the real `runRbr767Sweep` entrypoint and checks where
+ * the row actually ended up, never against a copy of the sweep's predicate.
  */
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
@@ -52,7 +56,7 @@ const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : 
 
 if (!embeddedPostgresSupport.supported) {
   console.warn(
-    `Skipping embedded Postgres RBR-814 explicit-assignment tests on this host: ${
+    `Skipping embedded Postgres RBR-813 explicit-assignment tests on this host: ${
       embeddedPostgresSupport.reason ?? "unsupported environment"
     }`,
   );
@@ -353,5 +357,66 @@ describeEmbeddedPostgres("rbr767 sweep: explicit assignment survives the sweep",
     const [after] = await db.select().from(issues).where(eq(issues.id, issue.id));
     expect(after.assigneeAgentId).toBe(specialist);
     expect(after.assigneeFallbackReason).toBeNull();
+  });
+
+  /**
+   * RBR-813 AC2. The one window the flag-clearing cannot close: the row was legitimately
+   * flagged when the sweep scanned it, and the reassignment lands *after* that SELECT but
+   * *before* the UPDATE. No amount of clearing at the writer helps here -- by the time
+   * the writer runs, the sweep has already decided what it is going to write.
+   *
+   * The interloper below deliberately leaves the flag set, which is exactly how a writer
+   * that predates this fix (or a raw SQL repair, or a migration) behaves. That forces the
+   * compare-and-swap to carry the whole test: the `isNotNull(assigneeFallbackReason)`
+   * branch still matches the row, so the write is rejected on the assignee mismatch alone
+   * or not at all.
+   */
+  it("AC2: skips rather than clobbers a row whose assignee changed mid-sweep", async () => {
+    const companyId = await seedCompany();
+    const ceo = await hire(companyId, "CEO", null);
+    const handPicked = await hire(companyId, "Hand picked owner", ceo);
+
+    const [issue] = await db.insert(issues).values({
+      companyId,
+      title: "Reassigned between the scan and the write",
+      status: "todo",
+      priority: "critical",
+      // The sweep logs each row by `identifier`, and the injector below keys off that log
+      // line. Direct inserts bypass the route that allocates identifiers, so set one
+      // explicitly rather than letting the injector silently never fire.
+      issueNumber: 1,
+      identifier: `RACE-${randomUUID().slice(0, 8)}`,
+      assigneeAgentId: ceo,
+      assigneeFallbackReason: "no_invokable_owner",
+    }).returning();
+
+    // The sweep logs its decision for a row after resolving an owner from the snapshot
+    // and before writing, so this callback is precisely the window under test.
+    let raced = false;
+    const sweep = await runRbr767Sweep(db, {
+      companyId,
+      apply: true,
+      log: async (line) => {
+        if (raced || !line.includes(issue.identifier ?? "\u0000")) return;
+        raced = true;
+        await db.update(issues)
+          .set({ assigneeAgentId: handPicked, assigneeFallbackReason: "no_invokable_owner" })
+          .where(eq(issues.id, issue.id));
+      },
+    });
+
+    // Guard against the injector silently never firing, which would make every assertion
+    // below pass for the wrong reason.
+    expect(raced).toBe(true);
+    expect(sweep.scanned).toBe(1);
+    // The CAS lost its snapshot, so the row is reported skipped, not repaired. Honest
+    // counts matter here: an operator who sees `repaired` must be able to trust it.
+    expect(sweep.repaired).toBe(0);
+    expect(sweep.failed).toBe(1);
+    expect(sweep.lines.join("\n")).toMatch(/SKIPPED: the row changed under the sweep/);
+
+    const [afterRace] = await db.select().from(issues).where(eq(issues.id, issue.id));
+    // The behavioural assertion: the owner chosen mid-sweep still holds the row.
+    expect(afterRace.assigneeAgentId).toBe(handPicked);
   });
 });

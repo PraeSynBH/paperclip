@@ -71,14 +71,19 @@ export type Rbr767SweepResult = {
  */
 export async function runRbr767Sweep(
   db: Db,
-  options: { companyId: string; apply?: boolean; log?: (line: string) => void },
+  options: { companyId: string; apply?: boolean; log?: (line: string) => void | Promise<void> },
 ): Promise<Rbr767SweepResult> {
   const { companyId } = options;
   const apply = options.apply ?? false;
   const lines: string[] = [];
-  const log = (line: string) => {
+  // Awaited, so a caller may hand in an async sink (a file, the activity log, an API)
+  // and have the sweep stay in step with it rather than racing ahead of its own
+  // narration. That ordering guarantee is also what makes the per-row log line a
+  // deterministic seam for exercising the between-snapshot-and-write window the
+  // compare-and-swap below defends.
+  const log = async (line: string) => {
     lines.push(line);
-    options.log?.(line);
+    await options.log?.(line);
   };
 
   const companyAgents = await loadCompanyAgentOrgRows(db, companyId);
@@ -109,18 +114,20 @@ export async function runRbr767Sweep(
     ));
 
   if (orphans.length === 0) {
-    log(`SWEEP CLEAN: 0 unassigned or degraded non-terminal issues in ${companyId}`);
+    await log(`SWEEP CLEAN: 0 unassigned or degraded non-terminal issues in ${companyId}`);
     return { scanned: 0, repaired: 0, failed: 0, lines };
   }
 
   const unassignedCount = orphans.filter((issue) => !issue.assigneeAgentId).length;
   const degradedCount = orphans.length - unassignedCount;
-  log(
+  await log(
     `${orphans.length} issue(s) needing an owner `
     + `(${unassignedCount} unassigned, ${degradedCount} degraded)${apply ? "" : " (dry run)"}`,
   );
   let failed = 0;
   let repaired = 0;
+  // Subset of `failed` that lost the compare-and-swap rather than failing to route.
+  let racedOut = 0;
 
   for (const issue of orphans) {
     const parent = issue.parentId
@@ -141,12 +148,12 @@ export async function runRbr767Sweep(
     // outcome. Neither is an error in the row; both are "the roster is not ready."
     if (!result.applied) {
       failed += 1;
-      log(`${issue.identifier} [${issue.status}/${issue.priority}] -> NO OWNER POSSIBLE (${result.reason})`);
+      await log(`${issue.identifier} [${issue.status}/${issue.priority}] -> NO OWNER POSSIBLE (${result.reason})`);
       continue;
     }
     if (result.degraded) {
       failed += 1;
-      log(
+      await log(
         `${issue.identifier} [${issue.status}/${issue.priority}] -> STILL DEGRADED `
         + `(${result.degradedReason}); leaving flagged for the next sweep`,
       );
@@ -154,7 +161,7 @@ export async function runRbr767Sweep(
     }
 
     const owner = `${result.reason} = ${agentName.get(result.assigneeAgentId) ?? "?"} (${result.assigneeAgentId})`;
-    log(`${issue.identifier} [${issue.status}/${issue.priority}] -> ${owner}`);
+    await log(`${issue.identifier} [${issue.status}/${issue.priority}] -> ${owner}`);
     repaired += 1;
 
     if (apply) {
@@ -164,9 +171,11 @@ export async function runRbr767Sweep(
       //     sweep; an agent could have been paused/terminated/reparented into an invalid
       //     chain since then, and Greptile correctly flagged that a stale invokability
       //     verdict could land a non-wakeable owner on the repaired issue.
-      //  2. The UPDATE's WHERE clause re-checks unassigned + non-terminal at write time
-      //     (unchanged from before), so a concurrent explicit assignment or a
-      //     completion/cancellation between the SELECT and this UPDATE is still safe.
+      //  2. The UPDATE is a compare-and-swap: its WHERE pins the write to the assignee
+      //     this sweep snapshotted, and re-checks non-terminal status, so a concurrent
+      //     reassignment, claim, completion or cancellation landing between the SELECT
+      //     and this UPDATE loses the race by design and is reported rather than
+      //     silently overwritten.
       const [freshOwner] = await db
         .select({
           id: agents.id,
@@ -185,13 +194,13 @@ export async function runRbr767Sweep(
       if (!freshInvokability.invokable) {
         failed += 1;
         repaired -= 1;
-        log(
+        await log(
           `${issue.identifier} [${issue.status}/${issue.priority}] -> SKIPPED: chosen owner `
           + `${result.assigneeAgentId} is no longer invokable (${freshInvokability.reason}); rerun the sweep`,
         );
         continue;
       }
-      await db.update(issues)
+      const written = await db.update(issues)
         .set({
           assigneeAgentId: result.assigneeAgentId,
           // The row now has a genuinely invokable owner, so it is no longer degraded.
@@ -202,6 +211,19 @@ export async function runRbr767Sweep(
         .where(and(
           eq(issues.id, issue.id),
           notInArray(issues.status, TERMINAL),
+          // RBR-813 AC2: compare-and-swap against the assignee this sweep snapshotted at
+          // the top-of-run SELECT. The flag-clearing above is the root-cause fix and on
+          // its own is enough for every writer that goes through `issueService`; this is
+          // the backstop for the window that fix cannot close -- a reassignment that
+          // lands *after* the SELECT and *before* this UPDATE, where the row was still
+          // legitimately flagged when it was scanned. Pinning the write to its own
+          // snapshot makes the repair atomic with respect to the plan it was computed
+          // from, rather than merely "still degraded at write time." Skipping is always
+          // the right call on a mismatch: whatever moved the row is newer information
+          // than anything this sweep computed.
+          issue.assigneeAgentId === null
+            ? isNull(issues.assigneeAgentId)
+            : eq(issues.assigneeAgentId, issue.assigneeAgentId),
           or(
             // Unchanged guard for the legacy unassigned population: do not clobber a
             // concurrent explicit assignment landed since the SELECT.
@@ -210,7 +232,7 @@ export async function runRbr767Sweep(
             // every one of them. Gate on the flag instead: still-degraded means nobody has
             // claimed it since the SELECT, so re-routing is safe.
             //
-            // RBR-814: that premise used to be false, and this branch was silently
+            // RBR-813: that premise used to be false, and this branch was silently
             // stealing explicit assignments. Nothing on the update/reassign path cleared
             // the flag, so a row a human deliberately took stayed flagged forever and
             // every subsequent sweep overwrote their owner with the ladder's pick. The
@@ -222,14 +244,41 @@ export async function runRbr767Sweep(
             // genuinely-degraded row, which all carry an assignee by construction.
             isNotNull(issues.assigneeFallbackReason),
           ),
-        ));
+        ))
+        .returning({ id: issues.id });
+
+      // Zero rows means the compare-and-swap lost: the row changed underneath this sweep
+      // between the scan and the write. Report it as skipped rather than repaired so the
+      // counts stay honest and the operator knows to rerun rather than believing a repair
+      // landed that did not.
+      if (written.length === 0) {
+        repaired -= 1;
+        failed += 1;
+        racedOut += 1;
+        await log(
+          `${issue.identifier} [${issue.status}/${issue.priority}] -> SKIPPED: the row changed `
+          + `under the sweep (reassigned, claimed, or closed since the scan); rerun the sweep`,
+        );
+      }
     }
   }
 
-  if (failed > 0) {
-    log(
-      `\n${failed} issue(s) still lack an invokable owner -- the roster has not recovered. `
+  // Split the tail summary by cause. A row that raced out did *not* fail to find an
+  // invokable owner and is not necessarily still flagged -- whatever moved it may well
+  // have given it a better owner than the ladder would have -- so folding it into the
+  // roster-has-not-recovered line would tell the operator something false about their
+  // data at exactly the moment they are deciding whether to rerun.
+  const unrouted = failed - racedOut;
+  if (unrouted > 0) {
+    await log(
+      `\n${unrouted} issue(s) still lack an invokable owner -- the roster has not recovered. `
       + `They remain flagged and will be re-routed by the next sweep.`,
+    );
+  }
+  if (racedOut > 0) {
+    await log(
+      `\n${racedOut} issue(s) changed under the sweep and were left untouched. `
+      + `Their current state is newer than this run's plan; rerun the sweep to re-evaluate them.`,
     );
   }
 

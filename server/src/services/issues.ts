@@ -7609,7 +7609,7 @@ export function issueService(db: Db) {
         patch.executionAgentNameKey = null;
         patch.executionLockedAt = null;
       }
-      // RBR-814: an explicitly chosen owner is by definition not a degraded-roster
+      // RBR-813: an explicitly chosen owner is by definition not a degraded-roster
       // fallback, so `assigneeFallbackReason` is stale the moment that write lands.
       // This must happen here, on the shared update path, rather than at each caller:
       // `scripts/rbr767-sweep.ts` gates its re-route on `isNotNull(assigneeFallbackReason)`
@@ -8013,7 +8013,7 @@ export function issueService(db: Db) {
         .set({
           assigneeAgentId: agentId,
           assigneeUserId: null,
-          // RBR-814: checkout is the strongest possible acceptance signal -- an agent is
+          // RBR-813: checkout is the strongest possible acceptance signal -- an agent is
           // claiming this row and starting work on it right now -- so a lingering
           // `assigneeFallbackReason` is stale here for the same reason it is stale on the
           // shared update path. Left set, the next `rbr767-sweep --apply` would match this
@@ -8119,7 +8119,7 @@ export function issueService(db: Db) {
           const now = new Date();
           const adoptionSet: Record<string, unknown> = {
             assigneeAgentId: agentId,
-            // RBR-814: adoption writes an explicit assignee exactly like the primary
+            // RBR-813: adoption writes an explicit assignee exactly like the primary
             // checkout branch does, so the stale-flag reasoning is identical and the
             // clear has to happen on both. Missing it here would leave the worst
             // instance of the defect live on the recovery path specifically: an agent
