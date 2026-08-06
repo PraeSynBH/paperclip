@@ -1088,6 +1088,11 @@ export interface AskUserQuestionsPayload {
   title?: string | null;
   submitLabel?: string | null;
   supersedeOnUserComment?: boolean;
+  /**
+   * RBR-852 AC1: ids of pending interactions this one explicitly replaces. Cross-issue is allowed
+   * (same company only); the caller may only name interactions it created itself.
+   */
+  supersedesInteractionIds?: string[];
   questions: AskUserQuestionsQuestion[];
 }
 
@@ -1104,8 +1109,10 @@ export interface AskUserQuestionsResult {
   answers: AskUserQuestionsAnswer[];
   cancelled?: true;
   cancellationReason?: string | null;
-  expirationReason?: "superseded_by_comment";
+  expirationReason?: "superseded_by_comment" | "superseded_by_interaction";
   commentId?: string | null;
+  /** Set when expirationReason is superseded_by_interaction: the interaction that replaced this one. */
+  supersededByInteractionId?: string | null;
   summaryMarkdown?: string | null;
 }
 
@@ -1181,6 +1188,8 @@ export interface RequestConfirmationPayload {
   declineReasonPlaceholder?: string | null;
   detailsMarkdown?: string | null;
   supersedeOnUserComment?: boolean;
+  /** RBR-852 AC1. See AskUserQuestionsPayload.supersedesInteractionIds. */
+  supersedesInteractionIds?: string[];
   target?: RequestConfirmationTarget | null;
   toolAction?: RequestConfirmationToolActionPayload;
 }
@@ -1206,6 +1215,8 @@ export interface RequestCheckboxConfirmationPayload {
   allowDeclineReason?: boolean;
   declineReasonPlaceholder?: string | null;
   supersedeOnUserComment?: boolean;
+  /** RBR-852 AC1. See AskUserQuestionsPayload.supersedesInteractionIds. */
+  supersedesInteractionIds?: string[];
   target?: RequestConfirmationTarget | null;
 }
 
@@ -1230,6 +1241,8 @@ export interface RequestItemVerdictsPayload {
   reasonLabel?: string | null;
   allowBulkApprove?: boolean;
   supersedeOnUserComment?: boolean;
+  /** RBR-852 AC1. See AskUserQuestionsPayload.supersedesInteractionIds. */
+  supersedesInteractionIds?: string[];
   target?: RequestConfirmationTarget | null;
 }
 
@@ -1240,6 +1253,7 @@ export interface RequestConfirmationResult {
     | "rejected"
     | "superseded_by_comment"
     | "superseded_by_newer_request"
+    | "superseded_by_interaction"
     | "stale_target"
     | "withdrawn"
     | "issue_closed"
@@ -1276,11 +1290,12 @@ export interface RequestItemVerdictsResultItem {
 
 export interface RequestItemVerdictsResult {
   version: 1;
-  outcome: "resolved" | "superseded_by_comment" | "stale_target" | "cancelled" | "withdrawn" | "issue_closed" | "addressee_deleted";
+  outcome: "resolved" | "superseded_by_comment" | "superseded_by_interaction" | "stale_target" | "cancelled" | "withdrawn" | "issue_closed" | "addressee_deleted";
   reason?: string | null;
   complete: boolean;
   items: RequestItemVerdictsResultItem[];
   commentId?: string | null;
+  supersededByInteractionId?: string | null;
   staleTarget?: RequestConfirmationTarget | null;
 }
 
