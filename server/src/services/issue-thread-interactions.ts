@@ -454,6 +454,28 @@ function shouldReturnAcceptedConfirmationToCreatorAgent(args: {
   return Boolean(args.issue.assigneeUserId);
 }
 
+/**
+ * RBR-875 (CEO ruling, separated from RBR-852). The default for `supersedeOnUserComment`.
+ *
+ * This was `true` — every ask created without an opinion opted itself in to being expired by the
+ * next human comment on the issue. That is the RBR-823 defect at its source: the board types one
+ * comment and unrelated pending interactions are silently garbage-collected, including
+ * contradictory irreversible asks that nobody ever answered.
+ *
+ * It stays `true` on RBR-852. Flipping it to `false` is the right end state — RBR-852 shipped the
+ * supported alternative, an explicit `supersedesInteractionIds` link that retires the specific
+ * target it names at create time with an auditable pointer back, which makes blanket
+ * expiry-by-proximity redundant. But the flip is a behaviour change for every existing caller and
+ * was ruled **out of scope for RBR-852** by the CEO; it is tracked separately on RBR-877 and lands
+ * after this. Do not flip it here.
+ *
+ * What RBR-852 does change is the multi-candidate case: see `selectCommentSupersededRows`. With
+ * the default still `true`, a lone pending ask keeps its historical behaviour (a comment instead
+ * of an answer retires it), while two or more pending asks now retire *nothing* — which is the
+ * actual defect RBR-823 reported.
+ */
+const SUPERSEDE_ON_USER_COMMENT_DEFAULT = true;
+
 function shouldSupersedeInteractionOnUserComment(interaction: UserCommentSupersedableInteraction) {
   return interaction.payload.supersedeOnUserComment === true;
 }
