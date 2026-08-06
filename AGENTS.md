@@ -138,6 +138,84 @@ pnpm build
 
 If anything cannot be run, explicitly report what was not run and why.
 
+### 7.1 When verification costs more than one agent run (RBR-937)
+
+Some verification legitimately exceeds a single agent run's wall clock. The
+server suite boots an embedded Postgres (~60 s) before any DB-backed test runs,
+so a targeted server verification plus a cold `pnpm install` can cost 5+ minutes.
+**A run that dies on the wall clock has proven nothing about your change.** Do not
+retry it inline — each retry re-pays the same unaffordable cost and dies in the
+same place. Run it detached instead:
+
+```sh
+# This run: start it and exit. Returns in ~1 s.
+bash scripts/detached-verify.sh start --name my-check -- pnpm test:run
+
+# Add --install when the tree may be unprovisioned (install is part of the cost).
+bash scripts/detached-verify.sh start --name my-check --install -- pnpm test:run
+
+# Non-node verifications skip the node preflight with --no-preflight.
+bash scripts/detached-verify.sh start --name db-check --no-preflight -- ./check.sh
+
+# A LATER run: read the durable result in milliseconds. Nothing is recomputed.
+bash scripts/detached-verify.sh report --name my-check
+```
+
+The job survives your run exiting (own session, no controlling terminal), writing
+`var/detached-verify/<name>/{summary.txt,run.log,meta.json}` plus a `.complete`
+sentinel. Exit codes are the contract: `0` pass, `1` fail, `2` still running (not
+an error — end the run and read it next wake), `3` **setup blocker: unverified,
+not broken**, `4` no such job.
+
+Worked example: verifying RBR-937's own AC4 suite.
+
+```sh
+bash scripts/detached-verify.sh start --name rbr937-ac4 -- \
+  pnpm exec vitest run --project @paperclipai/server \
+  server/src/__tests__/run-timeout-disposition.test.ts
+# ... end the run, then next wake:
+bash scripts/detached-verify.sh report --name rbr937-ac4
+```
+
+### 7.2 Environment landmines that make a cold tree fail for the wrong reason
+
+- **`NODE_ENV=production` is inherited from the agent runtime.** Under it pnpm
+  reports `devDependencies: skipped` and omits vitest, so `pnpm exec vitest` dies
+  with `Command "vitest" not found`. `pnpm test:run` and `detached-verify.sh`
+  already force `NODE_ENV=test`; if you invoke vitest directly, prefix it
+  yourself. **Never `pnpm install` in this repo with `NODE_ENV=production`.**
+- **`node_modules` can exist but be empty.** Run the preflight to tell a broken
+  environment apart from a broken change — it exits `3`, distinct from vitest's
+  `1`:
+
+  ```sh
+  node scripts/preflight-test-env.mjs          # test lane
+  node scripts/preflight-test-env.mjs --lane=install   # before installing
+  ```
+
+- **A populated root `node_modules` does NOT mean the workspace is provisioned.**
+  pnpm installs a tree per package. In a fresh worktree the root can look healthy
+  while `server/node_modules` and `packages/shared/node_modules` are absent, and
+  `tsc` then emits dozens of `Cannot find module 'zod'` errors that read as source
+  defects. The preflight checks these per-package trees; the fix is always
+  `NODE_ENV=test pnpm install` at the repo root.
+
+- **A stale test filter is a silent no-op.** Vitest treats positional args as
+  substring filters and ignores ones that match nothing, so citing a deleted suite
+  yields a green run in which your cited tests never ran. `pnpm test:run` now hard
+  fails on a zero-match filter. Check a filter directly with:
+
+  ```sh
+  node scripts/vitest-filter-guard.mjs server/src/__tests__/some.test.ts
+  ```
+
+These guards are covered by a cheap, DB-free suite:
+
+```sh
+NODE_ENV=test node --test scripts/__tests__/verification-guards.test.mjs
+```
+
+
 ## 8. API and Auth Expectations
 
 - Base path: `/api`

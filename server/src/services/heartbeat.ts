@@ -9313,6 +9313,10 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     const existing = await getAgent(agentId);
     if (!existing) return;
 
+    // Cheap early-out only. The authoritative guard lives in the WHERE clause of
+    // the UPDATE below: this snapshot is stale by the time we write, so an
+    // operator pause/terminate landing between here and the write must be
+    // preserved by the database predicate, not by this check.
     if (existing.status === "paused" || existing.status === "terminated") {
       return;
     }
@@ -9338,9 +9342,20 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         lastHeartbeatAt: new Date(),
         updatedAt: new Date(),
       })
-      .where(eq(agents.id, agentId))
+      .where(and(eq(agents.id, agentId), notInArray(agents.status, ["paused", "terminated"])))
       .returning()
       .then((rows) => rows[0] ?? null);
+
+    // Zero rows affected => an operator pause/terminate won the race after our
+    // snapshot read. Leave the operator's intent intact and skip all downstream
+    // side effects (telemetry, live event); every consumer below is null-guarded.
+    if (!updated) {
+      logger.info(
+        { agentId, outcome, attemptedStatus: nextStatus },
+        "finalizeAgentStatus skipped: agent paused or terminated concurrently",
+      );
+      return;
+    }
 
     if (isFirstHeartbeat && updated) {
       const tc = getTelemetryClient();

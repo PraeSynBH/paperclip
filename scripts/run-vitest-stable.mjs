@@ -3,6 +3,12 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readdirSync, statSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import {
+  ZeroMatchFilterError,
+  assertFiltersMatchTestFiles,
+  collectTestFiles,
+  extractPositionalFilters,
+} from "./vitest-filter-guard.mjs";
 
 const repoRoot = process.cwd();
 const serverRoot = path.join(repoRoot, "server");
@@ -245,7 +251,37 @@ function selectSerializedSuites(routeTests, shardIndex, shardCount) {
   return routeTests.filter((_, index) => index % shardCount === shardIndex);
 }
 
+let cachedRepoTestFiles = null;
+
+function repoTestFiles() {
+  if (cachedRepoTestFiles === null) {
+    cachedRepoTestFiles = collectTestFiles(repoRoot);
+  }
+  return cachedRepoTestFiles;
+}
+
+// RBR-937 AC3: vitest treats positional args as substring filters and silently
+// ignores any that match nothing — so citing a deleted suite yields a green run
+// in which the cited tests never executed. Refuse to launch instead.
+function assertFiltersResolve(args, label) {
+  const filters = extractPositionalFilters(args);
+  if (filters.length === 0) return;
+
+  try {
+    assertFiltersMatchTestFiles(filters, repoTestFiles());
+  } catch (error) {
+    if (error instanceof ZeroMatchFilterError) {
+      fail(
+        `${label}: refusing to run. ${error.message}\n` +
+          "A filter matching zero files would let vitest exit 0 without running the cited tests.",
+      );
+    }
+    throw error;
+  }
+}
+
 function runVitest(args, label) {
+  assertFiltersResolve(args, label);
   console.log(`\n[test:run] ${label}`);
   invocationIndex += 1;
   const tempRootParent = process.platform === "win32" ? os.tmpdir() : "/tmp";
