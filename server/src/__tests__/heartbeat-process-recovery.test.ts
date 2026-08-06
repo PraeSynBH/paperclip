@@ -288,7 +288,10 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
   beforeAll(async () => {
     tempDb = await startEmbeddedPostgresTestDatabase("paperclip-heartbeat-recovery-");
     db = createDb(tempDb.connectionString);
-  }, 20_000);
+    // No inline hook budget here on purpose (RBR-912): an inline
+    // `beforeAll(fn, ms)` silently overrides both the config `hookTimeout` and
+    // `--hookTimeout`. Budgets live in server/vitest.config.ts.
+  });
 
   afterEach(async () => {
     vi.clearAllMocks();
@@ -449,6 +452,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     runStatus?: "running" | "queued" | "failed";
     processPid?: number | null;
     processGroupId?: number | null;
+    processStartedAt?: Date | null;
     processLossRetryCount?: number;
     includeIssue?: boolean;
     runErrorCode?: string | null;
@@ -509,6 +513,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
         : { ...(input?.contextSnapshot ?? {}), issueId },
       processPid: input?.processPid ?? null,
       processGroupId: input?.processGroupId ?? null,
+      processStartedAt: input?.processStartedAt ?? null,
       processLossRetryCount: input?.processLossRetryCount ?? 0,
       errorCode: input?.runErrorCode ?? null,
       error: input?.runError ?? null,
@@ -1241,6 +1246,221 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       .then((rows) => rows[0] ?? null);
     expect(lease?.status).toBe("failed");
     expect(lease?.releasedAt).toBeTruthy();
+  });
+
+  // ── RBR-979: startup-restart negative controls ─────────────────────────────
+  //
+  // A server restart mass-marked every LIVE agent run orphaned, because agent
+  // runs are separate OS processes (`hermes chat -q`) that are NOT children of
+  // `paperclipai run`, and the reaper inferred death from their absence from the
+  // in-memory `runningProcesses` map. Observed 2026-08-06 09:26:41: one restart
+  // reaped 31 runs; 19 of them made authenticated API requests carrying their
+  // own X-Paperclip-Run-Id afterwards.
+  //
+  // These tests simulate that restart: the run row is `running` in the DB, the
+  // in-memory maps are EMPTY (exactly what a fresh process sees), and the
+  // process is genuinely alive. The bug is a false positive, so these target
+  // false positives.
+
+  it("RBR-979: a restart leaves a live registered run alone (identity via cmdline)", async () => {
+    const child = spawnAliveProcess();
+    childProcesses.add(child);
+    const pid = child.pid ?? 0;
+    expect(pid).toBeGreaterThan(0);
+
+    const { runId, agentId, issueId, wakeupRequestId } = await seedRunFixture({
+      agentStatus: "idle",
+      processPid: pid,
+      processStartedAt: new Date(),
+    });
+
+    // A fresh server process: nothing is tracked in memory.
+    expect(runningProcesses.has(runId)).toBe(false);
+
+    const heartbeat = heartbeatService(db);
+    const result = await heartbeat.reapOrphanedRuns({
+      // Identity proven the way a real `hermes chat -q ... <runId>` process
+      // proves it: the run id is in the live process's command line.
+      processTableProbe: {
+        isPidAlive: (candidate) => isPidAlive(candidate),
+        isProcessGroupAlive: () => false,
+        startTimeForPid: () => null,
+        pidsMentioningRunId: (candidate) => (candidate === runId ? [pid] : []),
+      },
+    });
+
+    // The whole point: NOT reaped.
+    expect(result.reaped).toBe(0);
+    expect(result.runIds).toEqual([]);
+    expect(result.spared).toBe(1);
+    expect(result.sparedRunIds).toEqual([runId]);
+
+    const verdict = result.verdicts.find((entry) => entry.runId === runId);
+    expect(verdict?.alive).toBe(true);
+    expect(verdict?.reason).toBe("pid_alive_identity_confirmed");
+    // AC4: per-run evidence for the destructive decision.
+    expect(verdict?.evidence.pidChecked).toBe(pid);
+    expect(verdict?.evidence.pidAlive).toBe(true);
+    expect(verdict?.evidence.identityConfirmedBy).toBe("cmdline_run_id");
+
+    // The run stays live, flagged detached rather than lost, and no retry is
+    // queued — a duplicate agent process is exactly what must not happen.
+    const run = await heartbeat.getRun(runId);
+    expect(run?.status).toBe("running");
+    expect(run?.errorCode).toBe("process_detached");
+
+    const runs = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.agentId, agentId));
+    expect(runs).toHaveLength(1);
+
+    // The issue keeps its execution path instead of being handed to recovery,
+    // which is what manufactured the phantom `blocked` writes.
+    const issue = await db
+      .select()
+      .from(issues)
+      .where(eq(issues.id, issueId))
+      .then((rows) => rows[0] ?? null);
+    expect(issue?.status).toBe("in_progress");
+    expect(issue?.checkoutRunId).toBe(runId);
+    expect(issue?.executionRunId).toBe(runId);
+
+    const wakeup = await db
+      .select()
+      .from(agentWakeupRequests)
+      .where(eq(agentWakeupRequests.id, wakeupRequestId))
+      .then((rows) => rows[0] ?? null);
+    expect(wakeup?.status).toBe("claimed");
+  });
+
+  it("RBR-979: a restart leaves a live run alone when NO pid was ever persisted", async () => {
+    // This was the entire 09:26:41 population — the deployed server had not
+    // persisted pids, so every live run looked identity-less. Liveness was
+    // still checkable via the process table; nothing looked.
+    const child = spawnAliveProcess();
+    childProcesses.add(child);
+    const pid = child.pid ?? 0;
+
+    const { runId, agentId } = await seedRunFixture({
+      agentStatus: "idle",
+      processPid: null,
+      processGroupId: null,
+      processStartedAt: null,
+    });
+
+    const heartbeat = heartbeatService(db);
+    const result = await heartbeat.reapOrphanedRuns({
+      processTableProbe: {
+        isPidAlive: (candidate) => isPidAlive(candidate),
+        isProcessGroupAlive: () => false,
+        startTimeForPid: () => null,
+        pidsMentioningRunId: (candidate) => (candidate === runId ? [pid] : []),
+      },
+    });
+
+    expect(result.reaped).toBe(0);
+    expect(result.sparedRunIds).toEqual([runId]);
+    const verdict = result.verdicts.find((entry) => entry.runId === runId);
+    expect(verdict?.reason).toBe("run_id_present_in_process_table");
+    expect(verdict?.evidence.runIdPidsObserved).toEqual([pid]);
+
+    const runs = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.agentId, agentId));
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.status).toBe("running");
+  });
+
+  it("RBR-979: a restart does not reap when the process-table probe fails", async () => {
+    // An unreadable process table must not be able to authorize a mass reap.
+    const { runId, agentId } = await seedRunFixture({
+      agentStatus: "idle",
+      processPid: 999_999_999,
+    });
+
+    const heartbeat = heartbeatService(db);
+    const result = await heartbeat.reapOrphanedRuns({
+      processTableProbe: {
+        isPidAlive: () => false,
+        isProcessGroupAlive: () => false,
+        startTimeForPid: () => null,
+        pidsMentioningRunId: () => {
+          throw new Error("process snapshot unavailable: ps timed out");
+        },
+      },
+    });
+
+    expect(result.reaped).toBe(0);
+    expect(result.sparedRunIds).toEqual([runId]);
+    const verdict = result.verdicts.find((entry) => entry.runId === runId);
+    expect(verdict?.reason).toBe("probe_failed_assumed_alive");
+    expect(verdict?.evidence.probeError).toContain("snapshot unavailable");
+
+    // No retry queued: a probe failure must be inert, not destructive.
+    const runs = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.agentId, agentId));
+    expect(runs).toHaveLength(1);
+  });
+
+  it("RBR-979: a restart still reaps a genuinely dead run, with pid evidence", async () => {
+    // The positive control, so the negative controls above are not vacuous.
+    const { runId } = await seedRunFixture({
+      agentStatus: "idle",
+      processPid: 999_999_998,
+      processStartedAt: new Date(),
+    });
+
+    const heartbeat = heartbeatService(db);
+    const result = await heartbeat.reapOrphanedRuns({
+      processTableProbe: {
+        isPidAlive: () => false,
+        isProcessGroupAlive: () => false,
+        startTimeForPid: () => null,
+        pidsMentioningRunId: () => [],
+      },
+    });
+
+    expect(result.reaped).toBe(1);
+    expect(result.runIds).toEqual([runId]);
+    expect(result.spared).toBe(0);
+
+    const verdict = result.verdicts.find((entry) => entry.runId === runId);
+    expect(verdict?.alive).toBe(false);
+    expect(verdict?.reason).toBe("pid_dead_no_other_evidence");
+    // AC4: the destructive action records the pid it checked and the result.
+    expect(verdict?.evidence.pidChecked).toBe(999_999_998);
+    expect(verdict?.evidence.pidAlive).toBe(false);
+  });
+
+  it("RBR-979: a restart spares live runs and reaps dead ones in the same sweep", async () => {
+    // The 09:26:41 sweep was mixed: 19 of 31 were alive. A per-run predicate
+    // must not be an all-or-nothing decision for the batch.
+    const child = spawnAliveProcess();
+    childProcesses.add(child);
+    const livePid = child.pid ?? 0;
+
+    const live = await seedRunFixture({ agentStatus: "idle", processPid: livePid });
+    const dead = await seedRunFixture({ agentStatus: "idle", processPid: 999_999_997 });
+
+    const heartbeat = heartbeatService(db);
+    const result = await heartbeat.reapOrphanedRuns({
+      processTableProbe: {
+        isPidAlive: (candidate) => isPidAlive(candidate),
+        isProcessGroupAlive: () => false,
+        startTimeForPid: () => null,
+        pidsMentioningRunId: (candidate) => (candidate === live.runId ? [livePid] : []),
+      },
+    });
+
+    expect(result.runIds).toEqual([dead.runId]);
+    expect(result.sparedRunIds).toEqual([live.runId]);
+
+    expect((await heartbeat.getRun(live.runId))?.status).toBe("running");
+    expect((await heartbeat.getRun(dead.runId))?.status).toBe("failed");
   });
 
   it.skipIf(process.platform === "win32")("reaps orphaned descendant process groups when the parent pid is already gone", async () => {

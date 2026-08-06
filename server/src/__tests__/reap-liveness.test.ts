@@ -169,6 +169,34 @@ describe("RBR-979 reap liveness predicate — negative control (false positives)
     expect(verdict.alive).toBe(true);
     expect(verdict.reason).toBe("run_id_present_in_process_table");
   });
+
+  it("does not mistake another run's live process for this run's liveness", () => {
+    // The cmdline oracle must match on the run's OWN id. A sibling run being
+    // alive says nothing about this one, or the predicate would spare everything
+    // whenever any agent was running.
+    const verdict = classifyRunProcessLiveness(
+      identity({ runId: CEO_RUN, processPid: 4242 }),
+      probeOver([{ pid: 3131, command: `hermes chat -q Run ID: ${CTO_RUN}` }]),
+    );
+
+    expect(verdict.alive).toBe(false);
+    expect(verdict.reason).toBe("pid_dead_no_other_evidence");
+    expect(verdict.evidence.runIdPidsObserved).toEqual([]);
+  });
+
+  it("holds the start-time tolerance boundary exactly", () => {
+    const startedAt = new Date("2026-08-06T09:11:16.000Z");
+    const at = (offsetMs: number) =>
+      classifyRunProcessLiveness(
+        identity({ processPid: 1234, processStartedAt: startedAt }),
+        probeOver([
+          { pid: 1234, startTimeMs: startedAt.getTime() + offsetMs, command: "no runId here" },
+        ]),
+      );
+
+    expect(at(PROCESS_START_TIME_TOLERANCE_MS).reason).toBe("pid_alive_identity_confirmed");
+    expect(at(PROCESS_START_TIME_TOLERANCE_MS + 1).reason).toBe("pid_reused_original_gone");
+  });
 });
 
 describe("RBR-979 reap liveness predicate — true positives still reap", () => {
