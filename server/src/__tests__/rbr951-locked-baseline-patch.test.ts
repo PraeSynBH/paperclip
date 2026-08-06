@@ -54,7 +54,9 @@ describeEmbeddedPostgres("issuesSvc.update derives blocked bookkeeping under the
     tempDb = await startEmbeddedPostgresTestDatabase("paperclip-issues-locked-baseline-");
     db = createDb(tempDb.connectionString);
     svc = issueService(db);
-  }, 20_000);
+    // No inline hook budget: vitest.config.ts owns hookTimeout (RBR-912/RBR-945).
+    // An inline argument silently overrides both the config and --hookTimeout.
+  });
 
   afterEach(async () => {
     await db.delete(issueComments);
