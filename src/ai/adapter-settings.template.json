@@ -49,7 +49,7 @@
     },
     "safetySettings": {
       "type": "array",
-      "description": "Content safety filter thresholds per harm category",
+      "description": "Content safety filter thresholds per harm category. GL-F9: standardized on BLOCK_MEDIUM_AND_ABOVE for all categories; overrides may only be equal or stricter. Canonical source: src/ai/safety-settings.ts",
       "items": {
         "type": "object",
         "properties": {
@@ -59,7 +59,9 @@
               "HARM_CATEGORY_HARASSMENT",
               "HARM_CATEGORY_HATE_SPEECH",
               "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-              "HARM_CATEGORY_DANGEROUS_CONTENT"
+              "HARM_CATEGORY_DANGEROUS_CONTENT",
+              "HARM_CATEGORY_CIVIC_INTEGRITY",
+              "HARM_CATEGORY_HARASSMENT_SEXUAL"
             ]
           },
           "threshold": {
@@ -71,16 +73,18 @@
               "BLOCK_ONLY_HIGH",
               "BLOCK_NONE"
             ],
-            "default": "BLOCK_LOW_AND_ABOVE"
+            "default": "BLOCK_MEDIUM_AND_ABOVE"
           }
         },
         "required": ["category", "threshold"]
       },
       "default": [
-        { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_LOW_AND_ABOVE" },
-        { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_LOW_AND_ABOVE" },
-        { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_LOW_AND_ABOVE" },
-        { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_LOW_AND_ABOVE" }
+        { "category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE" },
+        { "category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE" },
+        { "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE" },
+        { "category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE" },
+        { "category": "HARM_CATEGORY_CIVIC_INTEGRITY", "threshold": "BLOCK_MEDIUM_AND_ABOVE" },
+        { "category": "HARM_CATEGORY_HARASSMENT_SEXUAL", "threshold": "BLOCK_MEDIUM_AND_ABOVE" }
       ]
     },
     "modelMappings": {

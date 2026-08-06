@@ -16,6 +16,8 @@ import { OutputValidator } from "./output-validator.js";
 import type { ToolAuthorizationResult, AgentRole } from "./tool-auth.js";
 import { ToolAuthorizer } from "./tool-auth.js";
 import type { JitAccessManager } from "./jit-access.js";
+import type { AiSafetyConfig } from "./safety-settings.js";
+import { DEFAULT_SAFETY_CONFIG, resolveSafetySettingsDetailed } from "./safety-settings.js";
 
 export interface PipelineResult {
   response: OpenAiChatResponse;
@@ -39,6 +41,12 @@ export interface PipelineConfig {
   fallbackModel?: string;
   maxContentLengthChars?: number;
   safetySettings?: GeminiSafetySetting[];
+  /**
+   * Per-project safety policy (GL-F9). Thresholds resolve from this config,
+   * with `safetySettings` applied on top as explicit overrides. A strictness
+   * floor is enforced in `safety-settings.ts`, so overrides can only tighten.
+   */
+  safetyConfig?: AiSafetyConfig;
   auditLogger?: AuditLogger;
   rateLimiter?: RateLimiter;
   outputValidator?: OutputValidator;
@@ -66,7 +74,8 @@ export class SecureAiPipeline {
   private readonly formatAdapter: FormatAdapter;
   private readonly fallbackModel?: string;
   private readonly maxContentLengthChars: number;
-  private readonly safetySettings: GeminiSafetySetting[];
+  private readonly safetySettings?: readonly GeminiSafetySetting[];
+  private readonly safetyConfig: AiSafetyConfig;
   private readonly auditLogger?: AuditLogger;
   private readonly rateLimiter?: RateLimiter;
   private readonly outputValidator?: OutputValidator;
@@ -81,12 +90,11 @@ export class SecureAiPipeline {
     this.formatAdapter = config.formatAdapter ?? new FormatAdapter();
     this.fallbackModel = config.fallbackModel;
     this.maxContentLengthChars = config.maxContentLengthChars ?? DEFAULT_MAX_CONTENT_LENGTH;
-    this.safetySettings = config.safetySettings ?? [
-      { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_MEDIUM_AND_ABOVE" },
-      { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_LOW_AND_ABOVE" },
-      { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_LOW_AND_ABOVE" },
-    ];
+    // GL-F9: safety thresholds are no longer hardcoded here. They resolve from the
+    // governance safety config (per-project capable) with `safetySettings` layered on
+    // top as explicit overrides, all subject to a strictness floor.
+    this.safetySettings = config.safetySettings;
+    this.safetyConfig = config.safetyConfig ?? DEFAULT_SAFETY_CONFIG;
     this.auditLogger = config.auditLogger;
     this.rateLimiter = config.rateLimiter;
     this.outputValidator = config.outputValidator;
@@ -108,6 +116,25 @@ export class SecureAiPipeline {
         };
       });
     }
+  }
+
+  /**
+   * Resolve the effective Gemini safety settings for a project (GL-F9).
+   *
+   * Layers governance defaults, per-project overrides, and explicit
+   * `PipelineConfig.safetySettings`, enforcing the policy strictness floor.
+   */
+  resolveSafetySettings(projectId?: string) {
+    return resolveSafetySettingsDetailed({
+      config: this.safetyConfig,
+      projectId,
+      overrides: this.safetySettings,
+    });
+  }
+
+  /** Wire-safe safety settings for a project, as sent to Gemini. */
+  getEffectiveSafetySettings(projectId?: string): GeminiSafetySetting[] {
+    return this.resolveSafetySettings(projectId).settings;
   }
 
   async process(
@@ -234,6 +261,23 @@ export class SecureAiPipeline {
 
     const tools = this.formatAdapter.openAiToolsToGemini(request.tools);
 
+    const safety = this.resolveSafetySettings(projectId);
+    for (const violation of safety.violations) {
+      this.auditLogger?.log(
+        "safety.policy_clamped",
+        "warn",
+        agentId,
+        projectId,
+        `Safety threshold for ${violation.category} clamped to ${violation.applied}`,
+        {
+          category: violation.category,
+          requested: violation.requested,
+          applied: violation.applied,
+          reason: violation.reason,
+        },
+      );
+    }
+
     this.auditLogger?.logGeminiRequest(
       agentId,
       projectId,
@@ -252,7 +296,7 @@ export class SecureAiPipeline {
           maxOutputTokens: request.max_tokens ?? 32768,
           stopSequences: request.stop,
         },
-        safetySettings: this.safetySettings,
+        safetySettings: safety.settings,
         tools,
       });
 

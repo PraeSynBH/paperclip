@@ -13,6 +13,7 @@ export type AuditEventType =
   | "rate_limit.hit"
   | "output.validated"
   | "output.blocked"
+  | "safety.policy_clamped"
   | "jit.session_start"
   | "jit.session_end"
   | "jit.access_granted"

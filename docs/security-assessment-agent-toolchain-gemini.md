@@ -112,33 +112,75 @@ Hard budget caps must be set at the GCP project level to prevent unexpected spen
 
 ---
 
-### GL-F9: Content Filtering Safety Thresholds (MEDIUM) — PARTIALLY ADDRESSED
+### GL-F9: Content Filtering Safety Thresholds (MEDIUM) — REMEDIATED (RBR-135)
 
-**Source:** `src/ai/gemini-client.ts:153-158`, `src/ai/pipeline.ts:77-82`
+**Source:** `src/ai/safety-settings.ts` (canonical policy), `src/ai/gemini-client.ts`, `src/ai/pipeline.ts`, `src/ai/governance.ts`
 
-Two safety configurations exist with different thresholds:
+**Original problem.** Two independent hardcoded safety configurations existed with
+different thresholds — `GeminiClient.generateContent()` defaulted every category to
+`BLOCK_LOW_AND_ABOVE`, while `SecureAiPipeline` used `BLOCK_MEDIUM_AND_ABOVE` for
+harassment/hate-speech and `BLOCK_LOW_AND_ABOVE` for the other two. Neither declared
+`HARM_CATEGORY_CIVIC_INTEGRITY` or `HARM_CATEGORY_HARASSMENT_SEXUAL`, and thresholds
+were not configurable per project.
 
-| Safety Category | GeminiClient Default | SecureAiPipeline Default |
-|----------------|---------------------|-------------------------|
-| HARM_CATEGORY_HARASSMENT | BLOCK_LOW_AND_ABOVE | BLOCK_MEDIUM_AND_ABOVE |
-| HARM_CATEGORY_HATE_SPEECH | BLOCK_LOW_AND_ABOVE | BLOCK_MEDIUM_AND_ABOVE |
-| HARM_CATEGORY_SEXUALLY_EXPLICIT | BLOCK_LOW_AND_ABOVE | BLOCK_LOW_AND_ABOVE |
-| HARM_CATEGORY_DANGEROUS_CONTENT | BLOCK_LOW_AND_ABOVE | BLOCK_LOW_AND_ABOVE |
+**OWASP LLM Lens:** LLM01 Prompt Injection defense-in-depth — Google safety filters are a second layer. Inconsistent thresholds created a security gap.
 
-**Issues:**
-1. Inconsistent thresholds between client default and pipeline — the pipeline uses MEDIUM for harassment/hate speech, the client default uses LOW. The pipeline's settings take precedence in production.
-2. **Missing categories** — Google supports additional safety categories not configured: `HARM_CATEGORY_CIVIC_INTEGRITY`, `HARM_CATEGORY_HARASSMENT_SEXUAL`, `HARM_CATEGORY_HATE_SPEECH_HARASSMENT`, `HARM_CATEGORY_DANGEROUS_CONTENT_MEDICAL`, etc.
-3. Safety thresholds should be configurable per-project and per-agent-tier, not hardcoded
+**Remediation implemented (RBR-135):**
 
-**OWASP LLM Lens:** LLM01 Prompt Injection defense-in-depth — Google safety filters are a second layer. Inconsistent thresholds create a security gap.
+1. **Single source of truth.** `src/ai/safety-settings.ts` now owns all harm
+   categories and thresholds. Both `GeminiClient` and `SecureAiPipeline` resolve
+   through `resolveSafetySettings()`; neither carries its own literal defaults.
+2. **Thresholds standardized.** All categories default to `BLOCK_MEDIUM_AND_ABOVE`.
+3. **Missing categories added.** `HARM_CATEGORY_CIVIC_INTEGRITY` and
+   `HARM_CATEGORY_HARASSMENT_SEXUAL` are declared in `HARM_CATEGORIES`.
+4. **Duplicate client default removed.** `GeminiClient.generateContent()` no longer
+   holds a literal safety array.
+5. **Per-project configuration.** `AiGovernanceConfig.safetyConfig` carries
+   `projectOverrides` keyed by project id, each requiring a `justification` and
+   `approvedBy`, with optional `expiresAt` (expired overrides are ignored).
 
-**Remediation:**
-1. Standardize thresholds: use `BLOCK_MEDIUM_AND_ABOVE` for ALL four categories in the pipeline (consistent with current harassment/hate speech default)
-2. Add explicitly configured safety categories for civic integrity, sexual harassment, and medical dangerous content
-3. Make safety settings per-project configurable via governance config (currently hardcoded in `PipelineConfig.safetySettings`)
-4. Remove the duplicate default in `GeminiClient.generateContent()` (use only pipeline settings)
+**Effective policy:**
 
-**Current status:** PARTIALLY ADDRESSED. Pipeline safety settings are stricter than client defaults. Missing categories need to be added.
+| Safety Category | Threshold | Sent to API |
+|----------------|-----------|-------------|
+| HARM_CATEGORY_HARASSMENT | BLOCK_MEDIUM_AND_ABOVE | yes |
+| HARM_CATEGORY_HATE_SPEECH | BLOCK_MEDIUM_AND_ABOVE | yes |
+| HARM_CATEGORY_SEXUALLY_EXPLICIT | BLOCK_MEDIUM_AND_ABOVE | yes |
+| HARM_CATEGORY_DANGEROUS_CONTENT | BLOCK_MEDIUM_AND_ABOVE | yes |
+| HARM_CATEGORY_CIVIC_INTEGRITY | BLOCK_MEDIUM_AND_ABOVE | yes |
+| HARM_CATEGORY_HARASSMENT_SEXUAL | BLOCK_MEDIUM_AND_ABOVE | declared only — not yet in Google's HarmCategory enum |
+
+**Fail-closed guarantees (verified by tests):**
+
+- **Strictness floor.** `MINIMUM_SAFETY_THRESHOLD = BLOCK_MEDIUM_AND_ABOVE`. Any
+  override that would weaken a category (`BLOCK_NONE`, `BLOCK_ONLY_HIGH`,
+  `HARM_BLOCK_THRESHOLD_UNSPECIFIED`) is clamped back to the floor and recorded as a
+  `safety.policy_clamped` audit event. Filtering cannot be silently disabled.
+- **No unconfigured categories.** A partial override still yields every declared
+  category; unspecified ones fall back to the governance default.
+- **Unknown enum values are stripped, not sent.** Categories outside
+  `API_SUPPORTED_HARM_CATEGORIES` remain in the declared policy (auditable) but are
+  filtered from the wire request, since an unrecognised enum value causes Gemini to
+  reject the entire call with HTTP 400. `HARM_CATEGORY_HARASSMENT_SEXUAL` starts
+  transmitting automatically once Google publishes it.
+- **Unknown thresholds are ignored** rather than applied.
+
+Two categories named in the original finding —
+`HARM_CATEGORY_HATE_SPEECH_HARASSMENT` and `HARM_CATEGORY_DANGEROUS_CONTENT_MEDICAL`
+— were **not** added: they do not exist in Google's HarmCategory enum or public
+documentation, and the underlying harms are already covered by
+`HARM_CATEGORY_HATE_SPEECH`, `HARM_CATEGORY_HARASSMENT`, and
+`HARM_CATEGORY_DANGEROUS_CONTENT`. Add them to `HARM_CATEGORIES` if Google
+publishes them.
+
+**Verification:** `src/ai/__tests__/safety-settings.test.ts` — 21 tests covering the
+canonical policy, threshold resolution and clamping, per-project overrides
+(stricter / weaker / expired / unknown project), the absence of client-side
+duplicate defaults (asserted against the captured HTTP request body), pipeline
+wire-level integration, and governance wiring. Full `src/ai` suite: 199/199 passing,
+`tsc --noEmit` clean, `eslint` 0 errors.
+
+**Current status:** REMEDIATED.
 
 ---
 
@@ -180,7 +222,7 @@ The `ContentGuardrails.filterPrompt()` method provides pre-flight sanitization c
 | GL-F6 | MEDIUM | ACTIONABLE | Unknown CVE exposure in transitive deps | No |
 | GL-F7 | MEDIUM | OPEN | No automated key rotation | Must fix before 90d window |
 | GL-F8 | MEDIUM | OPEN | No GCP-level spend protection | Must fix before first production request |
-| GL-F9 | MEDIUM | PARTIAL | Missing safety categories | No (current defaults are reasonable) |
+| GL-F9 | MEDIUM | REMEDIATED | Thresholds standardized, categories added, per-project config (RBR-135) | No |
 | GL-F10 | MEDIUM | PARTIAL | Regex-only, no multi-turn tracking | No (current defense is adequate for initial rollout) |
 
 ## Implementation Plan
@@ -196,7 +238,7 @@ The `ContentGuardrails.filterPrompt()` method provides pre-flight sanitization c
 - [ ] **GL-F5**: Config-driven canary agent IDs (`src/ai/adapter.ts`, `src/ai/governance.ts`)
 - [ ] **GL-F7**: AWS Secrets Manager rotation configuration
 - [ ] **GL-F8**: GCP project budget caps documentation
-- [ ] **GL-F9**: Standardize safety thresholds, add missing categories
+- [x] **GL-F9**: Standardize safety thresholds, add missing categories — done in RBR-135 (`src/ai/safety-settings.ts`)
 - [ ] **GL-F10**: Multi-turn context tracking in ContentGuardrails
 
 ### Phase 3: Compliance follow-up
@@ -212,7 +254,7 @@ The `ContentGuardrails.filterPrompt()` method provides pre-flight sanitization c
 | GL-F6 | CISO (aad16410) | Executed in this heartbeat |
 | GL-F7 | Security Engineering (429dfce4) | Configure AWS SM auto-rotation, document policy |
 | GL-F8 | Security Engineering (429dfce4) | Configure GCP budget caps, document |
-| GL-F9 | Security Engineering (429dfce4) | Standardize safety thresholds, add missing categories |
+| GL-F9 | ~~Security Engineering (429dfce4)~~ CTO (b7079c44) | DONE (RBR-135) — canonical `src/ai/safety-settings.ts`, floor enforcement, per-project overrides |
 | GL-F10 | Security Engineering (429dfce4) | Add multi-turn tracking, obfuscation detection |
 | ISO mapping | Compliance (fdd2c995) | Map findings to ISO 27001 controls |
 | Re-assessment | Vendor Risk (25de7dfb) | Re-assess after fixes land |

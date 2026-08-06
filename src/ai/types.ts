@@ -1,3 +1,5 @@
+import type { AiSafetyConfig } from "./safety-settings.js";
+
 export interface ModelTier {
   name: string;
   modelId: string;
@@ -87,6 +89,11 @@ export interface AiGovernanceConfig {
   contentFilters: ContentFilterRule[];
   migrationPlan: MigrationConfig;
   budgetConfig: BudgetConfig;
+  /**
+   * Gemini content-safety policy (GL-F9). Optional for backward compatibility;
+   * when omitted, `DEFAULT_SAFETY_CONFIG` from `safety-settings.ts` applies.
+   */
+  safetyConfig?: AiSafetyConfig;
 }
 
 export interface DataClassificationRule {

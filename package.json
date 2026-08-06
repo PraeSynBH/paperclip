@@ -22,6 +22,8 @@
     "evidence:gcp:iam": "bash scripts/collect-gcp-evidence.sh",
     "sbom": "bash scripts/generate-sbom.sh",
     "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/ai/__tests__/*.test.ts\"",
+    "test:ai": "node --import tsx --test \"src/ai/__tests__/*.test.ts\"",
     "lint": "eslint src/",
     "check:paths": "tsx scripts/check-referenced-paths.ts",
     "hooks:install": "bash scripts/install-git-hooks.sh"

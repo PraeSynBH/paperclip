@@ -87,6 +87,10 @@ function extractPaths(command: string): string[] {
     if (!RUNTIME_EXTENSIONS.some((ext) => token.endsWith(ext))) continue;
     // A bare `foo.sh` with no separator is ambiguous; require a path shape.
     if (!token.includes("/")) continue;
+    // Glob patterns (`src/ai/__tests__/*.test.ts`) are expanded by the runtime,
+    // not resolved literally. Checking them as literal paths is a guaranteed
+    // false positive, which is exactly the noise this check avoids.
+    if (/[*?]|\[.*\]|\{.*\}/.test(token)) continue;
     found.push(token.replace(/^\.\//, ""));
   }
 

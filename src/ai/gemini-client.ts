@@ -1,4 +1,12 @@
 import { config, loadConfig } from "../config.js";
+import { resolveSafetySettings } from "./safety-settings.js";
+import type { GeminiSafetySetting } from "./safety-settings.js";
+
+export type {
+  GeminiSafetySetting,
+  GeminiHarmCategory,
+  GeminiHarmBlockThreshold,
+} from "./safety-settings.js";
 
 export interface GeminiGenerateRequest {
   model: string;
@@ -28,11 +36,6 @@ export interface GeminiPart {
   functionResponse?: { name: string; response: Record<string, unknown> };
 }
 
-
-export interface GeminiSafetySetting {
-  category: string;
-  threshold: "HARM_BLOCK_THRESHOLD_UNSPECIFIED" | "BLOCK_LOW_AND_ABOVE" | "BLOCK_MEDIUM_AND_ABOVE" | "BLOCK_ONLY_HIGH" | "BLOCK_NONE";
-}
 
 export interface GeminiTool {
   functionDeclarations?: GeminiFunctionDeclaration[];
@@ -151,12 +154,10 @@ export class GeminiClient {
         topP: 0.95,
         maxOutputTokens: 32768,
       },
-      safetySettings: request.safetySettings ?? [
-        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_LOW_AND_ABOVE" },
-        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_LOW_AND_ABOVE" },
-        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_LOW_AND_ABOVE" },
-        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_LOW_AND_ABOVE" },
-      ],
+      // GL-F9: no duplicate safety defaults here. Callers (normally SecureAiPipeline)
+      // own the policy; this only fills any category the caller left unset and
+      // enforces the strictness floor, so a partial list can never disable a filter.
+      safetySettings: resolveSafetySettings({ overrides: request.safetySettings }),
       tools: request.tools,
     };
 

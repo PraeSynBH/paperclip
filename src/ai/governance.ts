@@ -17,6 +17,8 @@ import type { OpenAiChatRequest, OpenAiChatResponse } from "./format-adapter.js"
 import type { AgentRole } from "./tool-auth.js";
 import { JitAccessManager } from "./jit-access.js";
 import { config, loadConfig } from "../config.js";
+import { DEFAULT_SAFETY_CONFIG } from "./safety-settings.js";
+import type { AiSafetyConfig } from "./safety-settings.js";
 
 const DEFAULT_GOVERNANCE_CONFIG: AiGovernanceConfig = {
   providers: [
@@ -93,6 +95,10 @@ const DEFAULT_GOVERNANCE_CONFIG: AiGovernanceConfig = {
     perAgentCostLimit: 500,
     overageAction: "alert",
   },
+  // GL-F9 (RBR-135): Gemini safety thresholds are governance-owned and
+  // per-project configurable. Add entries to `projectOverrides` keyed by
+  // project id; overrides may only be equal or stricter than `minimumThreshold`.
+  safetyConfig: DEFAULT_SAFETY_CONFIG,
 };
 
 export class AiGovernanceEngine {
@@ -105,6 +111,7 @@ export class AiGovernanceEngine {
   public readonly outputValidator: OutputValidator;
   public readonly toolAuthorizer: ToolAuthorizer;
   public readonly jitAccessManager: JitAccessManager;
+  public readonly safetyConfig: AiSafetyConfig;
 
   constructor(
     config: AiGovernanceConfig = DEFAULT_GOVERNANCE_CONFIG,
@@ -130,6 +137,7 @@ export class AiGovernanceEngine {
     });
     this.toolAuthorizer = new ToolAuthorizer();
     this.jitAccessManager = new JitAccessManager(undefined, this.auditLogger);
+    this.safetyConfig = config.safetyConfig ?? DEFAULT_SAFETY_CONFIG;
 
     const client = geminiClient ?? new GeminiClient({
       apiKey: "", // No static key — must be injected via createGovernanceEngine
@@ -144,6 +152,7 @@ export class AiGovernanceEngine {
       outputValidator: this.outputValidator,
       toolAuthorizer: this.toolAuthorizer,
       jitAccessManager: this.jitAccessManager,
+      safetyConfig: this.safetyConfig,
     });
   }
 
@@ -158,6 +167,14 @@ export class AiGovernanceEngine {
 
   static getProviderById(config: AiGovernanceConfig, providerId: string) {
     return config.providers.find(p => p.id === providerId);
+  }
+
+  /**
+   * Effective Gemini safety settings for a project (GL-F9). Use this to audit
+   * what thresholds a given project will actually send to Gemini.
+   */
+  getSafetySettings(projectId?: string) {
+    return this.pipeline.resolveSafetySettings(projectId);
   }
 
   getConfig(): AiGovernanceConfig {
