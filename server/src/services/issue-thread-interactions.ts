@@ -462,19 +462,16 @@ function shouldReturnAcceptedConfirmationToCreatorAgent(args: {
  * comment and unrelated pending interactions are silently garbage-collected, including
  * contradictory irreversible asks that nobody ever answered.
  *
- * It stays `true` on RBR-852. Flipping it to `false` is the right end state — RBR-852 shipped the
- * supported alternative, an explicit `supersedesInteractionIds` link that retires the specific
- * target it names at create time with an auditable pointer back, which makes blanket
- * expiry-by-proximity redundant. But the flip is a behaviour change for every existing caller and
- * was ruled **out of scope for RBR-852** by the CEO; it is tracked separately on RBR-877 and lands
- * after this. Do not flip it here.
+ * It is now `false`. RBR-852 shipped the supported alternative — an explicit
+ * `supersedesInteractionIds` link that retires the specific target it names at create time with an
+ * auditable pointer back — which makes blanket expiry-by-proximity redundant rather than merely
+ * damaging. A redundant default can be removed on its own evidence.
  *
- * What RBR-852 does change is the multi-candidate case: see `selectCommentSupersededRows`. With
- * the default still `true`, a lone pending ask keeps its historical behaviour (a comment instead
- * of an answer retires it), while two or more pending asks now retire *nothing* — which is the
- * actual defect RBR-823 reported.
+ * Consequence, stated plainly: expiry-by-comment is now strictly **opt-in**. A caller that wants a
+ * human comment to retire its ask must pass `supersedeOnUserComment: true` deliberately. Nothing
+ * in-tree does, so `selectCommentSupersededRows` is now a backstop for opt-in callers only.
  */
-const SUPERSEDE_ON_USER_COMMENT_DEFAULT = true;
+const SUPERSEDE_ON_USER_COMMENT_DEFAULT = false;
 
 function shouldSupersedeInteractionOnUserComment(interaction: UserCommentSupersedableInteraction) {
   return interaction.payload.supersedeOnUserComment === true;
