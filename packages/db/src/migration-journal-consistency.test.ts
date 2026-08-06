@@ -4,8 +4,13 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   assertMigrationJournalConsistency,
+  auditMigrationJournal,
   checkMigrationJournalConsistency,
+  findDuplicateJournalIdxGroups,
+  findJournalIdxGaps,
   formatMigrationJournalInconsistencies,
+  loadMigrationJournalIdxBaseline,
+  parseMigrationJournalIdxBaseline,
 } from "./migration-journal-consistency.js";
 
 // RBR-927: an orphaned .sql file (present in the migrations folder, absent from
@@ -21,6 +26,8 @@ const createdDirs: string[] = [];
 function makeFixture(options: {
   readonly files: readonly string[];
   readonly journalTags: readonly string[];
+  /** Explicit idx per journal tag. Defaults to the tag's position. */
+  readonly journalIdx?: readonly number[];
 }): { migrationsDir: string; journalPath: string } {
   const migrationsDir = mkdtempSync(join(tmpdir(), "paperclip-journal-consistency-"));
   createdDirs.push(migrationsDir);
@@ -37,7 +44,7 @@ function makeFixture(options: {
       version: "7",
       dialect: "postgresql",
       entries: options.journalTags.map((tag, index) => ({
-        idx: index,
+        idx: options.journalIdx?.[index] ?? index,
         version: "7",
         when: 1_700_000_000_000 + index,
         tag,
@@ -191,5 +198,263 @@ describe("formatMigrationJournalInconsistencies", () => {
 
     expect(message).toContain("0002_missing.sql");
     expect(message).not.toContain("Orphaned migration file");
+  });
+});
+
+// RBR-968: the guard also owns `idx` health. A duplicate `idx` does not stop
+// drizzle's migrate(), so it cannot be enforced in the runtime bootstrap path
+// without risking production startup — it is enforced here, in the pre-test /
+// pre-build audit, with an explicit ratcheting baseline for already-shipped
+// defects.
+
+describe("findDuplicateJournalIdxGroups", () => {
+  it("returns nothing when every idx is unique", () => {
+    expect(
+      findDuplicateJournalIdxGroups([
+        { idx: 1, tag: "a" },
+        { idx: 2, tag: "b" },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("groups the tags sharing an idx, in journal order", () => {
+    // The real origin/master shape: idx 178 claimed twice.
+    expect(
+      findDuplicateJournalIdxGroups([
+        { idx: 176, tag: "0176_a" },
+        { idx: 178, tag: "0177_activity_log_responsible_user" },
+        { idx: 178, tag: "0178_summary_slots" },
+      ]),
+    ).toEqual([
+      { idx: 178, tags: ["0177_activity_log_responsible_user", "0178_summary_slots"] },
+    ]);
+  });
+
+  it("reports a triple collision as one group with all three tags", () => {
+    expect(
+      findDuplicateJournalIdxGroups([
+        { idx: 5, tag: "a" },
+        { idx: 5, tag: "b" },
+        { idx: 5, tag: "c" },
+      ]),
+    ).toEqual([{ idx: 5, tags: ["a", "b", "c"] }]);
+  });
+});
+
+describe("findJournalIdxGaps", () => {
+  it("returns nothing for a contiguous sequence", () => {
+    expect(
+      findJournalIdxGaps([
+        { idx: 0, tag: "a" },
+        { idx: 1, tag: "b" },
+        { idx: 2, tag: "c" },
+      ]),
+    ).toEqual([]);
+  });
+
+  it("lists every missing idx between the lowest and highest present", () => {
+    // The real origin/master shape: 126, 130 and 177 absent.
+    expect(
+      findJournalIdxGaps([
+        { idx: 125, tag: "a" },
+        { idx: 127, tag: "b" },
+        { idx: 129, tag: "c" },
+        { idx: 131, tag: "d" },
+      ]),
+    ).toEqual([126, 128, 130]);
+  });
+
+  it("returns nothing for an empty journal", () => {
+    expect(findJournalIdxGaps([])).toEqual([]);
+  });
+});
+
+describe("auditMigrationJournal", () => {
+  it("passes a clean folder/journal pair with no warnings", async () => {
+    const fixture = makeFixture({
+      files: ["0001_first.sql", "0002_second.sql"],
+      journalTags: ["0001_first", "0002_second"],
+    });
+
+    const audit = await auditMigrationJournal(fixture);
+
+    expect(audit.errors).toEqual([]);
+    expect(audit.warnings).toEqual([]);
+  });
+
+  it("hard-errors on an orphaned file, naming it", async () => {
+    const fixture = makeFixture({
+      files: ["0001_first.sql", "0002_orphan.sql"],
+      journalTags: ["0001_first"],
+    });
+
+    const audit = await auditMigrationJournal(fixture);
+
+    expect(audit.errors).toHaveLength(1);
+    expect(audit.errors[0]).toContain("0002_orphan.sql");
+  });
+
+  it("hard-errors on an un-baselined duplicate idx, naming both tags", async () => {
+    const fixture = makeFixture({
+      files: ["0001_a.sql", "0002_b.sql"],
+      journalTags: ["0001_a", "0002_b"],
+      journalIdx: [7, 7],
+    });
+
+    const audit = await auditMigrationJournal(fixture);
+
+    expect(audit.errors).toHaveLength(1);
+    expect(audit.errors[0]).toContain("idx 7");
+    expect(audit.errors[0]).toContain("0001_a.sql");
+    expect(audit.errors[0]).toContain("0002_b.sql");
+  });
+
+  it("downgrades an exactly-baselined duplicate idx to a warning that still names it", async () => {
+    const fixture = makeFixture({
+      files: ["0001_a.sql", "0002_b.sql"],
+      journalTags: ["0001_a", "0002_b"],
+      journalIdx: [7, 7],
+    });
+
+    const audit = await auditMigrationJournal({
+      ...fixture,
+      baseline: { duplicateIdx: [{ idx: 7, tags: ["0001_a", "0002_b"] }] },
+    });
+
+    expect(audit.errors).toEqual([]);
+    expect(audit.warnings).toHaveLength(1);
+    expect(audit.warnings[0]).toContain("idx 7");
+    expect(audit.warnings[0]).toContain("0001_a.sql");
+  });
+
+  it("ignores the baseline under --strict so the defect is an error again", async () => {
+    const fixture = makeFixture({
+      files: ["0001_a.sql", "0002_b.sql"],
+      journalTags: ["0001_a", "0002_b"],
+      journalIdx: [7, 7],
+    });
+
+    const audit = await auditMigrationJournal({
+      ...fixture,
+      baseline: { duplicateIdx: [{ idx: 7, tags: ["0001_a", "0002_b"] }] },
+      strict: true,
+    });
+
+    expect(audit.errors).toHaveLength(1);
+    expect(audit.errors[0]).toContain("idx 7");
+  });
+
+  it("ratchets: a third entry joining a baselined group is a fresh error", async () => {
+    const fixture = makeFixture({
+      files: ["0001_a.sql", "0002_b.sql", "0003_c.sql"],
+      journalTags: ["0001_a", "0002_b", "0003_c"],
+      journalIdx: [7, 7, 7],
+    });
+
+    const audit = await auditMigrationJournal({
+      ...fixture,
+      baseline: { duplicateIdx: [{ idx: 7, tags: ["0001_a", "0002_b"] }] },
+    });
+
+    expect(audit.errors).toHaveLength(1);
+    expect(audit.errors[0]).toContain("0003_c");
+    expect(audit.warnings).toEqual([]);
+  });
+
+  it("errors on a stale baseline entry so the file cannot rot into a blanket excuse", async () => {
+    const fixture = makeFixture({
+      files: ["0001_a.sql", "0002_b.sql"],
+      journalTags: ["0001_a", "0002_b"],
+    });
+
+    const audit = await auditMigrationJournal({
+      ...fixture,
+      baseline: { duplicateIdx: [{ idx: 7, tags: ["0001_a", "0002_b"] }] },
+    });
+
+    expect(audit.errors).toHaveLength(1);
+    expect(audit.errors[0]).toContain("Stale baseline entry");
+  });
+
+  it("reports idx gaps as a warning, not an error", async () => {
+    const fixture = makeFixture({
+      files: ["0001_a.sql", "0002_b.sql"],
+      journalTags: ["0001_a", "0002_b"],
+      journalIdx: [1, 4],
+    });
+
+    const audit = await auditMigrationJournal(fixture);
+
+    expect(audit.errors).toEqual([]);
+    expect(audit.warnings).toHaveLength(1);
+    expect(audit.warnings[0]).toContain("2, 3");
+  });
+});
+
+describe("parseMigrationJournalIdxBaseline", () => {
+  it("accepts a well-formed baseline", () => {
+    const baseline = parseMigrationJournalIdxBaseline(
+      JSON.stringify({ duplicateIdx: [{ idx: 178, tags: ["a", "b"], reason: "shipped" }] }),
+    );
+
+    expect(baseline.duplicateIdx).toEqual([{ idx: 178, tags: ["a", "b"], reason: "shipped" }]);
+  });
+
+  it("treats an absent duplicateIdx as an empty baseline", () => {
+    expect(parseMigrationJournalIdxBaseline("{}").duplicateIdx).toEqual([]);
+  });
+
+  it("rejects an entry with fewer than two tags", () => {
+    expect(() =>
+      parseMigrationJournalIdxBaseline(JSON.stringify({ duplicateIdx: [{ idx: 1, tags: ["a"] }] })),
+    ).toThrow(/at least two/);
+  });
+
+  it("rejects a non-integer idx", () => {
+    expect(() =>
+      parseMigrationJournalIdxBaseline(
+        JSON.stringify({ duplicateIdx: [{ idx: "1", tags: ["a", "b"] }] }),
+      ),
+    ).toThrow(/non-integer idx/);
+  });
+});
+
+describe("the shipped repository journal", () => {
+  // AC2: the guard must catch the genuine origin/master defects. These pin the
+  // known state so the numbers cannot drift silently: idx 178 is duplicated
+  // and 126/130/177 are missing. When those defects are fixed, this test
+  // fails and must be updated together with the baseline file.
+  it("has exactly the known duplicate idx 178, and it is baselined", async () => {
+    const result = await checkMigrationJournalConsistency();
+    const baseline = await loadMigrationJournalIdxBaseline();
+
+    expect(result.duplicateIdxGroups).toEqual([
+      { idx: 178, tags: ["0177_activity_log_responsible_user", "0178_summary_slots"] },
+    ]);
+    expect(baseline.duplicateIdx.map((entry) => entry.idx)).toEqual([178]);
+  });
+
+  it("has the known idx gaps 126, 130 and 177", async () => {
+    const result = await checkMigrationJournalConsistency();
+
+    expect(result.idxGaps).toEqual([126, 130, 177]);
+  });
+
+  it("audits clean against the shipped baseline, with the defects as warnings", async () => {
+    const audit = await auditMigrationJournal({
+      baseline: await loadMigrationJournalIdxBaseline(),
+    });
+
+    expect(audit.errors).toEqual([]);
+    // Duplicate idx 178 (baselined) plus the idx-gap warning.
+    expect(audit.warnings).toHaveLength(2);
+    expect(audit.warnings.join("\n")).toContain("178");
+  });
+
+  it("fails under --strict, proving the guard would catch the defect on a clean journal", async () => {
+    const audit = await auditMigrationJournal({ strict: true });
+
+    expect(audit.errors).toHaveLength(1);
+    expect(audit.errors[0]).toContain("Duplicate journal idx 178");
   });
 });
