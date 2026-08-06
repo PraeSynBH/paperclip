@@ -1686,40 +1686,178 @@ export function issueRoutes(
     return null;
   }
 
-  async function revalidateActiveSourceRecovery(input: {
+  const PARKED_SOURCE_ISSUE_STATUS = "blocked" as const;
+
+  function isTerminalIssueStatus(status: unknown): status is "done" | "cancelled" {
+    return status === "done" || status === "cancelled";
+  }
+
+  /**
+   * RBR-921 / AC3 — undo a recovery park that revalidation has just proven wrong.
+   *
+   * A naive "restore evidence.previousStatus" is RBR-864 with the sign flipped, so this is gated on
+   * five non-negotiable invariants:
+   *
+   *  1. Never demote a terminal status. If the issue currently reads `done`/`cancelled` we never
+   *     write — that would manufacture the exact phantom regression this cluster exists to kill,
+   *     and it would do it on the hot read-projection path.
+   *  2. Only revert the indefensible park: `evidence.previousStatus` must itself be terminal. A
+   *     `done` issue cannot be stranded, so that park is wrong on its face. A run that legitimately
+   *     died from `in_progress` gets a live path restored elsewhere, never a status rewrite here.
+   *  3. Compare-and-set against a freshly locked row, not the request snapshot. Only write if the
+   *     issue still holds what the park wrote; if anything moved since, stand down.
+   *  4. Restore the assignee from `previousOwnerAgentId` (who held it before the park), never
+   *     `returnOwnerAgentId` — the two diverge.
+   *  5. The revert is observable: a distinct activity action plus a system comment on the issue.
+   */
+  async function revertPhantomRecoveryPark(input: {
     issue: IssueRouteSnapshot;
+    recoveryAction: NonNullable<Awaited<ReturnType<typeof recoveryActionsSvc.getActiveForIssue>>>;
     trigger: RecoveryRevalidationTrigger;
     actor?: ReturnType<typeof getActorInfo> | null;
-    activeRecoveryAction?: Awaited<ReturnType<typeof recoveryActionsSvc.getActiveForIssue>> | null;
-    statusChanged?: boolean;
-    assigneeChanged?: boolean;
-    blockersChanged?: boolean;
-    executionPolicyChanged?: boolean;
-    monitorChanged?: boolean;
-    documentChanged?: boolean;
-    workProductChanged?: boolean;
-    resumeRequested?: boolean;
-    reopened?: boolean;
-    blockedToTodoRecovery?: boolean;
   }) {
-    const activeRecoveryAction =
-      input.activeRecoveryAction === undefined
-        ? await recoveryActionsSvc.getActiveForIssue(input.issue.companyId, input.issue.id)
-        : input.activeRecoveryAction;
-    if (!activeRecoveryAction) return null;
+    const { recoveryAction } = input;
 
-    const resolutionNote = await classifySourceRecoveryRevalidation(input);
-    if (!resolutionNote) return activeRecoveryAction;
+    // Invariant 1.
+    if (isTerminalIssueStatus(input.issue.status)) return null;
+    // Invariant 3 (cheap pre-check on the snapshot; re-checked under lock below).
+    if (input.issue.status !== PARKED_SOURCE_ISSUE_STATUS) return null;
 
+    // Invariant 2.
+    const parkedFromStatus = readObject(recoveryAction.evidence).previousStatus;
+    if (!isTerminalIssueStatus(parkedFromStatus)) return null;
+
+    const restoreAssigneeAgentId = recoveryAction.previousOwnerAgentId ?? null; // Invariant 4.
+    const parkOwnerAgentId = recoveryAction.ownerAgentId ?? null;
+
+    let result: {
+      issue: IssueRouteSnapshot;
+      revertedFromStatus: string;
+      revertedFromAssigneeAgentId: string | null;
+      restoredAssigneeAgentId: string | null;
+    } | null = null;
+    try {
+      result = await db.transaction(async (tx) => {
+        // Invariant 3 — compare-and-set on the locked row.
+        const current = await tx
+          .select()
+          .from(issueRows)
+          .where(eq(issueRows.id, input.issue.id))
+          .for("update")
+          .then((rows: Array<IssueRouteSnapshot>) => rows[0] ?? null);
+        if (!current) return null;
+        if (current.companyId !== input.issue.companyId) return null;
+        if (isTerminalIssueStatus(current.status)) return null;
+        if (current.status !== PARKED_SOURCE_ISSUE_STATUS) return null;
+        // A human owner outranks any automated revert.
+        if (current.assigneeUserId) return null;
+
+        const patch: { status: "done" | "cancelled"; assigneeAgentId?: string | null } = {
+          status: parkedFromStatus,
+        };
+        // Only undo the ownership move the park itself made.
+        const shouldRestoreAssignee =
+          Boolean(restoreAssigneeAgentId) &&
+          current.assigneeAgentId !== restoreAssigneeAgentId &&
+          (parkOwnerAgentId === null || current.assigneeAgentId === parkOwnerAgentId);
+        if (shouldRestoreAssignee) {
+          patch.assigneeAgentId = restoreAssigneeAgentId;
+        }
+
+        const updated = await svc.update(input.issue.id, patch, tx);
+        if (!updated) return null;
+        return {
+          issue: updated as IssueRouteSnapshot,
+          revertedFromStatus: current.status,
+          revertedFromAssigneeAgentId: current.assigneeAgentId ?? null,
+          restoredAssigneeAgentId: shouldRestoreAssignee ? restoreAssigneeAgentId : null,
+        };
+      });
+    } catch (err) {
+      logger.warn(
+        { err, issueId: input.issue.id, recoveryActionId: recoveryAction.id, trigger: input.trigger },
+        "failed to revert phantom recovery park on source issue",
+      );
+      return null;
+    }
+    if (!result) return null;
+
+    const resolutionNote =
+      `Recovery action was reverted because the source issue was already ${parkedFromStatus} when it was ` +
+      `parked, so the park was a false positive. Restored status ${parkedFromStatus} and the pre-park assignee.`;
+
+    const actor = input.actor;
+    await logActivity(db, {
+      companyId: input.issue.companyId,
+      actorType: actor?.actorType ?? "system",
+      actorId: actor?.actorId ?? "system",
+      agentId: actor?.agentId ?? null,
+      runId: actor?.runId ?? null,
+      action: "issue.recovery_action_reverted", // Invariant 5.
+      entityType: "issue",
+      entityId: input.issue.id,
+      details: {
+        identifier: input.issue.identifier,
+        recoveryActionId: recoveryAction.id,
+        source: "source_revalidation_revert",
+        trigger: input.trigger,
+        resolutionNote,
+        evidencePreviousStatus: parkedFromStatus,
+        revertedFromStatus: result.revertedFromStatus,
+        revertedToStatus: result.issue.status,
+        revertedFromAssigneeAgentId: result.revertedFromAssigneeAgentId,
+        restoredAssigneeAgentId: result.restoredAssigneeAgentId,
+      },
+    });
+
+    try {
+      await svc.addComment(
+        input.issue.id,
+        [
+          "**Reverted a recovery park that revalidation proved wrong.**",
+          "",
+          `Recovery action \`${recoveryAction.id}\` (cause \`${recoveryAction.cause}\`) moved this issue to ` +
+            `\`${result.revertedFromStatus}\` from \`${parkedFromStatus}\`. A \`${parkedFromStatus}\` issue cannot ` +
+            "be a lost run, so that park was wrong on its face and has been undone automatically instead of " +
+            "left for a human to hand-revert.",
+          "",
+          `- Status: \`${result.revertedFromStatus}\` → \`${result.issue.status}\``,
+          result.restoredAssigneeAgentId
+            ? `- Assignee: restored to the pre-park owner (\`${result.restoredAssigneeAgentId}\`)`
+            : "- Assignee: left as-is (no pre-park owner recorded, or ownership had already moved on)",
+          `- Revalidation trigger: \`${input.trigger}\``,
+          "",
+          "No action needed — this is the automated undo of an incorrect park (RBR-921).",
+        ].join("\n"),
+        {},
+        { authorType: "system" },
+      );
+    } catch (err) {
+      logger.warn(
+        { err, issueId: input.issue.id, recoveryActionId: recoveryAction.id },
+        "reverted phantom recovery park but failed to post the revert comment",
+      );
+    }
+
+    return { issue: result.issue, resolutionNote };
+  }
+
+  async function resolveRevalidatedSourceRecovery(input: {
+    issue: IssueRouteSnapshot;
+    recoveryAction: NonNullable<Awaited<ReturnType<typeof recoveryActionsSvc.getActiveForIssue>>>;
+    resolutionNote: string;
+    trigger: RecoveryRevalidationTrigger;
+    actor?: ReturnType<typeof getActorInfo> | null;
+  }) {
     const resolved = await recoveryActionsSvc.resolveActiveForIssue({
       companyId: input.issue.companyId,
       sourceIssueId: input.issue.id,
-      actionId: activeRecoveryAction.id,
+      actionId: input.recoveryAction.id,
       status: "cancelled",
       outcome: "cancelled",
-      resolutionNote,
+      resolutionNote: input.resolutionNote,
     });
-    if (!resolved) return activeRecoveryAction;
+    if (!resolved) return null;
 
     const actor = input.actor;
     await logActivity(db, {
@@ -1742,6 +1880,66 @@ export function issueRoutes(
         trigger: input.trigger,
       },
     });
+
+    return resolved;
+  }
+
+  async function revalidateActiveSourceRecovery(input: {
+    issue: IssueRouteSnapshot;
+    trigger: RecoveryRevalidationTrigger;
+    actor?: ReturnType<typeof getActorInfo> | null;
+    activeRecoveryAction?: Awaited<ReturnType<typeof recoveryActionsSvc.getActiveForIssue>> | null;
+    statusChanged?: boolean;
+    assigneeChanged?: boolean;
+    blockersChanged?: boolean;
+    executionPolicyChanged?: boolean;
+    monitorChanged?: boolean;
+    documentChanged?: boolean;
+    workProductChanged?: boolean;
+    resumeRequested?: boolean;
+    reopened?: boolean;
+    blockedToTodoRecovery?: boolean;
+  }) {
+    const activeRecoveryAction =
+      input.activeRecoveryAction === undefined
+        ? await recoveryActionsSvc.getActiveForIssue(input.issue.companyId, input.issue.id)
+        : input.activeRecoveryAction;
+    if (!activeRecoveryAction) return null;
+
+    // RBR-921 / AC3 — a park taken from a terminal status is wrong on its face, so revalidation must
+    // undo what it invalidated rather than only closing its own bookkeeping. This runs before the
+    // stale-cancel classifier because a parked issue reads `blocked`, which the classifier
+    // deliberately leaves alone.
+    const revert = await revertPhantomRecoveryPark({
+      issue: input.issue,
+      recoveryAction: activeRecoveryAction,
+      trigger: input.trigger,
+      actor: input.actor,
+    });
+    if (revert) {
+      await resolveRevalidatedSourceRecovery({
+        issue: revert.issue,
+        recoveryAction: activeRecoveryAction,
+        resolutionNote: revert.resolutionNote,
+        trigger: input.trigger,
+        actor: input.actor,
+      });
+      // If the cancel lost a race the action stays active; the next revalidation folds it as stale
+      // because the issue now reads terminal again.
+      return null;
+    }
+
+    const resolutionNote = await classifySourceRecoveryRevalidation(input);
+    if (!resolutionNote) return activeRecoveryAction;
+
+    const resolved = await resolveRevalidatedSourceRecovery({
+      issue: input.issue,
+      recoveryAction: activeRecoveryAction,
+      resolutionNote,
+      trigger: input.trigger,
+      actor: input.actor,
+    });
+    if (!resolved) return activeRecoveryAction;
 
     return null;
   }
