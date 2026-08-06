@@ -298,4 +298,52 @@ describeEmbeddedPostgres("RBR-844: issue:comment authorization predicate", () =>
     const comment = await commentDecision(co.id, ceo.id, row);
     expect(comment.allowed).toBe(false);
   });
+
+  // ---- The ordering bug: the manager override on the mutate path is dead code ----
+  //
+  // routes/issues.ts assertAgentIssueMutationAllowed() calls
+  // hasActiveCheckoutManagementOverride() at :2260 -- but only AFTER the
+  // decideIssueAccess("issue:mutate") gate at :2251 has already returned 403.
+  //
+  // That gate denies exactly the case the override exists to permit (an actor
+  // acting on an issue assigned to a different agent). Whenever the override
+  // would matter, the gate has already returned; whenever the gate passes, the
+  // override is unnecessary. So the CEO/manager escape hatch on the mutate path
+  // is unreachable for agent actors, and assertAgentIssueCommentAllowed() does
+  // not even attempt it.
+  it("proves the manager override on the mutate path is unreachable: the boundary gate denies first", async () => {
+    const co = await company();
+    const ceo = await agent(co.id, "ceo");
+    const cto = await agent(co.id, "cto", ceo.id);
+    const row = await issue(co.id, cto.id);
+
+    const service = authorizationService(db);
+    const actor = { type: "agent", agentId: ceo.id, companyId: co.id, source: "agent_jwt" } as const;
+    const resource = {
+      type: "issue",
+      companyId: co.id,
+      issueId: row.id,
+      projectId: null,
+      parentIssueId: null,
+      assigneeAgentId: cto.id,
+      assigneeUserId: null,
+      status: "in_progress",
+    } as const;
+
+    // Gate evaluated first at routes/issues.ts:2251 -- denies.
+    const gate = await service.decide({ actor, action: "issue:mutate", resource });
+    expect(gate.allowed).toBe(false);
+    expect(gate.reason).toBe("deny_missing_grant");
+
+    // Override evaluated second at routes/issues.ts:2260 -- would have allowed.
+    const override = await service.decide({
+      actor,
+      action: "tasks:manage_active_checkouts",
+      resource: { type: "issue", companyId: co.id, issueId: row.id, assigneeAgentId: cto.id },
+    });
+    expect(override.allowed).toBe(true);
+
+    // Both true at once is the bug: a grant that exists, resolves, and is
+    // ordered behind a gate that can never let it run.
+  });
 });
