@@ -13,6 +13,7 @@ import { actorMiddleware } from "../middleware/auth.js";
 import { errorHandler } from "../middleware/error-handler.js";
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { assertCompanyAccess } from "../routes/authz.js";
+import { resetMismatchModeCache } from "../services/mismatch-enforce.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -144,6 +145,9 @@ describe("agent auth middleware", () => {
   beforeEach(() => {
     process.env.PAPERCLIP_AGENT_JWT_SECRET = "auth-middleware-secret";
     process.env.PAPERCLIP_AGENT_JWT_TTL_SECONDS = "3600";
+    delete process.env.RUN_ID_MISMATCH_ENFORCE;
+    delete process.env.RUN_ID_MISMATCH_ENFORCE_GLOBAL_DISABLE;
+    resetMismatchModeCache();
   });
 
   afterEach(() => {
@@ -151,6 +155,9 @@ describe("agent auth middleware", () => {
     else process.env.PAPERCLIP_AGENT_JWT_SECRET = originalSecret;
     if (originalTtl === undefined) delete process.env.PAPERCLIP_AGENT_JWT_TTL_SECONDS;
     else process.env.PAPERCLIP_AGENT_JWT_TTL_SECONDS = originalTtl;
+    delete process.env.RUN_ID_MISMATCH_ENFORCE;
+    delete process.env.RUN_ID_MISMATCH_ENFORCE_GLOBAL_DISABLE;
+    resetMismatchModeCache();
   });
 
   it("uses the signed responsible_user_id claim and keeps the signed run id authoritative", async () => {
@@ -179,7 +186,46 @@ describe("agent auth middleware", () => {
     });
   });
 
-  it("rejects mismatched run headers for agent JWTs and audits the spoof attempt", async () => {
+  it("audits mismatched run headers for agent JWTs but does not reject by default (detect_ignore)", async () => {
+    const companyId = randomUUID();
+    const agentId = randomUUID();
+    const runId = randomUUID();
+    const spoofedRunId = randomUUID();
+    const { db, activity } = createDbState({
+      agent: { id: agentId, companyId },
+      run: { id: runId, companyId, agentId, responsibleUserId: "user-claim" },
+    });
+    const token = createLocalAgentJwt(agentId, companyId, "codex_local", runId, "user-claim");
+
+    const res = await request(createApp(db))
+      .get("/actor")
+      .set("Authorization", `Bearer ${token}`)
+      .set("X-Paperclip-Run-Id", spoofedRunId);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({
+      type: "agent",
+      agentId,
+      companyId,
+      runId,
+      source: "agent_jwt",
+    });
+    expect(activity).toHaveLength(1);
+    expect(activity[0]).toMatchObject({
+      companyId,
+      actorType: "agent",
+      actorId: agentId,
+      action: "auth.agent_jwt_run_header_mismatch",
+      entityType: "heartbeat_run",
+      entityId: runId,
+      runId,
+      details: { claimRunId: runId, headerRunId: spoofedRunId },
+    });
+  });
+
+  it("rejects mismatched run headers when enforce_reject mode is enabled", async () => {
+    process.env.RUN_ID_MISMATCH_ENFORCE = "true";
+    resetMismatchModeCache();
     const companyId = randomUUID();
     const agentId = randomUUID();
     const runId = randomUUID();

@@ -19,6 +19,8 @@ import { logger } from "./logger.js";
 import { boardAuthService } from "../services/board-auth.js";
 import { ensureHumanRoleDefaultGrants } from "../services/principal-access-compatibility.js";
 import { forbidden, unprocessable } from "../errors.js";
+import { resolveMismatchMode } from "../services/mismatch-enforce.js";
+import { buildMismatchDedupKey, defaultMismatchDedupStore } from "../services/mismatch-dedup.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -279,22 +281,40 @@ export function actorMiddleware(db: Db, opts: ActorMiddlewareOptions): RequestHa
 
       const normalizedRunIdHeader = normalizeOptionalString(runIdHeader);
       if (normalizedRunIdHeader && normalizedRunIdHeader !== claims.run_id) {
-        await auditAgentJwtRunHeaderMismatch(db, {
-          companyId: claims.company_id,
-          agentId: claims.sub,
-          claimRunId: claims.run_id,
-          headerRunId: normalizedRunIdHeader,
-          method: req.method,
-          url: req.originalUrl,
+        const mode = resolveMismatchMode();
+        const enforcement = mode === "enforce_reject" ? "rejected" : "ignored";
+        const dedupKey = buildMismatchDedupKey({
+          tenantId: claims.company_id,
+          actorId: claims.sub,
+          authRunId: claims.run_id,
+          clientCorrelationRunId: normalizedRunIdHeader,
+          route: `${req.method} ${req.route?.path ?? req.path}`,
+          enforcement,
         });
-        next(
-          unprocessable("X-Paperclip-Run-Id does not match signed agent JWT run_id", {
-            code: "agent_jwt_run_id_mismatch",
+
+        const dedupResult = defaultMismatchDedupStore.shouldEmit(dedupKey);
+
+        if (dedupResult.emit) {
+          await auditAgentJwtRunHeaderMismatch(db, {
+            companyId: claims.company_id,
+            agentId: claims.sub,
             claimRunId: claims.run_id,
             headerRunId: normalizedRunIdHeader,
-          }),
-        );
-        return;
+            method: req.method,
+            url: req.originalUrl,
+          });
+        }
+
+        if (mode === "enforce_reject") {
+          next(
+            unprocessable("X-Paperclip-Run-Id does not match signed agent JWT run_id", {
+              code: "agent_jwt_run_id_mismatch",
+              claimRunId: claims.run_id,
+              headerRunId: normalizedRunIdHeader,
+            }),
+          );
+          return;
+        }
       }
 
       const onBehalfOfUserId = claims.responsible_user_id !== undefined
