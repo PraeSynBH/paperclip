@@ -137,6 +137,27 @@ export function evaluateRunAdmission(input: {
   // not create, and it is the difference between "we have a free slot" and "a run
   // started now will survive".
   if (isHostOverloaded(load)) {
+    // Forward-progress escape valve. Load is not a signal we fully own: a human's
+    // build, another worktree's test suite, or a stray repo-wide `rg` can hold the
+    // host above the threshold indefinitely. If we refused purely on load, that
+    // external pressure would wedge the whole company with nothing running and
+    // nothing able to start — a worse failure than a slow run, and one that no
+    // amount of waiting resolves.
+    //
+    // So when zero runs are live instance-wide, we are demonstrably not the cause
+    // of the load, and we admit exactly one run. A single run is the least-doomed
+    // option available and the only path to draining the queue; deferring forever
+    // is strictly worse. Above zero, ordinary backpressure applies.
+    if (runningGlobal <= 0 && effectiveAgentCap > 0) {
+      return {
+        ...base,
+        availableSlots: 1,
+        deferralReason: null,
+        detail:
+          `admitting 1 run despite 1m load ${load.loadAverage1m.toFixed(2)} on ${load.cpuCount} cores: ` +
+          `no runs are live instance-wide, so the load is external and deferring would stall all work`,
+      };
+    }
     return {
       ...base,
       availableSlots: 0,
