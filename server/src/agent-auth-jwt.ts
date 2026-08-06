@@ -88,9 +88,30 @@ function safeCompare(a: string, b: string) {
   return timingSafeEqual(left, right);
 }
 
-export function createLocalAgentJwt(agentId: string, companyId: string, adapterType: string, runId: string) {
+export function createLocalAgentJwt(
+  agentId: string,
+  companyId: string,
+  adapterType: string,
+  runId: string,
+  minTtlSeconds?: number | null,
+) {
   const config = jwtConfig();
   if (!config) return null;
+
+  // RBR-1035 AC1: the token must outlive the run it authenticates, not just
+  // the instance-wide default TTL. `minTtlSeconds` is derived by the caller
+  // from the run's own configured max wall clock (adapter `timeoutSec`) plus
+  // a safety margin — see the JWT-minting call site in heartbeat.ts. A hard
+  // 1h default TTL is what caused RBR-1014: agent runs routinely exceed one
+  // hour, especially under host load, and once the token expires mid-run
+  // every subsequent Paperclip API call fails with no recovery path. Using
+  // the larger of the configured default and the run-derived minimum means a
+  // bounded run is always covered without raising the TTL floor for every
+  // run (e.g. short-lived ones keep the tighter default expiry).
+  const ttlSeconds =
+    typeof minTtlSeconds === "number" && Number.isFinite(minTtlSeconds) && minTtlSeconds > config.ttlSeconds
+      ? Math.floor(minTtlSeconds)
+      : config.ttlSeconds;
 
   const now = Math.floor(Date.now() / 1000);
   const claims: LocalAgentJwtClaims = {
@@ -99,7 +120,7 @@ export function createLocalAgentJwt(agentId: string, companyId: string, adapterT
     adapter_type: adapterType,
     run_id: runId,
     iat: now,
-    exp: now + config.ttlSeconds,
+    exp: now + ttlSeconds,
     iss: config.issuer,
     aud: config.audience,
   };
