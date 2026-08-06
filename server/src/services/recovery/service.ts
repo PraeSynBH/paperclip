@@ -409,6 +409,45 @@ function isUnsuccessfulTerminalIssueRun(latestRun: LatestIssueRun) {
   );
 }
 
+/**
+ * RBR-884: error codes that name a *successful* stop rather than a failure.
+ *
+ * A run carrying one of these codes did not die — the issue it was working is
+ * closed, and the run row is `cancelled` only because the runtime is the thing
+ * that stood it down. These must never be bucketed with `timeout` /
+ * `process_lost` in the stranded-issue recovery sweep:
+ *
+ * - `issue_terminal_status`  — the issue reached `done`; the agent completed it.
+ * - `issue_cancelled`        — the issue was deliberately cancelled.
+ *
+ * Deliberately NOT included — `issue_reassigned`, `issue_assignee_changed`,
+ * `lock_released_on_reassignment`. That is the boundary this set encodes: the
+ * two exempt codes mean the issue is *closed*, so recovery can only ever be
+ * wrong. The reassignment codes leave the issue **open under a new owner** — if
+ * the handoff wake was dropped, this sweep is the only thing that notices.
+ * Exempting them would create a silent-drop hole (see RBR-813).
+ *
+ * Also excluded, as real unrecovered stops: `timeout`, `process_lost`,
+ * `adapter_failed`, `agent_not_invokable`, `budget_blocked`, `issue_paused`,
+ * `issue_dependencies_blocked`.
+ */
+const SUCCESSFUL_STOP_RUN_ERROR_CODES = new Set([
+  "issue_terminal_status",
+  "issue_cancelled",
+]);
+
+/**
+ * True when the latest run stopped for a reason that names success rather than
+ * failure. Keyed off the run row (which the sweep re-reads fresh for each
+ * candidate) rather than the issue row, so it still holds when the sweep is
+ * working from a stale issue snapshot — which is exactly how this defect
+ * reverted `done` issues in production.
+ */
+function isSuccessfulStopRun(latestRun: LatestIssueRun): boolean {
+  if (!latestRun || latestRun.status !== "cancelled") return false;
+  return SUCCESSFUL_STOP_RUN_ERROR_CODES.has(latestRun.errorCode ?? "");
+}
+
 function isSuccessfulInProgressContinuationRun(latestRun: LatestIssueRun): latestRun is SuccessfulLatestIssueRun {
   return latestRun?.status === "succeeded";
 }
@@ -2678,6 +2717,17 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     recoveryOwnerAgentId?: string | null;
     successfulRunHandoffEvidence?: SuccessfulRunHandoffRecoveryEvidence | null;
   }) {
+    // RBR-884: a run that stopped with a *success* code (the issue reached a
+    // terminal status, or was deliberately cancelled) is not a lost execution
+    // path, so it must never be escalated to `blocked`.
+    //
+    // This guard lives at the write funnel rather than only in the sweep loop
+    // because in production the sweep wrote `blocked` from a *stale* issue
+    // snapshot (`previousStatus: in_progress`) minutes after the agent had
+    // already set `done`. A loop-only check on the issue row therefore does not
+    // hold; keying off the freshly-read run row does.
+    if (isSuccessfulStopRun(input.latestRun)) return null;
+
     if (isStrandedIssueRecoveryIssue(input.issue)) {
       return escalateStrandedRecoveryIssueInPlace({
         issue: input.issue,
@@ -2871,6 +2921,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       escalated: 0,
       waitingOnReviewResolved: 0,
       recentProgressExempted: 0,
+      terminalStatusExempted: 0,
       skipped: 0,
       issueIds: [] as string[],
     };
@@ -2933,6 +2984,15 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         } else {
           result.skipped += 1;
         }
+        continue;
+      }
+
+      // RBR-884: a run that stopped with a *success* code (the issue reached a
+      // terminal status, or was deliberately cancelled) is not a lost execution
+      // path. Skip it before any escalation logic runs, and count it so the
+      // reason nothing changed is observable rather than inferred.
+      if (isSuccessfulStopRun(latestRun)) {
+        result.terminalStatusExempted += 1;
         continue;
       }
 
