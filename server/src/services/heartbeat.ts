@@ -57,6 +57,20 @@ import {
 } from "@paperclipai/db";
 import { conflict, HttpError, notFound } from "../errors.js";
 import { logger } from "../middleware/logger.js";
+import {
+  createGitRemoteAuthProvider,
+  describeGitAuthFailure,
+  scrubGitCredentialText,
+  type GitRemoteAuthProvider,
+} from "./git-credentials.js";
+// Re-exported because heartbeat's workspace surface exposed the scrubber before the
+// git-credentials module became its canonical home; existing importers keep working.
+export { scrubGitCredentialText };
+import {
+  evaluateRunAdmission,
+  readHostLoadSnapshot,
+  resolveGlobalRunCeiling,
+} from "./run-admission.js";
 import { publishLiveEvent } from "./live-events.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, listAdapterModelProfiles, runningProcesses } from "../adapters/index.js";
@@ -165,7 +179,7 @@ import {
 import { recoveryService } from "./recovery/service.js";
 import { productivityReviewService } from "./productivity-review.js";
 import { taskWatchdogService } from "./task-watchdogs.js";
-import { withAgentStartLock } from "./agent-start-lock.js";
+import { withAgentStartLock, withGlobalAdmissionLock } from "./agent-start-lock.js";
 import {
   evaluateAgentInvokability,
   evaluateAgentInvokabilityFromDb,
@@ -8401,6 +8415,20 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     return Number(count ?? 0);
   }
 
+  /**
+   * RBR-974: instance-wide running-run count. Deliberately NOT scoped to a
+   * company or agent — the global ceiling exists because per-agent caps summed
+   * without bound and put 27 runs on a 12-core host. Every running run competes
+   * for the same CPU regardless of who owns it.
+   */
+  async function countRunningRunsInstanceWide() {
+    const [{ count }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(heartbeatRuns)
+      .where(eq(heartbeatRuns.status, "running"));
+    return Number(count ?? 0);
+  }
+
   async function claimQueuedRun(run: typeof heartbeatRuns.$inferSelect, companyAgents?: AgentOrgRow[]) {
     if (run.status !== "queued") return run;
     const agent = await getAgent(run.agentId);
@@ -9361,9 +9389,41 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         return [];
       }
       const policy = parseHeartbeatPolicy(agent);
+      // RBR-974: the admission decision and the row claim must be atomic across
+      // agents. withAgentStartLock only serializes one agent, so without this two
+      // agents could each read the same free global slot and both start. Global
+      // lock is taken inside the per-agent lock and never acquires an agent lock,
+      // so the nesting order cannot deadlock.
+      return withGlobalAdmissionLock(async () => {
       const runningCount = await countRunningRunsForAgent(agentId);
-      const availableSlots = Math.max(0, policy.maxConcurrentRuns - runningCount);
-      if (availableSlots <= 0) return [];
+      // Admission control replaces optimistic per-agent dispatch. The gate
+      // consults the instance-wide ceiling and the live host load before any
+      // queued run is claimed. A refusal leaves runs in "queued" — resumeQueuedRuns
+      // retries them on the next sweep, so deferral costs a delay, not a run.
+      const runningGlobal = await countRunningRunsInstanceWide();
+      const admission = evaluateRunAdmission({
+        agentCap: policy.maxConcurrentRuns,
+        runningForAgent: runningCount,
+        runningGlobal,
+        load: readHostLoadSnapshot(),
+      });
+      const availableSlots = admission.availableSlots;
+      if (availableSlots <= 0) {
+        // Log at warn for load/ceiling refusals: they are the signal an operator
+        // needs to distinguish "queue is backpressured" from "scheduler is stuck".
+        logger.warn(
+          {
+            agentId,
+            deferralReason: admission.deferralReason,
+            globalCeiling: admission.globalCeiling,
+            effectiveAgentCap: admission.effectiveAgentCap,
+            runningGlobal: admission.runningGlobal,
+            runningForAgent: admission.runningForAgent,
+          },
+          admission.detail,
+        );
+        return [];
+      }
 
       const queuedRuns = await db
         .select()
@@ -9424,6 +9484,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         });
       }
       return claimedRuns;
+      });
     });
   }
 
