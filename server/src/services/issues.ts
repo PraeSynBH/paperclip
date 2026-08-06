@@ -7444,6 +7444,20 @@ export function issueService(db: Db) {
         blockedByIssueIds?: string[];
         actorAgentId?: string | null;
         actorUserId?: string | null;
+        /**
+         * RBR-929 AC1/AC2: opt-in status compare-and-set.
+         *
+         * When either is supplied, the write carries an extra WHERE predicate on
+         * `issues.status`, so a caller holding a stale status snapshot loses the
+         * race *in SQL* -- it affects zero rows -- rather than being talked out
+         * of it by a JS pre-check that a concurrent commit can invalidate.
+         *
+         * A losing CAS throws `conflict`; see the `!updated` branch on the write
+         * for why a throw and not `null`. Absent both keys there is no predicate
+         * at all, which is what leaves the ~100 existing callers unchanged.
+         */
+        expectedStatus?: string;
+        expectedStatuses?: string[];
       },
       dbOrTx: any = db,
       postCommitActivityPublications?: ActivityPublication[],
@@ -7462,8 +7476,31 @@ export function issueService(db: Db) {
         blockedByIssueIds,
         actorAgentId,
         actorUserId,
+        expectedStatus,
+        expectedStatuses,
         ...issueData
       } = data;
+
+      // RBR-929 AC1: fold the two opt-in CAS spellings into one list of accepted
+      // statuses. `expectedStatus` and `expectedStatuses` are destructured out
+      // above so neither can leak into `issueData` and become a column in `patch`.
+      //
+      // An explicitly empty `expectedStatuses` is a caller bug, not "no CAS": it
+      // can never match, so it would silently turn every write into a no-op.
+      // Reject it loudly rather than degrading to an unguarded write.
+      if (expectedStatuses !== undefined && expectedStatuses.length === 0) {
+        throw unprocessable("expectedStatuses must not be empty");
+      }
+      const casExpectedStatuses: string[] | null = (() => {
+        if (expectedStatus === undefined && expectedStatuses === undefined) return null;
+        return [
+          ...new Set([
+            ...(expectedStatus !== undefined ? [expectedStatus] : []),
+            ...(expectedStatuses ?? []),
+          ]),
+        ];
+      })();
+
       const isolatedWorkspacesEnabled = (await instanceSettings.getExperimental()).enableIsolatedWorkspaces;
       if (!isolatedWorkspacesEnabled) {
         delete issueData.executionWorkspaceId;
@@ -7644,13 +7681,49 @@ export function issueService(db: Db) {
           projectGoalId: nextProjectGoalId,
           defaultGoalId: defaultCompanyGoal?.id ?? null,
         });
+        // RBR-929 AC1: the compare-and-set lives here, in the WHERE clause of the
+        // write itself -- not as a JS comparison against `existing` / `receiptExisting`.
+        // A JS pre-check can be invalidated by a commit landing between the read
+        // and the write; a SQL predicate cannot, because the predicate is evaluated
+        // by the same statement that does the writing.
+        //
+        // `checkout` (see the `inArray(issues.status, expectedStatuses)` predicate
+        // further down this file) is the in-repo precedent this copies.
+        const casPredicate = casExpectedStatuses
+          ? inArray(issues.status, casExpectedStatuses)
+          : null;
         const updated = await tx
           .update(issues)
           .set(patch)
-          .where(eq(issues.id, id))
+          .where(casPredicate ? and(eq(issues.id, id), casPredicate) : eq(issues.id, id))
           .returning()
           .then((rows: Array<typeof issues.$inferSelect>) => rows[0] ?? null);
-        if (!updated) return null;
+        if (!updated) {
+          // RBR-929 AC2: a losing CAS must be distinguishable from "issue not found".
+          // `null` is already spoken for by not-found (see the early return above),
+          // so a lost CAS throws `conflict` instead.
+          //
+          // Chosen over a discriminated result because a new result shape would have
+          // to be threaded through ~100 existing call sites to stay type-honest,
+          // and because a `conflict` throw fails loudly by default: a caller that
+          // forgets to check cannot silently proceed as if its write had landed.
+          // `conflict` maps to HTTP 409, which is the correct wire answer for a
+          // lost race, and matches how `checkout` already reports the same class
+          // of failure.
+          //
+          // `receiptExisting` was read FOR UPDATE in this transaction, so if we are
+          // here with a row in hand the row exists and it is the status predicate
+          // that failed -- not a vanished row.
+          if (casExpectedStatuses) {
+            throw conflict("Issue status compare-and-set failed", {
+              issueId: id,
+              expectedStatuses: casExpectedStatuses,
+              actualStatus: receiptExisting.status,
+              requestedStatus: issueData.status ?? null,
+            });
+          }
+          return null;
+        }
         if (existing.status !== updated.status) {
           if (
             (existing.status === "done" || existing.status === "cancelled")
