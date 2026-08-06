@@ -14,6 +14,7 @@
     "drata:enrollment": "tsx src/drata/enrollment-monitor.ts",
     "drata:cleanup": "tsx src/drata/cleanup-stale-devices.ts",
     "drata:orphan-purge-list": "tsx src/drata/generate-orphan-purge-list.ts",
+    "drata:retirement-list": "tsx src/drata/generate-retirement-list.ts",
     "drata:windows-analysis": "tsx src/drata/windows-analysis.ts",
     "drata:windows-personnel-breakdown": "tsx src/drata/windows-personnel-breakdown.ts",
     "evidence:collect": "tsx src/evidence/collect.ts",
