@@ -115,6 +115,21 @@ const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
  * run. Tracked properly (shared helper + preflight) in RBR-912.
  */
 const EMBEDDED_POSTGRES_BOOTSTRAP_TIMEOUT_MS = 300_000;
+/**
+ * RBR-976: `server/vitest.config.ts` sets `pool`, `maxWorkers` and `sequence`
+ * but no `testTimeout`, so every case in this file runs against Vitest's 5s
+ * per-test default. That is not a budget a case whose fixture seeds embedded
+ * Postgres can reliably meet: the first cold case in a file pays the
+ * fixture-seeding cost and measured 9.2s, while a warm sibling running the
+ * identical code path measured 4.06s — barely under. The result is a coin-flip
+ * timeout that reads as a logic failure. This is the same class of defect as
+ * the `beforeAll` budget above (RBR-940); the per-test budget was missed.
+ *
+ * Scoped deliberately to the RBR-884 cases rather than raised suite-wide, so
+ * the other cases in this file keep the tighter default and a genuine hang
+ * still surfaces fast.
+ */
+const STRANDED_FIXTURE_SEEDING_TIMEOUT_MS = 60_000;
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
 
 if (!embeddedPostgresSupport.supported) {
@@ -4529,7 +4544,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     // No system comments were posted.
     const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
     expect(comments).toHaveLength(0);
-  });
+  }, STRANDED_FIXTURE_SEEDING_TIMEOUT_MS);
 
   // RBR-905 specimen tests (real production timestamps) and the
   // recovery-origin funnel case (`escalateStrandedRecoveryIssueInPlace`) are
