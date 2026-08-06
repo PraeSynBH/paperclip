@@ -209,6 +209,17 @@ export async function runRbr767Sweep(
             // Degraded rows already have an assignee, so the unassigned guard would reject
             // every one of them. Gate on the flag instead: still-degraded means nobody has
             // claimed it since the SELECT, so re-routing is safe.
+            //
+            // RBR-814: that premise used to be false, and this branch was silently
+            // stealing explicit assignments. Nothing on the update/reassign path cleared
+            // the flag, so a row a human deliberately took stayed flagged forever and
+            // every subsequent sweep overwrote their owner with the ladder's pick. The
+            // fix is to make the premise true rather than to weaken this predicate:
+            // `issueService.update` and `issueService.checkout` now clear
+            // `assigneeFallbackReason` whenever an explicit assignee lands, so a claimed
+            // row is out of the worklist entirely and a row that reaches here really is
+            // one nobody has accepted. Keep this branch -- deleting it would strand every
+            // genuinely-degraded row, which all carry an assignee by construction.
             isNotNull(issues.assigneeFallbackReason),
           ),
         ));

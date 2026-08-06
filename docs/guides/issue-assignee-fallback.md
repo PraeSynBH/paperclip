@@ -78,8 +78,8 @@ Zero agents in particular is not an impossibility — it is the **bootstrap stat
 company**. Someone has to be able to file the first issue, including the issue that says
 "hire the first agent." An unassigned issue in an empty company is the *correct* record.
 
-Both flags drain through the identical path: `scripts/rbr767-sweep.ts` selects rows that
-are unassigned **or** carry a non-null `assignee_fallback_reason`, re-runs the same ladder,
+Both flags drain through the identical path: `server/src/scripts/rbr767-sweep.ts` selects rows
+that are unassigned **or** carry a non-null `assignee_fallback_reason`, re-runs the same ladder,
 and clears the flag once the row lands on a genuinely invokable owner. A zero-agent-era
 issue is routed by the first sweep after the first hire. No new machinery.
 
