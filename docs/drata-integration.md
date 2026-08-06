@@ -119,9 +119,9 @@ V2 uses an `expand[]` query parameter to include related objects inline:
 | `GET /vendors` | 200 | 0 vendors |
 | `GET /workspaces/{id}/controls` | 200 (via `/workspaces/{id}/...` prefix) | 727 controls |
 | `GET /control-library` | 403 | Endpoint exists, no permission |
-| `GET /workspaces/{id}/frameworks` | 200 (via `/workspaces/{id}/...` prefix) | 21 frameworks (ISO 27001:2022 = id 17, enabled) |
+| `GET /workspaces/{id}/frameworks` | 200 (via `/workspaces/{id}/...` prefix) | 21 frameworks (ISO 27001:2022 = id 17, enabled; SOC 2 = id 1, `isEnabled: false` — **expected, decided state**, see below) |
 | `GET /workspaces/{id}/monitoring-tests` | 200 (via `/workspaces/{id}/...` prefix) | 148 monitoring tests |
-| `GET /evidence` | 404 | "Multiple artifacts are not enabled for this account" — plan/entitlement gap, not a path issue |
+| `GET /workspaces/{id}/evidence-library` | 200 (via `/workspaces/{id}/...` prefix) | 166 evidence-library entries |
 | `GET /risks` | 404 | Not in key scope |
 
 ### Workspace-scoped paths (RBR-860)
@@ -144,10 +144,27 @@ GET /public/v2/workspaces/{workspaceId}/monitoring-tests
 exactly one: `{ id: 1, primary: true, name: "Aira" }`) and caching the result.
 A workspace ID can also be passed explicitly to the constructor.
 
-`/evidence` and `/risks` deliberately stay on their top-level paths — neither
-is a wrong-path case. `/workspaces/{id}/evidence` returns a distinct
-"Multiple artifacts are not enabled for this account" message (plan gap) and
-`/workspaces/{id}/risks` 404s the same way the flat path does.
+`/evidence` is also workspace-scoped, but the resource name is `/evidence-library`,
+not `/evidence` — `GET /workspaces/{id}/evidence` returns a misleading "Multiple
+artifacts are not enabled" message that is actually Drata's generic 404 for a
+removed/renamed route, not an entitlement check. The correct path is
+`/workspaces/{id}/evidence-library` (RBR-883). `/risks` remains on the flat
+path — `/workspaces/{id}/risks` 404s the same way the flat path does.
+
+#### SOC 2 (framework id 1) `isEnabled: false` is expected, decided state
+
+`GET /workspaces/{id}/frameworks` returns framework id 1 (SOC 2) with
+`isEnabled: false` and 148 in-scope controls. **This is not a misconfiguration
+and does not need a gap analysis, evidence mapping, or re-triage.** ISO
+27001:2022 (id 17) is the company's sole active compliance program by
+deliberate decision, not by omission.
+
+The same observation — "SOC 2 shows `isEnabled:false`, is this broken?" — was
+independently filed three times in 28 days (RBR-51, RBR-865, RBR-878) before
+this note existed. If you are about to file a fourth: don't. Read the decision
+record first: [`docs/governance/DECISION-2026-08-06-soc2-posture.md`](./governance/DECISION-2026-08-06-soc2-posture.md).
+It documents provenance, evidence basis, and the exact three conditions that
+would reopen the question.
 
 #### `expand[]` values differ on the workspace-scoped routes
 
@@ -157,6 +174,7 @@ The v2 routes reject the old expand names with `400 EnumValidator`:
 |----------|------------------------|
 | controls | `customFields`, `evidenceIds`, `flags`, `frameworkTags`, `owners`, `requirements`, `testIds`, `topics` |
 | monitoring-tests | `controls`, `monitorInstances`, `disablingUser` |
+| evidence-library | `user`, `controls`, `renewalSchemaAndVersions` |
 
 Consequences for response shape, handled by `src/drata/helpers.ts`:
 
@@ -172,6 +190,11 @@ Consequences for response shape, handled by `src/drata/helpers.ts`:
   and `checkStatus` (`ENABLED` / `DISABLED`) instead of a `status` string,
   and carry no flat `controlId` — linked controls arrive via
   `expand[]=controls`.
+- Evidence-library entries have no flat `status`, `lastCollectedAt`,
+  `renewalDate`, or `collectionMethod`. Freshness comes from the `current`
+  entry in `versions[]` (`expand[]=renewalSchemaAndVersions`) and renewal
+  from `renewalSchema`. Use `evidenceCollectedAt(ev)` and
+  `evidenceRenewalDate(ev)`.
 
 ## Configuration
 
