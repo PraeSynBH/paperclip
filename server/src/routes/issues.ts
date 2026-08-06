@@ -10071,15 +10071,36 @@ export function issueRoutes(
     // all of it is non-essential instrumentation. It must never be able to turn
     // a persisted interaction into a 5xx: a caller that retries on that 5xx
     // files a duplicate ask, which is the exact failure this work exists to
-    // prevent. So the whole block is contained — on failure we log the
-    // instrumentation error and still return 201. The interaction committed;
-    // the response says so.
+    // prevent. So each post-commit step is contained and the route still
+    // returns 201. The interaction committed; the response says so.
+    //
+    // The depth probe and the activity-log write are contained *separately* on
+    // purpose. `issue.thread_interaction_created` is the only audit record of
+    // this creation, so a failing count query must not take the audit entry
+    // down with it: on a probe failure we still log the activity, marked
+    // `pendingInteractionCountUnavailable`, rather than silently dropping the
+    // interaction out of the activity feed.
+    let pendingInteractionCount: number | null = null;
+    let pendingSoftCapExceeded = false;
     try {
-      const pendingAfterCreate = (await issueThreadInteractionService(db).listForIssue(issue.id))
-        .filter((entry) => entry.status === "pending");
-      const pendingSoftCapExceeded =
-        pendingAfterCreate.length > ISSUE_THREAD_INTERACTION_PENDING_SOFT_CAP;
+      pendingInteractionCount = (await issueThreadInteractionService(db).listForIssue(issue.id))
+        .filter((entry) => entry.status === "pending")
+        .length;
+      pendingSoftCapExceeded = pendingInteractionCount > ISSUE_THREAD_INTERACTION_PENDING_SOFT_CAP;
+    } catch (err) {
+      pendingInteractionCount = null;
+      pendingSoftCapExceeded = false;
+      logger.error({
+        err,
+        issueId: issue.id,
+        identifier: issue.identifier,
+        interactionId: interaction.id,
+        agentId: actor.agentId,
+        runId: actor.runId,
+      }, "failed to measure pending issue-thread interaction depth; interaction is committed and the request still succeeds");
+    }
 
+    try {
       await logActivity(db, {
         companyId: issue.companyId,
         actorType: actor.actorType,
@@ -10098,7 +10119,9 @@ export function issueRoutes(
           addresseeAgentId: interaction.addresseeAgentId ?? null,
           requestedResolverPolicy: interaction.requestedResolverPolicy,
           effectiveResolverPolicy: interaction.effectiveResolverPolicy,
-          pendingInteractionCount: pendingAfterCreate.length,
+          ...(pendingInteractionCount === null
+            ? { pendingInteractionCountUnavailable: true }
+            : { pendingInteractionCount }),
           ...(pendingSoftCapExceeded
             ? {
                 pendingInteractionSoftCap: ISSUE_THREAD_INTERACTION_PENDING_SOFT_CAP,
@@ -10107,18 +10130,6 @@ export function issueRoutes(
             : {}),
         },
       });
-
-      if (pendingSoftCapExceeded) {
-        logger.warn({
-          issueId: issue.id,
-          identifier: issue.identifier,
-          interactionId: interaction.id,
-          agentId: actor.agentId,
-          runId: actor.runId,
-          pendingInteractionCount: pendingAfterCreate.length,
-          softCap: ISSUE_THREAD_INTERACTION_PENDING_SOFT_CAP,
-        }, "issue exceeds the pending issue-thread interaction soft cap");
-      }
     } catch (err) {
       logger.error({
         err,
@@ -10127,7 +10138,19 @@ export function issueRoutes(
         interactionId: interaction.id,
         agentId: actor.agentId,
         runId: actor.runId,
-      }, "post-create issue-thread interaction instrumentation failed; interaction is committed and the request still succeeds");
+      }, "failed to log issue.thread_interaction_created; interaction is committed and the request still succeeds");
+    }
+
+    if (pendingSoftCapExceeded) {
+      logger.warn({
+        issueId: issue.id,
+        identifier: issue.identifier,
+        interactionId: interaction.id,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        pendingInteractionCount,
+        softCap: ISSUE_THREAD_INTERACTION_PENDING_SOFT_CAP,
+      }, "issue exceeds the pending issue-thread interaction soft cap");
     }
 
     if (interaction.addresseeAgentId) {
