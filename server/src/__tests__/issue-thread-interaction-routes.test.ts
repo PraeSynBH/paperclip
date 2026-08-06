@@ -2283,11 +2283,18 @@ describe.sequential("issue thread interaction routes", () => {
     expect(res.body.id).toBe("interaction-1");
     // Exactly one row: the write ran once and the caller has no reason to retry.
     expect(mockInteractionService.create).toHaveBeenCalledTimes(1);
-    // The instrumentation is degraded, not the request.
-    expect(mockLogActivity).not.toHaveBeenCalledWith(
-      expect.anything(),
-      expect.objectContaining({ action: "issue.thread_interaction_created" }),
+    // The depth probe is degraded, but `issue.thread_interaction_created` is the
+    // only audit record of this creation, so it must still be written — with the
+    // count explicitly marked unavailable rather than silently absent or wrong.
+    const createdCall = mockLogActivity.mock.calls.find(
+      ([, entry]) => (entry as { action?: string }).action === "issue.thread_interaction_created",
     );
+    expect(createdCall).toBeDefined();
+    const details = (createdCall?.[1] as { details?: Record<string, unknown> }).details ?? {};
+    expect(details.pendingInteractionCountUnavailable).toBe(true);
+    expect(details.pendingInteractionCount).toBeUndefined();
+    expect(details.pendingInteractionSoftCap).toBeUndefined();
+    expect(details.pendingInteractionSoftCapExceeded).toBeUndefined();
   });
 
   // The activity write is post-commit instrumentation too, so it gets the same
@@ -2307,5 +2314,11 @@ describe.sequential("issue thread interaction routes", () => {
     expect(res.status).toBe(201);
     expect(res.body.id).toBe("interaction-1");
     expect(mockInteractionService.create).toHaveBeenCalledTimes(1);
+    // The audit write was attempted — it failed in the store, not because the
+    // route skipped it — and the failure was contained rather than surfaced.
+    expect(mockLogActivity).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "issue.thread_interaction_created" }),
+    );
   });
 });
