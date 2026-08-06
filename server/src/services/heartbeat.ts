@@ -113,6 +113,7 @@ import {
   buildHeartbeatRunStopMetadata,
   mergeHeartbeatRunStopMetadata,
   normalizeMaxTurnStopReason,
+  resolveHeartbeatRunTimeoutPolicy,
 } from "./heartbeat-stop-metadata.js";
 import {
   classifyRunLiveness,
@@ -352,6 +353,12 @@ const PAPERCLIP_HARNESS_CHECKOUT_KEY = "paperclipHarnessCheckedOut";
 const DETACHED_PROCESS_ERROR_CODE = "process_detached";
 const REPO_ONLY_CWD_SENTINEL = "/__paperclip_repo_only__";
 const MANAGED_WORKSPACE_GIT_CLONE_TIMEOUT_MS = 10 * 60 * 1000;
+// RBR-1035 AC1: margin added on top of a run's configured max wall clock
+// (`timeoutSec`) when sizing that run's agent JWT TTL. Covers clock skew
+// between the token-minting request and the adapter process actually
+// starting, plus any tail-end API calls the run makes right up against its
+// own timeout (e.g. a final disposition PATCH).
+const AGENT_JWT_RUN_TIMEOUT_MARGIN_SECONDS = 5 * 60;
 const MAX_INLINE_WAKE_COMMENTS = 8;
 const MAX_INLINE_WAKE_COMMENT_BODY_CHARS = 4_000;
 const MAX_INLINE_WAKE_COMMENT_BODY_TOTAL_CHARS = 12_000;
@@ -15253,6 +15260,23 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         issueRef?.workMode === "skill_test"
           ? { kind: "skill_test" as const, issueId: issueRef.id }
           : { kind: "standard" as const };
+      // RBR-1035 AC1: derive the JWT TTL from the run's own configured max
+      // wall clock (adapter `timeoutSec`) plus a safety margin, rather than
+      // trusting the instance-wide 1h default to always outlive the run.
+      // This is deliberately (a) from the RBR-1035 plan — a fixed max-TTL
+      // computed from the run's own bound — not (b) an in-process refresh:
+      // refreshing would require the agent process to either hold a signing
+      // secret (the exact anti-pattern under CISO review in RBR-1034) or
+      // call a not-yet-built orchestrator-brokered refresh endpoint. No new
+      // runtime moving parts are needed for a run whose maximum duration is
+      // already known up front. Runs with no configured timeout (`timeoutSec`
+      // unset/0, i.e. unbounded) keep the default TTL — there is no run
+      // duration to size the token to.
+      const runTimeoutPolicy = resolveHeartbeatRunTimeoutPolicy(agent.adapterType, runtimeConfig);
+      const jwtMinTtlSeconds =
+        runTimeoutPolicy.timeoutConfigured && runTimeoutPolicy.effectiveTimeoutSec
+          ? Math.ceil(runTimeoutPolicy.effectiveTimeoutSec) + AGENT_JWT_RUN_TIMEOUT_MARGIN_SECONDS
+          : null;
       const authToken = adapter.supportsLocalAgentJwt
         ? createLocalAgentJwt(
           agent.id,
@@ -15261,6 +15285,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           run.id,
           run.responsibleUserId,
           localAgentJwtScope,
+          jwtMinTtlSeconds,
         )
         : null;
       if (adapter.supportsLocalAgentJwt && !authToken) {
