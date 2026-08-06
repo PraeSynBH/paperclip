@@ -130,12 +130,19 @@ describeEmbeddedPostgres("RBR-852 interaction supersession (AC5 gate)", () => {
     return agentId;
   }
 
-  function confirmationPayload(title: string, supersedesInteractionIds?: string[]) {
+  function confirmationPayload(
+    title: string,
+    supersedesInteractionIds?: string[],
+    overrides?: { supersedeOnUserComment?: boolean },
+  ) {
     return {
       version: 1 as const,
       prompt: `Confirm: ${title}`,
       acceptLabel: "Confirm",
       ...(supersedesInteractionIds ? { supersedesInteractionIds } : {}),
+      ...(overrides?.supersedeOnUserComment === undefined
+        ? {}
+        : { supersedeOnUserComment: overrides.supersedeOnUserComment }),
     };
   }
 
@@ -200,9 +207,52 @@ describeEmbeddedPostgres("RBR-852 interaction supersession (AC5 gate)", () => {
     expect((await statusOf(stale190.id))?.status).toBe("pending");
   });
 
-  it("case 1b: a single pending ask still expires on a user comment (historical behaviour intact)", async () => {
+  /**
+   * Case 1b — the single-candidate branch still works when expiry-by-comment is opted into.
+   *
+   * This case opts in explicitly (`supersedeOnUserComment: true`) rather than relying on the
+   * create-time default. RBR-875 flipped `SUPERSEDE_ON_USER_COMMENT_DEFAULT` to `false`, making
+   * expiry-by-comment strictly opt-in; what this case guards is the *selection rule* in
+   * `selectCommentSupersededRows` (one candidate => expire it), which is RBR-852's contract and is
+   * independent of whatever the default happens to be. Case 1c below pins the default itself, so
+   * a future flip in either direction fails there loudly instead of silently rewriting this gate.
+   */
+  it("case 1b: a single opted-in pending ask still expires on a user comment", async () => {
     const { companyId, goalId } = await seedCompany("Single ask co");
     const issueId = await seedIssue(companyId, goalId, "One ask");
+    const agentA = await seedAgent(companyId, "Agent A");
+
+    const only = await interactionsSvc.create({ id: issueId, companyId }, {
+      kind: "request_confirmation",
+      payload: confirmationPayload("Delete 193 devices", undefined, { supersedeOnUserComment: true }),
+    }, { agentId: agentA });
+
+    const expired = await interactionsSvc.expireRequestConfirmationsSupersededByComment(
+      { id: issueId, companyId },
+      {
+        id: randomUUID(),
+        createdAt: new Date(new Date(only.createdAt).getTime() + 1_000),
+        authorUserId: "local-board",
+      },
+      { userId: "local-board" },
+    );
+
+    expect(expired).toHaveLength(1);
+    expect(expired[0]?.id).toBe(only.id);
+    expect((await statusOf(only.id))?.status).toBe("expired");
+  });
+
+  /**
+   * Case 1c — expiry-by-comment is opt-in at create time (RBR-875).
+   *
+   * An ask created without an opinion must not be retired by a passing board comment. This is the
+   * companion half of the RBR-823 defect: RBR-852 stopped a comment from expiring *several* asks,
+   * RBR-875 stopped it from expiring an unconsenting *single* ask. Asserted here so the default is
+   * covered by the acceptance gate and cannot drift back unnoticed.
+   */
+  it("case 1c: an ask that never opted in is not expired by a user comment", async () => {
+    const { companyId, goalId } = await seedCompany("Default opt-out co");
+    const issueId = await seedIssue(companyId, goalId, "One unconsenting ask");
     const agentA = await seedAgent(companyId, "Agent A");
 
     const only = await interactionsSvc.create({ id: issueId, companyId }, {
@@ -220,9 +270,8 @@ describeEmbeddedPostgres("RBR-852 interaction supersession (AC5 gate)", () => {
       { userId: "local-board" },
     );
 
-    expect(expired).toHaveLength(1);
-    expect(expired[0]?.id).toBe(only.id);
-    expect((await statusOf(only.id))?.status).toBe("expired");
+    expect(expired).toHaveLength(0);
+    expect((await statusOf(only.id))?.status).toBe("pending");
   });
 
   /**
@@ -390,5 +439,120 @@ describeEmbeddedPostgres("RBR-852 interaction supersession (AC5 gate)", () => {
       {},
       { agentId: author },
     )).rejects.toMatchObject({ status: 409 });
+  });
+
+  /**
+   * Case 6 — RBR-893 AC3, loud contradiction detection.
+   *
+   * The create-time sweep is scoped to same-issue + same-kind + same-agent, so a peer agent's
+   * confirmation survives a new one (correctly — no agent may destroy another's ask). AC3 is about
+   * that survivor no longer being *silent*: RBR-730 accumulated three pending confirmations for
+   * the same irreversible mass deletion with nothing anywhere flagging the contradiction.
+   *
+   * These cases pin the two halves separately: selection (pure, exact) and the create integration
+   * (warns, and critically expires nothing).
+   */
+  describe("case 6: RBR-893 AC3 loud contradiction detection", () => {
+    it("warns and expires nothing when a peer agent's confirmation is already pending", async () => {
+      const { companyId, goalId } = await seedCompany("Contradiction co");
+      const issueId = await seedIssue(companyId, goalId, "Mass deletion");
+      const ciso = await seedAgent(companyId, "CISO");
+      const cto = await seedAgent(companyId, "CTO");
+
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const peerAsk = await interactionsSvc.create({ id: issueId, companyId }, {
+          kind: "request_confirmation",
+          payload: confirmationPayload("Delete 188 devices"),
+        }, { agentId: ciso });
+
+        const newAsk = await interactionsSvc.create({ id: issueId, companyId }, {
+          kind: "request_confirmation",
+          payload: confirmationPayload("Delete 193 devices"),
+        }, { agentId: cto });
+
+        // The safety property: detection is an alarm, never a deletion primitive over a peer.
+        expect((await statusOf(peerAsk.id))?.status).toBe("pending");
+        expect((await statusOf(newAsk.id))?.status).toBe("pending");
+
+        const contradictionWarning = warn.mock.calls
+          .map((call) => String(call[0]))
+          .find((message) => message.includes("RBR-893"));
+        expect(contradictionWarning).toBeDefined();
+        expect(contradictionWarning).toContain(peerAsk.id);
+        expect(contradictionWarning).toContain(newAsk.id);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("stays quiet when the new confirmation explicitly supersedes the only pending one", async () => {
+      const { companyId, goalId } = await seedCompany("Clean supersede co");
+      const issueId = await seedIssue(companyId, goalId, "Mass deletion");
+      const author = await seedAgent(companyId, "Author");
+
+      const stale = await interactionsSvc.create({ id: issueId, companyId }, {
+        kind: "request_confirmation",
+        payload: confirmationPayload("Delete 188 devices"),
+      }, { agentId: author });
+
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      try {
+        const replacement = await interactionsSvc.create({ id: issueId, companyId }, {
+          kind: "request_confirmation",
+          payload: confirmationPayload("Delete 193 devices", [stale.id]),
+        }, { agentId: author });
+
+        // The declared link retired the predecessor, so nothing coexists and nothing is flagged.
+        expect((await statusOf(stale.id))?.status).toBe("expired");
+        expect((await statusOf(replacement.id))?.status).toBe("pending");
+        expect(
+          warn.mock.calls.map((call) => String(call[0])).filter((message) => message.includes("RBR-893")),
+        ).toEqual([]);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it("selects only pending confirmation-like peers, never itself, answered rows, or questions", () => {
+      const issueId = randomUUID();
+      const row = (over: Record<string, unknown>) => ({
+        id: randomUUID(),
+        issueId,
+        kind: "request_confirmation",
+        status: "pending",
+        createdByAgentId: randomUUID(),
+        ...over,
+      } as never);
+
+      const created = row({ kind: "request_confirmation" });
+      const peerConfirmation = row({});
+      const peerCheckbox = row({ kind: "request_checkbox_confirmation" });
+      const question = row({ kind: "ask_user_questions" });
+      const answered = row({ status: "accepted" });
+
+      const selected = selectContradictoryPendingConfirmations(
+        created,
+        [created, peerConfirmation, peerCheckbox, question, answered],
+      );
+
+      expect(selected.map((entry) => entry.id).sort()).toEqual(
+        [peerConfirmation.id, peerCheckbox.id].sort(),
+      );
+    });
+
+    it("returns nothing for a non-confirmation kind, so questions never trip the alarm", () => {
+      const issueId = randomUUID();
+      const created = { id: randomUUID(), issueId, kind: "ask_user_questions" } as never;
+      const pendingConfirmation = {
+        id: randomUUID(),
+        issueId,
+        kind: "request_confirmation",
+        status: "pending",
+        createdByAgentId: randomUUID(),
+      } as never;
+
+      expect(selectContradictoryPendingConfirmations(created, [pendingConfirmation])).toEqual([]);
+    });
   });
 });
