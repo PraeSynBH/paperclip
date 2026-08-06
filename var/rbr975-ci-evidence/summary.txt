@@ -1,0 +1,6 @@
+RESULT: PASS
+COMMAND: bash -c $'\nnode ./scripts/check-no-git-push.mjs; A=$?\nnode --test ./scripts/check-no-git-push.test.mjs; B=$?\nnode --test ./scripts/__tests__/run-vitest-stable-shard.test.mjs; C=$?\nNODE_ENV=test node --test scripts/__tests__/verification-guards.test.mjs; G=$?\nNODE_ENV=test pnpm exec vitest run --project @paperclipai/server server/src/__tests__/run-timeout-disposition.test.ts; V=$?\necho "SUMMARY no-git-push=$A no-git-push-test=$B shard-test=$C guards=$G vitest=$V"\n[ $A -eq 0 ] && [ $B -eq 0 ] && [ $C -eq 0 ] && [ $G -eq 0 ] && [ $V -eq 0 ]\n' 
+DURATION: 187s
+Test Files  1 passed (1)
+Tests  11 passed (11)
+LOG: /private/tmp/rbr875-scope/var/detached-verify/rbr975-cto-ci/run.log

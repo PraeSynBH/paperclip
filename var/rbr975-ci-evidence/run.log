@@ -1,0 +1,95 @@
+[test-preflight] OK — environment can run tests.
+  - node_env_ok
+  - node_modules_ok
+  - workspace_packages_ok
+  ✓  No unapproved `git push` invocations found in adapter/runtime code.
+✔ regex matches common git push forms (84.058333ms)
+✔ regex ignores unrelated `push` usages (0.238792ms)
+✔ findGitPushOffenses flags a bare invocation in a string (0.848041ms)
+✔ findGitPushOffenses ignores mentions inside `//` comments (100.346917ms)
+✔ findGitPushOffenses allows opt-in marker on the same line (0.273875ms)
+✔ findGitPushOffenses allows opt-in marker on the line above (0.248125ms)
+✔ findGitPushOffenses flags string-literal push even when text is split across mixed quotes (5.23425ms)
+✔ findGitPushOffenses flags args-array form passed to spawn/execFile (0.494459ms)
+✔ findGitPushOffenses ignores `git push` in a comment after a string ending with a literal backslash (0.2145ms)
+✔ findGitPushOffenses does not flag args-array form when allow marker is present (0.301542ms)
+✔ runCheck passes when scoped tree has no offenses (60.891625ms)
+✔ runCheck fails when scoped tree contains an unapproved git push (20.791583ms)
+✔ runCheck ignores opt-in marker outside the scoped tree (14.166833ms)
+✔ collectScannableFiles skips node_modules, dist, and .d.ts (43.601209ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3928.257709
+✔ the general-server shards form a complete, non-overlapping partition (5252.622292ms)
+✔ a route/authz suite never leaks into the general-server shards (982.934125ms)
+✔ shard flags are rejected for the parallel workspace groups (1559.62275ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9640.869667
+✔ AC3: a filter matching zero test files throws rather than passing silently (187.259375ms)
+✔ AC3: the RBR-912 regression — a deleted suite folded into another file is caught (116.475041ms)
+✔ AC3: filters that all match are returned with their resolutions (7.741833ms)
+✔ AC3: vitest substring-filter semantics are mirrored, including ./ prefixes (0.199708ms)
+✔ AC3: flags and their values are never mistaken for positional filters (0.204041ms)
+✔ AC3: --shard and --reporter values are not treated as filters (0.148792ms)
+✔ AC3: no filters at all is not an error (a full-suite run is legitimate) (0.137375ms)
+✔ AC3: collectTestFiles skips node_modules and dist (25.496167ms)
+✔ AC3: findSimilarTestFiles ignores noise tokens instead of suggesting everything (0.338709ms)
+✔ AC3: the guard CLI exits non-zero on a zero-match filter (1330.504584ms)
+✔ AC3: the guard CLI exits 0 for a filter that resolves (1221.823917ms)
+✔ AC3: the real test lane refuses to launch vitest on a stale filter (60007.606583ms)
+✔ AC2: NODE_ENV=production is fatal for an install lane (0.307458ms)
+✔ AC2: NODE_ENV=production is tolerated-with-warning for a test lane that forces NODE_ENV=test (0.174ms)
+✔ AC2: a sane NODE_ENV passes cleanly (0.115ms)
+✔ AC2: a missing node_modules is a setup blocker (0.941542ms)
+✔ AC2: the RBR-912 regression — an empty node_modules is a setup blocker, not a test failure (0.914ms)
+✔ AC2: node_modules without .modules.yaml is a half-provisioned tree (2.05875ms)
+✔ AC2: a production-install signature (no vitest bin) is named as such (4.076541ms)
+✔ AC2: a fully provisioned tree passes (3.139166ms)
+✔ AC2: the blocker report says 'NOT a test failure' in so many words (1.560875ms)
+✔ AC2: preflight exits with the distinct setup-blocker code 3, not vitest's 1 (1731.287875ms)
+✔ AC2: a pnpm workspace package with deps but no node_modules is a setup blocker (2.322166ms)
+✔ AC2: a provisioned workspace package passes (2.766709ms)
+✔ AC2: a dependency-free workspace package never raises a false blocker (14.386083ms)
+✔ AC2: an absent workspace package is skipped rather than reported (10.921584ms)
+✔ AC2: preflight on this repo reports only real, actionable environment state (1692.456041ms)
+✔ AC1: start returns immediately and the job completes after the starter exits (8401.423958ms)
+✔ AC1: a failing verification is reported as FAIL (exit 1) with the failing lines (5309.035458ms)
+✔ AC4: a killed job reports UNVERIFIED (exit 3), never FAIL (6088.501208ms)
+✔ AC1: an unknown job is exit 4, distinct from both pass and fail (376.333042ms)
+✔ AC1: start refuses to launch a second copy of a live job (3329.228125ms)
+✔ AC1: a verification command containing shell metacharacters survives round-tripping (5128.454083ms)
+✔ AC1: the runner forces NODE_ENV=test even when started under production (2730.994375ms)
+✔ AC1: a non-node verification is not gated on the node test environment (4859.014458ms)
+✔ AC1: --no-preflight lets a node command opt out of the env gate (9681.246292ms)
+✔ AC1: usage output is not truncated as the header grows (753.007167ms)
+✔ AC1: list reports running and completed jobs distinctly (6421.590375ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 121767.069917
+
+ RUN  v4.1.8 /private/tmp/rbr875-scope
+
+ ✓ |@paperclipai/server| src/__tests__/run-timeout-disposition.test.ts (11 tests) 51ms
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  09:07:34
+   Duration  10.92s (transform 4.57s, setup 1.36s, import 5.80s, tests 51ms, environment 0ms)
+
+SUMMARY no-git-push=0 no-git-push-test=0 shard-test=0 guards=0 vitest=0
