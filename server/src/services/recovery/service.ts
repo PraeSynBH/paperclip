@@ -68,6 +68,7 @@ import {
   withRecoveryModelProfileHint,
 } from "./model-profile-hint.js";
 import { isAutomaticRecoverySuppressedByPauseHold } from "./pause-hold-guard.js";
+import { buildRunVerificationDispositionMetadata, buildUnverifiedTimeoutNotice } from "./run-timeout-disposition.js";
 
 const EXECUTION_PATH_HEARTBEAT_RUN_STATUSES = ["queued", "running", "scheduled_retry"] as const;
 const UNSUCCESSFUL_HEARTBEAT_RUN_TERMINAL_STATUSES = ["failed", "cancelled", "timed_out"] as const;
@@ -2768,9 +2769,19 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
             metadata: notice.metadata,
           });
         } else {
-          await issuesSvc.addComment(input.issue.id, `${input.comment ?? ""}${recoveryLine}`, {}, {
-            authorType: "system",
-          });
+          // RBR-937 AC4: a run that died on the wall clock proved nothing about the
+          // code. Say "UNVERIFIED", not "broken", so a healthy change is not
+          // escalated as a failure and retried into the same unaffordable cost.
+          const unverifiedTimeoutNotice = buildUnverifiedTimeoutNotice(input.latestRun);
+          await issuesSvc.addComment(
+            input.issue.id,
+            `${input.comment ?? ""}${unverifiedTimeoutNotice ?? ""}${recoveryLine}`,
+            {},
+            {
+              authorType: "system",
+              metadata: buildRunVerificationDispositionMetadata(input.latestRun),
+            },
+          );
         }
       }
     }
