@@ -94,8 +94,42 @@ describe("AC1: concurrent runs instance-wide cannot exceed the global ceiling", 
         runningGlobal,
         load: IDLE,
       });
-      expect(runningGlobal + decision.availableSlots).toBeLessThanOrEqual(ceiling);
+      // The invariant is "admission never pushes us above the ceiling". Note that
+      // runningGlobal can legitimately start ABOVE the ceiling — runs already
+      // in flight when the cap is lowered, or when this build is deployed onto a
+      // host mid-flight. In that state the gate must admit exactly nothing rather
+      // than compound the overshoot; it must never kill or drop what is running.
+      if (runningGlobal >= ceiling) {
+        expect(decision.availableSlots).toBe(0);
+        expect(decision.deferralReason).toBe("global_ceiling");
+      } else {
+        expect(runningGlobal + decision.availableSlots).toBeLessThanOrEqual(ceiling);
+        expect(decision.availableSlots).toBeGreaterThan(0);
+      }
     }
+  });
+
+  it("drains an existing overshoot rather than compounding it", () => {
+    // The measured state was 27 runs on a host whose ceiling is 5. Admission must
+    // return 0 at every step until the overshoot has drained below the ceiling.
+    const ceiling = resolveGlobalRunCeiling(REFERENCE_CORES);
+    for (let runningGlobal = 27; runningGlobal > ceiling; runningGlobal -= 1) {
+      const decision = evaluateRunAdmission({
+        agentCap: 5,
+        runningForAgent: 0,
+        runningGlobal,
+        load: IDLE,
+      });
+      expect(decision.availableSlots).toBe(0);
+    }
+    // Once it drains to ceiling-1, dispatch resumes.
+    const resumed = evaluateRunAdmission({
+      agentCap: 5,
+      runningForAgent: 0,
+      runningGlobal: ceiling - 1,
+      load: IDLE,
+    });
+    expect(resumed.availableSlots).toBe(1);
   });
 
   it("holds the ceiling when 10 agents each demand their full cap simultaneously", () => {
@@ -183,7 +217,7 @@ describe("AC3: saturation defers the wake instead of starting a doomed run", () 
     const decision = evaluateRunAdmission({
       agentCap: 5,
       runningForAgent: 0,
-      runningGlobal: 0, // every slot looks free — only load says no
+      runningGlobal: 1, // our runs are live, so we own the load
       load: SATURATED,
     });
     expect(decision.availableSlots).toBe(0);
@@ -192,16 +226,17 @@ describe("AC3: saturation defers the wake instead of starting a doomed run", () 
     expect(decision.detail).toContain("12 cores");
   });
 
-  it("refuses even with a fully idle slot pool, because load is not slot-visible", () => {
+  it("refuses even with free slots, because load is not slot-visible", () => {
     // The 69.6% CPU unscoped `rg` and four stray vitest suites are load we did not
     // start; slot accounting cannot see them.
     const decision = evaluateRunAdmission({
       agentCap: 5,
       runningForAgent: 0,
-      runningGlobal: 0,
+      runningGlobal: 1, // 1 of 5 slots used — slot math says "yes", load says "no"
       load: { cpuCount: 12, loadAverage1m: 40.46 },
     });
     expect(decision.deferralReason).toBe("host_load");
+    expect(decision.availableSlots).toBe(0);
   });
 
   it("load refusal takes precedence over slot availability", () => {
@@ -249,6 +284,77 @@ describe("AC3: saturation defers the wake instead of starting a doomed run", () 
   });
 });
 
+describe("forward-progress escape valve: external load must not wedge the instance", () => {
+  it("admits exactly one run when load is high but nothing of ours is running", () => {
+    // Load we do not own (a human's build, another worktree's suite). If we
+    // deferred on load alone, the company would stall permanently: nothing running
+    // means nothing will ever finish to bring the load down.
+    const decision = evaluateRunAdmission({
+      agentCap: 5,
+      runningForAgent: 0,
+      runningGlobal: 0,
+      load: SATURATED,
+    });
+    expect(decision.availableSlots).toBe(1);
+    expect(decision.deferralReason).toBeNull();
+    expect(decision.detail).toMatch(/load is external/);
+  });
+
+  it("closes the valve as soon as one run is live — it is a trickle, not a bypass", () => {
+    const decision = evaluateRunAdmission({
+      agentCap: 5,
+      runningForAgent: 1,
+      runningGlobal: 1,
+      load: SATURATED,
+    });
+    expect(decision.availableSlots).toBe(0);
+    expect(decision.deferralReason).toBe("host_load");
+  });
+
+  it("cannot be used to exceed the ceiling at any load", () => {
+    for (const loadAverage1m of [0, 8, 15, 30, 45.98, 200]) {
+      const decision = evaluateRunAdmission({
+        agentCap: 99,
+        runningForAgent: 0,
+        runningGlobal: 0,
+        load: { cpuCount: 12, loadAverage1m },
+      });
+      expect(decision.availableSlots).toBeLessThanOrEqual(decision.globalCeiling);
+    }
+  });
+
+  it("respects a zero per-agent cap even under the valve", () => {
+    const decision = evaluateRunAdmission({
+      agentCap: 0,
+      runningForAgent: 0,
+      runningGlobal: 0,
+      load: SATURATED,
+    });
+    expect(decision.availableSlots).toBe(0);
+  });
+
+  it("guarantees the instance can always drain a queue from a cold start", () => {
+    // Simulate a permanently-loaded host: each admitted run completes, so
+    // runningGlobal returns to 0 and the valve admits the next one. The queue
+    // drains slowly but it does drain — no deadlock.
+    let queued = 4;
+    let iterations = 0;
+    while (queued > 0 && iterations < 50) {
+      iterations += 1;
+      const decision = evaluateRunAdmission({
+        agentCap: 5,
+        runningForAgent: 0,
+        runningGlobal: 0,
+        load: SATURATED,
+      });
+      expect(decision.availableSlots).toBeGreaterThan(0);
+      queued -= decision.availableSlots;
+    }
+    expect(queued).toBeLessThanOrEqual(0);
+    expect(iterations).toBeLessThan(50);
+  });
+});
+
 describe("regression: the measured 27-run failure cannot recur", () => {
   it("caps the exact observed scenario to the ceiling", () => {
     // 27 runs were live on a 12-core box. Replay the admission gate against that
@@ -268,7 +374,7 @@ describe("regression: the measured 27-run failure cannot recur", () => {
     const scenarios = [
       { agentCap: 5, runningForAgent: 0, runningGlobal: 5, load: IDLE },
       { agentCap: 3, runningForAgent: 3, runningGlobal: 3, load: IDLE },
-      { agentCap: 5, runningForAgent: 0, runningGlobal: 0, load: SATURATED },
+      { agentCap: 5, runningForAgent: 1, runningGlobal: 1, load: SATURATED },
     ];
     for (const scenario of scenarios) {
       const decision = evaluateRunAdmission(scenario);
