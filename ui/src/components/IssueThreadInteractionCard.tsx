@@ -27,6 +27,7 @@ import {
   type SuggestedTaskTreeNode,
 } from "../lib/issue-thread-interactions";
 import { cn, formatDateTime, formatShortDate } from "../lib/utils";
+import { InteractionSupersessionNotice } from "./InteractionSupersessionNotice";
 import { MarkdownBody, type MarkdownExternalReferenceMap } from "./MarkdownBody";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
@@ -40,6 +41,13 @@ const OTHER_ANSWER_ID = "__paperclip_other__";
 
 interface IssueThreadInteractionCardProps {
   interaction: IssueThreadInteraction;
+  /**
+   * RBR-914 (AC4). Sibling interactions on the same task, so the card can surface the
+   * multi-pending-confirmation hazard (which ask is newest, what a prose reply will actually do,
+   * and explicit supersession pointers). Presentation only — omit it and the card renders exactly
+   * as before.
+   */
+  threadInteractions?: readonly IssueThreadInteraction[];
   agentMap?: Map<string, Agent>;
   currentUserId?: string | null;
   userLabelMap?: ReadonlyMap<string, string> | null;
@@ -3082,6 +3090,7 @@ function VerdictProgressBadge({
 
 export function IssueThreadInteractionCard({
   interaction,
+  threadInteractions,
   agentMap,
   currentUserId,
   userLabelMap,
@@ -3305,6 +3314,16 @@ export function IssueThreadInteractionCard({
           />
         )}
       </div>
+
+      {/*
+       * RBR-914 (AC4). The multi-pending-confirmation hazard and explicit supersession pointers.
+       * Sits below the body so it reads as a caveat on the ask rather than part of the ask, and
+       * above the resolution footer so it is gone once the card is settled history.
+       */}
+      <InteractionSupersessionNotice
+        interaction={interaction}
+        threadInteractions={threadInteractions}
+      />
 
       {adminOutcome === "withdrawn" ? (
         <div

@@ -238,6 +238,11 @@ interface IssueChatMessageContext {
   onUploadImage?: (file: File) => Promise<string>;
   issueStatus?: string;
   /**
+   * RBR-914 (AC4). Every interaction on this task, passed to interaction cards so they can surface
+   * the multi-pending-confirmation hazard. Presentation only.
+   */
+  threadInteractions?: readonly IssueThreadInteraction[];
+  /**
    * Current assignee. Agent comments from anyone else are cross-issue writes, so
    * they carry a "for {user}" attribution chip (the open cross-task write design (attribution)).
    */
@@ -2275,6 +2280,7 @@ function ExpiredRequestConfirmationActivity({
     onCancelInteraction,
     onUploadImage,
     externalReferences,
+    threadInteractions,
   } = useContext(IssueChatCtx);
   const [expanded, setExpanded] = useState(false);
   const hasResolvedActor = Boolean(interaction.resolvedByAgentId || interaction.resolvedByUserId);
@@ -2348,6 +2354,7 @@ function ExpiredRequestConfirmationActivity({
         <div id={detailsId} className="mt-2">
           <IssueThreadInteractionCard
             interaction={interaction}
+            threadInteractions={threadInteractions}
             agentMap={agentMap}
             currentUserId={currentUserId}
             userLabelMap={userLabelMap}
@@ -2883,6 +2890,7 @@ function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
     onSubmitInteractionVerdicts,
     onUploadImage,
     externalReferences,
+    threadInteractions,
   } = useContext(IssueChatCtx);
   const custom = message.metadata.custom as Record<string, unknown>;
   const anchorId = typeof custom.anchorId === "string" ? custom.anchorId : undefined;
@@ -2932,6 +2940,7 @@ function IssueChatSystemMessage({ message }: { message: ThreadMessage }) {
         <div className="py-1.5">
           <IssueThreadInteractionCard
             interaction={interaction}
+            threadInteractions={threadInteractions}
             agentMap={agentMap}
             currentUserId={currentUserId}
             userLabelMap={userLabelMap}
@@ -4967,6 +4976,7 @@ export function IssueChatThread({
       onSubmitInteractionVerdicts: stableOnSubmitInteractionVerdicts,
       onUploadImage: stableOnUploadImage,
       issueStatus,
+      threadInteractions: interactions,
       issueAssigneeAgentId,
       successfulRunHandoff: successfulRunHandoffWithLiveness,
       externalReferences,
@@ -4996,6 +5006,7 @@ export function IssueChatThread({
       stableOnSubmitInteractionVerdicts,
       stableOnUploadImage,
       issueStatus,
+      interactions,
       issueAssigneeAgentId,
       successfulRunHandoffWithLiveness,
       externalReferences,
