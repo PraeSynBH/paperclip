@@ -513,6 +513,64 @@ export function selectCommentSupersededRows(
   return [];
 }
 
+/**
+ * RBR-893 AC3. Given the confirmation-like row that was just created and every pending
+ * confirmation-like row still live on the same issue, return the ones that now coexist with it.
+ *
+ * Why this exists. Create-time supersession only reaches rows that are same-issue **and**
+ * same-kind **and** same-agent, plus whatever the author explicitly named in
+ * `supersedesInteractionIds`. Everything outside that intersection — a peer agent's confirmation,
+ * a `request_checkbox_confirmation` sitting next to a `request_confirmation`, or a board-created
+ * ask — survives untouched. That is correct (one agent must never be able to silently destroy
+ * another's ask, and AC1 forbids guessing), but it means two contradictory irreversible
+ * instructions can sit pending on the same thread with nothing anywhere saying so. RBR-823's
+ * live example: three pending confirmations for the same mass deletion on RBR-730.
+ *
+ * Silent coexistence is the defect, so the fix is volume, not enforcement. Per the hard
+ * constraints on this issue we must not block interaction creation and must not change what
+ * agents are permitted to ask, so this returns rows for the caller to *report*, never to expire:
+ *  - auto-expiring a peer's ask would hand any agent a deletion primitive over other agents' cards
+ *  - 4xx-ing the create would fail an agent on the very call replacing a bad ask, which is the
+ *    prose-cleanup-chore RBR-823 exists to kill
+ *
+ * The author's supported route to a clean thread stays `supersedesInteractionIds` (its own asks)
+ * or an explicit withdraw. This is the alarm that tells it, and the board, that the route is
+ * needed.
+ */
+export function selectContradictoryPendingConfirmations(
+  created: Pick<IssueThreadInteractionRow, "id" | "kind">,
+  pendingOnIssue: readonly IssueThreadInteractionRow[],
+): IssueThreadInteractionRow[] {
+  if (!isRequestConfirmationLikeKind(created.kind)) return [];
+  return pendingOnIssue.filter((row) => (
+    row.id !== created.id
+    && row.status === "pending"
+    && isRequestConfirmationLikeKind(row.kind)
+  ));
+}
+
+/**
+ * RBR-893 AC3. Emit the loud signal for the rows above. Kept separate from selection so the
+ * decision is unit-testable without asserting on console output.
+ */
+function warnAboutContradictoryPendingConfirmations(
+  created: Pick<IssueThreadInteractionRow, "id" | "issueId">,
+  contradictory: readonly IssueThreadInteractionRow[],
+) {
+  if (contradictory.length === 0) return;
+  console.warn(
+    `[paperclip] RBR-893: confirmation ${created.id} was created on issue ${created.issueId} while `
+    + `${contradictory.length} other confirmation(s) are still pending there. Contradictory `
+    + "irreversible instructions can now coexist and the board cannot tell which one is current. "
+    + `Still pending: ${contradictory
+      .map((row) => `${row.id} (${row.kind}, createdByAgentId=${row.createdByAgentId ?? "none"})`)
+      .join(", ")}. `
+    + "The creating agent should declare supersedesInteractionIds on the replacement, or withdraw "
+    + "the stale asks explicitly. Nothing was auto-expired: an agent must not be able to retire "
+    + "another agent's ask, and guessing a winner is what RBR-823 reported.",
+  );
+}
+
 function normalizeCreateInteractionInput(input: CreateIssueThreadInteraction): CreateIssueThreadInteraction {
   switch (input.kind) {
     case "ask_user_questions":
@@ -2201,6 +2259,33 @@ export function issueThreadInteractionService(db: Db, opts: IssueThreadInteracti
           });
         }
         return hydrateInteraction(existing);
+      }
+
+      /**
+       * RBR-893 AC3. The create transaction has committed, so this sees the real surviving set:
+       * everything the same-agent/same-kind sweep and the explicit `supersedesInteractionIds`
+       * links already expired is gone. Whatever confirmation-like rows are still pending here
+       * genuinely coexist with the new one. Read-only and deliberately outside the transaction —
+       * this must never be able to fail or slow down the create it is reporting on.
+       */
+      if (isRequestConfirmationLikeKind(created.kind)) {
+        try {
+          const stillPending = await db
+            .select()
+            .from(issueThreadInteractions)
+            .where(and(
+              eq(issueThreadInteractions.companyId, issue.companyId),
+              eq(issueThreadInteractions.issueId, issue.id),
+              eq(issueThreadInteractions.status, "pending"),
+              ne(issueThreadInteractions.id, created.id),
+            ));
+          warnAboutContradictoryPendingConfirmations(
+            created,
+            selectContradictoryPendingConfirmations(created, stillPending),
+          );
+        } catch (error) {
+          console.error("[paperclip] RBR-893: contradictory-confirmation check failed", error);
+        }
       }
 
       await touchIssue(db, issue.id);

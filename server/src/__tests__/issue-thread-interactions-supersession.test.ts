@@ -40,7 +40,10 @@ import {
   startEmbeddedPostgresTestDatabase,
 } from "./helpers/embedded-postgres.js";
 import { instanceSettingsService } from "../services/instance-settings.js";
-import { issueThreadInteractionService } from "../services/issue-thread-interactions.js";
+import {
+  issueThreadInteractionService,
+  selectContradictoryPendingConfirmations,
+} from "../services/issue-thread-interactions.js";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
