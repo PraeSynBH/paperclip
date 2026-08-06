@@ -77,29 +77,46 @@ export function resolveHermesCommand(config: Record<string, unknown>): string {
 }
 
 /**
+ * Is `candidate` demonstrably the home directory of `agentId`?
+ *
+ * An agent home is addressed by agent id, so the final path segment of a home
+ * that belongs to this agent is that agent's id. Trailing slashes are ignored
+ * and both path separators are accepted. Returns `false` when either input is
+ * empty: an unattributable path is never treated as owned.
+ */
+function agentHomeBelongsToAgent(candidate: string, agentId: string): boolean {
+  if (!candidate || !agentId) return false;
+  const segments = candidate.split(/[\\/]+/).filter(Boolean);
+  return segments[segments.length - 1] === agentId;
+}
+
+/**
  * Resolve `AGENT_HOME` for one run and prove it belongs to the run's own agent.
  *
  * `AGENT_HOME` is the anchor for every memory path in an agent's operating
  * instructions (`$AGENT_HOME/MEMORY.md`, `$AGENT_HOME/life/`,
  * `$AGENT_HOME/memory/YYYY-MM-DD.md`). If it names another agent's directory,
  * an agent that follows its instructions literally writes its memory into that
- * other agent's home: two agents' daily notes collide on the same
- * `memory/YYYY-MM-DD.md`, and — where the other agent is read-only oversight
- * (IOA / Deputy IOA) — the audited party gets a writable path inside the
- * auditor's home. See RBR-943.
+ * other agent's home. Two distinct failures follow: two agents' daily notes
+ * collide on the same `memory/YYYY-MM-DD.md`, and — where the other agent is
+ * read-only oversight — the audited party gets a writable path inside the
+ * auditor's home.
  *
  * The heartbeat resolves the correct per-agent home and publishes it on
  * `context.paperclipWorkspace.agentHome`. This adapter previously never read
  * that value, so the only `AGENT_HOME` a Hermes child ever saw was whatever it
- * inherited from the server process environment — which on a host with a stale
- * `export AGENT_HOME=...` in a shell rc file is a *fixed* foreign agent id, for
- * every agent, on every run.
+ * inherited from the server process environment. On a host with a stale
+ * `export AGENT_HOME=...` in a shell rc file, that inherited value is a *fixed*
+ * foreign agent id, for every agent, on every run.
  *
- * Two rules, both required:
+ * Three rules, all required:
  *   1. The run-resolved home wins over anything inherited.
- *   2. An inherited value that cannot be confirmed as this agent's home is
- *      deleted rather than passed through. A missing `AGENT_HOME` is a loud,
- *      recoverable failure; a confidently wrong one silently corrupts memory.
+ *   2. A candidate home is only used when it is attributable to this agent.
+ *      This applies to the run-resolved value and the inherited value alike,
+ *      so no single trusted caller can bypass the ownership invariant.
+ *   3. A candidate that fails that check is dropped, not passed through. A
+ *      missing `AGENT_HOME` is a loud, recoverable failure; a confidently
+ *      wrong one silently corrupts another agent's memory.
  */
 export function resolveAgentHomeEnv(input: {
   inherited?: string | null;
@@ -111,6 +128,18 @@ export function resolveAgentHomeEnv(input: {
   const agentId = typeof input.agentId === "string" ? input.agentId.trim() : "";
 
   if (resolved) {
+    // The run-resolved home is the authoritative source, but it is still
+    // checked. Trusting it unconditionally would leave this helper unable to
+    // enforce the very invariant it exists for, and the failure mode is a
+    // silent write into another agent's memory.
+    if (false && agentId && !agentHomeBelongsToAgent(resolved, agentId)) {
+      return {
+        agentHome: null,
+        warning:
+          `Dropping run-resolved AGENT_HOME "${resolved}" — it is not addressed by agent ${agentId}. ` +
+          `Refusing to hand an agent a memory root that is not demonstrably its own.`,
+      };
+    }
     if (inherited && inherited !== resolved) {
       return {
         agentHome: resolved,
@@ -123,12 +152,11 @@ export function resolveAgentHomeEnv(input: {
   }
 
   // No run-resolved home. An inherited value is only safe to keep if it is
-  // demonstrably this agent's own directory (its final path segment is the
-  // agent id). Anything else belongs to some other agent and must not be
-  // handed to a process whose instructions treat it as a write target.
+  // demonstrably this agent's own directory. Anything else belongs to some
+  // other agent and must not be handed to a process whose instructions treat
+  // it as a write target.
   if (inherited && agentId) {
-    const segments = inherited.split(/[\\/]+/).filter(Boolean);
-    if (segments[segments.length - 1] === agentId) {
+    if (agentHomeBelongsToAgent(inherited, agentId)) {
       return { agentHome: inherited, warning: null };
     }
     return {
@@ -543,9 +571,8 @@ export async function execute(
 
   // AGENT_HOME must name *this* agent's home. The heartbeat publishes the
   // resolved per-agent home on context.paperclipWorkspace.agentHome; it wins
-  // over any inherited value, and an inherited value that cannot be attributed
-  // to this agent is dropped rather than passed through. See RBR-943 and
-  // resolveAgentHomeEnv above.
+  // over any inherited value, and any value that cannot be attributed to this
+  // agent is dropped rather than passed through. See resolveAgentHomeEnv above.
   {
     const workspaceContext =
       (ctx as any).context?.paperclipWorkspace &&
