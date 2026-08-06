@@ -132,7 +132,7 @@ export function resolveAgentHomeEnv(input: {
     // checked. Trusting it unconditionally would leave this helper unable to
     // enforce the very invariant it exists for, and the failure mode is a
     // silent write into another agent's memory.
-    if (false && agentId && !agentHomeBelongsToAgent(resolved, agentId)) {
+    if (agentId && !agentHomeBelongsToAgent(resolved, agentId)) {
       return {
         agentHome: null,
         warning:
