@@ -4516,17 +4516,21 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     const heartbeat = heartbeatService(db);
 
     const result = await heartbeat.reconcileStrandedAssignedIssues();
-    expect(result.terminalStatusExempted).toBe(1);
+
+    // Assert the production-visible outcome FIRST. The defect RBR-884 describes
+    // is the sweep writing a false `blocked` over finished work and handing it
+    // to a recovery owner, so that is what this test must go red on when the
+    // guard is absent. `terminalStatusExempted` is bookkeeping that only exists
+    // once the guard lands; asserting it first would make the pre-fix run fail
+    // on a missing counter and prove nothing about the real damage (RBR-976 AC3).
+    const issue = await db.select().from(issues).where(eq(issues.id, issueId)).then((rows) => rows[0] ?? null);
+    expect(issue?.status).toBe("in_progress");
+    expect(issue?.assigneeAgentId).toBe(agentId);
+
     expect(result.escalated).toBe(0);
     expect(result.continuationRequeued).toBe(0);
     expect(result.dispatchRequeued).toBe(0);
     expect(result.issueIds).toEqual([]);
-
-    // The issue must remain in_progress with its assignee intact — the sweep
-    // did not move it to `blocked` or hand it to a recovery owner.
-    const issue = await db.select().from(issues).where(eq(issues.id, issueId)).then((rows) => rows[0] ?? null);
-    expect(issue?.status).toBe("in_progress");
-    expect(issue?.assigneeAgentId).toBe(agentId);
 
     // No recovery actions or recovery issues were created.
     const recoveryActions = await db
@@ -4544,6 +4548,11 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     // No system comments were posted.
     const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
     expect(comments).toHaveLength(0);
+
+    // Finally the observability counter: the reason nothing changed must be
+    // attributable to the successful-stop exemption, not to the sweep silently
+    // skipping the issue for some unrelated reason.
+    expect(result.terminalStatusExempted).toBe(1);
   }, STRANDED_FIXTURE_SEEDING_TIMEOUT_MS);
 
   // RBR-905 specimen tests (real production timestamps) and the
