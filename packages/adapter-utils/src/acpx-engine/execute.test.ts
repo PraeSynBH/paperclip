@@ -554,7 +554,13 @@ describe("shared ACPX engine runtime behavior", () => {
     expect(prompt).toContain("--fail-with-body");
     // RBR-919: an example without a status gate teaches agents that a 403 is a
     // success, because curl exits 0 on 4xx.
-    for (const line of prompt.split("\n").filter((l) => /\bcurl\s/.test(l))) {
+    // Match curl in command position (line start, after a pipe, or inside $( ))
+    // so prose that merely mentions curl is not treated as an example.
+    const curlInvocations = prompt
+      .split("\n")
+      .filter((l) => /(?:^|\||\$\()\s*curl\s+-/.test(l));
+    expect(curlInvocations.length).toBeGreaterThan(0);
+    for (const line of curlInvocations) {
       expect(
         /--fail-with-body|--fail|pc-api\.sh|%\{http_code\}/.test(line),
         `ungated curl in generated prompt: ${line.trim()}`,

@@ -230,9 +230,11 @@ test("never teaches an API call without an HTTP status gate", () => {
   expect(prompt).toContain("Always gate API calls on the HTTP status");
 
   // Every curl invocation in the prompt must carry a status gate.
+  // Match curl in command position (line start, after a pipe, or inside $( ))
+  // so prose that merely mentions curl is not treated as an example.
   const curlInvocations = prompt
     .split("\n")
-    .filter((line) => /\bcurl\s/.test(line) && !line.trim().startsWith("-"));
+    .filter((line) => /(?:^|\||\$\()\s*curl\s+-/.test(line));
   expect(curlInvocations.length).toBeGreaterThan(0);
   for (const invocation of curlInvocations) {
     expect(
