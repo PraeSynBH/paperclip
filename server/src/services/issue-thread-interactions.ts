@@ -458,74 +458,40 @@ function shouldSupersedeInteractionOnUserComment(interaction: UserCommentSuperse
   return interaction.payload.supersedeOnUserComment === true;
 }
 
-function rowSupersedesInteractionIds(row: IssueThreadInteractionRow): string[] {
-  const ids = (row.payload as { supersedesInteractionIds?: unknown } | null)?.supersedesInteractionIds;
-  if (!Array.isArray(ids)) return [];
-  return ids.filter((id): id is string => typeof id === "string" && id.length > 0);
-}
-
-function compareInteractionRowsOldestFirst(a: IssueThreadInteractionRow, b: IssueThreadInteractionRow) {
-  const aMs = new Date(a.createdAt).getTime();
-  const bMs = new Date(b.createdAt).getTime();
-  if (aMs !== bMs) return aMs - bMs;
-  return a.id.localeCompare(b.id);
-}
-
 /**
  * RBR-852 AC1 + AC5. Given every pending supersedable row a single human comment could otherwise
  * expire, return only the rows that comment is actually allowed to expire.
  *
  * The defect this fixes: one board comment used to expire *every* pending interaction on the
  * issue, so contradictory irreversible asks were silently garbage-collected together and the
- * board could not tell which question it had just answered.
+ * board could not tell which question it had just answered — including the newest, still-correct
+ * ask the agent was actively waiting on.
  *
- * Rules, applied per kind group (confirmation-like and questions are grouped separately because
- * they answer different asks):
- *  - Exactly one candidate: the comment supersedes it. This is the historical single-ask case and
- *    is the only behaviour that survives unchanged.
- *  - More than one candidate: expire only the newest, plus any older sibling the newest
- *    explicitly named through `supersedesInteractionIds`. Per the product direction we do not
- *    guess a winner among unlinked interactions — the rest stay pending and are logged loudly,
- *    so a comment can never destroy a contradictory-but-live ask.
+ * The rule is deliberately unclever:
+ *  - Exactly one pending supersedable candidate: the comment supersedes it. A comment posted
+ *    instead of answering the only open card is a reply to that card. This is the historical
+ *    behaviour and the only one that survives unchanged.
+ *  - More than one: expire nothing and log loudly. Product direction (RBR-852 AC1) is explicit
+ *    that the fallback must never guess a winner. Every tiebreak available here is a guess —
+ *    "newest" would destroy the fresh ask and keep the stale one, which is precisely backwards.
+ *
+ * Note this is only a *backstop*. The primary mechanism is explicit `supersedesInteractionIds`,
+ * which retires the superseded ask at create time, so a well-behaved agent arrives at comment time
+ * with exactly one pending card and lands in the single-candidate branch. Interactions predating
+ * explicit linking simply stay pending until their author withdraws them.
  */
 export function selectCommentSupersededRows(
   candidates: readonly IssueThreadInteractionRow[],
 ): IssueThreadInteractionRow[] {
-  const selected: IssueThreadInteractionRow[] = [];
+  if (candidates.length <= 1) return [...candidates];
 
-  for (const group of [
-    candidates.filter((row) => isRequestConfirmationLikeKind(row.kind) || row.kind === "request_item_verdicts"),
-    candidates.filter((row) => row.kind === "ask_user_questions"),
-  ]) {
-    if (group.length === 0) continue;
-    if (group.length === 1) {
-      selected.push(group[0]!);
-      continue;
-    }
-
-    const ordered = [...group].sort(compareInteractionRowsOldestFirst);
-    const newest = ordered[ordered.length - 1]!;
-    const explicit = new Set(rowSupersedesInteractionIds(newest));
-    const skipped: string[] = [];
-    for (const row of ordered) {
-      if (row.id === newest.id || explicit.has(row.id)) {
-        selected.push(row);
-      } else {
-        skipped.push(row.id);
-      }
-    }
-    if (skipped.length > 0) {
-      // Loud backstop, per AC1: interactions created before explicit linking shipped have no
-      // link to follow, so we expire nothing rather than guess which ask the comment answered.
-      console.warn(
-        `[paperclip] RBR-852: a user comment matched ${ordered.length} pending ${newest.kind} interactions on issue ${newest.issueId}; `
-        + `expiring only the newest (${newest.id}) plus ${explicit.size} explicitly linked. Left pending: ${skipped.join(", ")}. `
-        + "The creating agent should declare supersedesInteractionIds or withdraw these explicitly.",
-      );
-    }
-  }
-
-  return selected;
+  console.warn(
+    `[paperclip] RBR-852: a user comment matched ${candidates.length} pending supersedable interactions on issue `
+    + `${candidates[0]!.issueId}; expiring none of them rather than guessing which ask the comment answered. `
+    + `Left pending: ${candidates.map((row) => `${row.id} (${row.kind})`).join(", ")}. `
+    + "The creating agent should declare supersedesInteractionIds on the replacement, or withdraw these explicitly.",
+  );
+  return [];
 }
 
 function normalizeCreateInteractionInput(input: CreateIssueThreadInteraction): CreateIssueThreadInteraction {
@@ -535,7 +501,7 @@ function normalizeCreateInteractionInput(input: CreateIssueThreadInteraction): C
         ...input,
         payload: {
           ...input.payload,
-          supersedeOnUserComment: input.payload.supersedeOnUserComment ?? true,
+          supersedeOnUserComment: input.payload.supersedeOnUserComment ?? SUPERSEDE_ON_USER_COMMENT_DEFAULT,
         },
       };
     case "request_confirmation":
@@ -543,7 +509,7 @@ function normalizeCreateInteractionInput(input: CreateIssueThreadInteraction): C
         ...input,
         payload: {
           ...input.payload,
-          supersedeOnUserComment: input.payload.supersedeOnUserComment ?? true,
+          supersedeOnUserComment: input.payload.supersedeOnUserComment ?? SUPERSEDE_ON_USER_COMMENT_DEFAULT,
         },
       };
     case "request_checkbox_confirmation":
@@ -551,7 +517,7 @@ function normalizeCreateInteractionInput(input: CreateIssueThreadInteraction): C
         ...input,
         payload: {
           ...input.payload,
-          supersedeOnUserComment: input.payload.supersedeOnUserComment ?? true,
+          supersedeOnUserComment: input.payload.supersedeOnUserComment ?? SUPERSEDE_ON_USER_COMMENT_DEFAULT,
         },
       };
     case "request_item_verdicts":
@@ -559,7 +525,7 @@ function normalizeCreateInteractionInput(input: CreateIssueThreadInteraction): C
         ...input,
         payload: {
           ...input.payload,
-          supersedeOnUserComment: input.payload.supersedeOnUserComment ?? true,
+          supersedeOnUserComment: input.payload.supersedeOnUserComment ?? SUPERSEDE_ON_USER_COMMENT_DEFAULT,
         },
       };
     default:
@@ -1334,6 +1300,26 @@ export function issueThreadInteractionService(db: Db, opts: IssueThreadInteracti
     return hydrateInteraction(current);
   }
 
+  /**
+   * RBR-852 AC2 + finding 3. Company-scoped read for the cross-issue withdraw route.
+   *
+   * `getForIssue` pins `current.issueId === issue.id`, which is exactly the constraint that forces
+   * an agent to ask a human to clean up an ask it left on another issue. The withdraw route needs
+   * to authorize on `createdByAgentId` before it knows which issue the row lives on, so it needs a
+   * lookup that is scoped by company alone. Company scoping is still absolute.
+   */
+  async function getForCompany(scope: { companyId: string }, interactionId: string) {
+    const current = await db
+      .select()
+      .from(issueThreadInteractions)
+      .where(eq(issueThreadInteractions.id, interactionId))
+      .then((rows) => rows[0] ?? null);
+    if (!current || current.companyId !== scope.companyId) {
+      throw notFound("Interaction not found");
+    }
+    return hydrateInteraction(current);
+  }
+
   async function assertIssueWorkspaceFinalizedForAccept(args: {
     db: Pick<Db, "select">;
     issue: { id: string; companyId: string };
@@ -1629,6 +1615,7 @@ export function issueThreadInteractionService(db: Db, opts: IssueThreadInteracti
 
   return {
     getForIssue,
+    getForCompany,
     sweepMergedPullRequestConfirmations: async () => {
       const rows = await db
         .select({
