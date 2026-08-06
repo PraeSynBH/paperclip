@@ -201,6 +201,68 @@ function shouldSupersedeInteractionOnUserComment(interaction: UserCommentSuperse
   return interaction.payload.supersedeOnUserComment === true;
 }
 
+/**
+ * RBR-823. Explicit supersession links declared by the creating agent.
+ * A pending interaction may only be expired by a comment when it is the *only* candidate,
+ * or when the newest pending interaction explicitly names it here.
+ */
+function supersedesInteractionIdsOf(interaction: UserCommentSupersedableInteraction): string[] {
+  const ids = (interaction.payload as { supersedesInteractionIds?: unknown }).supersedesInteractionIds;
+  if (!Array.isArray(ids)) return [];
+  return ids.filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
+function rowSupersedesInteractionIds(row: IssueThreadInteractionRow): string[] {
+  if (!isUserCommentSupersedableKind(row.kind)) return [];
+  const ids = (row.payload as { supersedesInteractionIds?: unknown } | null)?.supersedesInteractionIds;
+  if (!Array.isArray(ids)) return [];
+  return ids.filter((id): id is string => typeof id === "string" && id.length > 0);
+}
+
+function compareRowsOldestFirst(a: IssueThreadInteractionRow, b: IssueThreadInteractionRow) {
+  const aMs = new Date(a.createdAt).getTime();
+  const bMs = new Date(b.createdAt).getTime();
+  if (aMs !== bMs) return aMs - bMs;
+  return a.id.localeCompare(b.id);
+}
+
+/**
+ * RBR-823 guard. Given every pending supersedable row that a single comment could otherwise
+ * expire, return only the rows that comment is actually allowed to expire.
+ *
+ * Rules, per kind group (confirmations and questions are grouped separately because they answer
+ * different asks):
+ *  - Exactly one candidate: the comment supersedes it. This is the historical single-ask case.
+ *  - More than one candidate: expire only the newest one, plus any older ones the newest
+ *    explicitly named through `supersedesInteractionIds`. Everything else stays pending, so a
+ *    board comment can never silently destroy a contradictory-but-live ask.
+ */
+export function selectCommentSupersededRows(
+  candidates: readonly IssueThreadInteractionRow[],
+): IssueThreadInteractionRow[] {
+  const selected: IssueThreadInteractionRow[] = [];
+
+  for (const group of [
+    candidates.filter((row) => isRequestConfirmationLikeKind(row.kind)),
+    candidates.filter((row) => row.kind === "ask_user_questions"),
+  ]) {
+    if (group.length === 0) continue;
+    if (group.length === 1) {
+      selected.push(group[0]!);
+      continue;
+    }
+
+    const ordered = [...group].sort(compareRowsOldestFirst);
+    const newest = ordered[ordered.length - 1]!;
+    const explicit = new Set(rowSupersedesInteractionIds(newest));
+    for (const row of ordered) {
+      if (row.id === newest.id || explicit.has(row.id)) selected.push(row);
+    }
+  }
+
+  return selected;
+}
+
 function normalizeCreateInteractionInput(input: CreateIssueThreadInteraction): CreateIssueThreadInteraction {
   switch (input.kind) {
     case "ask_user_questions":
@@ -247,6 +309,37 @@ function buildSupersededByCommentResult(row: IssueThreadInteractionRow, commentI
     version: 1,
     outcome: "superseded_by_comment",
     commentId,
+  } as const;
+}
+
+/** RBR-823 AC3: a newer confirmation retired this one; the pointer must survive in the result. */
+function buildSupersededByInteractionResult(
+  row: IssueThreadInteractionRow,
+  supersededByInteractionId: string,
+) {
+  if (row.kind === "ask_user_questions") {
+    return {
+      version: 1,
+      answers: [],
+      expirationReason: "superseded_by_interaction",
+      supersededByInteractionId,
+      summaryMarkdown: null,
+    } as const;
+  }
+
+  return {
+    version: 1,
+    outcome: "superseded_by_interaction",
+    supersededByInteractionId,
+  } as const;
+}
+
+/** RBR-823 AC2: an agent retiring its own stale ask. */
+function buildAgentCancelledConfirmationResult(reason: string | null) {
+  return {
+    version: 1,
+    outcome: "cancelled",
+    reason,
   } as const;
 }
 
@@ -1337,7 +1430,7 @@ export function issueThreadInteractionService(db: Db) {
           eq(issueThreadInteractions.status, "pending"),
         ));
 
-      const superseded = rows.filter((row) => {
+      const superseded = selectCommentSupersededRows(rows.filter((row) => {
         if (!isUserCommentSupersedableKind(row.kind)) return false;
         const interaction = hydrateInteraction(row) as UserCommentSupersedableInteraction;
         return (
@@ -1347,7 +1440,7 @@ export function issueThreadInteractionService(db: Db) {
             interactionCreatedAt: row.createdAt,
           })
         );
-      });
+      }));
 
       if (superseded.length === 0) return [];
 
@@ -1438,9 +1531,9 @@ export function issueThreadInteractionService(db: Db) {
 
       const rowById = new Map(rows.map((row) => [row.id, row] as const));
       for (const { comment, rowIds } of supersededByComment.values()) {
-        const commentRows = rowIds
+        const commentRows = selectCommentSupersededRows(rowIds
           .map((rowId) => rowById.get(rowId))
-          .filter((row): row is IssueThreadInteractionRow => Boolean(row));
+          .filter((row): row is IssueThreadInteractionRow => Boolean(row)));
         const questionRowIds = commentRows
           .filter((row) => row.kind === "ask_user_questions")
           .map((row) => row.id);

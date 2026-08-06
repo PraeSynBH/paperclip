@@ -650,6 +650,16 @@ export const askUserQuestionsQuestionOptionSchema = z.object({
   description: z.string().trim().max(500).nullable().optional(),
 });
 
+/**
+ * RBR-823: explicit supersession link. Ids of pending interactions on the same issue that the
+ * new interaction replaces. Blanket comment-driven supersession is no longer allowed to expire
+ * more than one pending interaction without one of these links.
+ */
+export const supersedesInteractionIdsSchema = z
+  .array(z.string().uuid())
+  .max(20)
+  .optional();
+
 export const askUserQuestionsQuestionSchema = z.object({
   id: z.string().trim().min(1).max(120),
   prompt: z.string().trim().min(1).max(500),
@@ -664,6 +674,7 @@ export const askUserQuestionsPayloadSchema = z.object({
   title: z.string().trim().max(240).nullable().optional(),
   submitLabel: z.string().trim().max(120).nullable().optional(),
   supersedeOnUserComment: z.boolean().optional(),
+  supersedesInteractionIds: supersedesInteractionIdsSchema,
   questions: z.array(askUserQuestionsQuestionSchema).min(1).max(10),
 }).superRefine((value, ctx) => {
   const seenQuestionIds = new Set<string>();
@@ -702,8 +713,9 @@ export const askUserQuestionsResultSchema = z.object({
   answers: z.array(askUserQuestionsAnswerSchema).max(20),
   cancelled: z.literal(true).optional(),
   cancellationReason: z.string().trim().max(4000).nullable().optional(),
-  expirationReason: z.literal("superseded_by_comment").optional(),
+  expirationReason: z.enum(["superseded_by_comment", "superseded_by_interaction"]).optional(),
   commentId: z.string().uuid().nullable().optional(),
+  supersededByInteractionId: z.string().uuid().nullable().optional(),
   summaryMarkdown: z.string().max(20000).nullable().optional(),
 });
 
@@ -750,6 +762,7 @@ export const requestConfirmationPayloadSchema = z.object({
   declineReasonPlaceholder: z.string().trim().min(1).max(240).nullable().optional(),
   detailsMarkdown: z.string().max(20000).nullable().optional(),
   supersedeOnUserComment: z.boolean().optional(),
+  supersedesInteractionIds: supersedesInteractionIdsSchema,
   target: requestConfirmationTargetSchema.nullable().optional(),
 });
 
@@ -779,6 +792,7 @@ export const requestCheckboxConfirmationPayloadSchema = z.object({
   allowDeclineReason: z.boolean().optional().default(true),
   declineReasonPlaceholder: z.string().trim().min(1).max(240).nullable().optional(),
   supersedeOnUserComment: z.boolean().optional(),
+  supersedesInteractionIds: supersedesInteractionIdsSchema,
   target: requestConfirmationTargetSchema.nullable().optional(),
 }).superRefine((value, ctx) => {
   const optionIds = new Set<string>();
@@ -855,9 +869,17 @@ export const requestCheckboxConfirmationPayloadSchema = z.object({
 
 export const requestConfirmationResultSchema = z.object({
   version: z.literal(1),
-  outcome: z.enum(["accepted", "rejected", "superseded_by_comment", "stale_target"]),
+  outcome: z.enum([
+    "accepted",
+    "rejected",
+    "superseded_by_comment",
+    "superseded_by_interaction",
+    "stale_target",
+    "cancelled",
+  ]),
   reason: z.string().trim().max(4000).nullable().optional(),
   commentId: z.string().uuid().nullable().optional(),
+  supersededByInteractionId: z.string().uuid().nullable().optional(),
   staleTarget: requestConfirmationTargetSchema.nullable().optional(),
 });
 

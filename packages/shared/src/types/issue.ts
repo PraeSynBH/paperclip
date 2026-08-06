@@ -779,6 +779,12 @@ export interface AskUserQuestionsPayload {
   title?: string | null;
   submitLabel?: string | null;
   supersedeOnUserComment?: boolean;
+  /**
+   * Explicit supersession link (RBR-823). Ids of pending interactions on the same issue that
+   * this interaction replaces. A comment never expires more than one pending interaction
+   * unless the replacement declared the link here.
+   */
+  supersedesInteractionIds?: string[];
   questions: AskUserQuestionsQuestion[];
 }
 
@@ -793,8 +799,9 @@ export interface AskUserQuestionsResult {
   answers: AskUserQuestionsAnswer[];
   cancelled?: true;
   cancellationReason?: string | null;
-  expirationReason?: "superseded_by_comment";
+  expirationReason?: "superseded_by_comment" | "superseded_by_interaction";
   commentId?: string | null;
+  supersededByInteractionId?: string | null;
   summaryMarkdown?: string | null;
 }
 
@@ -833,6 +840,12 @@ export interface RequestConfirmationPayload {
   declineReasonPlaceholder?: string | null;
   detailsMarkdown?: string | null;
   supersedeOnUserComment?: boolean;
+  /**
+   * Explicit supersession link (RBR-823). Ids of pending confirmations on the same issue that
+   * this confirmation replaces. Required when the issue already has a pending confirmation:
+   * creation is rejected with 409 otherwise so contradictory irreversible asks cannot coexist.
+   */
+  supersedesInteractionIds?: string[];
   target?: RequestConfirmationTarget | null;
 }
 
@@ -857,14 +870,24 @@ export interface RequestCheckboxConfirmationPayload {
   allowDeclineReason?: boolean;
   declineReasonPlaceholder?: string | null;
   supersedeOnUserComment?: boolean;
+  /** Explicit supersession link (RBR-823). See RequestConfirmationPayload.supersedesInteractionIds. */
+  supersedesInteractionIds?: string[];
   target?: RequestConfirmationTarget | null;
 }
 
 export interface RequestConfirmationResult {
   version: 1;
-  outcome: "accepted" | "rejected" | "superseded_by_comment" | "stale_target";
+  outcome:
+    | "accepted"
+    | "rejected"
+    | "superseded_by_comment"
+    | "superseded_by_interaction"
+    | "stale_target"
+    | "cancelled";
   reason?: string | null;
   commentId?: string | null;
+  /** Set when outcome is superseded_by_interaction: the interaction that replaced this one. */
+  supersededByInteractionId?: string | null;
   staleTarget?: RequestConfirmationTarget | null;
 }
 
