@@ -106,23 +106,40 @@ V2 uses an `expand[]` query parameter to include related objects inline:
 
 ## Endpoint Availability Matrix (Current API Key)
 
+_Last verified live: 2026-08-06 (SecurityEngineering, RBR-19)._
+
 | Endpoint | Status | Data Available |
 |----------|--------|---------------|
 | `GET /company` | 200 | Company name: Aira |
 | `GET /workspaces` | 200 | 1 workspace: Aira |
-| `GET /users` | 200 | 662 users |
-| `GET /personnel` | 200 | 657 personnel (144 active employees) |
-| `GET /devices` | 200 | 621 devices (0 compliant) |
-| `GET /assets` | 200 | 425 physical assets |
+| `GET /users` | 200 | 685 users |
+| `GET /personnel` | 200 | 678 personnel |
+| `GET /devices` | 200 | 647 devices (0 compliant) |
+| `GET /assets` | 200 | 443 physical assets |
 | `GET /policies` | 200 | 35 active policies |
 | `GET /events` | 200 | Audit log accessible |
 | `GET /vendors` | 200 | 0 vendors |
 | `GET /workspaces/{id}/controls` | 200 (via `/workspaces/{id}/...` prefix) | 727 controls |
-| `GET /control-library` | 403 | Endpoint exists, no permission |
+| `GET /control-library` (top-level) | 403 | Endpoint exists, key lacks permission (Drata error code `17003`) |
+| `GET /workspaces/{id}/control-library` | 404 | Not a valid route — Drata has no workspace-scoped control-library resource |
 | `GET /workspaces/{id}/frameworks` | 200 (via `/workspaces/{id}/...` prefix) | 21 frameworks (ISO 27001:2022 = id 17, enabled; SOC 2 = id 1, `isEnabled: false` — **expected, decided state**, see below) |
-| `GET /workspaces/{id}/monitoring-tests` | 200 (via `/workspaces/{id}/...` prefix) | 148 monitoring tests |
+| `GET /workspaces/{id}/monitoring-tests` | 200 (via `/workspaces/{id}/...` prefix) | 148 monitoring tests (97 pass / 23 fail / 28 other) |
 | `GET /workspaces/{id}/evidence-library` | 200 (via `/workspaces/{id}/...` prefix) | 166 evidence-library entries |
-| `GET /risks` | 404 | Not in key scope |
+| `GET /risks` (top-level) | 404 | Not in key scope |
+| `GET /workspaces/{id}/risks` | 404 | Not in key scope (same failure on both path shapes) |
+
+**RBR-19 scope-expansion status: 5 of 6 originally-requested scopes are now live.** Controls,
+frameworks, monitoring-tests, and evidence are all `200` (workspace-scoped, per RBR-861/RBR-883/
+RBR-860). Only two gaps remain open, and they are distinct root causes, not one blocked ticket:
+
+- **`/risks`** — still `404` on both the flat and workspace-scoped path. This is a genuine
+  missing scope grant (or the account has no Risk Management module enabled) — same failure
+  mode the original RBR-19/RBR-61 reports described, unchanged since 2026-07-09.
+- **`/control-library`** — `403` at the top level (endpoint exists, key denied) and `404`
+  workspace-scoped (route doesn't exist there). This is **not a scope-expansion candidate** in
+  the workspace-scoped form; it's either a key-level entitlement Drata hasn't granted, or the
+  resource isn't exposed to non-admin API keys at all. Needs a direct question to the Drata
+  account team, not just a dashboard toggle.
 
 ### Workspace-scoped paths (RBR-860)
 
