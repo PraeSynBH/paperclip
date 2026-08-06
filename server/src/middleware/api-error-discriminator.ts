@@ -36,7 +36,7 @@ export function apiErrorDiscriminator() {
     res.json = ((body?: unknown) => {
       // Status is read at send time, not at mount time: routes call
       // `res.status(403).json(...)`, so the code is only known here.
-      if (false && res.statusCode >= 400) {
+      if (res.statusCode >= 400) {
         return originalJson(withApiErrorDiscriminator(body));
       }
       return originalJson(body);
