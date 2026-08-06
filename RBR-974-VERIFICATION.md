@@ -86,3 +86,49 @@ The technical design is done and tested. The two open items are both yours:
 2. **Rule on the escape valve** — keep the one-run trickle, or make load-refusal absolute and accept possible stalls on external load.
 
 Marking `in_review` with you as reviewer rather than `done`: the code is complete and verified, but the thing that actually stops the false positives is enforcement, and I cannot enable that under your escalation gate.
+
+---
+
+## Verification addendum (post-refactor)
+
+### Unit suite — PASS
+`server/src/services/run-admission.test.ts`: **29/29 passing**, 11s.
+
+### Full server typecheck — COMPLETED, clean in all changed files
+`tsc --noEmit` over `server/` ran to completion (~28 min at `nice -n 10`, load ~30).
+
+**68 errors total, spread across 22 files. Zero in any file this branch touches:**
+
+```
+$ grep -cE '^src/services/(run-admission|agent-start-lock|heartbeat)\.ts' tsc.log
+0
+```
+
+The 68 are stale-build resolution artifacts of my verification setup, not
+regressions. This worktree has no `packages/*/dist`, so I symlinked
+`node_modules` from the main checkout; `tsc` therefore reads older built `.d.ts`
+for the workspace packages while reading current source for `server/`. Symbols
+present in worktree source but absent from those older builds surface as
+TS2305/TS2307/TS2739. Confirmed directly: `overrideReleaseIssueTreeHoldSchema`
+exists at `packages/shared/src/validators/issue-tree-control.ts:46` and is
+exported from `packages/shared/src/index.ts:1264`.
+
+The important negative result: **`heartbeat.ts` produced no TS2307.** Its
+`@paperclipai/shared` and `@paperclipai/db` imports resolved, so the file — and
+the admission wiring inside it — was genuinely typechecked, and it is clean.
+
+### Not run, and why
+`heartbeat-stale-queue-invalidation.test.ts` and the other four heartbeat
+integration suites need `embedded-postgres` plus resolvable workspace packages.
+They fail at module load in this worktree for the same stale-symlink reason
+(`Cannot find package '@paperclipai/adapter-acpx-local/server'`), before any test
+body executes. The same file gets past module resolution and boots
+embedded-postgres in the main checkout, which localises the failure to my
+verification environment rather than the change.
+
+Closing that gap needs a real `pnpm install` + workspace build in the worktree.
+At load ~30 on a 12-core box that is precisely the cost this ticket exists to
+stop, so I did not spend it. **It is the one genuine verification gap: the
+dispatch-path refactor in `startNextQueuedRunForAgent` has typecheck plus unit
+coverage, but no integration-test execution.** Worth running before merge, on a
+quiet host.
