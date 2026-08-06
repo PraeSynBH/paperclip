@@ -179,10 +179,58 @@ function wakeDiagnosticActivityTargetsIssue(issueId: string) {
   )`;
 }
 
-function assertTransition(from: string, to: string) {
+/**
+ * RBR-953 (CEO ruling on the RBR-929 AC-3 open question): the *only* from→to
+ * edge class `assertTransition` gates is terminal → non-terminal.
+ *
+ * There is deliberately no full transition matrix. A complete matrix would be a
+ * high-blast-radius change across ~70 in-repo `issuesSvc.update` call sites to
+ * defend against a hazard exactly one of them exhibited: the RBR-864 incident
+ * was specifically the recovery reconciler writing `done -> blocked` from a
+ * status snapshot it had read earlier, outside the row lock.
+ *
+ * The distinction is not new taxonomy — the write path below already treats
+ * terminal → non-terminal as a special case, emitting
+ * `execution_workspace.source_issue_reopened` for workspaces that were archived
+ * with an `issue_terminal%` cleanup reason. This gates a line the code already
+ * draws.
+ *
+ * Legitimate reopens are real (board reopen, comment-driven reopen, watchdog
+ * revive, status-card/summary regeneration, workspace restore), so the gate is
+ * opt-in rather than absolute: those callers pass `allowTerminalReopen: true`
+ * to `update`. A caller that derives its target status from a stale snapshot
+ * does not, and is rejected. See RBR-950's `expectedStatus`/`expectedStatuses`
+ * compare-and-set for the complementary defence that makes a *losing* write
+ * touch zero rows; this gate is the one that stops a write that never should
+ * have been attempted at all.
+ */
+const TERMINAL_ISSUE_STATUSES = ["done", "cancelled"] as const;
+
+function isTerminalIssueStatusValue(status: string) {
+  return (TERMINAL_ISSUE_STATUSES as readonly string[]).includes(status);
+}
+
+function assertTransition(from: string, to: string, options?: { allowTerminalReopen?: boolean }) {
   if (from === to) return;
   if (!ALL_ISSUE_STATUSES.includes(to)) {
     throw conflict(`Unknown issue status: ${to}`);
+  }
+  // RBR-953: name the rejected edge in the message. The RBR-864 postmortem cost
+  // real time because the logs said nothing about *which* transition was wrong,
+  // so `done -> blocked` has to be greppable straight out of the error text.
+  if (isTerminalIssueStatusValue(from) && !isTerminalIssueStatusValue(to) && !options?.allowTerminalReopen) {
+    throw conflict(
+      `Refusing terminal issue status regression: ${from} -> ${to}. `
+      + "Moving an issue out of a terminal status requires an explicit "
+      + "allowTerminalReopen opt-in; a caller deriving status from an earlier "
+      + "snapshot must not silently revert a completed issue.",
+      {
+        code: "issue_terminal_status_regression",
+        from,
+        to,
+        transition: `${from} -> ${to}`,
+      },
+    );
   }
 }
 
@@ -7490,6 +7538,17 @@ export function issueService(db: Db) {
          */
         expectedStatus?: string;
         expectedStatuses?: string[];
+        /**
+         * RBR-953: explicit opt-in for a terminal → non-terminal transition
+         * (`done`/`cancelled` back to any live status).
+         *
+         * Deliberately absent from the wire schema: this is an in-process
+         * capability, not a client-supplied one. Route handlers decide whether
+         * the request they are serving is a real reopen and set it themselves;
+         * a caller that computed its target status from an earlier snapshot
+         * must leave it off so the gate can reject the write.
+         */
+        allowTerminalReopen?: boolean;
       },
       dbOrTx: any = db,
       postCommitActivityPublications?: ActivityPublication[],
@@ -7510,6 +7569,7 @@ export function issueService(db: Db) {
         actorUserId,
         expectedStatus,
         expectedStatuses,
+        allowTerminalReopen,
         ...issueData
       } = data;
 
@@ -7541,7 +7601,7 @@ export function issueService(db: Db) {
       }
 
       if (issueData.status) {
-        assertTransition(existing.status, issueData.status);
+        assertTransition(existing.status, issueData.status, { allowTerminalReopen });
       }
 
       const patch: Partial<typeof issues.$inferInsert> = {
@@ -7680,6 +7740,18 @@ export function issueService(db: Db) {
         // outside any lock at the top of `update`, so anything keyed off it
         // could describe a status/assignee the row no longer has.
         applyLockedBaselinePatchFields(receiptExisting, issueData, patch);
+        // RBR-953: re-assert the terminal-regression gate against the *locked*
+        // row, not the snapshot `existing` read before the transaction. The
+        // pre-lock check at the top of `update` is a fast fail for the obvious
+        // case, but it cannot be the enforcement point: the RBR-864 incident is
+        // exactly the interleaving where the reconciler reads a non-terminal
+        // snapshot, the run commits `done`, and the reconciler then writes
+        // `blocked`. Checked only against `existing`, that write still passes
+        // the gate. Checked here, `receiptExisting.status` is already `done` and
+        // the write is refused with the edge named.
+        if (issueData.status) {
+          assertTransition(receiptExisting.status, issueData.status, { allowTerminalReopen });
+        }
         const [previousLabelsByIssueId, previousRelationSummaries] = await Promise.all([
           nextLabelIds !== undefined
             ? labelMapForIssues(tx, [id])

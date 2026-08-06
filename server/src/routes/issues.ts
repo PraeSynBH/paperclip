@@ -11087,7 +11087,11 @@ export function issueRoutes(
             actor,
           })
         : null;
-      const reopenedIssue = await svc.update(id, { status: "todo" });
+      // RBR-953: this is the board/human comment reopen path. `isClosed` is
+      // computed from the issue this handler fetched and the target is the
+      // constant `todo`, so the terminal regression is the intended product
+      // behaviour, not a stale-snapshot artifact. Opt in explicitly.
+      const reopenedIssue = await svc.update(id, { status: "todo", allowTerminalReopen: true });
       if (!reopenedIssue) {
         res.status(404).json({ error: "Issue not found" });
         return;

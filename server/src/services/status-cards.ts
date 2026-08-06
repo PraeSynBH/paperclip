@@ -400,7 +400,10 @@ export function statusCardService(
     // covers idempotency-key hits that resolve to a terminal task (done/cancelled)
     // as well as a `blocked` one that a manual re-kick is reviving.
     const reopened = deduplicated && (TERMINAL_ISSUE_STATUSES.has(created.status) || created.status === "blocked")
-      ? await issuesSvc.update(created.id, { status: "todo", assigneeAgentId: summarizerAgentId })
+      // RBR-953: the guard on this ternary *is* the terminal check -- an
+      // idempotency-key hit resolved to a finished generation issue and we are
+      // deliberately reviving it for a fresh compile.
+      ? await issuesSvc.update(created.id, { status: "todo", assigneeAgentId: summarizerAgentId, allowTerminalReopen: true })
       : created;
     const generationIssue = await issuesSvc.update(reopened!.id, {
       description: compileDescription(card, reopened!.id, hash),
@@ -700,7 +703,11 @@ export function statusCardService(
       onDeduplicated: (reason) => { deduplicated = reason === "idempotency_key"; },
     });
     const reopened = deduplicated && TERMINAL_ISSUE_STATUSES.has(created.status)
-      ? await issuesSvc.update(created.id, { status: "todo", assigneeAgentId: summarizerAgentId })
+      // RBR-953: the guard on this ternary *is* the terminal check -- an
+      // idempotency-key hit resolved to a finished generation issue and we are
+      // deliberately reviving it for a fresh update compile. Same operation as
+      // the full-rebuild path above.
+      ? await issuesSvc.update(created.id, { status: "todo", assigneeAgentId: summarizerAgentId, allowTerminalReopen: true })
       : created;
     const generationIssue = await issuesSvc.update(reopened!.id, {
       description: updateDescription({ card, generationIssueId: reopened!.id, fingerprint, changes, kind, trigger, previousSummary, snapshot }),

@@ -16601,6 +16601,11 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             {
               status: "todo",
               executionState: null,
+              // RBR-953: `shouldReopenDeferredCommentWake` above has already
+              // established this is a human/comment-driven reopen of a terminal
+              // issue (and explicitly excludes system follow-up wakes), so the
+              // terminal regression is deliberate here.
+              allowTerminalReopen: true,
             },
             tx,
           );
