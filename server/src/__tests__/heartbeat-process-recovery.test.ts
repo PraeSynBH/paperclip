@@ -105,6 +105,31 @@ import {
   SUCCESSFUL_RUN_MISSING_STATE_REASON,
 } from "../services/recovery/index.ts";
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
+/**
+ * RBR-912 / RBR-918 / RBR-925: embedded-Postgres bootstrap on a cold cache far
+ * exceeds the 20s inline `beforeAll` budget this suite used to carry. When the
+ * hook timed out, Vitest reported the whole file as `skipped` (72 skipped, zero
+ * executed) and the run still exited in a way that reads as "not failing" —
+ * green-by-skip. A skipped test is not a passing test, so the budget is raised
+ * to a value that lets bootstrap actually finish and the assertions actually
+ * run. Tracked properly (shared helper + preflight) in RBR-912.
+ */
+const EMBEDDED_POSTGRES_BOOTSTRAP_TIMEOUT_MS = 300_000;
+/**
+ * RBR-976: `server/vitest.config.ts` sets `pool`, `maxWorkers` and `sequence`
+ * but no `testTimeout`, so every case in this file runs against Vitest's 5s
+ * per-test default. That is not a budget a case whose fixture seeds embedded
+ * Postgres can reliably meet: the first cold case in a file pays the
+ * fixture-seeding cost and measured 9.2s, while a warm sibling running the
+ * identical code path measured 4.06s — barely under. The result is a coin-flip
+ * timeout that reads as a logic failure. This is the same class of defect as
+ * the `beforeAll` budget above (RBR-940); the per-test budget was missed.
+ *
+ * Scoped deliberately to the RBR-884 cases rather than raised suite-wide, so
+ * the other cases in this file keep the tighter default and a genuine hang
+ * still surfaces fast.
+ */
+const STRANDED_FIXTURE_SEEDING_TIMEOUT_MS = 60_000;
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
 
 if (!embeddedPostgresSupport.supported) {
@@ -288,7 +313,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
   beforeAll(async () => {
     tempDb = await startEmbeddedPostgresTestDatabase("paperclip-heartbeat-recovery-");
     db = createDb(tempDb.connectionString);
-  }, 20_000);
+  }, EMBEDDED_POSTGRES_BOOTSTRAP_TIMEOUT_MS);
 
   afterEach(async () => {
     vi.clearAllMocks();
@@ -653,6 +678,14 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     livenessState?: "completed" | "advanced" | "plan_only" | "empty_response" | "blocked" | "failed" | "needs_followup" | null;
     runErrorCode?: string | null;
     runError?: string | null;
+    /**
+     * RBR-884: mark the seeded issue as recovery-origin so the recovery-origin
+     * escalation path (`escalateStrandedRecoveryIssueInPlace`) can be exercised.
+     * That path writes `blocked` independently of the
+     * `escalateStrandedAssignedIssue` funnel, so a guard on one does not cover
+     * the other.
+     */
+    originKind?: string | null;
   }) {
     const companyId = randomUUID();
     const agentId = randomUUID();
@@ -661,6 +694,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     const rootIssueId = randomUUID();
     const issueId = randomUUID();
     const now = new Date("2026-03-19T00:00:00.000Z");
+    const finishedAt = new Date("2026-03-19T00:05:00.000Z");
     const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 
     await db.insert(companies).values({
@@ -694,7 +728,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
       status: input.runStatus === "cancelled" ? "cancelled" : "failed",
       runId,
       claimedAt: now,
-      finishedAt: new Date("2026-03-19T00:05:00.000Z"),
+      finishedAt,
       error: input.runStatus === "succeeded"
         ? null
         : ("runError" in input ? input.runError : "run failed before issue advanced"),
@@ -718,8 +752,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
         ...(input.runSource ? { source: input.runSource } : {}),
       },
       startedAt: now,
-      finishedAt: new Date("2026-03-19T00:05:00.000Z"),
-      updatedAt: new Date("2026-03-19T00:05:00.000Z"),
+      finishedAt,
+      updatedAt: finishedAt,
       errorCode: input.runStatus === "succeeded"
         ? null
         : ("runErrorCode" in input ? input.runErrorCode : "process_lost"),
@@ -757,6 +791,7 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
         issueNumber: input.activePauseHold ? 2 : 1,
         identifier: `${issuePrefix}-${input.activePauseHold ? 2 : 1}`,
         startedAt: input.status === "in_progress" ? now : null,
+        ...(input.originKind ? { originKind: input.originKind } : {}),
       },
     ]);
 
@@ -4460,4 +4495,73 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     const runs = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.id, runId));
     expect(runs).toHaveLength(1);
   });
+
+  // RBR-884: A run cancelled with `issue_terminal_status` or `issue_cancelled`
+  // is a *success* signal — the agent completed its work (or the issue was
+  // deliberately closed) and the runtime correctly stopped the run. The
+  // stranded-issue recovery sweep must not treat it as a lost execution path.
+  //
+  // `retryReason` is set so that on pre-fix code this drives the sweep all the
+  // way through `didAutomaticRecoveryFail` into a real `blocked` escalation.
+  it.each([
+    { errorCode: "issue_terminal_status", label: "issue_terminal_status (issue reached done)" },
+    { errorCode: "issue_cancelled", label: "issue_cancelled (issue was deliberately cancelled)" },
+  ] as const)("does not escalate a run cancelled with $label", async ({ errorCode }) => {
+    const { companyId, agentId, issueId } = await seedStrandedIssueFixture({
+      status: "in_progress",
+      runStatus: "cancelled",
+      runErrorCode: errorCode,
+      retryReason: "issue_continuation_needed",
+    });
+    const heartbeat = heartbeatService(db);
+
+    const result = await heartbeat.reconcileStrandedAssignedIssues();
+
+    // Assert the production-visible outcome FIRST. The defect RBR-884 describes
+    // is the sweep writing a false `blocked` over finished work and handing it
+    // to a recovery owner, so that is what this test must go red on when the
+    // guard is absent. `terminalStatusExempted` is bookkeeping that only exists
+    // once the guard lands; asserting it first would make the pre-fix run fail
+    // on a missing counter and prove nothing about the real damage (RBR-976 AC3).
+    const issue = await db.select().from(issues).where(eq(issues.id, issueId)).then((rows) => rows[0] ?? null);
+    expect(issue?.status).toBe("in_progress");
+    expect(issue?.assigneeAgentId).toBe(agentId);
+
+    expect(result.escalated).toBe(0);
+    expect(result.continuationRequeued).toBe(0);
+    expect(result.dispatchRequeued).toBe(0);
+    expect(result.issueIds).toEqual([]);
+
+    // No recovery actions or recovery issues were created.
+    const recoveryActions = await db
+      .select()
+      .from(issueRecoveryActions)
+      .where(eq(issueRecoveryActions.sourceIssueId, issueId));
+    expect(recoveryActions).toHaveLength(0);
+
+    const recoveryIssues = await db
+      .select()
+      .from(issues)
+      .where(and(eq(issues.companyId, companyId), eq(issues.originKind, "stranded_issue_recovery")));
+    expect(recoveryIssues).toHaveLength(0);
+
+    // No system comments were posted.
+    const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, issueId));
+    expect(comments).toHaveLength(0);
+
+    // Finally the observability counter: the reason nothing changed must be
+    // attributable to the successful-stop exemption, not to the sweep silently
+    // skipping the issue for some unrelated reason.
+    expect(result.terminalStatusExempted).toBe(1);
+  }, STRANDED_FIXTURE_SEEDING_TIMEOUT_MS);
+
+  // RBR-905 specimen tests (real production timestamps) and the
+  // recovery-origin funnel case (`escalateStrandedRecoveryIssueInPlace`) are
+  // deliberately NOT in this file yet — they are tracked on RBR-885 together
+  // with the sibling negative control and the transactional re-read of the
+  // stale snapshot. RBR-940 landed one guard on one funnel
+  // (`escalateStrandedAssignedIssue`); a test for the other funnel would fail
+  // against it, and the fixture params those specimens need
+  // (`runStartedAt`/`runFinishedAt`) are not on `seedStrandedIssueFixture`.
+
 });

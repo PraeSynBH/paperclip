@@ -14549,6 +14549,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
 
     reconcileStrandedAssignedIssues,
 
+    // RBR-884: exposed so the recovery-classification regression tests can drive
+    // the two escalation write paths directly. The production defect was a
+    // *stale candidate snapshot* reaching these functions, which cannot be
+    // reproduced through reconcileStrandedAssignedIssues — that sweep only
+    // selects open issues, so by the time the issue row is `done` it is no
+    // longer a candidate and the race is unobservable from outside.
+    escalateStrandedAssignedIssue: recovery.escalateStrandedAssignedIssue,
+    escalateStrandedRecoveryIssueInPlace: recovery.escalateStrandedRecoveryIssueInPlace,
+
     sweepStaleIssueLocks,
 
     buildIssueGraphLivenessAutoRecoveryPreview,
