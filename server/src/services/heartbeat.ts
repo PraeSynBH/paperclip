@@ -13374,116 +13374,116 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         }
         return [];
       }
-      const policy = parseHeartbeatPolicy(agent);
-      // RBR-974: the admission decision and the row claim must be atomic across
-      // agents. withAgentStartLock only serializes one agent, so without this two
-      // agents could each read the same free global slot and both start. Global
-      // lock is taken inside the per-agent lock and never acquires an agent lock,
-      // so the nesting order cannot deadlock.
-      return withGlobalAdmissionLock(async () => {
-      const runningCount = await countRunningRunsForAgent(agentId);
-      // Admission control replaces optimistic per-agent dispatch. The gate
-      // consults the instance-wide ceiling and the live host load before any
-      // queued run is claimed. A refusal leaves runs in "queued" — resumeQueuedRuns
-      // retries them on the next sweep, so deferral costs a delay, not a run.
-      const runningGlobal = await countRunningRunsInstanceWide();
-      const admission = evaluateRunAdmission({
-        agentCap: policy.maxConcurrentRuns,
-        runningForAgent: runningCount,
-        runningGlobal,
-        load: readHostLoadSnapshot(),
-      });
-      const availableSlots = admission.availableSlots;
-      if (availableSlots <= 0) {
-        // Log at warn for load/ceiling refusals: they are the signal an operator
-        // needs to distinguish "queue is backpressured" from "scheduler is stuck".
-        logger.warn(
-          {
-            agentId,
-            deferralReason: admission.deferralReason,
-            globalCeiling: admission.globalCeiling,
-            effectiveAgentCap: admission.effectiveAgentCap,
-            runningGlobal: admission.runningGlobal,
-            runningForAgent: admission.runningForAgent,
-          },
-          admission.detail,
-        );
-        return [];
-      }
-
-      const queuedRuns = await db
-        .select()
-        .from(heartbeatRuns)
-        .where(and(
-          eq(heartbeatRuns.agentId, agentId),
-          eq(heartbeatRuns.status, "queued"),
-          cutoff ? gte(heartbeatRuns.createdAt, cutoff) : undefined,
-        ))
-        .orderBy(asc(heartbeatRuns.createdAt));
-      if (queuedRuns.length === 0) return [];
-
-      const dependencyReadiness = await listQueuedRunDependencyReadiness(agent.companyId, queuedRuns);
-      const queuedIssueIds = [...new Set(
-        queuedRuns
-          .map((run) => readNonEmptyString(parseObject(run.contextSnapshot).issueId))
-          .filter((issueId): issueId is string => Boolean(issueId)),
-      )];
-      const issueRows = await db
-        .select({
-          id: issues.id,
-          status: issues.status,
-          priority: issues.priority,
-        })
-        .from(issues)
-        .where(
-          queuedIssueIds.length > 0
-            ? and(eq(issues.companyId, agent.companyId), inArray(issues.id, queuedIssueIds))
-            : sql`false`,
-        );
-      const issueById = new Map(issueRows.map((row) => [row.id, row]));
-      const companyAgents = await listCompanyAgentOrgRows(agent.companyId);
-      const prioritizedRuns = [...queuedRuns].sort((left, right) => {
-        const leftIssueId = readNonEmptyString(parseObject(left.contextSnapshot).issueId);
-        const rightIssueId = readNonEmptyString(parseObject(right.contextSnapshot).issueId);
-        const leftReadiness = leftIssueId ? dependencyReadiness.get(leftIssueId) : null;
-        const rightReadiness = rightIssueId ? dependencyReadiness.get(rightIssueId) : null;
-        const leftReady = leftIssueId ? (leftReadiness?.isDependencyReady ?? true) : true;
-        const rightReady = rightIssueId ? (rightReadiness?.isDependencyReady ?? true) : true;
-        const leftIssue = leftIssueId ? issueById.get(leftIssueId) : null;
-        const rightIssue = rightIssueId ? issueById.get(rightIssueId) : null;
-        const leftRank = leftIssueId ? (leftReady ? (leftIssue?.status === "in_progress" ? 0 : 1) : 3) : 2;
-        const rightRank = rightIssueId ? (rightReady ? (rightIssue?.status === "in_progress" ? 0 : 1) : 3) : 2;
-        if (leftRank !== rightRank) return leftRank - rightRank;
-        const leftPriorityRank = issueRunPriorityRank(leftIssue?.priority);
-        const rightPriorityRank = issueRunPriorityRank(rightIssue?.priority);
-        if (leftPriorityRank !== rightPriorityRank) return leftPriorityRank - rightPriorityRank;
-        return left.createdAt.getTime() - right.createdAt.getTime();
-      });
-
-      const claimedRuns: Array<typeof heartbeatRuns.$inferSelect> = [];
-      for (const queuedRun of prioritizedRuns) {
-        if (claimedRuns.length >= availableSlots) break;
-        const claimed = await claimQueuedRun(queuedRun, companyAgents);
-        if (claimed) claimedRuns.push(claimed);
-      }
-      if (claimedRuns.length === 0) return [];
-
-      for (const claimedRun of claimedRuns) {
-        const execution = executeRun(claimedRun.id).catch((err) => {
-          logger.error({ err, runId: claimedRun.id }, "queued heartbeat execution failed");
-        });
-        // Register the in-flight execution so drainActiveRunExecutions() can await
-        // it. executeRun resolves only after its finally block finishes flushing
-        // run rows/events, so awaiting this promise guarantees the run's writes
-        // have landed before a caller (e.g. a test's afterEach) mutates the DB.
-        activeRunExecutionPromises.add(execution);
-        void execution.finally(() => {
-          activeRunExecutionPromises.delete(execution);
-        });
-      }
-      return claimedRuns;
-      });
+      // RBR-974: the admission decision and the row claim must be one atomic step
+      // across agents. withAgentStartLock only serializes a single agent, so
+      // without this two agents could each read the same free global slot and both
+      // start, overshooting the instance ceiling. The global lock is always taken
+      // inside the per-agent lock and never acquires an agent lock, so the nesting
+      // order cannot deadlock.
+      return withGlobalAdmissionLock(() => admitAndClaimQueuedRuns(agent, parseHeartbeatPolicy(agent), cutoff));
     });
+  }
+
+  /**
+   * RBR-974: admission control, replacing optimistic per-agent dispatch.
+   *
+   * Consults the instance-wide ceiling and live host load before claiming
+   * anything. On refusal the runs stay `queued` and the periodic resumeQueuedRuns
+   * sweep retries them — deferral costs a delay, never a dropped or killed run.
+   *
+   * Caller must hold both the agent start lock and the global admission lock.
+   */
+  async function admitAndClaimQueuedRuns(
+    agent: NonNullable<Awaited<ReturnType<typeof getAgent>>>,
+    policy: ReturnType<typeof parseHeartbeatPolicy>,
+    cutoff: Date | null,
+  ) {
+    const agentId = agent.id;
+    const admission = evaluateRunAdmission({
+      agentCap: policy.maxConcurrentRuns,
+      runningForAgent: await countRunningRunsForAgent(agentId),
+      runningGlobal: await countRunningRunsInstanceWide(),
+      load: readHostLoadSnapshot(),
+    });
+    if (admission.availableSlots <= 0) {
+      const { detail, ...fields } = admission;
+      // warn, not debug: this is the signal that distinguishes "queue is
+      // backpressured" from "scheduler is wedged" when an operator asks why
+      // nothing is starting.
+      logger.warn({ agentId, ...fields }, detail);
+      return [];
+    }
+
+    const queuedRuns = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(and(
+        eq(heartbeatRuns.agentId, agentId),
+        eq(heartbeatRuns.status, "queued"),
+        cutoff ? gte(heartbeatRuns.createdAt, cutoff) : undefined,
+      ))
+      .orderBy(asc(heartbeatRuns.createdAt));
+    if (queuedRuns.length === 0) return [];
+
+    const dependencyReadiness = await listQueuedRunDependencyReadiness(agent.companyId, queuedRuns);
+    const queuedIssueIds = [...new Set(
+      queuedRuns
+        .map((run) => readNonEmptyString(parseObject(run.contextSnapshot).issueId))
+        .filter((issueId): issueId is string => Boolean(issueId)),
+    )];
+    const issueRows = await db
+      .select({
+        id: issues.id,
+        status: issues.status,
+        priority: issues.priority,
+      })
+      .from(issues)
+      .where(
+        queuedIssueIds.length > 0
+          ? and(eq(issues.companyId, agent.companyId), inArray(issues.id, queuedIssueIds))
+          : sql`false`,
+      );
+    const issueById = new Map(issueRows.map((row) => [row.id, row]));
+    const companyAgents = await listCompanyAgentOrgRows(agent.companyId);
+    const prioritizedRuns = [...queuedRuns].sort((left, right) => {
+      const leftIssueId = readNonEmptyString(parseObject(left.contextSnapshot).issueId);
+      const rightIssueId = readNonEmptyString(parseObject(right.contextSnapshot).issueId);
+      const leftReadiness = leftIssueId ? dependencyReadiness.get(leftIssueId) : null;
+      const rightReadiness = rightIssueId ? dependencyReadiness.get(rightIssueId) : null;
+      const leftReady = leftIssueId ? (leftReadiness?.isDependencyReady ?? true) : true;
+      const rightReady = rightIssueId ? (rightReadiness?.isDependencyReady ?? true) : true;
+      const leftIssue = leftIssueId ? issueById.get(leftIssueId) : null;
+      const rightIssue = rightIssueId ? issueById.get(rightIssueId) : null;
+      const leftRank = leftIssueId ? (leftReady ? (leftIssue?.status === "in_progress" ? 0 : 1) : 3) : 2;
+      const rightRank = rightIssueId ? (rightReady ? (rightIssue?.status === "in_progress" ? 0 : 1) : 3) : 2;
+      if (leftRank !== rightRank) return leftRank - rightRank;
+      const leftPriorityRank = issueRunPriorityRank(leftIssue?.priority);
+      const rightPriorityRank = issueRunPriorityRank(rightIssue?.priority);
+      if (leftPriorityRank !== rightPriorityRank) return leftPriorityRank - rightPriorityRank;
+      return left.createdAt.getTime() - right.createdAt.getTime();
+    });
+
+    const claimedRuns: Array<typeof heartbeatRuns.$inferSelect> = [];
+    for (const queuedRun of prioritizedRuns) {
+      if (claimedRuns.length >= admission.availableSlots) break;
+      const claimed = await claimQueuedRun(queuedRun, companyAgents);
+      if (claimed) claimedRuns.push(claimed);
+    }
+
+    for (const claimedRun of claimedRuns) {
+      const execution = executeRun(claimedRun.id).catch((err) => {
+        logger.error({ err, runId: claimedRun.id }, "queued heartbeat execution failed");
+      });
+      // Register the in-flight execution so drainActiveRunExecutions() can await
+      // it. executeRun resolves only after its finally block finishes flushing
+      // run rows/events, so awaiting this promise guarantees the run's writes
+      // have landed before a caller (e.g. a test's afterEach) mutates the DB.
+      activeRunExecutionPromises.add(execution);
+      void execution.finally(() => {
+        activeRunExecutionPromises.delete(execution);
+      });
+    }
+    return claimedRuns;
   }
 
   // Await every background heartbeat execution that is currently in flight. A
