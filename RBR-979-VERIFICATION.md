@@ -1,6 +1,6 @@
 # RBR-979 — Startup reaper liveness predicate: landing record
 
-**Owner:** CTO · **Branch:** `rbr979-reaper-liveness` · **HEAD:** `3ae2c932f755ae842817192ddf0c8107ee3c2834`
+**Owner:** CTO · **Branch:** `rbr979-reaper-liveness` · **HEAD:** `9eccd948cf`
 **Worktree:** `/private/tmp/rbr979-liveness` · **Date:** 2026-08-06
 
 > **Why this file exists instead of an issue comment.** The CTO run that did this work
@@ -17,6 +17,8 @@
 | `cc1fc9004e` | fix: liveness predicate wired into `reapOrphanedRuns` |
 | `a69c00c9c7` | test: negative control (16 tests) + mutation controls |
 | `3ae2c932f7` | test: no-globalSetup vitest config |
+| `7e5c1dc474` | test: DB-level restart negative controls (5 tests, real reaper + PG) |
+| `9eccd948cf` | fix: drop stray duplicate migration blocking the embedded-PG tier |
 
 RBR-974 was not context-switched away from; it is committed separately on `rbr974-admission`
 (`442de84d07`). The two changes are additive, as the ticket states.
@@ -126,7 +128,7 @@ the world.
 
 ## AC3 — negative control, and proof it is load-bearing
 
-`server/src/__tests__/reap-liveness.test.ts` — **16 tests, 16 passed**, 573ms, no embedded Postgres
+`server/src/__tests__/reap-liveness.test.ts` — **18 tests, 18 passed**, no embedded Postgres
 (dedicated `vitest.reaplive.config.ts`, per the standing narrow-verification constraint).
 
 7 cases assert a **live run is left alone**, including the exact production shape (live process,
@@ -145,7 +147,7 @@ decorative":
   Tests  2 failed | 14 passed (16)
   ```
 
-  Restored → 16/16. The guard is load-bearing, not decorative.
+  Restored → 18/18. The guard is load-bearing, not decorative.
 
 Anti-over-correction: 4 true-positive cases plus an explicit anti-deadlock case proving the
 dead-holder path stays reachable, so runs cannot pile up forever.
@@ -160,11 +162,45 @@ time and delta, and which pids mentioned the runId. Replaces
 
 ## Verification performed
 
-- 16/16 unit tests green; mutation run fails exactly the 2 specimen tests.
-- `tsc --noEmit -p tsconfig.json` (full server project) — **zero errors on all touched files**.
-- **No restart of `paperclipai run`.** Per the ticket's explicit constraint, verification did not
-  restart the server. The predicate is proven in isolation with an injected probe; the forensic
-  counts came from `ps` and read-only DB queries.
+All green, on a clean `pnpm install` of this branch (not a borrowed `node_modules`).
+
+| Check | Result |
+|---|---|
+| `reap-liveness.test.ts` (predicate unit tests) | **18/18 passed** |
+| `heartbeat-process-recovery.test.ts -t "RBR-979"` (real reaper + embedded Postgres) | **5/5 passed** |
+| `tsc --noEmit -p tsconfig.json` (full server project) | **zero errors on all touched files** |
+| Mutation control (delete signal 2) | fails exactly the 2 specimen tests |
+
+The 5 DB tests are the end-to-end proof: the run row is `running` in real Postgres, the in-memory
+maps are **empty** (exactly what a freshly restarted process sees), and the process is a genuinely
+spawned live OS process. They pass, i.e. a simulated restart leaves live runs alone.
+
+Full-project `tsc` reports 126 errors, **all 126** from `@paperclipai/plugin-sdk` having no `dist/`
+(the install emits a warning about it). Zero are in files this branch touches; zero non-plugin errors
+exist.
+
+**No restart of `paperclipai run`.** Per the ticket's explicit constraint, verification did not
+restart the server. The predicate is proven with an injected probe plus real spawned processes; the
+forensic counts came from `ps` and read-only DB queries.
+
+### Unblocking the embedded-Postgres tier was a prerequisite
+
+The DB tests initially could not run at all. Two pre-existing faults, both fixed here:
+
+1. **Stray duplicate migration** (commit `9eccd948cf`). RAM-902 landed force-reassign as
+   `0131_force_reassign.sql` (correctly journalled) but left a **byte-identical copy** misnamed
+   `0128_force_reassign.sql` with no journal entry. `inspectMigrations()` derives "available" from
+   the `.sql` files **on disk** while drizzle applies only what the **journal** lists, so the orphan
+   is permanently pending: bootstrap can never reach `upToDate` and **every** suite calling
+   `startEmbeddedPostgresTestDatabase()` died with `Failed to bootstrap migrations:
+   0128_force_reassign.sql`. Verified by control: an untouched suite (`heartbeat-list.test.ts`)
+   failed identically. Journal and files now reconcile at 132/132. This was blocking the embedded-PG
+   tier for every agent, not just this ticket.
+2. **Inline hook budget** (in `7e5c1dc474`). A `beforeAll(fn, 20_000)` silently overrode both the
+   config `hookTimeout` and `--hookTimeout` — the RBR-912 trap, already documented verbatim in
+   `heartbeat-finalize-agent-status-pause-race.test.ts`. It masked the migration fault as a generic
+   20s timeout. Removed so budgets live in `vitest.config.ts` where they belong.
+
 
 ## Escalations — not self-authorized
 
