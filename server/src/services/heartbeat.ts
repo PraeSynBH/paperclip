@@ -137,6 +137,16 @@ import { executionWorkspaceService, mergeExecutionWorkspaceConfig } from "./exec
 import { workspaceOperationService, type WorkspaceOperationRecorder } from "./workspace-operations.js";
 import { isProcessGroupAlive, terminateLocalService } from "./local-service-supervisor.js";
 import {
+  classifyRunProcessLiveness,
+  isReapAuthorizedReason,
+  type ProcessTableProbe,
+  type ReapLivenessVerdict,
+} from "./run-reap-liveness.js";
+import {
+  captureProcessSnapshot,
+  createProcessTableProbeFromSnapshot,
+} from "./process-table-snapshot.js";
+import {
   buildExecutionWorkspaceAdapterConfig,
   gateProjectExecutionWorkspacePolicy,
   issueExecutionWorkspaceModeForPersistedWorkspace,
@@ -9595,7 +9605,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       .then((rows) => rows[0] ?? null);
   }
 
-  async function reapOrphanedRuns(opts?: { staleThresholdMs?: number }) {
+  async function reapOrphanedRuns(opts?: {
+    staleThresholdMs?: number;
+    /**
+     * OS process-table probe. Injected by tests so a negative control can
+     * present a genuinely LIVE registered run and prove the reaper leaves it
+     * alone (RBR-979 AC3). Defaults to a real one-shot `ps` snapshot.
+     */
+    processTableProbe?: ProcessTableProbe;
+  }) {
     const staleThresholdMs = opts?.staleThresholdMs ?? 0;
     const now = new Date();
 
@@ -9611,6 +9629,19 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       .where(eq(heartbeatRuns.status, "running"));
 
     const reaped: string[] = [];
+    // Per-run evidence for the destructive action. `{"reaped":31}` with a bare
+    // id list is not auditable (RBR-979 AC4).
+    const verdicts: ReapLivenessVerdict[] = [];
+    const spared: ReapLivenessVerdict[] = [];
+
+    // One process-table snapshot for the whole sweep: consistent view, and one
+    // `ps` instead of one per candidate run.
+    const processTableProbe = opts?.processTableProbe
+      ?? createProcessTableProbeFromSnapshot(
+        activeRuns.length > 0
+          ? await captureProcessSnapshot()
+          : { entries: [], byPid: new Map(), error: null },
+      );
 
     for (const { run, adapterType, adapterConfig } of activeRuns) {
       if (runningProcesses.has(run.id) || activeRunExecutions.has(run.id)) continue;
@@ -9622,11 +9653,42 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       }
 
       const tracksLocalChild = isTrackedLocalChildProcessAdapter(adapterType);
-      const processPidAlive = tracksLocalChild && run.processPid && isProcessAlive(run.processPid);
-      const processGroupAlive = tracksLocalChild && run.processGroupId && isProcessGroupAlive(run.processGroupId);
-      if (processPidAlive) {
+
+      // ── RBR-979: check process liveness before reaping ──────────────────
+      //
+      // Agent runs are separate OS processes that survive a server restart.
+      // Absence from `runningProcesses` means "this server is not tracking it",
+      // NOT "it is dead". Reap only on positive evidence of death.
+      const verdict = classifyRunProcessLiveness(
+        {
+          runId: run.id,
+          processPid: run.processPid,
+          processGroupId: run.processGroupId,
+          processStartedAt: run.processStartedAt,
+          tracksLocalChildProcess: tracksLocalChild,
+        },
+        processTableProbe,
+      );
+      verdicts.push(verdict);
+
+      if (verdict.alive || !isReapAuthorizedReason(verdict.reason)) {
+        spared.push(verdict);
+        logger.info(
+          {
+            runId: run.id,
+            agentId: run.agentId,
+            adapterType,
+            livenessReason: verdict.reason,
+            evidence: verdict.evidence,
+          },
+          "reap skipped: run process is still alive",
+        );
+        // The run is alive but this server has no handle on it. Mark it detached
+        // so recovery reads "live, untracked" instead of "lost".
         if (run.errorCode !== DETACHED_PROCESS_ERROR_CODE) {
-          const detachedMessage = `Lost in-memory process handle, but child pid ${run.processPid} is still alive`;
+          const detachedMessage = verdict.evidence.pidChecked
+            ? `Lost in-memory process handle, but child pid ${verdict.evidence.pidChecked} is still alive (${verdict.reason})`
+            : `Lost in-memory process handle, but the run process is still alive (${verdict.reason})`;
           const detachedRun = await setRunStatus(run.id, "running", {
             error: detachedMessage,
             errorCode: DETACHED_PROCESS_ERROR_CODE,
@@ -9638,7 +9700,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
               level: "warn",
               message: detachedMessage,
               payload: {
-                processPid: run.processPid,
+                livenessReason: verdict.reason,
+                ...verdict.evidence,
               },
             });
           }
@@ -9646,6 +9709,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         continue;
       }
 
+      const processGroupAlive = verdict.evidence.processGroupAlive === true;
       let descendantOnlyCleanup = false;
       if (processGroupAlive) {
         descendantOnlyCleanup = true;
@@ -9709,6 +9773,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           ...(run.processGroupId ? { processGroupId: run.processGroupId } : {}),
           ...(descendantOnlyCleanup ? { descendantOnlyCleanup: true } : {}),
           ...(retriedRun ? { retryRunId: retriedRun.id } : {}),
+          livenessReason: verdict.reason,
+          livenessEvidence: verdict.evidence,
         },
       });
 
@@ -9718,10 +9784,44 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       reaped.push(run.id);
     }
 
+    // RBR-979 AC4: a destructive sweep must be auditable per run. Emit the pid
+    // checked and the verdict for every candidate, reaped or spared.
+    const reapedVerdicts = verdicts.filter((v) => reaped.includes(v.runId));
     if (reaped.length > 0) {
-      logger.warn({ reapedCount: reaped.length, runIds: reaped }, "reaped orphaned heartbeat runs");
+      logger.warn(
+        {
+          reapedCount: reaped.length,
+          runIds: reaped,
+          sparedCount: spared.length,
+          evidence: reapedVerdicts.map((v) => ({
+            runId: v.runId,
+            reason: v.reason,
+            pidChecked: v.evidence.pidChecked,
+            pidAlive: v.evidence.pidAlive,
+            processGroupChecked: v.evidence.processGroupChecked,
+            processGroupAlive: v.evidence.processGroupAlive,
+            runIdPidsObserved: v.evidence.runIdPidsObserved,
+          })),
+        },
+        "reaped orphaned heartbeat runs",
+      );
     }
-    return { reaped: reaped.length, runIds: reaped };
+    if (spared.length > 0) {
+      logger.info(
+        {
+          sparedCount: spared.length,
+          spared: spared.map((v) => ({ runId: v.runId, reason: v.reason, pidChecked: v.evidence.pidChecked })),
+        },
+        "orphan reap spared live runs after process liveness check",
+      );
+    }
+    return {
+      reaped: reaped.length,
+      runIds: reaped,
+      spared: spared.length,
+      sparedRunIds: spared.map((v) => v.runId),
+      verdicts,
+    };
   }
 
   async function resumeQueuedRuns() {
