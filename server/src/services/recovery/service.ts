@@ -409,46 +409,6 @@ function isUnsuccessfulTerminalIssueRun(latestRun: LatestIssueRun) {
   );
 }
 
-/**
- * RBR-884: error codes that name a *successful* stop rather than a failure.
- *
- * A run carrying one of these codes did not die — it finished, or the runtime
- * deliberately stood it down, and the run row is `cancelled` only because the
- * runtime is the thing that stopped it. These must never be bucketed with
- * `timeout` / `process_lost` in the stranded-issue recovery sweep:
- *
- * - `issue_terminal_status`  — the issue reached `done`; the agent completed it.
- * - `issue_cancelled`        — the issue was deliberately cancelled.
- * - `issue_reassigned` /
- *   `issue_assignee_changed` /
- *   `lock_released_on_reassignment`
- *                            — ownership moved on purpose; the new owner is
- *                              woken instead, so there is no lost work here.
- *
- * Deliberately NOT included: `agent_not_invokable`, `budget_blocked`,
- * `issue_paused`, `issue_dependencies_blocked`, `timeout`, `process_lost`,
- * `adapter_failed`. Those name a real stop that nothing else recovers from.
- */
-const SUCCESSFUL_STOP_RUN_ERROR_CODES = new Set([
-  "issue_terminal_status",
-  "issue_cancelled",
-  "issue_reassigned",
-  "issue_assignee_changed",
-  "lock_released_on_reassignment",
-]);
-
-/**
- * True when the latest run stopped for a reason that names success rather than
- * failure. Keyed off the run row (which the sweep re-reads fresh for each
- * candidate) rather than the issue row, so it still holds when the sweep is
- * working from a stale issue snapshot — which is exactly how this defect
- * reverted `done` issues in production.
- */
-function isSuccessfulStopRun(latestRun: LatestIssueRun): boolean {
-  if (!latestRun || latestRun.status !== "cancelled") return false;
-  return SUCCESSFUL_STOP_RUN_ERROR_CODES.has(latestRun.errorCode ?? "");
-}
-
 function isSuccessfulInProgressContinuationRun(latestRun: LatestIssueRun): latestRun is SuccessfulLatestIssueRun {
   return latestRun?.status === "succeeded";
 }
@@ -2581,11 +2541,6 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     previousStatus: StrandedPreviousStatus;
     latestRun: LatestIssueRun;
   }) {
-    // RBR-884: same success-code guard as escalateStrandedAssignedIssue. The
-    // sweep loop calls this directly for recovery-origin issues, so the funnel
-    // guard alone would not cover this path.
-    if (isSuccessfulStopRun(input.latestRun)) return null;
-
     const updated = await issuesSvc.update(input.issue.id, { status: "blocked" });
     if (!updated) return null;
 
@@ -2723,17 +2678,6 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     recoveryOwnerAgentId?: string | null;
     successfulRunHandoffEvidence?: SuccessfulRunHandoffRecoveryEvidence | null;
   }) {
-    // RBR-884: last line of defence. A run that stopped with a *success* code
-    // (issue reached `done`/`cancelled`, or ownership deliberately moved) is not
-    // a lost execution path, so it must never be escalated to `blocked`.
-    //
-    // This guard lives at the write funnel rather than only in the sweep loop
-    // because in production the sweep wrote `blocked` from a *stale* issue
-    // snapshot (`previousStatus: in_progress`) minutes after the agent had
-    // already set `done`. A loop-only check on the issue row therefore does not
-    // hold; keying off the freshly-read run row does.
-    if (isSuccessfulStopRun(input.latestRun)) return null;
-
     if (isStrandedIssueRecoveryIssue(input.issue)) {
       return escalateStrandedRecoveryIssueInPlace({
         issue: input.issue,
@@ -2927,7 +2871,6 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       escalated: 0,
       waitingOnReviewResolved: 0,
       recentProgressExempted: 0,
-      terminalStatusExempted: 0,
       skipped: 0,
       issueIds: [] as string[],
     };
@@ -2978,13 +2921,6 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       }
 
       const latestRun = await getLatestIssueRun(issue.companyId, issue.id);
-      // RBR-884: A run that stopped with a *success* code (the issue reached
-      // `done`/`cancelled`, or ownership deliberately moved) is not a lost
-      // execution path. Skip it before any escalation logic runs.
-      if (isSuccessfulStopRun(latestRun)) {
-        result.terminalStatusExempted += 1;
-        continue;
-      }
       if (isStrandedIssueRecoveryIssue(issue) && isUnsuccessfulTerminalIssueRun(latestRun)) {
         const updated = await escalateStrandedRecoveryIssueInPlace({
           issue,

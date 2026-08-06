@@ -664,18 +664,13 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     runErrorCode?: string | null;
     runError?: string | null;
     /**
-     * RBR-905: mark the seeded issue as recovery-origin so the sweep takes the
-     * `escalateStrandedRecoveryIssueInPlace` branch instead of the normal
-     * `escalateStrandedAssignedIssue` funnel. The two paths write independently,
-     * so a guard on one does not cover the other.
+     * RBR-884: mark the seeded issue as recovery-origin so the recovery-origin
+     * escalation path (`escalateStrandedRecoveryIssueInPlace`) can be exercised.
+     * That path writes `blocked` independently of the
+     * `escalateStrandedAssignedIssue` funnel, so a guard on one does not cover
+     * the other.
      */
     originKind?: string | null;
-    /**
-     * RBR-905: real timestamps from the production specimen. Defaults keep the
-     * long-standing 2026-03-19 fixture clock for every existing caller.
-     */
-    runStartedAt?: Date;
-    runFinishedAt?: Date;
   }) {
     const companyId = randomUUID();
     const agentId = randomUUID();
@@ -683,8 +678,8 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     const wakeupRequestId = randomUUID();
     const rootIssueId = randomUUID();
     const issueId = randomUUID();
-    const now = input.runStartedAt ?? new Date("2026-03-19T00:00:00.000Z");
-    const finishedAt = input.runFinishedAt ?? new Date("2026-03-19T00:05:00.000Z");
+    const now = new Date("2026-03-19T00:00:00.000Z");
+    const finishedAt = new Date("2026-03-19T00:05:00.000Z");
     const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
 
     await db.insert(companies).values({
