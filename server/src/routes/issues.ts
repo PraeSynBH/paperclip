@@ -187,6 +187,7 @@ import { stalledReviewDecisionService } from "../services/stalled-review-decisio
 import { environmentService } from "../services/environments.js";
 import { environmentRuntimeService } from "../services/environment-runtime.js";
 import { redactSensitiveText } from "../redaction.js";
+import { createRunSecretRedactionRegistry } from "../services/run-secret-redaction.js";
 import {
   createCompanySearchRateLimiter,
   type CompanySearchRateLimiter,
@@ -2692,6 +2693,7 @@ export function issueRoutes(
 ) {
   const router = Router();
   const svc = issueService(db);
+  const runRedactions = createRunSecretRedactionRegistry(db);
   const access = accessService(db);
   const heartbeat = heartbeatService(db, {
     pluginWorkerManager: opts.pluginWorkerManager,
@@ -5673,7 +5675,7 @@ export function issueRoutes(
       includeForIssueComment: wakeCommentId !== null,
     });
 
-    res.json({
+    const response = {
       issue: {
         id: issue.id,
         identifier: issue.identifier,
@@ -5745,7 +5747,8 @@ export function issueRoutes(
         : null,
       planReviewContext,
       currentExecutionWorkspace: compactIssueExecutionWorkspace(currentExecutionWorkspace),
-    });
+    };
+    res.json(await runRedactions.redactForIssue(issue.companyId, issue.id, response));
   });
 
   router.get("/issues/:id/diagnostics/blockers", async (req, res) => {
@@ -9980,7 +9983,7 @@ export function issueRoutes(
       order,
       limit,
     });
-    res.json(comments);
+    res.json(await runRedactions.redactForIssue(issue.companyId, issue.id, comments));
   });
 
   router.get("/issues/:id/interactions", async (req, res) => {
@@ -10043,6 +10046,12 @@ export function issueRoutes(
       throw unprocessable("payload.toolAction is server-owned metadata and cannot be supplied when creating an interaction");
     }
 
+    // Plan-document confirmation targets are validated authoritatively inside
+    // issueThreadInteractionService.create, which re-reads the plan document's
+    // latest revision and rejects a stale/missing target under the same insert
+    // transaction (see assertRequestConfirmationTargetIsCurrent). We deliberately
+    // do not pre-check the revision here: a separate route-level read would be
+    // non-atomic with the insert and only duplicate the service gate.
     const interaction = await issueThreadInteractionService(db).create(issue, {
       ...req.body,
       sourceRunId: req.actor.type === "agent" ? agentSourceRunId : req.body.sourceRunId ?? null,
@@ -10618,7 +10627,7 @@ export function issueRoutes(
       res.status(404).json({ error: "Comment not found" });
       return;
     }
-    res.json(comment);
+    res.json(await runRedactions.redactForIssue(issue.companyId, issue.id, comment));
   });
 
   router.delete("/issues/:id/comments/:commentId", async (req, res) => {

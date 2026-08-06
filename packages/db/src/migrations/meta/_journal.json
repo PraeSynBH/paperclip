@@ -1440,8 +1440,15 @@
     {
       "idx": 207,
       "version": "7",
+      "when": 1785903493352,
+      "tag": "0207_moaning_amazoness",
+      "breakpoints": true
+    },
+    {
+      "idx": 208,
+      "version": "7",
       "when": 1785940048732,
-      "tag": "0207_expire_pending_interactions_on_closed_issues",
+      "tag": "0208_expire_pending_interactions_on_closed_issues",
       "breakpoints": true
     }
   ]

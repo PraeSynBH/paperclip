@@ -13,7 +13,7 @@ import {
 } from "@paperclipai/shared";
 
 // These literals mirror the jsonb_build_object branches in
-// packages/db/src/migrations/0207_expire_pending_interactions_on_closed_issues.sql
+// packages/db/src/migrations/0208_expire_pending_interactions_on_closed_issues.sql
 const askUserQuestionsBackfill = {
   version: 1,
   outcome: "issue_closed",
