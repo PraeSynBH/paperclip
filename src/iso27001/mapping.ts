@@ -1,5 +1,6 @@
 import { ISO_27001_2022_ANNEX_A, type IsoControl } from "./annex-a.js";
 import type { DrataControl, DrataFramework } from "../drata/types.js";
+import { controlFrameworkNames, isControlReady } from "../drata/helpers.js";
 
 export interface MappingResult {
   isoControl: IsoControl;
@@ -71,11 +72,17 @@ function assessCoverage(
   if (matches.length >= 2) return "full";
 
   const match = matches[0];
-  const isFrameworkMapped = frameworks.some((f) =>
-    match?.name?.toLowerCase().includes(f.name.toLowerCase())
-  );
+  if (!match) return "partial";
 
-  if (match && (isFrameworkMapped || match.status === "ready")) {
+  // v2 controls carry their framework linkage under `requirements`; fall back
+  // to the old name-substring heuristic when that expand isn't present.
+  const mappedFrameworks = controlFrameworkNames(match).map((n) => n.toLowerCase());
+  const isFrameworkMapped =
+    mappedFrameworks.length > 0
+      ? frameworks.some((f) => mappedFrameworks.includes(f.name.toLowerCase()))
+      : frameworks.some((f) => match.name?.toLowerCase().includes(f.name.toLowerCase()));
+
+  if (isFrameworkMapped || isControlReady(match)) {
     return "full";
   }
   return "partial";

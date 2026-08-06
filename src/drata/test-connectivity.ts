@@ -1,4 +1,5 @@
 import { DrataClient } from "./client.js";
+import { controlFrameworkNames, controlStatusLabel } from "./helpers.js";
 import { mapDrataToIso, summarizeCoverage } from "../iso27001/mapping.js";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
@@ -32,7 +33,7 @@ async function main() {
     const workspaces = await client.listWorkspaces({ size: 10 });
     console.log(`   Found ${workspaces.data.length} workspace(s)`);
     for (const ws of workspaces.data) {
-      console.log(`   - ${ws.name} (ID: ${ws.id}, Default: ${ws.isDefault})`);
+      console.log(`   - ${ws.name} (ID: ${ws.id}, Primary: ${ws.primary ?? ws.isDefault ?? false})`);
     }
     console.log();
   } catch (err: any) {
@@ -58,8 +59,11 @@ async function main() {
     const controls = await client.getAllControls();
     console.log(`   Found ${controls.length} control(s):`);
     for (const ctrl of controls.slice(0, 20)) {
-      const fwNames = ctrl.frameworks?.map((f) => f.name).join(", ") ?? "none";
-      console.log(`   - ${ctrl.name} [${ctrl.status}]` + (fwNames !== "none" ? ` — Frameworks: ${fwNames}` : ""));
+      const fwNames = controlFrameworkNames(ctrl).join(", ");
+      console.log(
+        `   - ${ctrl.name} [${controlStatusLabel(ctrl)}]` +
+          (fwNames ? ` — Frameworks: ${fwNames}` : "")
+      );
     }
     if (controls.length > 20) console.log(`   ... and ${controls.length - 20} more`);
     console.log();
@@ -72,8 +76,10 @@ async function main() {
   try {
     const tests = await client.getAllMonitoringTests();
     console.log(`   Found ${tests.length} monitoring test(s)`);
-    const passCount = tests.filter((t) => t.status === "pass").length;
-    const failCount = tests.filter((t) => t.status === "fail").length;
+    const result = (t: (typeof tests)[number]) =>
+      (t.checkResultStatus ?? t.status ?? "UNKNOWN").toUpperCase();
+    const passCount = tests.filter((t) => result(t) === "PASSED" || result(t) === "PASS").length;
+    const failCount = tests.filter((t) => result(t) === "FAILED" || result(t) === "FAIL").length;
     console.log(`   Pass: ${passCount}, Fail: ${failCount}, Other: ${tests.length - passCount - failCount}`);
     console.log();
   } catch (err: any) {
@@ -173,7 +179,7 @@ async function main() {
   }
 
   // 13. ISO 27001 mapping
-  console.log("13. ISO 27001:2022 Annex A mapping (controls may be unavailable due to API key scoping)...");
+  console.log("13. ISO 27001:2022 Annex A mapping...");
   try {
     const controls = await client.getAllControls();
     const frameworks = await client.getAllFrameworks();
@@ -222,7 +228,7 @@ async function main() {
     );
     console.log(`\n   Coverage report saved to data/iso27001-coverage.json`);
   } catch (err: any) {
-    console.log(`   Note: Controls/frameworks endpoints returned ${err.status ?? "error"} — API key needs additional scopes.\n`);
+    console.log(`   Error: ${err.message}\n`);
   }
 
   console.log("\n=== Connectivity test complete ===");

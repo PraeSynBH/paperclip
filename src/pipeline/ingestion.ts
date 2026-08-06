@@ -1,6 +1,18 @@
 import type { DrataControl, DrataEvidence, DrataMonitoringTest } from "../drata/types.js";
 import { DrataClient } from "../drata/client.js";
 
+/**
+ * Drata v2 monitoring tests no longer carry a flat `controlId`; the linked
+ * controls come back under `expand[]=controls`. Fall back to the legacy field
+ * so older cached payloads still resolve.
+ */
+function resolveTestControlId(test: DrataMonitoringTest): number | null {
+  if (typeof test.controlId === "number") return test.controlId;
+  const first = test.controls?.[0];
+  return typeof first?.id === "number" ? first.id : null;
+}
+
+
 export interface EvidenceRecord {
   id: string;
   source: "drata";
@@ -57,7 +69,8 @@ export class EvidenceIngestionPipeline {
     const coveredControls = new Set<number>();
 
     for (const test of tests) {
-      const control = controlMap.get(test.controlId);
+      const controlId = resolveTestControlId(test);
+      const control = controlId !== null ? controlMap.get(controlId) : undefined;
       const record = this.monitoringTestToRecord(test, control);
       batch.records.push(record);
       if (control) coveredControls.add(control.id);
@@ -90,17 +103,22 @@ export class EvidenceIngestionPipeline {
     test: DrataMonitoringTest,
     control?: DrataControl
   ): EvidenceRecord {
-    const status = this.determineStatus(test.lastTestedAt, test.nextTestAt);
+    const collectedAt = test.lastTestedAt ?? test.lastPassedAt ?? null;
+    const renewalDate = test.nextTestAt ?? null;
+    const status = this.determineStatus(collectedAt, renewalDate);
+    const controlId = resolveTestControlId(test);
     return {
       id: `drata-monitor-${test.id}`,
       source: "drata",
       sourceId: test.id,
-      controlId: test.controlId,
-      controlName: control?.name ?? `Control #${test.controlId}`,
+      controlId: controlId ?? 0,
+      controlName:
+        control?.name ??
+        (controlId !== null ? `Control #${controlId}` : "Unmapped control"),
       evidenceType: "monitoring_test",
       status,
-      collectedAt: test.lastTestedAt,
-      renewalDate: test.nextTestAt,
+      collectedAt,
+      renewalDate,
       rawData: test as unknown as Record<string, unknown>,
     };
   }

@@ -24,22 +24,50 @@ export interface DrataUser {
 export interface DrataWorkspace {
   id: number;
   name: string;
+  description?: string | null;
+  /** Legacy/alternate flag; the v2 API returns `primary` instead. */
+  isDefault?: boolean;
+  /** True for the account's primary workspace (v2 API shape). */
+  primary?: boolean;
+}
+
+export interface DrataControlRequirement {
+  id: number;
+  name: string;
   description: string | null;
-  isDefault: boolean;
+  frameworkName: string;
+  frameworkTag: string;
+  frameworkSlug: string;
+  externalId: string | null;
+  longDescription: string | null;
+}
+
+export interface DrataControlFlags {
+  hasEvidence: boolean;
+  hasPolicy: boolean;
+  hasTicket: boolean;
+  isReady: boolean;
+  [key: string]: boolean;
 }
 
 export interface DrataControl {
   id: number;
   name: string;
   description: string;
-  status: "ready" | "not_ready" | "not_applicable" | "not_required";
-  controlType: string;
-  remappedFromId: number | null;
-  workspaceId: number;
+  code?: string;
+  /** Legacy flat-path field; v2 exposes readiness via `flags.isReady`. */
+  status?: "ready" | "not_ready" | "not_applicable" | "not_required";
+  controlType?: string;
+  remappedFromId?: number | null;
+  workspaceId?: number;
   createdAt: string;
   updatedAt: string;
   frameworks?: DrataFramework[];
-  owners?: DrataUser[];
+  /** `expand[]=requirements` — each requirement names its framework. */
+  requirements?: DrataControlRequirement[];
+  /** `expand[]=flags` */
+  flags?: DrataControlFlags;
+  owners?: DrataUser[] | { data: DrataUser[]; totalCount: number };
   monitoringTests?: DrataMonitoringTest[];
 }
 
@@ -57,12 +85,23 @@ export interface DrataMonitoringTest {
   id: number;
   name: string;
   description: string | null;
-  status: "pass" | "fail" | "not_tested" | "not_applicable" | "unknown";
-  lastTestedAt: string | null;
-  nextTestAt: string | null;
-  testInterval: string;
-  controlId: number;
-  workspaceId: number;
+  /** Legacy flat-path field; v2 reports `checkResultStatus`. */
+  status?: "pass" | "fail" | "not_tested" | "not_applicable" | "unknown";
+  /** v2: PASSED | FAILED | ERROR | NOT_APPLICABLE | ... */
+  checkResultStatus?: string;
+  /** v2: ENABLED | DISABLED */
+  checkStatus?: string;
+  testSource?: string;
+  testId?: number;
+  lastPassedAt?: string | null;
+  failedSince?: string | null;
+  lastTestedAt?: string | null;
+  nextTestAt?: string | null;
+  testInterval?: string;
+  controlId?: number;
+  /** `expand[]=controls` */
+  controls?: DrataControl[];
+  workspaceId?: number;
   createdAt: string;
   updatedAt: string;
   evidence?: DrataEvidence[];

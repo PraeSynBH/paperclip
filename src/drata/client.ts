@@ -21,10 +21,13 @@ import type {
 export class DrataClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
+  private readonly configuredWorkspaceId?: number;
+  private workspaceIdPromise?: Promise<number>;
 
-  constructor(baseUrl?: string, apiKey?: string) {
+  constructor(baseUrl?: string, apiKey?: string, workspaceId?: number) {
     this.baseUrl = baseUrl ?? config.drata.baseUrl;
     this.apiKey = apiKey ?? config.drata.apiKey;
+    this.configuredWorkspaceId = workspaceId;
   }
 
   private async request<T>(
@@ -102,44 +105,111 @@ export class DrataClient {
     return this.request<DrataListResponse<DrataWorkspace>>("/workspaces", params);
   }
 
-  // Controls
+  /**
+   * Resolve (and cache) the workspace ID used to scope framework/control/
+   * monitoring-test paths. The Drata v2 API requires these resources to be
+   * addressed as `/workspaces/{id}/...`; the flat top-level paths 404.
+   *
+   * Prefers an explicitly configured ID, then the workspace flagged
+   * `primary` (or legacy `isDefault`), then the first workspace returned.
+   */
+  async getWorkspaceId(): Promise<number> {
+    if (this.configuredWorkspaceId !== undefined) return this.configuredWorkspaceId;
+
+    if (!this.workspaceIdPromise) {
+      this.workspaceIdPromise = (async () => {
+        const page = await this.listWorkspaces({ size: 100 });
+        const workspaces = page.data ?? [];
+        if (workspaces.length === 0) {
+          throw new Error(
+            "Drata: no workspaces returned; cannot resolve workspace-scoped API paths"
+          );
+        }
+        const primary =
+          workspaces.find((ws) => ws.primary === true) ??
+          workspaces.find((ws) => ws.isDefault === true) ??
+          workspaces[0];
+        return primary.id;
+      })().catch((err) => {
+        // Don't cache failures — allow a later call to retry.
+        this.workspaceIdPromise = undefined;
+        throw err;
+      });
+    }
+
+    return this.workspaceIdPromise;
+  }
+
+  /** Build a workspace-scoped path, e.g. `/workspaces/1/controls`. */
+  private async workspacePath(suffix: string): Promise<string> {
+    const workspaceId = await this.getWorkspaceId();
+    return `/workspaces/${workspaceId}${suffix}`;
+  }
+
+  // Controls (workspace-scoped)
   async listControls(params?: DrataListParams) {
-    return this.request<DrataListResponse<DrataControl>>("/controls", params);
+    return this.request<DrataListResponse<DrataControl>>(
+      await this.workspacePath("/controls"),
+      params
+    );
   }
 
   async getAllControls() {
-    return this.fetchAll<DrataControl>("/controls", { expand: ["frameworks", "owners", "monitoringTests"] });
+    // v2 expand enum: customFields,evidenceIds,flags,frameworkTags,owners,
+    // requirements,testIds,topics — `frameworks`/`monitoringTests` are 400s.
+    return this.fetchAll<DrataControl>(await this.workspacePath("/controls"), {
+      expand: ["frameworkTags", "owners", "requirements", "testIds", "flags"],
+    });
   }
 
   async getControl(controlId: number, expand?: string[]) {
     const params = expand ? { expand } : {};
-    return this.request<DrataControl>(`/controls/${controlId}`, params);
+    return this.request<DrataControl>(
+      await this.workspacePath(`/controls/${controlId}`),
+      params
+    );
   }
 
-  // Control Notes
+  // Control Notes (workspace-scoped)
   async listControlNotes(controlId: number, params?: DrataListParams) {
-    return this.request<DrataListResponse<DrataControlNote>>(`/controls/${controlId}/notes`, params);
+    return this.request<DrataListResponse<DrataControlNote>>(
+      await this.workspacePath(`/controls/${controlId}/notes`),
+      params
+    );
   }
 
-  // Frameworks
+  // Frameworks (workspace-scoped)
   async listFrameworks(params?: DrataListParams) {
-    return this.request<DrataListResponse<DrataFramework>>("/frameworks", params);
+    return this.request<DrataListResponse<DrataFramework>>(
+      await this.workspacePath("/frameworks"),
+      params
+    );
   }
 
   async getAllFrameworks() {
-    return this.fetchAll<DrataFramework>("/frameworks");
+    return this.fetchAll<DrataFramework>(await this.workspacePath("/frameworks"));
   }
 
-  // Monitoring Tests
+  // Monitoring Tests (workspace-scoped)
   async listMonitoringTests(params?: DrataListParams) {
-    return this.request<DrataListResponse<DrataMonitoringTest>>("/monitoring-tests", params);
+    return this.request<DrataListResponse<DrataMonitoringTest>>(
+      await this.workspacePath("/monitoring-tests"),
+      params
+    );
   }
 
   async getAllMonitoringTests() {
-    return this.fetchAll<DrataMonitoringTest>("/monitoring-tests", { expand: ["evidence"] });
+    // v2 expand enum: controls,monitorInstances,disablingUser — `evidence` 400s.
+    return this.fetchAll<DrataMonitoringTest>(
+      await this.workspacePath("/monitoring-tests"),
+      { expand: ["controls"] }
+    );
   }
 
   // Evidence Library
+  // NOTE: intentionally NOT workspace-scoped — `/workspaces/{id}/evidence`
+  // returns "Multiple artifacts are not enabled for this account" (a plan /
+  // entitlement gap), not a wrong-path 404. See RBR-860.
   async listEvidence(params?: DrataListParams) {
     return this.request<DrataListResponse<DrataEvidence>>("/evidence", params);
   }
