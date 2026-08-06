@@ -66,12 +66,33 @@ export function buildUnverifiedTimeoutNotice(run: RunTimeoutDispositionInput): s
 /**
  * Structured metadata companion to the notice, so the UI/board can render the
  * distinction rather than parsing prose.
+ *
+ * This MUST satisfy `issueCommentMetadataSchema`, which is `.strict()` and
+ * section/row shaped — `issuesSvc.addComment` parses it non-leniently, so an
+ * ad-hoc flat object would throw a ZodError and take the whole recovery comment
+ * down with it. Returns `null` for non-timeout runs so existing comments carry
+ * no new metadata.
  */
 export function buildRunVerificationDispositionMetadata(run: RunTimeoutDispositionInput) {
-  const disposition = classifyRunVerificationDisposition(run);
+  if (!isWallClockExhaustedRun(run)) return null;
+
   return {
-    verificationDisposition: disposition,
-    changeKnownBroken: false,
-    timedOut: disposition === "unverified_timeout",
+    version: 1 as const,
+    sections: [
+      {
+        title: "Verification disposition",
+        rows: [
+          { type: "key_value" as const, label: "Disposition", value: "UNVERIFIED (run exceeded wall clock)" },
+          { type: "key_value" as const, label: "Change known broken", value: "No" },
+          {
+            type: "text" as const,
+            text:
+              "A timeout is not evidence of a defect. Check whether the work is already complete in the " +
+              "working tree, and if verification is what does not fit in one run, run it detached with " +
+              "scripts/detached-verify.sh and read the durable result on the next wake.",
+          },
+        ],
+      },
+    ],
   };
 }

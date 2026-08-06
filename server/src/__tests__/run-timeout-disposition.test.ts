@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { issueCommentMetadataSchema } from "@paperclipai/shared";
+
 import {
   buildRunVerificationDispositionMetadata,
   buildUnverifiedTimeoutNotice,
@@ -75,28 +77,25 @@ describe("run timeout disposition", () => {
   });
 
   describe("structured metadata", () => {
-    it("marks a timed-out run as timedOut and never as known-broken", () => {
+    it("emits schema-valid metadata for a timed-out run that never asserts brokenness", () => {
       const metadata = buildRunVerificationDispositionMetadata({ status: "timed_out" });
 
-      expect(metadata.verificationDisposition).toBe("unverified_timeout");
-      expect(metadata.timedOut).toBe(true);
-      expect(metadata.changeKnownBroken).toBe(false);
+      // Must satisfy the real, strict comment-metadata schema — addComment parses
+      // it non-leniently, so a malformed shape would throw and lose the comment.
+      const parsed = issueCommentMetadataSchema.parse(metadata);
+
+      expect(parsed.version).toBe(1);
+      const rendered = JSON.stringify(parsed);
+      expect(rendered).toContain("UNVERIFIED");
+      expect(rendered).toContain("not evidence of a defect");
+      expect(rendered).toContain("scripts/detached-verify.sh");
+      expect(rendered).toMatch(/Change known broken[^]*?No/);
     });
 
-    it("stays indeterminate for other outcomes, and still never asserts brokenness", () => {
-      const metadata = buildRunVerificationDispositionMetadata({ status: "failed" });
-
-      expect(metadata.verificationDisposition).toBe("indeterminate");
-      expect(metadata.timedOut).toBe(false);
-      // Recovery escalation is about a missing execution path, not a proven defect.
-      expect(metadata.changeKnownBroken).toBe(false);
-    });
-
-    it("is safe on a missing run", () => {
-      const metadata = buildRunVerificationDispositionMetadata(null);
-
-      expect(metadata.verificationDisposition).toBe("indeterminate");
-      expect(metadata.timedOut).toBe(false);
+    it("attaches no metadata for outcomes that are not wall-clock timeouts", () => {
+      expect(buildRunVerificationDispositionMetadata({ status: "failed" })).toBeNull();
+      expect(buildRunVerificationDispositionMetadata({ status: "cancelled" })).toBeNull();
+      expect(buildRunVerificationDispositionMetadata(null)).toBeNull();
     });
   });
 });
