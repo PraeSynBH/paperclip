@@ -132,3 +132,75 @@ stop, so I did not spend it. **It is the one genuine verification gap: the
 dispatch-path refactor in `startNextQueuedRunForAgent` has typecheck plus unit
 coverage, but no integration-test execution.** Worth running before merge, on a
 quiet host.
+
+---
+
+## Verification addendum 2 — verification gap closed properly
+
+The prior addendum's symlinked-`node_modules` shortcut was not good enough, so I
+did the real thing: removed the 41 symlinks, ran `pnpm install --frozen-lockfile
+--prod=false` (2m52s), and ran the project's own `preflight:workspace-links`.
+
+### Unit + concurrency suites — PASS
+```
+✓ src/services/run-admission.test.ts   (29 tests)
+✓ src/services/agent-start-lock.test.ts (6 tests)
+  Test Files  2 passed (2)
+       Tests  35 passed (35)
+```
+
+New `agent-start-lock.test.ts` covers the concurrency primitive that is the
+actual risk in this change — the cross-agent TOCTOU hole — without needing a
+database. It asserts the lock serializes overlapping sections, releases on throw,
+and does not deadlock nested inside `withAgentStartLock`. Most importantly it
+runs 10 agents dispatching simultaneously with a yield between the slot read and
+the claim, and asserts **the ceiling holds with the global lock and is breached
+without it**. If anyone removes the lock, that test fails loudly.
+
+### Heartbeat integration suite — pre-existing failure, NOT a regression
+`heartbeat-stale-queue-invalidation.test.ts` fails in `beforeAll`:
+`Hook timed out in 20000ms`, 21 tests skipped.
+
+I A/B'd it against pristine master in the same fully-installed worktree:
+
+| HEAD | result |
+|---|---|
+| `8aee12ddef` (my branch) | `Hook timed out in 20000ms`, 21 skipped |
+| `75d915b328` (pristine master, my files absent) | **`Hook timed out in 20000ms`, 21 skipped** |
+
+**Identical failure with my code absent.** The cause is line 150: the `beforeAll`
+hardcodes a 20s budget — `}, 20_000)` — for `startEmbeddedPostgresTestDatabase`,
+which does a full initdb, `ensurePostgresDatabase`, and `applyPendingMigrations`.
+That fits on an idle box; at load 24-36 it does not. The same boot took 76.6s in
+the main checkout. The timeout is not overridable from the CLI (`--hookTimeout`
+is ignored in favour of the inline argument). This is another specimen of the bug
+this ticket describes: a test that only passes on an unloaded host.
+
+### Full `tsc --noEmit` — clean in every file I touch
+Ran twice to completion (~28 min and ~13 min). Both runs: **zero errors in
+`run-admission.ts`, `agent-start-lock.ts`, `agent-start-lock.test.ts`,
+`run-admission.test.ts`, or `heartbeat.ts`.**
+
+Remaining errors are unbuilt-workspace-package artifacts, all cascading from
+missing `dist/` for `@paperclipai/plugin-sdk` / `db`. I built `plugin-sdk` and
+`shared` successfully, which cleared their cascade.
+
+### Genuine pre-existing bug found (not mine, worth its own ticket)
+`pnpm --filter @paperclipai/db build` fails on master:
+
+```
+Error: Duplicate migration number 0128 in migration files:
+  0128_force_reassign.sql, 0128_user_specific_secrets.sql
+```
+
+Both files are present in pristine `75d915b328` and I touched no migrations
+(`git diff --name-only 75d915b328..HEAD | grep migration` -> empty). This blocks
+`pnpm -r build` and therefore any full typecheck that needs built `db` types.
+**Someone should renumber one of them.**
+
+### Net verification position
+- Admission logic and the concurrency primitive: **proven by 35 passing tests.**
+- Type correctness of the wiring: **proven, clean.**
+- Heartbeat integration suites: **cannot pass on this host, on master or on this
+  branch, for reasons unrelated to this change.** Run them on a quiet box before
+  merge.
