@@ -46,9 +46,19 @@ import { evaluateAgentInvokability, type AgentOrgRow } from "./agent-invokabilit
  * persisted first-class on the issue so a degraded roster produces a *worklist*
  * (`scripts/rbr767-sweep.ts`) rather than an outage.
  *
- * The caller rejects for exactly one case: `no_agents_in_company`, a company with zero
- * agents, where no row could name an owner even in principle. That is a genuine
- * impossibility, not a degraded state.
+ * ## Zero agents is a bootstrap state, not an impossibility
+ *
+ * An earlier revision of this module rejected one case: `no_agents_in_company`. That was
+ * wrong, and it was the same fail-closed sentence in a narrower window -- "this company
+ * has no staff, therefore no one may write anything down." Zero agents is the bootstrap
+ * state of every company that has ever existed: someone has to be able to file the first
+ * issue, including the issue that says "hire the first agent."
+ *
+ * So there is now NO input on which the create route refuses to write. At zero agents we
+ * return `applied: false` with `degradedReason: "no_agents_in_company"`: the issue is
+ * created unassigned and flagged. `applied: false` means "no owner was named," never
+ * "reject." The row drains through the identical sweep path as any other degraded row the
+ * moment an agent exists -- no new machinery.
  *
  * Backlog is deliberately NOT excluded. A backlog issue still gets a deterministic owner;
  * it simply does not generate an assignment wake (existing behaviour for `status: backlog`).
@@ -63,10 +73,18 @@ export type IssueAssigneeFallbackReason =
   | "company_root";
 
 /**
- * Why a fallback landed on an owner that is not currently invokable. Persisted first-class
- * on the issue so the sweep can find these without scraping activity text.
+ * Why an issue is flagged for the sweep.
+ *
+ *  - `no_invokable_owner`  -- an owner was named, but none of the ladder's rungs were
+ *    invokable, so the row landed on a paused/terminated owner of last resort.
+ *  - `no_agents_in_company` -- the company has zero agents, so no owner could be named at
+ *    all. The issue is created unassigned and flagged.
+ *
+ * Both are persisted first-class on the issue so the sweep can find them without scraping
+ * activity text, and both clear through the same path once a row lands on an invokable
+ * owner.
  */
-export type IssueAssigneeDegradedReason = "no_invokable_owner";
+export type IssueAssigneeDegradedReason = "no_invokable_owner" | "no_agents_in_company";
 
 export type IssueAssigneeFallbackResult =
   /** An explicit assignee was supplied; the ladder did not run. */
@@ -86,10 +104,12 @@ export type IssueAssigneeFallbackResult =
     candidatesConsidered: string[];
   }
   /**
-   * The company has zero agents. No row could name an owner even in principle, so there is
-   * nothing to degrade to. This is the only case in which the caller rejects the create.
+   * The company has zero agents, so no owner can be named. The caller does NOT reject:
+   * it creates the issue unassigned and persists this flag. An unassigned issue in an
+   * empty company is the correct record -- the work exists, it is queryable, and it gets
+   * an owner the moment one exists. `applied: false` here means "flag," not "reject."
    */
-  | { applied: false; reason: "no_agents_in_company" };
+  | { applied: false; reason: "no_agents_in_company"; degradedReason: "no_agents_in_company" };
 
 export type IssueAssigneeFallbackInput = {
   companyId: string;
@@ -217,9 +237,10 @@ export function resolveIssueAssigneeFallback(
     };
   }
 
-  // Zero agents in the company: no row could name an owner even in principle. This is a
-  // genuine impossibility rather than a degraded state, and the only case the caller rejects.
-  return { applied: false, reason: "no_agents_in_company" };
+  // Zero agents in the company: no owner can be named. We do NOT reject -- creating the
+  // issue unassigned and flagged is the correct record for an empty company. This is the
+  // bootstrap state of every company, and someone has to be able to file the first issue.
+  return { applied: false, reason: "no_agents_in_company", degradedReason: "no_agents_in_company" };
 }
 
 export async function loadCompanyAgentOrgRows(db: Db, companyId: string): Promise<AgentOrgRow[]> {

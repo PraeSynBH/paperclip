@@ -171,10 +171,16 @@ describe("resolveIssueAssigneeFallback", () => {
     });
   });
 
-  it("rejects ONLY the genuine impossibility: a company with zero agents", () => {
-    // No row could name an owner even in principle. This is the single case that refuses.
+  it("flags, never rejects, a company with zero agents", () => {
+    // Zero agents is the bootstrap state of every company, not an impossibility. No owner
+    // can be named, so the caller writes the issue unassigned and carries this flag. There
+    // is no input on which the resolver tells the caller to refuse the write.
     const result = resolve({ createdByAgentId: null, companyAgents: [] });
-    expect(result).toEqual({ applied: false, reason: "no_agents_in_company" });
+    expect(result).toEqual({
+      applied: false,
+      reason: "no_agents_in_company",
+      degradedReason: "no_agents_in_company",
+    });
   });
 
   it("never reports a degraded result without naming an owner", () => {

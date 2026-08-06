@@ -56,12 +56,32 @@ land on the same agent.
 
 ### When nothing is wakeable
 
-If no rung yields an invokable agent, the create is **rejected loudly** with
-`422 Cannot create an unassigned issue: no invokable fallback owner is available in this
-company`, and `details.candidatesConsidered` lists every `reason:agentId` pair that was
-tried. This is the only case where a create that used to succeed now fails, and it means
-the company has no wakeable agent at all — an issue created into it would be invisible
-by definition.
+**The create route never refuses to write for a roster reason.** There is no input on
+which `POST /companies/:id/issues` or `POST /issues/:id/children` returns a roster 422.
+
+Two degraded shapes exist, and both produce a *flagged row* rather than an error:
+
+| roster state | assignee written | `assignee_fallback_reason` |
+|---|---|---|
+| a rung is invokable (healthy) | that agent | `NULL` |
+| agents exist, none invokable | company root (even if paused) | `no_invokable_owner` |
+| **zero agents** | **none — unassigned** | **`no_agents_in_company`** |
+
+An earlier cut rejected the degraded case with a 422, then a narrower cut rejected only
+the zero-agent case. Both were the same sentence — *"the roster is degraded, therefore no
+new issue may be filed"* — and narrowing a fail-closed window is not closing it. Weigh the
+two failure modes honestly: a flagged issue exists, is queryable, and is recoverable the
+moment anyone looks; a rejected create means the work never exists at all, the caller moves
+on, and there is nothing to recover.
+
+Zero agents in particular is not an impossibility — it is the **bootstrap state of every
+company**. Someone has to be able to file the first issue, including the issue that says
+"hire the first agent." An unassigned issue in an empty company is the *correct* record.
+
+Both flags drain through the identical path: `scripts/rbr767-sweep.ts` selects rows that
+are unassigned **or** carry a non-null `assignee_fallback_reason`, re-runs the same ladder,
+and clears the flag once the row lands on a genuinely invokable owner. A zero-agent-era
+issue is routed by the first sweep after the first hire. No new machinery.
 
 ### Auditability
 
@@ -74,6 +94,12 @@ The fallback is recorded, not silent. The `issue.created` activity entry carries
   "assigneeFallbackAgentId": "<agent-uuid>"
 }
 ```
+
+A degraded result adds `assigneeFallbackDegraded: true` and
+`assigneeFallbackDegradedReason`. The zero-agent case records
+`assigneeFallbackApplied: false` alongside `assigneeFallbackDegraded: true` and
+`assigneeFallbackDegradedReason: "no_agents_in_company"` — no owner was named, but the
+condition is still audited.
 
 These keys are absent when the caller named an owner, so "was this auto-routed?" is
 directly queryable from the activity log.

@@ -10,13 +10,21 @@
  * Two populations are swept:
  *
  *   1. **Unassigned** issues (`assignee_agent_id IS NULL AND assignee_user_id IS NULL`) --
- *      legacy invisible work created before the create-path fallback shipped.
+ *      legacy invisible work created before the create-path fallback shipped, plus
+ *      zero-agent-era work: rows the create path deliberately wrote with no assignee
+ *      because the company had no agents at all (`no_agents_in_company`). Zero agents is
+ *      the bootstrap state of every company, not an error, so the create path flags rather
+ *      than refuses -- and those rows land here.
  *   2. **Degraded** issues (`assignee_fallback_reason IS NOT NULL`) -- issues the create
  *      path deliberately wrote while the roster had no invokable owner. Per RBR-796 the
  *      create path fails *visible*, never *closed*: it assigns the company root even when
  *      that root is paused, and flags the row. Those rows have a non-null assignee, so the
  *      unassigned query alone would never find them. This flag is the sweep input that
  *      closes the loop -- a degraded roster produces a worklist, not an outage.
+ *
+ * Both `no_invokable_owner` and `no_agents_in_company` drain through the identical path:
+ * once a row lands on a genuinely invokable owner the flag is cleared. A zero-agent-era
+ * issue is routed by the first sweep after the first hire. No new machinery.
  *
  * Once a degraded issue is re-routed to a genuinely invokable owner the flag is cleared,
  * so the worklist drains as the roster recovers.
@@ -26,6 +34,7 @@
  *
  *   pnpm --filter @paperclipai/server exec tsx src/scripts/rbr767-sweep.ts --company <uuid> [--apply]
  */
+import type { Db } from "@paperclipai/db";
 import { issues, agents, createDb } from "@paperclipai/db";
 import { and, eq, isNull, isNotNull, notInArray, or } from "drizzle-orm";
 
@@ -45,17 +54,32 @@ function parseFlag(name: string): string | null {
   return value && !value.startsWith("--") ? value : null;
 }
 
-async function main() {
-  const companyId = parseFlag("--company");
-  if (!companyId) throw new Error("--company <uuid> is required");
-  const apply = process.argv.includes("--apply");
+export type Rbr767SweepResult = {
+  /** Rows the sweep considered: unassigned or flagged, non-terminal. */
+  scanned: number;
+  /** Rows that landed on a genuinely invokable owner (written when `apply`). */
+  repaired: number;
+  /** Rows that still lack an invokable owner and stay flagged for the next run. */
+  failed: number;
+  lines: string[];
+};
 
-  const config = loadConfig();
-  const db = createDb(
-    process.env.DATABASE_URL?.trim()
-    || config.databaseUrl
-    || `postgres://paperclip:paperclip@127.0.0.1:${config.embeddedPostgresPort}/paperclip`,
-  );
+/**
+ * The sweep body, exported so it can be exercised against a real database rather than
+ * only via the CLI. `log` is injected so tests can assert on the worklist without
+ * capturing stdout.
+ */
+export async function runRbr767Sweep(
+  db: Db,
+  options: { companyId: string; apply?: boolean; log?: (line: string) => void },
+): Promise<Rbr767SweepResult> {
+  const { companyId } = options;
+  const apply = options.apply ?? false;
+  const lines: string[] = [];
+  const log = (line: string) => {
+    lines.push(line);
+    options.log?.(line);
+  };
 
   const companyAgents = await loadCompanyAgentOrgRows(db, companyId);
   const agentName = new Map(companyAgents.map((a) => [a.id, a.name]));
@@ -76,7 +100,7 @@ async function main() {
       eq(issues.companyId, companyId),
       notInArray(issues.status, TERMINAL),
       or(
-        // (1) Legacy invisible work: no owner at all.
+        // (1) Legacy invisible work, plus zero-agent-era work: no owner at all.
         and(isNull(issues.assigneeAgentId), isNull(issues.assigneeUserId)),
         // (2) Degraded work: an owner was written, but off a degraded roster. These rows
         //     have a non-null assignee and would be missed by the unassigned query alone.
@@ -85,17 +109,18 @@ async function main() {
     ));
 
   if (orphans.length === 0) {
-    console.log(`SWEEP CLEAN: 0 unassigned or degraded non-terminal issues in ${companyId}`);
-    return;
+    log(`SWEEP CLEAN: 0 unassigned or degraded non-terminal issues in ${companyId}`);
+    return { scanned: 0, repaired: 0, failed: 0, lines };
   }
 
   const unassignedCount = orphans.filter((issue) => !issue.assigneeAgentId).length;
   const degradedCount = orphans.length - unassignedCount;
-  console.log(
+  log(
     `${orphans.length} issue(s) needing an owner `
     + `(${unassignedCount} unassigned, ${degradedCount} degraded)${apply ? "" : " (dry run)"}`,
   );
   let failed = 0;
+  let repaired = 0;
 
   for (const issue of orphans) {
     const parent = issue.parentId
@@ -110,17 +135,18 @@ async function main() {
       companyAgents,
     });
 
-    // `applied: false` now means only `no_agents_in_company` -- the ladder always names an
-    // owner otherwise. A still-degraded result means the roster has not recovered yet, so
-    // the issue stays flagged and gets picked up on the next run.
+    // `applied: false` here means only `no_agents_in_company` -- the company still has no
+    // agents, so the row keeps its flag and is re-routed by the first sweep after the
+    // first hire. A still-degraded result means the roster has not recovered yet, same
+    // outcome. Neither is an error in the row; both are "the roster is not ready."
     if (!result.applied) {
       failed += 1;
-      console.log(`${issue.identifier} [${issue.status}/${issue.priority}] -> NO OWNER POSSIBLE (${result.reason})`);
+      log(`${issue.identifier} [${issue.status}/${issue.priority}] -> NO OWNER POSSIBLE (${result.reason})`);
       continue;
     }
     if (result.degraded) {
       failed += 1;
-      console.log(
+      log(
         `${issue.identifier} [${issue.status}/${issue.priority}] -> STILL DEGRADED `
         + `(${result.degradedReason}); leaving flagged for the next sweep`,
       );
@@ -128,7 +154,8 @@ async function main() {
     }
 
     const owner = `${result.reason} = ${agentName.get(result.assigneeAgentId) ?? "?"} (${result.assigneeAgentId})`;
-    console.log(`${issue.identifier} [${issue.status}/${issue.priority}] -> ${owner}`);
+    log(`${issue.identifier} [${issue.status}/${issue.priority}] -> ${owner}`);
+    repaired += 1;
 
     if (apply) {
       // Guard the write in two ways against drift since the initial snapshots:
@@ -157,7 +184,8 @@ async function main() {
       );
       if (!freshInvokability.invokable) {
         failed += 1;
-        console.log(
+        repaired -= 1;
+        log(
           `${issue.identifier} [${issue.status}/${issue.priority}] -> SKIPPED: chosen owner `
           + `${result.assigneeAgentId} is no longer invokable (${freshInvokability.reason}); rerun the sweep`,
         );
@@ -188,19 +216,45 @@ async function main() {
   }
 
   if (failed > 0) {
-    console.error(
+    log(
       `\n${failed} issue(s) still lack an invokable owner -- the roster has not recovered. `
       + `They remain flagged and will be re-routed by the next sweep.`,
     );
-    process.exitCode = 1;
   }
+
+  return { scanned: orphans.length, repaired, failed, lines };
 }
 
-// The pg pool keeps the event loop alive; exit explicitly once the sweep is done.
-main().then(
-  () => process.exit(process.exitCode ?? 0),
-  (error) => {
-    console.error(error);
-    process.exit(1);
-  },
-);
+async function main() {
+  const companyId = parseFlag("--company");
+  if (!companyId) throw new Error("--company <uuid> is required");
+  const apply = process.argv.includes("--apply");
+
+  const config = loadConfig();
+  const db = createDb(
+    process.env.DATABASE_URL?.trim()
+    || config.databaseUrl
+    || `postgres://paperclip:paperclip@127.0.0.1:${config.embeddedPostgresPort}/paperclip`,
+  );
+
+  const result = await runRbr767Sweep(db, {
+    companyId,
+    apply,
+    log: (line) => console.log(line),
+  });
+  if (result.failed > 0) process.exitCode = 1;
+}
+
+// Only run the CLI when this module is the process entrypoint. Importing it from a test
+// must not start a sweep or call process.exit.
+const invokedAsScript = process.argv[1]?.includes("rbr767-sweep") ?? false;
+if (invokedAsScript) {
+  // The pg pool keeps the event loop alive; exit explicitly once the sweep is done.
+  main().then(
+    () => process.exit(process.exitCode ?? 0),
+    (error: unknown) => {
+      console.error(error);
+      process.exit(1);
+    },
+  );
+}

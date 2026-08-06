@@ -427,34 +427,96 @@ describe("RBR-767: unassigned issues cannot be created invisible", { timeout: 12
     });
   });
 
-  // The 422 survives for exactly one case: a company with zero agents, where no row could
-  // name an owner even in principle. That is a genuine impossibility, not a degraded state.
-  describe("zero agents: the only genuine impossibility", () => {
+  // RBR-804 §F2: zero agents is a BOOTSTRAP STATE, not an impossibility.
+  //
+  // The previous cut kept a 422 for one case -- "this company has no agents to own it" --
+  // and called it a genuine impossibility. It is not. It is the state every company starts
+  // in, and someone has to be able to file the first issue, including the issue that says
+  // "hire the first agent." Six pre-existing guards in
+  // `issue-create-deduplication-routes.test.ts` assert 201 on exactly this path and they
+  // were telling the truth.
+  //
+  // Narrowing a fail-closed window is not closing it. There is now NO input on which this
+  // route refuses to write for a roster reason.
+  describe("zero agents: created unassigned and flagged, never refused", () => {
     beforeEach(() => {
       roster.rows = [];
     });
 
-    it("rejects with 422 when the company has no agents at all", async () => {
+    it("creates the issue unassigned instead of returning 422", async () => {
       const res = await request(await createApp(null))
         .post("/api/companies/company-1/issues")
-        .send({ title: "Nobody exists to own this", status: "todo", assigneeAgentId: null });
+        .send({ title: "The first issue in an empty company", status: "todo", assigneeAgentId: null });
 
-      expect(res.status).toBe(422);
-      expect(String(res.body?.error)).toMatch(/no agents to own it/i);
-      expect(res.body?.details?.reason).toBe("no_agents_in_company");
-      expect(mockIssueService.create).not.toHaveBeenCalled();
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      expect(mockIssueService.create).toHaveBeenCalled();
     });
 
-    it("the zero-agent 422 body carries no agent identifiers", async () => {
-      const res = await request(await createApp(null))
+    it("persists no_agents_in_company with a null assignee", async () => {
+      await request(await createApp(null))
         .post("/api/companies/company-1/issues")
-        .send({ title: "Clean refusal", status: "todo", assigneeAgentId: null });
+        .send({ title: "Hire the first agent", status: "todo", assigneeAgentId: null });
 
-      const serialized = JSON.stringify(res.body);
-      expect(serialized).not.toMatch(/candidatesConsidered/);
-      for (const agentIdentifier of [CEO, CTO, STAFF, CISO]) {
-        expect(serialized).not.toContain(agentIdentifier);
-      }
+      // An unassigned issue in an empty company is the CORRECT record. The flag is what
+      // makes it a worklist entry rather than invisible work: `rbr767-sweep.ts` already
+      // queries `assignee_fallback_reason IS NOT NULL` and clears it on first hire.
+      const [, createInput] = mockIssueService.create.mock.calls.at(-1)!;
+      expect(createInput).toMatchObject({ assigneeFallbackReason: "no_agents_in_company" });
+      expect(createInput.assigneeAgentId ?? null).toBeNull();
+    });
+
+    it("records the zero-agent flag in the issue.created activity details", async () => {
+      await request(await createApp(null))
+        .post("/api/companies/company-1/issues")
+        .send({ title: "Audited bootstrap create", status: "todo", assigneeAgentId: null });
+
+      expect(mockLogActivity).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          action: "issue.created",
+          details: expect.objectContaining({
+            assigneeFallbackApplied: false,
+            assigneeFallbackDegraded: true,
+            assigneeFallbackDegradedReason: "no_agents_in_company",
+          }),
+        }),
+      );
+    });
+
+    it("a child issue in an empty company is created unassigned and flagged", async () => {
+      mockIssueService.getById.mockResolvedValue(makeIssue({
+        id: "parent-1",
+        title: "Parent issue",
+        status: "in_progress",
+        assigneeAgentId: null,
+      }));
+
+      const res = await request(await createApp(null))
+        .post("/api/issues/parent-1/children")
+        .send({ title: "Child in an empty company", status: "todo", assigneeAgentId: null });
+
+      expect(res.status, JSON.stringify(res.body)).toBe(201);
+      const [, childInput] = mockIssueService.createChild.mock.calls.at(-1)!;
+      expect(childInput).toMatchObject({ assigneeFallbackReason: "no_agents_in_company" });
+      expect(childInput.assigneeAgentId ?? null).toBeNull();
+    });
+
+    it("no create path returns 422 for a roster reason", async () => {
+      const create = await request(await createApp(null))
+        .post("/api/companies/company-1/issues")
+        .send({ title: "Never refused", status: "todo", assigneeAgentId: null });
+      expect(create.status).not.toBe(422);
+
+      mockIssueService.getById.mockResolvedValue(makeIssue({
+        id: "parent-1",
+        title: "Parent issue",
+        status: "in_progress",
+        assigneeAgentId: null,
+      }));
+      const child = await request(await createApp(null))
+        .post("/api/issues/parent-1/children")
+        .send({ title: "Never refused either", status: "todo", assigneeAgentId: null });
+      expect(child.status).not.toBe(422);
     });
   });
 });

@@ -7607,9 +7607,15 @@ export function issueRoutes(
       }
     }
     // An issue with no agent and no user assignee is picked up by no heartbeat, ever --
-    // it is invisible work. Route it to a deterministic owner at creation time. When the
-    // roster is degraded we still create the issue and flag it (fail visible, never fail
-    // closed); we reject only when the company has zero agents.
+    // it is invisible work. Route it to a deterministic owner at creation time.
+    //
+    // THIS ROUTE NEVER REFUSES TO WRITE FOR A ROSTER REASON. When the roster is degraded
+    // we assign the owner of last resort and flag the row. When the company has zero
+    // agents we create the issue *unassigned* and flag it `no_agents_in_company`. Zero
+    // agents is not an impossibility -- it is the bootstrap state of every company, and
+    // someone has to be able to file the first issue, including "hire the first agent."
+    // An unassigned issue in an empty company is the correct record: the work exists, it
+    // is queryable, and `scripts/rbr767-sweep.ts` gives it an owner on first hire.
     const assigneeFallback = await resolveIssueAssigneeFallbackFromDb(db, {
       companyId,
       assigneeAgentId: normalizedAssigneeAgentId ?? null,
@@ -7617,19 +7623,12 @@ export function issueRoutes(
       parentAssigneeAgentId: createParent?.assigneeAgentId ?? null,
       createdByAgentId: actor.agentId ?? null,
     });
-    if (!assigneeFallback.applied && assigneeFallback.reason === "no_agents_in_company") {
-      // The only genuine impossibility: no agent exists that could own this row even in
-      // principle. Note the body carries no agent identifiers -- there are none to leak.
-      res.status(422).json({
-        error: "Cannot create an issue: this company has no agents to own it",
-        details: { reason: "no_agents_in_company" },
-      });
-      return;
-    }
     const fallbackAssigneeAgentId = assigneeFallback.applied ? assigneeFallback.assigneeAgentId : null;
-    const assigneeFallbackDegradedReason = assigneeFallback.applied && assigneeFallback.degraded
-      ? assigneeFallback.degradedReason
-      : null;
+    // `applied: false` with a `degradedReason` means "flag," not "reject": no owner could
+    // be named, so the row is written unassigned and carries the flag instead.
+    const assigneeFallbackDegradedReason = assigneeFallback.applied
+      ? (assigneeFallback.degraded ? assigneeFallback.degradedReason : null)
+      : (assigneeFallback.reason === "no_agents_in_company" ? assigneeFallback.degradedReason : null);
     const runWorkspaceInheritanceSourceIssueId = hasExplicitIssueWorkspaceCreateSelection(rawCreateBody)
       ? null
       : await resolveRunIssueWorkspaceInheritanceSource(companyId, actor);
@@ -7786,7 +7785,16 @@ export function issueRoutes(
               }
               : {}),
           }
-          : {}),
+          : assigneeFallback.reason === "no_agents_in_company"
+            ? {
+              // No owner could be named, so the row was written unassigned and flagged.
+              // Recorded as degraded so the same operator query finds it. There are no
+              // candidate identifiers here because there are no agents to name.
+              assigneeFallbackApplied: false,
+              assigneeFallbackDegraded: true,
+              assigneeFallbackDegradedReason: assigneeFallback.degradedReason,
+            }
+            : {}),
         ...(Array.isArray(req.body.blockedByIssueIds) ? { blockedByIssueIds: req.body.blockedByIssueIds } : {}),
         ...summarizeIssueReferenceActivityDetails({
           addedReferencedIssues: referenceDiff.addedReferencedIssues.map(summarizeIssueRelationForActivity),
@@ -7900,18 +7908,13 @@ export function issueRoutes(
       parentAssigneeAgentId: parent.assigneeAgentId ?? null,
       createdByAgentId: getActorInfo(req).agentId ?? null,
     });
-    if (!childAssigneeFallback.applied && childAssigneeFallback.reason === "no_agents_in_company") {
-      // Only genuine impossibility rejects. No agent identifiers in the body -- none exist.
-      res.status(422).json({
-        error: "Cannot create an issue: this company has no agents to own it",
-        details: { reason: "no_agents_in_company" },
-      });
-      return;
-    }
-    const childAssigneeFallbackDegradedReason =
-      childAssigneeFallback.applied && childAssigneeFallback.degraded
+    // As on the create path: no roster condition refuses the write. Zero agents means the
+    // child is created unassigned and flagged `no_agents_in_company` for the sweep.
+    const childAssigneeFallbackDegradedReason = childAssigneeFallback.applied
+      ? (childAssigneeFallback.degraded ? childAssigneeFallback.degradedReason : null)
+      : (childAssigneeFallback.reason === "no_agents_in_company"
         ? childAssigneeFallback.degradedReason
-        : null;
+        : null);
     const createBody = {
       ...sanitizedBody,
       ...(normalizedAssigneeAgentId !== undefined ? { assigneeAgentId: normalizedAssigneeAgentId } : {}),
