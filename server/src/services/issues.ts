@@ -204,6 +204,38 @@ function applyStatusSideEffects(
   return patch;
 }
 
+// RBR-929 AC3: every patch field that is derived from the issue's *current*
+// row state must be computed from a baseline that was read under the same row
+// lock as the write. Derived from an unlocked snapshot, a winning write can
+// persist bookkeeping for a status (or an assignee) the row no longer had by
+// the time the UPDATE landed. Callers must pass the row they read with
+// `select ... for update` inside the writing transaction — never the
+// pre-transaction snapshot.
+function applyLockedBaselinePatchFields(
+  baseline: Pick<typeof issues.$inferSelect, "status" | "assigneeAgentId" | "assigneeUserId">,
+  issueData: Partial<typeof issues.$inferInsert>,
+  patch: Partial<typeof issues.$inferInsert>,
+): Partial<typeof issues.$inferInsert> {
+  if (baseline.status !== "blocked" && issueData.status === "blocked") {
+    patch.blockedTransitionAt = patch.updatedAt;
+    patch.blockedOwnerNotifiedAt = null;
+  } else if (baseline.status === "blocked" && issueData.status && issueData.status !== "blocked") {
+    patch.unblockDescriptor = null;
+    patch.blockedTransitionAt = null;
+    patch.blockedOwnerNotifiedAt = null;
+  }
+  if (
+    (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== baseline.assigneeAgentId) ||
+    (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== baseline.assigneeUserId)
+  ) {
+    patch.checkoutRunId = null;
+    patch.executionRunId = null;
+    patch.executionAgentNameKey = null;
+    patch.executionLockedAt = null;
+  }
+  return patch;
+}
+
 function workspaceWorktreeRequiresProjectDetails() {
   return {
     code: WORKSPACE_WORKTREE_REQUIRES_PROJECT_CODE,
@@ -7516,14 +7548,9 @@ export function issueService(db: Db) {
         ...issueData,
         updatedAt: new Date(),
       };
-      if (existing.status !== "blocked" && issueData.status === "blocked") {
-        patch.blockedTransitionAt = patch.updatedAt;
-        patch.blockedOwnerNotifiedAt = null;
-      } else if (existing.status === "blocked" && issueData.status && issueData.status !== "blocked") {
-        patch.unblockDescriptor = null;
-        patch.blockedTransitionAt = null;
-        patch.blockedOwnerNotifiedAt = null;
-      }
+      // RBR-929 AC3: the blocked-transition bookkeeping that keys off the
+      // current status is computed inside runUpdate, under the same row lock
+      // as the write (see applyLockedBaselinePatchFields).
       if (issueData.requestDepth !== undefined) {
         patch.requestDepth = clampIssueRequestDepth(issueData.requestDepth);
       }
@@ -7633,15 +7660,9 @@ export function issueService(db: Db) {
         patch.executionAgentNameKey = null;
         patch.executionLockedAt = null;
       }
-      if (
-        (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== existing.assigneeAgentId) ||
-        (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== existing.assigneeUserId)
-      ) {
-        patch.checkoutRunId = null;
-        patch.executionRunId = null;
-        patch.executionAgentNameKey = null;
-        patch.executionLockedAt = null;
-      }
+      // RBR-929 AC3: assignee-change lock clearing keys off the current
+      // assignee, so it too is applied under the row lock in runUpdate via
+      // applyLockedBaselinePatchFields.
 
       const runUpdate = async (tx: any) => {
         // The receipt baseline must be read under the same row lock as the
@@ -7654,6 +7675,11 @@ export function issueService(db: Db) {
           .for("update")
           .then((rows: Array<typeof issues.$inferSelect>) => rows[0] ?? null);
         if (!receiptExisting) return null;
+        // RBR-929 AC3: recompute the patch fields that are derived from the
+        // row's current state now that the row is locked. `existing` was read
+        // outside any lock at the top of `update`, so anything keyed off it
+        // could describe a status/assignee the row no longer has.
+        applyLockedBaselinePatchFields(receiptExisting, issueData, patch);
         const [previousLabelsByIssueId, previousRelationSummaries] = await Promise.all([
           nextLabelIds !== undefined
             ? labelMapForIssues(tx, [id])
@@ -7664,17 +7690,19 @@ export function issueService(db: Db) {
         ]);
         const defaultCompanyGoal = await getDefaultCompanyGoal(tx, existing.companyId);
         const [currentProjectGoalId, nextProjectGoalId] = await Promise.all([
-          getProjectDefaultGoalId(tx, existing.companyId, existing.projectId),
+          getProjectDefaultGoalId(tx, existing.companyId, receiptExisting.projectId),
           getProjectDefaultGoalId(
             tx,
             existing.companyId,
-            issueData.projectId !== undefined ? issueData.projectId : existing.projectId,
+            issueData.projectId !== undefined ? issueData.projectId : receiptExisting.projectId,
           ),
         ]);
 
+        // RBR-929 AC3: patch.goalId derives from the row's current project and
+        // goal, so it uses the locked baseline rather than the unlocked read.
         patch.goalId = resolveNextIssueGoalId({
-          currentProjectId: existing.projectId,
-          currentGoalId: existing.goalId,
+          currentProjectId: receiptExisting.projectId,
+          currentGoalId: receiptExisting.goalId,
           currentProjectGoalId,
           projectId: issueData.projectId,
           goalId: issueData.goalId,
