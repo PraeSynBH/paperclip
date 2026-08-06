@@ -1908,4 +1908,51 @@ describe.sequential("issue thread interaction routes", () => {
     expect(details.pendingInteractionCount).toBe(2);
     expect(details.pendingInteractionSoftCapExceeded).toBeUndefined();
   });
+
+  // RBR-802 F1: the soft-cap count runs after `create()` has committed. If that
+  // read throws and the route 500s, the caller retries against an interaction
+  // that already exists and files a duplicate ask — the exact failure this work
+  // exists to prevent. Non-essential instrumentation must never fail the
+  // essential write.
+  it("still returns 201 with exactly one interaction row when the post-commit count query throws", async () => {
+    mockInteractionService.listForIssue.mockRejectedValue(new Error("count query exploded"));
+    const app = await createApp();
+
+    const res = await request(app)
+      .post("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/interactions")
+      .send({
+        kind: "suggest_tasks",
+        payload: { version: 1, tasks: [{ clientKey: "task-1", title: "One" }] },
+      });
+
+    // The interaction committed, so the response must say so.
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe("interaction-1");
+    // Exactly one row: the write ran once and the caller has no reason to retry.
+    expect(mockInteractionService.create).toHaveBeenCalledTimes(1);
+    // The instrumentation is degraded, not the request.
+    expect(mockLogActivity).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ action: "issue.thread_interaction_created" }),
+    );
+  });
+
+  // The activity write is post-commit instrumentation too, so it gets the same
+  // containment: a logging failure cannot retract a persisted interaction.
+  it("still returns 201 when the post-commit activity log write throws", async () => {
+    mockInteractionService.listForIssue.mockResolvedValue([{ id: "p-1", status: "pending" }]);
+    mockLogActivity.mockRejectedValueOnce(new Error("activity log unavailable"));
+    const app = await createApp();
+
+    const res = await request(app)
+      .post("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/interactions")
+      .send({
+        kind: "suggest_tasks",
+        payload: { version: 1, tasks: [{ clientKey: "task-1", title: "One" }] },
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe("interaction-1");
+    expect(mockInteractionService.create).toHaveBeenCalledTimes(1);
+  });
 });
