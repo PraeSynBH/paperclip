@@ -7752,9 +7752,14 @@ export function issueService(db: Db) {
           }
           return null;
         }
-        if (existing.status !== updated.status) {
+        // RBR-929 AC3: the "did the status actually change" gate, and the
+        // terminal-reopen detection inside it, compare against the row as it
+        // was under this write's own row lock. `existing` was read before the
+        // transaction opened, so a concurrent commit could make this block fire
+        // on a transition that never happened (or skip one that did).
+        if (receiptExisting.status !== updated.status) {
           if (
-            (existing.status === "done" || existing.status === "cancelled")
+            (receiptExisting.status === "done" || receiptExisting.status === "cancelled")
             && updated.status !== "done"
             && updated.status !== "cancelled"
           ) {
@@ -7778,7 +7783,7 @@ export function issueService(db: Db) {
                 entityId: workspace.id,
                 details: {
                   sourceIssueId: updated.id,
-                  previousIssueStatus: existing.status,
+                  previousIssueStatus: receiptExisting.status,
                   nextIssueStatus: updated.status,
                   workspaceAction: "left_archived",
                 },
@@ -7900,9 +7905,15 @@ export function issueService(db: Db) {
               : {}),
           },
         );
+        // RBR-929 AC3: `receiptExisting.status` is the locked baseline. The
+        // stale `existing.status` could claim a transition into done/cancelled
+        // that a concurrent commit had already made, dropping the escalation's
+        // `blocks` edge twice (or on a write that changed nothing).
+        // `originKind` / `originId` / `companyId` / `id` are immutable for the
+        // life of the row, so reading those off `existing` is lock-independent.
         if (
           (issueData.status === "done" || issueData.status === "cancelled") &&
-          existing.status !== issueData.status &&
+          receiptExisting.status !== issueData.status &&
           existing.originKind === RECOVERY_ORIGIN_KINDS.issueGraphLivenessEscalation
         ) {
           const parsedIncident = parseIssueGraphLivenessIncidentKey(existing.originId);
