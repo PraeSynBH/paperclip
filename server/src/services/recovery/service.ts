@@ -2679,6 +2679,20 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       });
     }
 
+    // RBR-1051 (RBR-973 step 3/5, AC3 / RBR-907 AC2): snapshot the assignee
+    // BEFORE the revert. This is a non-terminal revert by construction —
+    // `input.previousStatus` is typed as `StrandedPreviousStatus`
+    // ("todo" | "in_progress" | "in_review"), never a terminal status, and
+    // AC1's write-boundary guard already no-ops this entire update() call if
+    // the issue's current status happens to be done/cancelled. So the only
+    // path that reaches this line is a legitimate non-terminal revert, and
+    // the assignee write below restores exactly the snapshot taken here —
+    // atomically with the status change, in the same update() call — rather
+    // than reassigning ownership to `recoveryAction.ownerAgentId` (the
+    // recovery/notification owner, which is a distinct concept surfaced via
+    // the recovery action record and wake, not via issue.assigneeAgentId).
+    const previousAssigneeAgentId = input.issue.assigneeAgentId;
+
     const recoveryCause = input.recoveryCause ?? "stranded_assigned_issue";
     const recoveryAction = await ensureSourceScopedStrandedRecoveryAction({
       issue: input.issue,
@@ -2692,7 +2706,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     const updated = await issuesSvc.update(input.issue.id, {
       status: "blocked",
       blockedByIssueIds: blockerIds,
-      assigneeAgentId: recoveryAction.ownerAgentId ?? input.issue.assigneeAgentId,
+      assigneeAgentId: previousAssigneeAgentId,
       actorKind: RECOVERY_AUTOMATION_ACTOR_KIND,
     });
     if (!updated) return null;
@@ -2812,7 +2826,15 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       recoveryCause,
     });
 
-    if (recoveryAction.ownerAgentId && recoveryAction.ownerAgentId === input.issue.assigneeAgentId) {
+    // Re-assert the block if enqueueSourceScopedStrandedRecoveryWake's
+    // synchronous claim path flipped the issue's status/assignee out from
+    // under this write (see the "keeps the source issue blocked when
+    // source-scoped wakeup is claimed synchronously" regression test). This
+    // guard only activates when the recovery owner IS the previously
+    // snapshotted assignee, so the restore below still writes the same
+    // snapshot taken before the revert, not a fresh ownership assignment —
+    // paired atomically with the status write per RBR-1051 AC1/AC3.
+    if (recoveryAction.ownerAgentId && recoveryAction.ownerAgentId === previousAssigneeAgentId) {
       const [currentIssue] = await db
         .select({
           status: issues.status,
@@ -2824,12 +2846,12 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       if (
         currentIssue &&
         (currentIssue.status !== "blocked" ||
-          currentIssue.assigneeAgentId !== recoveryAction.ownerAgentId)
+          currentIssue.assigneeAgentId !== previousAssigneeAgentId)
       ) {
         const reblocked = await issuesSvc.update(input.issue.id, {
           status: "blocked",
           blockedByIssueIds: blockerIds,
-          assigneeAgentId: recoveryAction.ownerAgentId,
+          assigneeAgentId: previousAssigneeAgentId,
           actorKind: RECOVERY_AUTOMATION_ACTOR_KIND,
         });
         if (reblocked) return reblocked;

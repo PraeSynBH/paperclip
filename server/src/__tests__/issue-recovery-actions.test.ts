@@ -1350,4 +1350,98 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       .where(eq(issueRecoveryActions.id, action.id));
     expect(actionRow?.status).toBe("active");
   });
+
+  // RBR-1051 (RBR-973 step 3/5, AC3 / RBR-907 AC2): recovery must never write
+  // assigneeId as a bare side effect of the status write. Any assignee write
+  // must be paired with a snapshot+restore that happens atomically with the
+  // status change, not a reassignment to the recovery/notification owner.
+  it("restores the prior status AND prior assignee together on a legitimate non-terminal revert, not recoveryAction.ownerAgentId", async () => {
+    const { companyId, managerId, coderId, sourceIssue } = await seedCompany();
+    // coderId reports to managerId, so the recovery owner resolved for
+    // notification purposes is managerId (the CTO) — deliberately different
+    // from the source issue's actual assignee (coderId). Before this fix,
+    // `assigneeAgentId: recoveryAction.ownerAgentId ?? issue.assigneeAgentId`
+    // would have reassigned issue ownership to managerId here, which is the
+    // exact defect RBR-1051 closes.
+    const enqueueWakeup = vi.fn(async () => null);
+    const recovery = recoveryService(db, { enqueueWakeup });
+    const latestRun = {
+      id: randomUUID(),
+      agentId: coderId,
+      status: "failed",
+      error: "adapter failed",
+      errorCode: "adapter_failed",
+      contextSnapshot: { retryReason: "issue_continuation_needed" },
+      livenessState: "needs_followup",
+    } as const;
+
+    const updated = await recovery.escalateStrandedAssignedIssue({
+      issue: sourceIssue,
+      previousStatus: "in_progress",
+      latestRun,
+      comment: "Automatic continuation recovery failed.",
+    });
+
+    expect(updated).not.toBeNull();
+    expect(updated?.status).toBe("blocked");
+    expect(updated?.assigneeAgentId).toBe(coderId);
+    expect(updated?.assigneeAgentId).not.toBe(managerId);
+
+    const actionRows = await db
+      .select()
+      .from(issueRecoveryActions)
+      .where(eq(issueRecoveryActions.sourceIssueId, sourceIssue.id));
+    expect(actionRows).toHaveLength(1);
+    // The recovery/notification owner is still correctly resolved and
+    // recorded on the recovery action itself (that's a separate concern from
+    // issue.assigneeAgentId) — it is simply no longer written onto the
+    // source issue's assignee field.
+    expect(actionRows[0]?.ownerAgentId).toBe(managerId);
+    expect(actionRows[0]?.previousOwnerAgentId).toBe(coderId);
+    expect(actionRows[0]?.returnOwnerAgentId).toBe(coderId);
+
+    const [row] = await db.select().from(issues).where(eq(issues.id, sourceIssue.id));
+    expect(row.status).toBe("blocked");
+    expect(row.assigneeAgentId).toBe(coderId);
+  });
+
+  // Overlaps with RBR-1049's own guard test by design (per RBR-1051 AC2a) —
+  // confirms no regression: escalateStrandedAssignedIssue must be a no-op,
+  // touching neither status nor assigneeId, when the write boundary guard
+  // refuses the underlying status write because the issue is already
+  // terminal (done/cancelled) at write time.
+  it("leaves a terminal-status issue's status and assignee untouched (RBR-1049 guard, no regression)", async () => {
+    const { sourceIssueId, coderId, sourceIssue } = await seedCompany();
+    // Simulate the issue having reached a terminal state between the
+    // reconciler's read (which produced `previousStatus: "in_progress"`) and
+    // this write — the exact race the RBR-1049 write-boundary guard exists
+    // to close, regardless of what `previousStatus` the caller believes.
+    await db.update(issues).set({ status: "done" }).where(eq(issues.id, sourceIssueId));
+    const [terminalIssue] = await db.select().from(issues).where(eq(issues.id, sourceIssueId));
+
+    const enqueueWakeup = vi.fn(async () => null);
+    const recovery = recoveryService(db, { enqueueWakeup });
+    const latestRun = {
+      id: randomUUID(),
+      agentId: coderId,
+      status: "failed",
+      error: "adapter failed",
+      errorCode: "adapter_failed",
+      contextSnapshot: { retryReason: "issue_continuation_needed" },
+      livenessState: "needs_followup",
+    } as const;
+
+    const updated = await recovery.escalateStrandedAssignedIssue({
+      issue: terminalIssue!,
+      previousStatus: "in_progress",
+      latestRun,
+      comment: "Automatic continuation recovery failed.",
+    });
+
+    expect(updated).toBeNull();
+
+    const [row] = await db.select().from(issues).where(eq(issues.id, sourceIssueId));
+    expect(row.status).toBe("done");
+    expect(row.assigneeAgentId).toBe(sourceIssue.assigneeAgentId);
+  });
 });
