@@ -96,6 +96,16 @@ import {
 import { classifyIssueGraphLiveness, type IssueLivenessFinding } from "./recovery/issue-graph-liveness.js";
 
 const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "blocked", "done", "cancelled"];
+// Actor kind recovery/reconciliation services must pass to `issueService(db).update()`
+// so the write path can enforce that automated recovery never mutates status on a
+// terminal issue. This is the boundary invariant behind RBR-973 AC1: it lives on the
+// single update path (not a guard clause inside any individual recovery function), so
+// no future recovery call site can bypass it by omission.
+export const RECOVERY_AUTOMATION_ACTOR_KIND = "recovery_automation" as const;
+const RECOVERY_WRITE_BLOCKED_TERMINAL_STATUSES = new Set(["done", "cancelled"]);
+function isRecoveryWriteBlockedTerminalStatus(status: string | null | undefined) {
+  return typeof status === "string" && RECOVERY_WRITE_BLOCKED_TERMINAL_STATUSES.has(status);
+}
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
 export const ISSUE_LIST_DEFAULT_LIMIT = 500;
 export const ISSUE_LIST_MAX_LIMIT = 1000;
@@ -5495,6 +5505,7 @@ export function issueService(db: Db) {
         blockedByIssueIds?: string[];
         actorAgentId?: string | null;
         actorUserId?: string | null;
+        actorKind?: typeof RECOVERY_AUTOMATION_ACTOR_KIND;
       },
       dbOrTx: any = db,
     ) => {
@@ -5510,8 +5521,33 @@ export function issueService(db: Db) {
         blockedByIssueIds,
         actorAgentId,
         actorUserId,
+        actorKind,
         ...issueData
       } = data;
+
+      // Hard invariant: automated recovery/reconciliation can never write `status`
+      // on an issue that is already in a terminal state (`done`/`cancelled`). This
+      // is enforced here, at the single write path every `issuesSvc.update()` call
+      // goes through, rather than as a guard clause inside any one recovery
+      // function — so no recovery call site can bypass it by omission.
+      // If the reconciler believes a terminal issue is stranded, it must raise a
+      // flag/notification instead of moving the issue; this no-ops the write.
+      if (
+        actorKind === RECOVERY_AUTOMATION_ACTOR_KIND &&
+        issueData.status !== undefined &&
+        isRecoveryWriteBlockedTerminalStatus(existing.status)
+      ) {
+        logger.warn(
+          {
+            issueId: id,
+            currentStatus: existing.status,
+            attemptedStatus: issueData.status,
+          },
+          "refused automated recovery status write on a terminal issue",
+        );
+        return null;
+      }
+
       const isolatedWorkspacesEnabled = (await instanceSettings.getExperimental()).enableIsolatedWorkspaces;
       if (!isolatedWorkspacesEnabled) {
         delete issueData.executionWorkspaceId;

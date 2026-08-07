@@ -36,7 +36,7 @@ import { budgetService } from "../budgets.js";
 import { instanceSettingsService } from "../instance-settings.js";
 import { issueRecoveryActionService } from "../issue-recovery-actions.js";
 import { issueTreeControlService } from "../issue-tree-control.js";
-import { TERMINAL_HEARTBEAT_RUN_STATUSES, issueService } from "../issues.js";
+import { RECOVERY_AUTOMATION_ACTOR_KIND, TERMINAL_HEARTBEAT_RUN_STATUSES, issueService } from "../issues.js";
 import { parseIssueExecutionState } from "../issue-execution-policy.js";
 import { evaluateAgentInvokabilityFromDb } from "../agent-invokability.js";
 import { getRunLogStore } from "../run-log-store.js";
@@ -1356,7 +1356,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     if (!finalizedRun) return { kind: "skipped" as const };
 
     if (input.existingEvaluation && !isTerminalIssueStatus(input.existingEvaluation.status)) {
-      await issuesSvc.update(input.existingEvaluation.id, { status: "done" });
+      await issuesSvc.update(input.existingEvaluation.id, { status: "done", actorKind: RECOVERY_AUTOMATION_ACTOR_KIND });
       await issuesSvc.addComment(input.existingEvaluation.id, [
         "Source-resolved watchdog fold.",
         "",
@@ -2534,7 +2534,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     previousStatus: StrandedPreviousStatus;
     latestRun: LatestIssueRun;
   }) {
-    const updated = await issuesSvc.update(input.issue.id, { status: "blocked" });
+    const updated = await issuesSvc.update(input.issue.id, { status: "blocked", actorKind: RECOVERY_AUTOMATION_ACTOR_KIND });
     if (!updated) return null;
 
     const prefix = await getCompanyIssuePrefix(input.issue.companyId);
@@ -2629,7 +2629,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     const blockedByIssueIds = [...new Set([...existingBlockers.map((row) => row.id), ...openChildren.map((row) => row.id)])];
     if (blockedByIssueIds.length === 0) return null;
 
-    const updated = await issuesSvc.update(issue.id, { status: "blocked", blockedByIssueIds });
+    const updated = await issuesSvc.update(issue.id, { status: "blocked", blockedByIssueIds, actorKind: RECOVERY_AUTOMATION_ACTOR_KIND });
     if (!updated) return null;
 
     const waitingOn = formatIssueLinksForComment([...openChildren, ...existingBlockers]);
@@ -2693,6 +2693,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       status: "blocked",
       blockedByIssueIds: blockerIds,
       assigneeAgentId: recoveryAction.ownerAgentId ?? input.issue.assigneeAgentId,
+      actorKind: RECOVERY_AUTOMATION_ACTOR_KIND,
     });
     if (!updated) return null;
 
@@ -2829,6 +2830,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
           status: "blocked",
           blockedByIssueIds: blockerIds,
           assigneeAgentId: recoveryAction.ownerAgentId,
+          actorKind: RECOVERY_AUTOMATION_ACTOR_KIND,
         });
         if (reblocked) return reblocked;
       }
@@ -3658,7 +3660,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         result.activeSkipped += 1;
         continue;
       }
-      await issuesSvc.update(recovery.id, { status: "cancelled" });
+      await issuesSvc.update(recovery.id, { status: "cancelled", actorKind: RECOVERY_AUTOMATION_ACTOR_KIND });
       result.retired += 1;
       result.retiredIssueIds.push(recovery.id);
     }
@@ -3866,8 +3868,9 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       return input.issue;
     }
 
-    const update: Partial<typeof issues.$inferInsert> & { blockedByIssueIds: string[] } = {
+    const update: Partial<typeof issues.$inferInsert> & { blockedByIssueIds: string[]; actorKind: typeof RECOVERY_AUTOMATION_ACTOR_KIND } = {
       blockedByIssueIds: nextBlockerIds,
+      actorKind: RECOVERY_AUTOMATION_ACTOR_KIND,
     };
     if (!isAlreadyBlocked) {
       update.status = "blocked";
