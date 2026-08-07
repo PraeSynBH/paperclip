@@ -48,7 +48,7 @@ describeEmbeddedPostgres("productivity review service", () => {
 
   afterAll(async () => {
     await tempDb?.cleanup();
-  });
+  }, 120_000);
 
   async function seedAssignedIssue(opts?: {
     status?: "todo" | "in_progress";
