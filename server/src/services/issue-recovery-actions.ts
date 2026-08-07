@@ -137,6 +137,32 @@ export function issueRecoveryActionService(db: Db) {
     return row ? toReadModel(row) : null;
   }
 
+  // Most recent row for this exact (companyId, sourceIssueId, cause) regardless of
+  // status. Used to reactivate a resolved/cancelled row for a recurring cause
+  // instead of inserting a second row (RBR-899: two recovery actions, same issue,
+  // same cause, ~40s apart, because the write path only ever checked for an
+  // *active* row and fell through to INSERT once the prior row had been resolved).
+  async function getMostRecentRowForCause(
+    companyId: string,
+    sourceIssueId: string,
+    cause: string,
+  ): Promise<IssueRecoveryAction | null> {
+    const row = await db
+      .select()
+      .from(issueRecoveryActions)
+      .where(
+        and(
+          eq(issueRecoveryActions.companyId, companyId),
+          eq(issueRecoveryActions.sourceIssueId, sourceIssueId),
+          eq(issueRecoveryActions.cause, cause),
+        ),
+      )
+      .orderBy(desc(issueRecoveryActions.updatedAt))
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
+    return row ? toReadModel(row) : null;
+  }
+
   async function listActiveForIssues(companyId: string, sourceIssueIds: string[]) {
     if (sourceIssueIds.length === 0) return new Map<string, IssueRecoveryAction>();
     const rows = await db
@@ -216,6 +242,58 @@ export function issueRecoveryActionService(db: Db) {
         return retryUpsertSourceScoped(input, retryCount);
       }
       return toReadModel(updated!);
+    }
+
+    // No active row for this issue right now, but a prior row for this exact
+    // cause may already exist in a resolved/cancelled state (e.g. the recovery
+    // action was folded/resolved between reconciler passes, then the same
+    // failure cause re-fired). Reactivate that row in place rather than
+    // inserting a second `issue_recovery_actions` row for the same
+    // (sourceIssueId, cause) pair — see RBR-899/RBR-907 AC1.
+    const priorForCause = await getMostRecentRowForCause(input.companyId, input.sourceIssueId, input.cause);
+    if (priorForCause) {
+      try {
+        const [reactivated] = await db
+          .update(issueRecoveryActions)
+          .set({
+            recoveryIssueId: input.recoveryIssueId ?? null,
+            kind: input.kind,
+            status: "active",
+            ownerType,
+            ownerAgentId: input.ownerAgentId ?? null,
+            ownerUserId: input.ownerUserId ?? null,
+            previousOwnerAgentId: input.previousOwnerAgentId ?? priorForCause.previousOwnerAgentId,
+            returnOwnerAgentId: input.returnOwnerAgentId ?? priorForCause.returnOwnerAgentId,
+            cause: input.cause,
+            fingerprint: input.fingerprint,
+            evidence: input.evidence ?? priorForCause.evidence,
+            nextAction: input.nextAction,
+            wakePolicy: input.wakePolicy ?? null,
+            monitorPolicy: input.monitorPolicy ?? null,
+            attemptCount: priorForCause.attemptCount + 1,
+            maxAttempts: input.maxAttempts ?? null,
+            timeoutAt: input.timeoutAt ?? null,
+            lastAttemptAt: input.lastAttemptAt ?? now,
+            outcome: null,
+            resolutionNote: null,
+            resolvedAt: null,
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(issueRecoveryActions.id, priorForCause.id),
+              eq(issueRecoveryActions.cause, input.cause),
+            ),
+          )
+          .returning();
+        if (!reactivated) {
+          return retryUpsertSourceScoped(input, retryCount);
+        }
+        return toReadModel(reactivated!);
+      } catch (error) {
+        if (!isUniqueRecoveryActionConflict(error)) throw error;
+        return retryUpsertSourceScoped(input, retryCount, error);
+      }
     }
 
     try {

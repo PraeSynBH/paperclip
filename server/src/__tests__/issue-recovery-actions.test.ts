@@ -379,6 +379,84 @@ describeEmbeddedPostgres("issue recovery actions", () => {
     });
   });
 
+  it("reactivates the resolved row for a recurring cause instead of inserting a second row (RBR-899 double-revert)", async () => {
+    // Reproduces RBR-899: the issue_terminal_status revert re-fired twice, ~40s
+    // apart, for the same issue and the same cause, and produced two distinct
+    // recovery_actions rows because the write path only ever checked for an
+    // *active* row via getActiveForIssue and fell through to a plain INSERT
+    // once the first row had already been resolved. The upsert must key off
+    // (companyId, sourceIssueId, cause) across the row's full lifecycle, not
+    // just its active window.
+    const { companyId, managerId, sourceIssueId } = await seedCompany();
+    const svc = issueRecoveryActionService(db);
+
+    const firstPass = await svc.upsertSourceScoped({
+      companyId,
+      sourceIssueId,
+      kind: "stranded_assigned_issue",
+      ownerType: "agent",
+      ownerAgentId: managerId,
+      cause: "issue_terminal_status",
+      fingerprint: "source_scoped_recovery:issue_terminal_status",
+      evidence: { latestRunId: "run-1" },
+      nextAction: "Restore a live execution path.",
+      wakePolicy: { type: "wake_owner" },
+    });
+    expect(firstPass.attemptCount).toBe(1);
+
+    // Something resolved the recovery action between the two reconciler
+    // passes (e.g. an operator or a fold path) — this is the state RBR-899
+    // was caught in when the second revert fired ~40s later.
+    const resolved = await svc.resolveActiveForIssue({
+      companyId,
+      sourceIssueId,
+      actionId: firstPass.id,
+      status: "resolved",
+      outcome: "restored",
+      resolutionNote: "Manually restored between reconciler passes.",
+    });
+    expect(resolved?.status).toBe("resolved");
+    expect(await svc.getActiveForIssue(companyId, sourceIssueId)).toBeNull();
+
+    // Second reconciler pass, same issue, same cause, ~40s later per RBR-899.
+    const secondPass = await svc.upsertSourceScoped({
+      companyId,
+      sourceIssueId,
+      kind: "stranded_assigned_issue",
+      ownerType: "agent",
+      ownerAgentId: managerId,
+      cause: "issue_terminal_status",
+      fingerprint: "source_scoped_recovery:issue_terminal_status",
+      evidence: { latestRunId: "run-2" },
+      nextAction: "Restore a live execution path.",
+      wakePolicy: { type: "wake_owner" },
+    });
+
+    expect(secondPass.id).toBe(firstPass.id);
+    expect(secondPass.status).toBe("active");
+    expect(secondPass.attemptCount).toBe(2);
+    expect(secondPass.evidence).toMatchObject({ latestRunId: "run-2" });
+
+    const actionRows = await db
+      .select()
+      .from(issueRecoveryActions)
+      .where(
+        and(
+          eq(issueRecoveryActions.sourceIssueId, sourceIssueId),
+          eq(issueRecoveryActions.cause, "issue_terminal_status"),
+        ),
+      );
+    expect(actionRows).toHaveLength(1);
+    expect(actionRows[0]).toMatchObject({
+      id: firstPass.id,
+      status: "active",
+      attemptCount: 2,
+    });
+    expect(actionRows[0]?.lastAttemptAt.getTime()).toBeGreaterThan(
+      resolved!.resolvedAt!.getTime() - 1,
+    );
+  });
+
   it("deduplicates workspace-incoherence recovery actions by the typed workspace fingerprint", async () => {
     const { companyId, coderId, sourceIssue } = await seedCompany();
     const enqueueWakeup = vi.fn(async () => null);
