@@ -42,8 +42,16 @@ const TEST_IDENTS = new Set(["it", "test"]);
 const TOKEN_RE =
   /\/\/[^\n]*|\/\*[\s\S]*?\*\/|"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|`(?:[^`\\]|\\.)*`/g;
 
+// Matches the identifier plus any `.only`/`.skip`/etc. modifiers and an
+// optional trailing `.each`. The `.each(...)` argument list itself is NOT
+// captured here — it can contain arbitrarily nested parens (e.g.
+// `it.each([...new Set(...)])`), so a bounded `[^)]*` fragment would stop at
+// the first nested `)` and silently fail to recognize the real call's open
+// paren. Bracket-matching for `.each(...)` (when present) is done in code via
+// findMatchingClose, then this regex's own trailing `(` is re-located after
+// that point.
 const IDENT_CALL_RE =
-  /(?<![.\w$])(it|test|beforeAll|beforeEach|afterAll|afterEach)((?:\s*\.\s*(?:only|skip|concurrent|sequential|todo|failing|runIf|skipIf))*)(?:\s*\.\s*each\s*\([^)]*\))?\s*\(/g;
+  /(?<![.\w$])(it|test|beforeAll|beforeEach|afterAll|afterEach)((?:\s*\.\s*(?:only|skip|concurrent|sequential|todo|failing|runIf|skipIf))*)(\s*\.\s*each\s*)?/g;
 
 const NUMERIC_ARG_RE = /^\s*(\d[\d_]*)\s*$/;
 
@@ -116,7 +124,21 @@ function findInlineBudgetSites(src: string, file: string): BudgetSite[] {
   const sites: BudgetSite[] = [];
   for (const match of masked.matchAll(IDENT_CALL_RE)) {
     const ident = match[1]!;
-    const openIdx = match.index! + match[0].length - 1;
+    let cursor = match.index! + match[0].length;
+    if (match[3]) {
+      // A `.each` was matched; its own `(...)` argument list can nest
+      // arbitrarily deep (e.g. `it.each([...new Set(...)])`), so skip past
+      // it with proper bracket matching before looking for the real call's
+      // open paren, rather than a bounded character-class fragment.
+      while (cursor < masked.length && /\s/.test(masked[cursor]!)) cursor += 1;
+      if (masked[cursor] !== "(") continue;
+      const eachClose = findMatchingClose(masked, cursor);
+      if (eachClose === -1) continue;
+      cursor = eachClose + 1;
+    }
+    while (cursor < masked.length && /\s/.test(masked[cursor]!)) cursor += 1;
+    if (masked[cursor] !== "(") continue;
+    const openIdx = cursor;
     const closeIdx = findMatchingClose(masked, openIdx);
     if (closeIdx === -1) continue;
     const args = splitTopLevelArgs(masked, openIdx, closeIdx);
