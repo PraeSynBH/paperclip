@@ -2109,4 +2109,126 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       .where(eq(issueRecoveryActions.id, action.id));
     expect(actionRow?.status).toBe("active");
   });
+
+  // RBR-1013 — load-aware recovery deferral (RBR-977 scope item 3).
+  it("defers reconcileStrandedAssignedIssues under high host load instead of dispatching", async () => {
+    const { companyId, coderId, sourceIssueId } = await seedCompany();
+    await db.insert(heartbeatRuns).values({
+      id: randomUUID(),
+      companyId,
+      agentId: coderId,
+      invocationSource: "manual",
+      status: "failed",
+      error: "adapter failed",
+      errorCode: "adapter_failed",
+      startedAt: new Date("2026-07-15T20:00:00.000Z"),
+      finishedAt: new Date("2026-07-15T20:01:00.000Z"),
+      contextSnapshot: { issueId: sourceIssueId, retryReason: "issue_continuation_needed" },
+    });
+    const enqueueWakeup = vi.fn(async () => null);
+    // RBR-977 measured load average 52.40 on 12 cores during the run that
+    // outlived its JWT — reuse that exact reading as the degraded reading.
+    const recovery = recoveryService(db, {
+      enqueueWakeup,
+      readHostLoadSnapshot: () => ({ loadAverage1m: 52.4, cpuCount: 12 }),
+    });
+
+    const result = await recovery.reconcileStrandedAssignedIssues();
+
+    expect(result).toMatchObject({ deferredByLoad: true, loadGateReason: "host_load" });
+    // The core assertion: deferral means the sweep did not dispatch. It is
+    // not enough for a log line to say "deferred" while the sweep proceeds
+    // to mutate state and wake an agent anyway.
+    expect(enqueueWakeup).not.toHaveBeenCalled();
+    expect(await db.select().from(issueRecoveryActions)).toHaveLength(0);
+    const [issueRow] = await db.select().from(issues).where(eq(issues.id, sourceIssueId));
+    expect(issueRow?.status).toBe("in_progress"); // untouched — sweep never reached the mutation path
+  });
+
+  it("dispatches reconcileStrandedAssignedIssues normally when host load is healthy (negative control)", async () => {
+    const { companyId, coderId, sourceIssueId } = await seedCompany();
+    await db.insert(heartbeatRuns).values({
+      id: randomUUID(),
+      companyId,
+      agentId: coderId,
+      invocationSource: "manual",
+      status: "failed",
+      error: "adapter failed",
+      errorCode: "adapter_failed",
+      startedAt: new Date("2026-07-15T20:00:00.000Z"),
+      finishedAt: new Date("2026-07-15T20:01:00.000Z"),
+      contextSnapshot: { issueId: sourceIssueId, retryReason: "issue_continuation_needed" },
+    });
+    const enqueueWakeup = vi.fn(async () => null);
+    const recovery = recoveryService(db, {
+      enqueueWakeup,
+      readHostLoadSnapshot: () => ({ loadAverage1m: 1, cpuCount: 12 }),
+    });
+
+    const result = await recovery.reconcileStrandedAssignedIssues();
+
+    expect(result.deferredByLoad).toBe(false);
+    // Proves the negative control: with the guard's condition false, the
+    // sweep proceeds and does dispatch — the deferral test above is
+    // actually exercising the gate, not a sweep that never dispatches.
+    expect(enqueueWakeup).toHaveBeenCalled();
+  });
+
+  it("defers reconcileStrandedAssignedIssues on API latency over threshold even when host load is healthy", async () => {
+    const { companyId, coderId, sourceIssueId } = await seedCompany();
+    await db.insert(heartbeatRuns).values({
+      id: randomUUID(),
+      companyId,
+      agentId: coderId,
+      invocationSource: "manual",
+      status: "failed",
+      error: "adapter failed",
+      errorCode: "adapter_failed",
+      startedAt: new Date("2026-07-15T20:00:00.000Z"),
+      finishedAt: new Date("2026-07-15T20:01:00.000Z"),
+      contextSnapshot: { issueId: sourceIssueId, retryReason: "issue_continuation_needed" },
+    });
+    const enqueueWakeup = vi.fn(async () => null);
+    const recovery = recoveryService(db, {
+      enqueueWakeup,
+      readHostLoadSnapshot: () => ({ loadAverage1m: 1, cpuCount: 12 }),
+      readApiP50Ms: () => 101_400, // RBR-977 measured a single POST at 101.4s
+    });
+
+    const result = await recovery.reconcileStrandedAssignedIssues();
+
+    expect(result).toMatchObject({ deferredByLoad: true, loadGateReason: "api_latency" });
+    expect(enqueueWakeup).not.toHaveBeenCalled();
+  });
+
+  it("honors configurable thresholds for the load gate", async () => {
+    const { companyId, coderId, sourceIssueId } = await seedCompany();
+    await db.insert(heartbeatRuns).values({
+      id: randomUUID(),
+      companyId,
+      agentId: coderId,
+      invocationSource: "manual",
+      status: "failed",
+      error: "adapter failed",
+      errorCode: "adapter_failed",
+      startedAt: new Date("2026-07-15T20:00:00.000Z"),
+      finishedAt: new Date("2026-07-15T20:01:00.000Z"),
+      contextSnapshot: { issueId: sourceIssueId, retryReason: "issue_continuation_needed" },
+    });
+    const enqueueWakeup = vi.fn(async () => null);
+    // 3.0 load average on 12 cores is a 0.25 ratio, healthy against the
+    // default 1.25 threshold, but this test lowers the threshold to 0.2 to
+    // prove the override — not just the default — is what's consulted.
+    const recovery = recoveryService(db, {
+      enqueueWakeup,
+      readHostLoadSnapshot: () => ({ loadAverage1m: 3, cpuCount: 12 }),
+      recoveryLoadThresholdOverrides: { loadRefusalRatio: 0.2 },
+    });
+
+    const result = await recovery.reconcileStrandedAssignedIssues();
+
+    expect(result).toMatchObject({ deferredByLoad: true, loadGateReason: "host_load" });
+    expect(enqueueWakeup).not.toHaveBeenCalled();
+  });
 });
+
