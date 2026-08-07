@@ -26,6 +26,7 @@ import { errorHandler } from "../middleware/index.js";
 import { issueRoutes } from "../routes/issues.js";
 import { buildPaperclipWakePayload } from "../services/heartbeat.js";
 import { issueRecoveryActionService } from "../services/issue-recovery-actions.js";
+import { apiLatencyTracker, HEALTHY_HOST_LOAD_SNAPSHOT } from "../services/recovery/load-guard.js";
 import { recoveryService } from "../services/recovery/service.js";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
@@ -274,7 +275,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
   it("escalates stranded assigned work into a source action instead of a recovery issue", async () => {
     const { companyId, managerId, coderId, sourceIssue } = await seedCompany();
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
     const latestRun = {
       id: randomUUID(),
       agentId: coderId,
@@ -341,7 +342,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
     async (errorCode, explicitCause, expectedOwner) => {
       const { managerId, coderId, sourceIssue } = await seedCompany();
       const enqueueWakeup = vi.fn(async () => null);
-      const recovery = recoveryService(db, { enqueueWakeup });
+      const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
       const latestRun = {
         id: randomUUID(),
         agentId: coderId,
@@ -398,7 +399,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -422,7 +423,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -445,7 +446,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -472,7 +473,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -520,7 +521,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       finishedAt: new Date("2026-07-15T21:01:00.000Z"),
       contextSnapshot: { issueId: sourceIssueId },
     });
-    const recovery = recoveryService(db, { enqueueWakeup: vi.fn(async () => null) });
+    const recovery = recoveryService(db, { enqueueWakeup: vi.fn(async () => null), readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -551,7 +552,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -585,7 +586,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -653,7 +654,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -714,7 +715,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const firstResult = await recovery.reconcileStrandedAssignedIssues();
 
@@ -812,7 +813,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     }]);
     const enqueueWakeup = vi.fn(async () => ({ id: randomUUID() } as never));
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -873,7 +874,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => ({ id: randomUUID() } as never));
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -910,7 +911,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       finishedAt: new Date("2026-07-15T20:01:00.000Z"),
       contextSnapshot: { issueId: sourceIssueId },
     });
-    const recovery = recoveryService(db, { enqueueWakeup: vi.fn(async () => null) });
+    const recovery = recoveryService(db, { enqueueWakeup: vi.fn(async () => null), readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -940,7 +941,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -974,7 +975,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       contextSnapshot: { issueId: sourceIssueId },
     });
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     const result = await recovery.reconcileStrandedAssignedIssues();
 
@@ -993,7 +994,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
   it("reuses the same source-scoped action when latest run IDs change while the cause stays the same", async () => {
     const { companyId, managerId, coderId, sourceIssue } = await seedCompany();
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
     const firstLatestRun = {
       id: randomUUID(),
       agentId: coderId,
@@ -1048,7 +1049,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
   it("deduplicates workspace-incoherence recovery actions by the typed workspace fingerprint", async () => {
     const { companyId, coderId, sourceIssue } = await seedCompany();
     const enqueueWakeup = vi.fn(async () => null);
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
     const workspaceFingerprint = `workspace_incoherence:v1:sha256:${"a".repeat(64)}`;
     const workspaceValidation = {
       reason: "git_worktree_branch_incoherence",
@@ -1179,7 +1180,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
         .where(eq(issues.id, sourceIssue.id));
       return null;
     });
-    const recovery = recoveryService(db, { enqueueWakeup });
+    const recovery = recoveryService(db, { enqueueWakeup, readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
     const firstLatestRun = {
       id: randomUUID(),
       agentId: coderId,
@@ -1252,7 +1253,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       originFingerprint: `stranded_issue_recovery:${sourceIssueId}`,
     });
     const [recoveryIssue] = await db.select().from(issues).where(eq(issues.id, recoveryIssueId));
-    const recovery = recoveryService(db, { enqueueWakeup: vi.fn(async () => null) });
+    const recovery = recoveryService(db, { enqueueWakeup: vi.fn(async () => null), readHostLoadSnapshot: () => HEALTHY_HOST_LOAD_SNAPSHOT });
 
     await recovery.escalateStrandedAssignedIssue({
       issue: recoveryIssue!,
@@ -2229,6 +2230,76 @@ describeEmbeddedPostgres("issue recovery actions", () => {
 
     expect(result).toMatchObject({ deferredByLoad: true, loadGateReason: "host_load" });
     expect(enqueueWakeup).not.toHaveBeenCalled();
+  });
+
+  // Greptile P1 on PR #11028 (commit c7bfe48c): the default API-p50 reader
+  // must not read over the tracker's full six-hour retention, or a
+  // degradation that has since recovered keeps the sweep deferred until
+  // stale samples age out on their own.
+  it("does not defer on the default API-p50 reader once stale degraded samples have aged out of the gate's window", async () => {
+    apiLatencyTracker.reset();
+    const { companyId, coderId, sourceIssueId } = await seedCompany();
+    await db.insert(heartbeatRuns).values({
+      id: randomUUID(),
+      companyId,
+      agentId: coderId,
+      invocationSource: "manual",
+      status: "failed",
+      error: "adapter failed",
+      errorCode: "adapter_failed",
+      startedAt: new Date("2026-07-15T20:00:00.000Z"),
+      finishedAt: new Date("2026-07-15T20:01:00.000Z"),
+      contextSnapshot: { issueId: sourceIssueId, retryReason: "issue_continuation_needed" },
+    });
+    // A degraded sample from 10 minutes ago — outside the default 5-minute
+    // gate window, but still well inside the tracker's 6-hour retention.
+    apiLatencyTracker.record(101_400, Date.now() - 10 * 60 * 1000);
+    const enqueueWakeup = vi.fn(async () => null);
+    const recovery = recoveryService(db, {
+      enqueueWakeup,
+      readHostLoadSnapshot: () => ({ loadAverage1m: 1, cpuCount: 12 }),
+      // No readApiP50Ms override here — this exercises the real default
+      // reader (`apiLatencyTracker.getP50(recoveryLoadThresholds.apiLatencyWindowMs)`),
+      // not a test double, so the window bound is actually proven.
+    });
+
+    const result = await recovery.reconcileStrandedAssignedIssues();
+
+    expect(result.deferredByLoad).toBe(false);
+    expect(enqueueWakeup).toHaveBeenCalled();
+    apiLatencyTracker.reset();
+  });
+
+  it("negative control: the default API-p50 reader still defers on a degraded sample inside the gate's window", async () => {
+    apiLatencyTracker.reset();
+    const { companyId, coderId, sourceIssueId } = await seedCompany();
+    await db.insert(heartbeatRuns).values({
+      id: randomUUID(),
+      companyId,
+      agentId: coderId,
+      invocationSource: "manual",
+      status: "failed",
+      error: "adapter failed",
+      errorCode: "adapter_failed",
+      startedAt: new Date("2026-07-15T20:00:00.000Z"),
+      finishedAt: new Date("2026-07-15T20:01:00.000Z"),
+      contextSnapshot: { issueId: sourceIssueId, retryReason: "issue_continuation_needed" },
+    });
+    // Same degraded sample, but recorded 1 minute ago — inside the default
+    // 5-minute gate window. Proves the test above is exercising the window
+    // bound itself, not a gate that never defers via the default reader.
+    apiLatencyTracker.record(101_400, Date.now() - 60 * 1000);
+    const enqueueWakeup = vi.fn(async () => null);
+    const recovery = recoveryService(db, {
+      enqueueWakeup,
+      readHostLoadSnapshot: () => ({ loadAverage1m: 1, cpuCount: 12 }),
+    });
+
+    const result = await recovery.reconcileStrandedAssignedIssues();
+
+    expect(result).toMatchObject({ deferredByLoad: true, loadGateReason: "api_latency" });
+    expect(enqueueWakeup).not.toHaveBeenCalled();
+    apiLatencyTracker.reset();
   });
 });
 

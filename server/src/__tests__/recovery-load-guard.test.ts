@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DEFAULT_RECOVERY_API_LATENCY_WINDOW_MS,
   DEFAULT_RECOVERY_API_P50_THRESHOLD_MS,
   DEFAULT_RECOVERY_LOAD_REFUSAL_RATIO,
   evaluateRecoveryLoadGate,
@@ -64,6 +65,7 @@ describe("resolveRecoveryLoadThresholds", () => {
     expect(thresholds).toEqual({
       loadRefusalRatio: DEFAULT_RECOVERY_LOAD_REFUSAL_RATIO,
       apiP50ThresholdMs: DEFAULT_RECOVERY_API_P50_THRESHOLD_MS,
+      apiLatencyWindowMs: DEFAULT_RECOVERY_API_LATENCY_WINDOW_MS,
     });
   });
 
@@ -71,8 +73,9 @@ describe("resolveRecoveryLoadThresholds", () => {
     const thresholds = resolveRecoveryLoadThresholds({
       PAPERCLIP_RECOVERY_LOAD_REFUSAL_RATIO: "2.5",
       PAPERCLIP_RECOVERY_API_P50_THRESHOLD_MS: "9000",
+      PAPERCLIP_RECOVERY_API_P50_WINDOW_MS: "60000",
     });
-    expect(thresholds).toEqual({ loadRefusalRatio: 2.5, apiP50ThresholdMs: 9_000 });
+    expect(thresholds).toEqual({ loadRefusalRatio: 2.5, apiP50ThresholdMs: 9_000, apiLatencyWindowMs: 60_000 });
   });
 
   it("prefers explicit overrides over env vars", () => {
@@ -91,6 +94,7 @@ describe("resolveRecoveryLoadThresholds", () => {
     expect(thresholds).toEqual({
       loadRefusalRatio: DEFAULT_RECOVERY_LOAD_REFUSAL_RATIO,
       apiP50ThresholdMs: DEFAULT_RECOVERY_API_P50_THRESHOLD_MS,
+      apiLatencyWindowMs: DEFAULT_RECOVERY_API_LATENCY_WINDOW_MS,
     });
   });
 });

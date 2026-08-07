@@ -799,6 +799,7 @@ export function recoveryService(
     recoveryLoadThresholdOverrides?: {
       loadRefusalRatio?: number;
       apiP50ThresholdMs?: number;
+      apiLatencyWindowMs?: number;
     };
   },
 ) {
@@ -822,7 +823,11 @@ export function recoveryService(
    */
   function checkRecoveryLoadGate(): RecoveryLoadGateDecision {
     const hostLoad = (deps.readHostLoadSnapshot ?? readHostLoadSnapshot)();
-    const apiP50Ms = (deps.readApiP50Ms ?? (() => apiLatencyTracker.getP50()))();
+    // Bounded to `apiLatencyWindowMs` (default 5m), not the tracker's full
+    // six-hour retention: a sustained degradation that has since recovered
+    // must not keep the sweep deferred until stale samples age out (Greptile
+    // P1 on PR #11028, commit c7bfe48c).
+    const apiP50Ms = (deps.readApiP50Ms ?? (() => apiLatencyTracker.getP50(recoveryLoadThresholds.apiLatencyWindowMs)))();
     return evaluateRecoveryLoadGate({ hostLoad, apiP50Ms, thresholds: recoveryLoadThresholds });
   }
 

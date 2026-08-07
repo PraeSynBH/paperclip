@@ -39,10 +39,20 @@ export type RecoveryLoadThresholds = {
   loadRefusalRatio: number;
   /** Defer when the supplied API p50 (ms) exceeds this value. */
   apiP50ThresholdMs: number;
+  /** Window (ms) the recovery sweep's default API-p50 reader looks back
+   * over. Deliberately bounded — the tracker retains samples for six hours
+   * (see `DEFAULT_API_LATENCY_RETENTION_MS`), but the recovery gate is
+   * asking "is the host degraded *right now*", not "was it degraded at any
+   * point in the last six hours". Without this bound, a sustained
+   * degradation that later recovers keeps the sweep deferred until enough
+   * stale samples age out of the full retention window (Greptile P1 on
+   * PR #11028, commit c7bfe48c). */
+  apiLatencyWindowMs: number;
 };
 
 export const DEFAULT_RECOVERY_LOAD_REFUSAL_RATIO = 1.25;
 export const DEFAULT_RECOVERY_API_P50_THRESHOLD_MS = 5_000;
+export const DEFAULT_RECOVERY_API_LATENCY_WINDOW_MS = 5 * 60 * 1000;
 
 function readPositiveFloat(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
@@ -61,6 +71,10 @@ export function resolveRecoveryLoadThresholds(
     apiP50ThresholdMs: readPositiveFloat(
       overrides?.apiP50ThresholdMs !== undefined ? String(overrides.apiP50ThresholdMs) : env.PAPERCLIP_RECOVERY_API_P50_THRESHOLD_MS,
       DEFAULT_RECOVERY_API_P50_THRESHOLD_MS,
+    ),
+    apiLatencyWindowMs: readPositiveFloat(
+      overrides?.apiLatencyWindowMs !== undefined ? String(overrides.apiLatencyWindowMs) : env.PAPERCLIP_RECOVERY_API_P50_WINDOW_MS,
+      DEFAULT_RECOVERY_API_LATENCY_WINDOW_MS,
     ),
   };
 }
