@@ -4457,6 +4457,109 @@ describeEmbeddedPostgres("issueService blockers and dependency wake readiness", 
   });
 });
 
+describeEmbeddedPostgres("issueService.update recovery-automation terminal-status write guard (RBR-1049 AC1)", () => {
+  let db!: ReturnType<typeof createDb>;
+  let svc!: ReturnType<typeof issueService>;
+  let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
+
+  beforeAll(async () => {
+    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-issues-recovery-terminal-guard-");
+    db = createDb(tempDb.connectionString);
+    svc = issueService(db);
+  }, 20_000);
+
+  afterEach(async () => {
+    await db.delete(issueComments);
+    await db.delete(activityLog);
+    await db.delete(issues);
+    await db.delete(projects);
+    await db.delete(agents);
+    await db.delete(instanceSettings);
+    await db.delete(companies);
+  });
+
+  afterAll(async () => {
+    await tempDb?.cleanup();
+  });
+
+  async function seedTerminalIssue(status: "done" | "cancelled") {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Finished work",
+      status,
+      priority: "medium",
+    });
+    return { companyId, issueId };
+  }
+
+  it("refuses an automated-recovery status write on a done issue instead of mutating it", async () => {
+    const { issueId } = await seedTerminalIssue("done");
+
+    const result = await svc.update(issueId, {
+      status: "blocked",
+      actorKind: "recovery_automation" as const,
+    });
+
+    // The write path must no-op (return null) rather than silently mutating the
+    // terminal issue. `assertTransition` alone does not block done->blocked (it
+    // only rejects unknown status values), so this test pins the *specific*
+    // recovery-automation boundary invariant added for RBR-1049 AC1: it must
+    // refuse the write outright, and the row must be observably untouched.
+    expect(result).toBeNull();
+
+    const [row] = await db.select().from(issues).where(eq(issues.id, issueId));
+    expect(row.status).toBe("done");
+  });
+
+  it("refuses an automated-recovery status write on a cancelled issue instead of mutating it", async () => {
+    const { issueId } = await seedTerminalIssue("cancelled");
+
+    const result = await svc.update(issueId, {
+      status: "blocked",
+      actorKind: "recovery_automation" as const,
+    });
+
+    expect(result).toBeNull();
+
+    const [row] = await db.select().from(issues).where(eq(issues.id, issueId));
+    expect(row.status).toBe("cancelled");
+  });
+
+  it("still allows non-recovery-automation actors to write status on a terminal issue via a legal transition", async () => {
+    const { issueId } = await seedTerminalIssue("done");
+
+    // No actorKind at all (e.g. a board/human-triggered update) is not subject to
+    // the recovery-automation boundary guard — it only needs to satisfy the normal
+    // status-transition rules enforced by `assertTransition`.
+    const result = await svc.update(issueId, { status: "cancelled" });
+
+    expect(result).not.toBeNull();
+    expect(result?.status).toBe("cancelled");
+  });
+
+  it("still allows automated-recovery writes that do not touch status on a terminal issue", async () => {
+    const { issueId } = await seedTerminalIssue("done");
+
+    const result = await svc.update(issueId, {
+      priority: "high",
+      actorKind: "recovery_automation" as const,
+    });
+
+    expect(result).not.toBeNull();
+    expect(result?.priority).toBe("high");
+    expect(result?.status).toBe("done");
+  });
+});
+
 describeEmbeddedPostgres("issueService.create workspace inheritance", () => {
   let db!: ReturnType<typeof createDb>;
   let svc!: ReturnType<typeof issueService>;
