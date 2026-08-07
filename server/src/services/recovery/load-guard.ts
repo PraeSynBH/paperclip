@@ -144,7 +144,7 @@ export function evaluateRecoveryLoadGate(input: {
 const DEFAULT_API_LATENCY_MAX_SAMPLES = 5_000;
 const DEFAULT_API_LATENCY_RETENTION_MS = 6 * 60 * 60 * 1000;
 
-type LatencySample = { at: number; ms: number };
+type LatencySample = { at: number; ms: number; companyId: string | null };
 
 export class ApiLatencyTracker {
   private samples: LatencySample[] = [];
@@ -154,9 +154,13 @@ export class ApiLatencyTracker {
     private readonly retentionMs = DEFAULT_API_LATENCY_RETENTION_MS,
   ) {}
 
-  record(ms: number, at = Date.now()) {
+  /** `companyId` is optional so unauthenticated/pre-actor requests (health
+   * checks, auth routes) can still feed the host-wide degradation signal —
+   * but any *company-scoped* consumer (see `getP50`'s `companyId` param)
+   * must never match those, hence `null` rather than an empty string. */
+  record(ms: number, at = Date.now(), companyId: string | null = null) {
     if (!Number.isFinite(ms) || ms < 0) return;
-    this.samples.push({ at, ms });
+    this.samples.push({ at, ms, companyId });
     if (this.samples.length > this.maxSamples) {
       this.samples.splice(0, this.samples.length - this.maxSamples);
     }
@@ -171,11 +175,23 @@ export class ApiLatencyTracker {
 
   /** p50 over the trailing `windowMs`, or over all retained samples when
    * `windowMs` is omitted. Returns null when there are no samples in range —
-   * callers must treat that as "unknown", never as "healthy" or "degraded". */
-  getP50(windowMs?: number, now = Date.now()): number | null {
+   * callers must treat that as "unknown", never as "healthy" or "degraded".
+   *
+   * When `companyId` is supplied, only that company's own recorded samples
+   * count — a company-scoped consumer (e.g. the productivity monitor
+   * deciding whether *this company's* no-comment streak is attributable)
+   * must never be suppressed or explained by another company's slow
+   * requests on a shared multi-tenant instance. Omit `companyId` for
+   * host-wide consumers (e.g. the recovery sweep, which is asking "is this
+   * server instance currently degraded" — a question with no company
+   * scope). */
+  getP50(windowMs?: number, now = Date.now(), companyId?: string): number | null {
     this.prune(now);
     const cutoff = windowMs !== undefined ? now - windowMs : -Infinity;
-    const values = this.samples.filter((sample) => sample.at >= cutoff).map((sample) => sample.ms);
+    const values = this.samples
+      .filter((sample) => sample.at >= cutoff)
+      .filter((sample) => companyId === undefined || sample.companyId === companyId)
+      .map((sample) => sample.ms);
     if (values.length === 0) return null;
     const sorted = [...values].sort((a, b) => a - b);
     const index = Math.min(sorted.length - 1, Math.max(0, Math.ceil(0.5 * sorted.length) - 1));

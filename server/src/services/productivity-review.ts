@@ -293,17 +293,18 @@ export function productivityReviewService(
   deps?: {
     enqueueWakeup?: EnqueueWakeup;
     /** RBR-1013: injectable API p50 (ms) reader. Defaults to the
-     * process-wide `apiLatencyTracker`, scoped to the caller-supplied
+     * process-wide `apiLatencyTracker`, scoped both to the caller-supplied
      * window (see `collectEvidence` — the window is bounded to the
      * no-comment streak's own time span, not the tracker's full six-hour
-     * retention, so latency from unrelated requests/companies/periods
-     * cannot suppress a streak it never overlapped). */
-    readApiP50Ms?: (windowMs?: number) => number | null;
+     * retention) and to the caller-supplied `companyId` — a shared
+     * multi-tenant instance must never let one company's slow API traffic
+     * suppress another company's genuine no-comment streak. */
+    readApiP50Ms?: (windowMs?: number, companyId?: string) => number | null;
   },
 ) {
   const issuesSvc = issueService(db);
   const budgets = budgetService(db);
-  const readApiP50Ms = deps?.readApiP50Ms ?? ((windowMs?: number) => apiLatencyTracker.getP50(windowMs));
+  const readApiP50Ms = deps?.readApiP50Ms ?? ((windowMs?: number, companyId?: string) => apiLatencyTracker.getP50(windowMs, undefined, companyId));
 
   async function getCompanyIssuePrefix(companyId: string) {
     return db
@@ -651,7 +652,7 @@ export function productivityReviewService(
     const streakWindowMs = oldestStreakRun
       ? Math.max(1, now.getTime() - (oldestStreakRun.startedAt ?? oldestStreakRun.createdAt).getTime())
       : undefined;
-    const apiP50Ms = readApiP50Ms(streakWindowMs);
+    const apiP50Ms = readApiP50Ms(streakWindowMs, sourceIssue.companyId);
     const suppression = evaluateNoCommentStreakSuppression({ streakRuns, apiP50Ms, thresholds });
     const noCommentSuppressed = noCommentStreak >= thresholds.noCommentStreakRuns && suppression.reasons.length > 0;
     const noComment = noCommentStreak >= thresholds.noCommentStreakRuns && !noCommentSuppressed;
