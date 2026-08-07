@@ -293,18 +293,25 @@ export function productivityReviewService(
   deps?: {
     enqueueWakeup?: EnqueueWakeup;
     /** RBR-1013: injectable API p50 (ms) reader. Defaults to the
-     * process-wide `apiLatencyTracker`, scoped both to the caller-supplied
+     * process-wide `apiLatencyTracker`, scoped to the caller-supplied
      * window (see `collectEvidence` — the window is bounded to the
      * no-comment streak's own time span, not the tracker's full six-hour
-     * retention) and to the caller-supplied `companyId` — a shared
-     * multi-tenant instance must never let one company's slow API traffic
-     * suppress another company's genuine no-comment streak. */
-    readApiP50Ms?: (windowMs?: number, companyId?: string) => number | null;
+     * retention), anchored at the caller-supplied `at` (the streak's own
+     * end time, not "now" — see Greptile P1 on PR #11028: reconciliation
+     * can run well after the streak's newest run finished, and unrelated
+     * same-company latency in that gap must not retroactively explain a
+     * streak it never overlapped), and scoped to the caller-supplied
+     * `companyId` — a shared multi-tenant instance must never let one
+     * company's slow API traffic suppress another company's genuine
+     * no-comment streak. */
+    readApiP50Ms?: (windowMs?: number, companyId?: string, at?: number) => number | null;
   },
 ) {
   const issuesSvc = issueService(db);
   const budgets = budgetService(db);
-  const readApiP50Ms = deps?.readApiP50Ms ?? ((windowMs?: number, companyId?: string) => apiLatencyTracker.getP50(windowMs, undefined, companyId));
+  const readApiP50Ms =
+    deps?.readApiP50Ms ??
+    ((windowMs?: number, companyId?: string, at?: number) => apiLatencyTracker.getP50(windowMs, at, companyId));
 
   async function getCompanyIssuePrefix(companyId: string) {
     return db
@@ -642,17 +649,23 @@ export function productivityReviewService(
     // streak itself, not the whole `latestRuns` sample: a run outside the
     // streak having run long is irrelevant to *this* observation.
     const streakRuns = terminalRuns.slice(0, noCommentStreak);
-    // Bound the API-latency sample to the streak's own time span (oldest
-    // streak run's start through now) rather than the tracker's full
-    // six-hour retention — otherwise latency from an unrelated request
-    // (different issue, different company, or a period before this streak
-    // even started) could suppress a genuine no-comment streak it never
-    // overlapped.
+    // Bound the API-latency sample to the streak's own time span: from the
+    // oldest streak run's start through the newest streak run's finish
+    // (not "now") rather than the tracker's full six-hour retention —
+    // otherwise latency from an unrelated request (different issue,
+    // different company, a period before this streak even started, or —
+    // Greptile P1 on PR #11028 — a period *after* the streak's last run
+    // finished but before this reconciliation pass happened to run) could
+    // suppress a genuine no-comment streak it never overlapped.
     const oldestStreakRun = streakRuns[streakRuns.length - 1];
+    const newestStreakRun = streakRuns[0];
+    const streakWindowEndAt = newestStreakRun
+      ? (newestStreakRun.finishedAt ?? newestStreakRun.createdAt).getTime()
+      : now.getTime();
     const streakWindowMs = oldestStreakRun
-      ? Math.max(1, now.getTime() - (oldestStreakRun.startedAt ?? oldestStreakRun.createdAt).getTime())
+      ? Math.max(1, streakWindowEndAt - (oldestStreakRun.startedAt ?? oldestStreakRun.createdAt).getTime())
       : undefined;
-    const apiP50Ms = readApiP50Ms(streakWindowMs, sourceIssue.companyId);
+    const apiP50Ms = readApiP50Ms(streakWindowMs, sourceIssue.companyId, streakWindowEndAt);
     const suppression = evaluateNoCommentStreakSuppression({ streakRuns, apiP50Ms, thresholds });
     const noCommentSuppressed = noCommentStreak >= thresholds.noCommentStreakRuns && suppression.reasons.length > 0;
     const noComment = noCommentStreak >= thresholds.noCommentStreakRuns && !noCommentSuppressed;

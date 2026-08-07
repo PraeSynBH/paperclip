@@ -793,6 +793,51 @@ describeEmbeddedPostgres("productivity review service", () => {
     expect(await listProductivityReviews(seeded.companyId)).toHaveLength(0);
   });
 
+  // Greptile P1 on PR #11028: the API-latency sample window must be anchored
+  // at the streak's own end (newest streak run's finish), not at "now"/the
+  // reconciliation pass's own wall-clock time. A slow unrelated request that
+  // lands in the gap *after* the streak's last run finished but *before*
+  // reconciliation happens to run must never retroactively explain (and
+  // suppress) a genuine no-comment streak it never overlapped. Asserted via
+  // spy on the exact `at` anchor passed to the latency reader — proving the
+  // call site's anchoring itself, not just an end-to-end outcome a stub
+  // could coincidentally satisfy either way.
+  it("anchors the no_comment_streak latency sample at the streak's own end, not at reconciliation time", async () => {
+    const runsAnchor = new Date("2026-04-28T12:00:00.000Z");
+    const seeded = await seedAssignedIssue();
+    const runs = await insertRuns({
+      companyId: seeded.companyId,
+      agentId: seeded.coderId,
+      issueId: seeded.issueId,
+      count: DEFAULT_PRODUCTIVITY_REVIEW_NO_COMMENT_STREAK_RUNS,
+      now: runsAnchor,
+      gapMs: 8 * 60_000,
+    });
+    const newestRunFinishedAt = runs[0]!.finishedAt as Date;
+    // Reconciliation runs a full hour after the streak's last run finished —
+    // plenty of room for an unrelated slow request to land in that gap.
+    const reconcileNow = new Date(newestRunFinishedAt.getTime() + 60 * 60_000);
+
+    const calls: Array<{ windowMs?: number; companyId?: string; at?: number }> = [];
+    const service = productivityReviewService(db, {
+      readApiP50Ms: (windowMs, companyId, at) => {
+        calls.push({ windowMs, companyId, at });
+        return 200;
+      },
+    });
+
+    const result = await service.reconcileProductivityReviews({ now: reconcileNow, companyId: seeded.companyId });
+
+    expect(result.created).toBe(1);
+    expect(calls).toHaveLength(1);
+    // The fixed call site must anchor at the streak's own end, not at
+    // reconciliation's wall-clock time — a pre-fix call site either omits
+    // `at` entirely or passes `reconcileNow`, both of which this assertion
+    // rejects.
+    expect(calls[0]!.at).toBe(newestRunFinishedAt.getTime());
+    expect(calls[0]!.at).not.toBe(reconcileNow.getTime());
+  });
+
   it(
     "negative control: still creates a no_comment_streak review when neither suppression cause applies",
     async () => {
