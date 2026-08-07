@@ -58,15 +58,6 @@ import {
 import { conflict, HttpError, notFound } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import {
-  createGitRemoteAuthProvider,
-  describeGitAuthFailure,
-  scrubGitCredentialText,
-  type GitRemoteAuthProvider,
-} from "./git-credentials.js";
-// Re-exported because heartbeat's workspace surface exposed the scrubber before the
-// git-credentials module became its canonical home; existing importers keep working.
-export { scrubGitCredentialText };
-import {
   evaluateRunAdmission,
   readHostLoadSnapshot,
   resolveGlobalRunCeiling,
@@ -9483,56 +9474,11 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     if (claimedRuns.length === 0) return [];
 
     for (const claimedRun of claimedRuns) {
-      const execution = executeRun(claimedRun.id).catch((err) => {
+      void executeRun(claimedRun.id).catch((err) => {
         logger.error({ err, runId: claimedRun.id }, "queued heartbeat execution failed");
-      });
-      // Register the in-flight execution so drainActiveRunExecutions() can await
-      // it. executeRun resolves only after its finally block finishes flushing
-      // run rows/events, so awaiting this promise guarantees the run's writes
-      // have landed before a caller (e.g. a test's afterEach) mutates the DB.
-      activeRunExecutionPromises.add(execution);
-      void execution.finally(() => {
-        activeRunExecutionPromises.delete(execution);
       });
     }
     return claimedRuns;
-  }
-
-  // Await every background heartbeat execution that is currently in flight. A
-  // draining run can, in its finally block, promote and dispatch the next queued
-  // run for the same agent — that follow-up execution is registered in the set
-  // before the parent promise settles, so we loop until the set is empty rather
-  // than snapshotting once. Callers use this to guarantee no run is still
-  // writing rows/events (graceful shutdown, deterministic test teardown).
-  //
-  // Await in-flight wakeup promises first. A wakeup resolves only after it
-  // registers its run execution, so a wake that is still before run registration
-  // is invisible to activeRunExecutionPromises alone. Awaiting the wakeup promise
-  // closes that window: once it settles, any run it dispatched is already in
-  // activeRunExecutionPromises, and the second await drains that run. A wakeup or
-  // a run can add more entries as it settles, so loop until both sets are empty.
-  async function drainActiveRunExecutions() {
-    while (activeWakeupPromises.size > 0 || activeRunExecutionPromises.size > 0) {
-      await Promise.allSettled([...activeWakeupPromises]);
-      await Promise.all([...activeRunExecutionPromises]);
-    }
-  }
-
-  // Public wakeup entry point. Callers dispatch it fire-and-forget, so register
-  // the promise in activeWakeupPromises before it starts its asynchronous
-  // prologue. drainActiveRunExecutions can then await a wake that is still before
-  // run registration. Internal callers reference enqueueWakeup directly and
-  // already await it, so they do not need this registration.
-  function trackWakeup(
-    agentId: string,
-    opts: WakeupOptions = {},
-  ): ReturnType<typeof enqueueWakeup> {
-    const promise = enqueueWakeup(agentId, opts);
-    activeWakeupPromises.add(promise);
-    void promise.catch(() => {}).finally(() => {
-      activeWakeupPromises.delete(promise);
-    });
-    return promise;
   }
 
   async function executeRun(runId: string) {
