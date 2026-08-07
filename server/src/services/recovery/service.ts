@@ -29,6 +29,7 @@ import {
 } from "@paperclipai/db";
 import { parseObject, asBoolean, asNumber } from "../../adapters/utils.js";
 import {
+  apiLatencyTracker,
   evaluateRecoveryLoadGate,
   readHostLoadSnapshot,
   resolveRecoveryLoadThresholds,
@@ -821,7 +822,7 @@ export function recoveryService(
    */
   function checkRecoveryLoadGate(): RecoveryLoadGateDecision {
     const hostLoad = (deps.readHostLoadSnapshot ?? readHostLoadSnapshot)();
-    const apiP50Ms = (deps.readApiP50Ms ?? (() => null))();
+    const apiP50Ms = (deps.readApiP50Ms ?? (() => apiLatencyTracker.getP50()))();
     return evaluateRecoveryLoadGate({ hostLoad, apiP50Ms, thresholds: recoveryLoadThresholds });
   }
 

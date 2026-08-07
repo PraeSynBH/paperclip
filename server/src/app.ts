@@ -299,8 +299,10 @@ export async function createApp(
   // RBR-1013: feed the process-local API latency tracker consulted by the
   // load-aware recovery gate and the productivity monitor's degraded-window
   // suppression. Mounted immediately after the request logger so recorded
-  // durations cover the same span the logger reports.
-  app.use(apiLatencySampler());
+  // durations cover the same span the logger reports. Scoped to /api only —
+  // this metric feeds gates that decide whether to defer *API* work, so
+  // slow MCP gateway/plugin UI/static-asset/Vite responses must not count.
+  app.use("/api", apiLatencySampler());
   const privateHostnameGateEnabled = shouldEnablePrivateHostnameGuard({
     deploymentMode: opts.deploymentMode,
     deploymentExposure: opts.deploymentExposure,
