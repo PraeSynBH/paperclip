@@ -14,13 +14,11 @@
     "as a hard error, so this file cannot silently rot.",
     "",
     "Do not add entries here to unblock your own change. If your change introduces a duplicate",
-    "`idx`, fix the journal instead."
+    "`idx`, fix the journal instead.",
+    "",
+    "RBR-1033 fork-retarget note: the idx-178 duplicate baselined by RBR-968 does not exist on",
+    "this fork's journal (this fork's migration history diverged from upstream/master and never",
+    "carried that duplicate — max idx here is 127 with no gaps or dupes). Baseline left empty."
   ],
-  "duplicateIdx": [
-    {
-      "idx": 178,
-      "tags": ["0177_activity_log_responsible_user", "0178_summary_slots"],
-      "reason": "Pre-existing on origin/master: two journal entries share idx 178, so journal-ordered migration application is ambiguous between these two tags. Discovered while building the guard (RBR-968); fixing the journal history itself is deliberately out of scope for that issue."
-    }
-  ]
+  "duplicateIdx": []
 }

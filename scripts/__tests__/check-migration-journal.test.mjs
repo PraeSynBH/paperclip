@@ -31,45 +31,43 @@ test("passes on the real tree with the shipped baseline", () => {
   assert.match(output, /OK — \d+ migration file\(s\) match \d+ journal entry\/entries/);
 });
 
-test("reports the two genuine origin/master defects as warnings (AC2)", () => {
-  const { output } = runGuard();
-  // Duplicate idx 178, baselined -> warning naming both tags.
-  assert.match(output, /WARN Duplicate journal idx 178/);
-  assert.match(output, /0177_activity_log_responsible_user\.sql/);
-  assert.match(output, /0178_summary_slots\.sql/);
-  // Missing idx 126, 130, 177 -> gap warning.
-  assert.match(output, /WARN Gaps in journal idx sequence: 126, 130, 177/);
+test("reports no defects on this fork's clean journal (RBR-1033 fork-retarget)", () => {
+  // RBR-968 pinned upstream/paperclipai/paperclip's known defects (duplicate idx 178,
+  // gaps at 126/130/177). This fork's journal diverged before those defects existed on
+  // this line of history, so it has neither: no duplicate-idx or idx-gap warnings.
+  const { status, output } = runGuard();
+  assert.equal(status, 0, output);
+  assert.doesNotMatch(output, /WARN Duplicate journal idx/);
+  assert.doesNotMatch(output, /WARN Gaps in journal idx sequence/);
 });
 
-test("--strict turns the baselined duplicate idx into a hard error (AC1/AC2)", () => {
+test("--strict also passes cleanly on this fork's journal", () => {
   const { status, output } = runGuard(["--strict"]);
-  assert.equal(status, 1);
-  assert.match(output, /ERROR Duplicate journal idx 178 in meta\/_journal\.json/);
-  assert.match(output, /FAILED — 1 error\(s\)/);
+  assert.equal(status, 0, output);
 });
 
 test("an orphaned .sql is a hard error naming the file (AC3)", () => {
-  const orphan = path.join(migrationsDir, "0128_force_reassign.sql");
+  const orphan = path.join(migrationsDir, "0128_orphan_probe.sql");
   writeFileSync(orphan, "ALTER TABLE issues ADD COLUMN orphan_probe int;\n", "utf8");
   try {
     const { status, output } = runGuard();
     assert.equal(status, 1);
     assert.match(output, /ERROR Orphaned migration file\(s\)/);
-    assert.match(output, /0128_force_reassign\.sql/);
+    assert.match(output, /0128_orphan_probe\.sql/);
   } finally {
     rmSync(orphan, { force: true });
   }
 });
 
 test("a journal entry with no .sql file is a hard error naming the file", () => {
-  const held = path.join(migrationsDir, "0178_summary_slots.sql");
+  const held = path.join(migrationsDir, "0127_environment_custom_images_instance_scoped.sql");
   const stash = path.join(mkdtempSync(path.join(tmpdir(), "pcmj-")), "held.sql");
   renameSync(held, stash);
   try {
     const { status, output } = runGuard();
     assert.equal(status, 1);
     assert.match(output, /ERROR Journal entry\/entries with no matching \.sql file/);
-    assert.match(output, /0178_summary_slots\.sql/);
+    assert.match(output, /0127_environment_custom_images_instance_scoped\.sql/);
   } finally {
     renameSync(stash, held);
   }
@@ -136,15 +134,23 @@ test("agrees with the TS source of truth on the real tree (anti-drift)", () => {
     "mjs and ts guards disagree on whether the tree passes under --strict",
   );
 
-  // Both must see the same defects, by number.
-  assert.deepEqual(tsVerdict.duplicateIdx, [178]);
-  assert.deepEqual(tsVerdict.idxGaps, [126, 130, 177]);
+  // Both must see the same defects, by number. This fork's journal is clean.
+  assert.deepEqual(tsVerdict.duplicateIdx, []);
+  assert.deepEqual(tsVerdict.idxGaps, []);
   assert.match(relaxed.output, new RegExp(`match ${tsVerdict.files} journal entry`));
-  assert.match(
-    relaxed.output,
-    new RegExp(`${tsVerdict.relaxedWarnings} warning\\(s\\)`),
-    "mjs and ts guards report a different number of warnings",
-  );
+  if (tsVerdict.relaxedWarnings > 0) {
+    assert.match(
+      relaxed.output,
+      new RegExp(`${tsVerdict.relaxedWarnings} warning\\(s\\)`),
+      "mjs and ts guards report a different number of warnings",
+    );
+  } else {
+    assert.doesNotMatch(
+      relaxed.output,
+      /warning\(s\)/,
+      "mjs guard reports warnings the ts guard does not",
+    );
+  }
 });
 
 test("rejects a malformed journal entry instead of silently skipping it", () => {

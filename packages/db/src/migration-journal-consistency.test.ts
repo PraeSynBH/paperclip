@@ -420,41 +420,38 @@ describe("parseMigrationJournalIdxBaseline", () => {
 });
 
 describe("the shipped repository journal", () => {
-  // AC2: the guard must catch the genuine origin/master defects. These pin the
-  // known state so the numbers cannot drift silently: idx 178 is duplicated
-  // and 126/130/177 are missing. When those defects are fixed, this test
-  // fails and must be updated together with the baseline file.
-  it("has exactly the known duplicate idx 178, and it is baselined", async () => {
+  // RBR-1033 fork-retarget note: RBR-968 pinned upstream/paperclipai/paperclip's known
+  // defects at the time (duplicate idx 178, gaps at 126/130/177). This fork's journal
+  // diverged from upstream before those defects existed on this line of history, so its
+  // journal is clean: no duplicates, no gaps, 128 entries with max idx 127. These tests
+  // pin that clean state so a regression is caught; if this fork's journal legitimately
+  // grows a defect, the fix belongs in the journal, not in loosening this assertion.
+  it("has no duplicate idx groups on the fork's journal", async () => {
     const result = await checkMigrationJournalConsistency();
     const baseline = await loadMigrationJournalIdxBaseline();
 
-    expect(result.duplicateIdxGroups).toEqual([
-      { idx: 178, tags: ["0177_activity_log_responsible_user", "0178_summary_slots"] },
-    ]);
-    expect(baseline.duplicateIdx.map((entry) => entry.idx)).toEqual([178]);
+    expect(result.duplicateIdxGroups).toEqual([]);
+    expect(baseline.duplicateIdx).toEqual([]);
   });
 
-  it("has the known idx gaps 126, 130 and 177", async () => {
+  it("has no idx gaps on the fork's journal", async () => {
     const result = await checkMigrationJournalConsistency();
 
-    expect(result.idxGaps).toEqual([126, 130, 177]);
+    expect(result.idxGaps).toEqual([]);
   });
 
-  it("audits clean against the shipped baseline, with the defects as warnings", async () => {
+  it("audits clean against the (empty) shipped baseline, with no warnings", async () => {
     const audit = await auditMigrationJournal({
       baseline: await loadMigrationJournalIdxBaseline(),
     });
 
     expect(audit.errors).toEqual([]);
-    // Duplicate idx 178 (baselined) plus the idx-gap warning.
-    expect(audit.warnings).toHaveLength(2);
-    expect(audit.warnings.join("\n")).toContain("178");
+    expect(audit.warnings).toEqual([]);
   });
 
-  it("fails under --strict, proving the guard would catch the defect on a clean journal", async () => {
+  it("passes under --strict too, since the fork's journal has no baselined defects", async () => {
     const audit = await auditMigrationJournal({ strict: true });
 
-    expect(audit.errors).toHaveLength(1);
-    expect(audit.errors[0]).toContain("Duplicate journal idx 178");
+    expect(audit.errors).toEqual([]);
   });
 });

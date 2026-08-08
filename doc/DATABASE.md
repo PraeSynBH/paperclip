@@ -188,11 +188,12 @@ Rules the guard applies:
 - **A duplicate `idx` is a hard error**, except for groups recorded in
   `packages/db/src/migration-journal-idx-baseline.json`, which are reported as
   warnings so the guard could be adopted without first rewriting shipped
-  history. `origin/master` currently carries one: idx 178 is claimed by both
-  `0177_activity_log_responsible_user` and `0178_summary_slots`.
-- **`idx` gaps are warnings.** `origin/master` currently has gaps at 126, 130
-  and 177 — usually a migration dropped before merge. They are tolerated, but
-  they make "latest idx" an unreliable count of applied migrations.
+  history. This fork's journal currently has no such duplicates (the baseline
+  is empty); `upstream/paperclipai/paperclip` master carried one at idx 178
+  as of RBR-968, which never reached this fork's journal history.
+- **`idx` gaps are warnings.** This fork's journal (128 entries, max idx 127)
+  currently has none. Gaps usually mean a migration dropped before merge and
+  make "latest idx" an unreliable count of applied migrations.
 
 The baseline file is a ratchet, not an excuse list. A baselined group is
 excused only when its `idx` *and* its exact tag set still match, so a third
