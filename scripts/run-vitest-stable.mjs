@@ -254,7 +254,7 @@ function runMigrationJournalGuard() {
   // suite starts, so the operator sees the offending filename immediately
   // instead of hunting through skipped suites.
   console.log("\n[test:run] preflight: migration journal consistency");
-  const result = spawnSync(process.execPath, [path.join(scriptsDir, "check-migration-journal.mjs")], {
+  const result = spawnSync(process.execPath, [path.join(repoRoot, "scripts", "check-migration-journal.mjs")], {
     cwd: repoRoot,
     env: process.env,
     stdio: "inherit",
