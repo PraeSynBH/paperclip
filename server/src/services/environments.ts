@@ -197,28 +197,43 @@ export function environmentService(db: Db) {
 
     ensureLocalEnvironment: async (_companyId?: string): Promise<Environment> => {
       const now = new Date();
-      const row = await db
-        .insert(environments)
-        .values({
-          name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
-          description: DEFAULT_LOCAL_ENVIRONMENT_DESCRIPTION,
-          driver: "local",
-          status: "active",
-          config: {},
-          envVars: {},
-          metadata: {
-            managedByPaperclip: true,
-            defaultForInstance: true,
-          },
-          createdAt: now,
-          updatedAt: now,
-        })
-        .onConflictDoNothing({
-          target: [environments.driver],
-          where: sql`${environments.driver} = 'local'`,
-        })
-        .returning()
-        .then((rows) => rows[0] ?? null);
+      const insert = () =>
+        db
+          .insert(environments)
+          .values({
+            name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
+            description: DEFAULT_LOCAL_ENVIRONMENT_DESCRIPTION,
+            driver: "local",
+            status: "active",
+            config: {},
+            envVars: {},
+            metadata: {
+              managedByPaperclip: true,
+              defaultForInstance: true,
+            },
+            createdAt: now,
+            updatedAt: now,
+          })
+          .onConflictDoNothing({
+            target: [environments.driver],
+            where: sql`${environments.driver} = 'local'`,
+          })
+          .returning()
+          .then((rows) => rows[0] ?? null);
+      // The onConflictDoNothing arbiter only covers the partial `driver`
+      // index. The table also has an unconditional unique index on `name`
+      // (`environments_name_idx`), and since DEFAULT_LOCAL_ENVIRONMENT_NAME
+      // is a fixed literal, two concurrent callers can race: the loser hits
+      // the uncovered name index and Postgres raises 23505 instead of
+      // falling through to onConflictDoNothing. Catch that broadly (by
+      // constraint name) and treat it the same as a covered-conflict miss —
+      // fall through to the existing "select by driver" recovery path below.
+      const row = await insert().catch((error: unknown) => {
+        if (hasConstraintName(error, "environments_name_idx")) {
+          return null;
+        }
+        throw error;
+      });
       if (row) return toEnvironment(row);
 
       const existing = await db

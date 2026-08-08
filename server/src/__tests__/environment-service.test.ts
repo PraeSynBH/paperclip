@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { agents, companies, createDb, environmentLeases, environments, heartbeatRuns } from "@paperclipai/db";
 import {
   getEmbeddedPostgresTestSupport,
@@ -223,6 +223,87 @@ describeEmbeddedPostgres("environmentService leases", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.driver).toBe("local");
     expect(rows[0]?.status).toBe("active");
+  });
+
+  it("survives the uncovered environments_name_idx race under a forced tight window", async () => {
+    // `ensureLocalEnvironment`'s onConflictDoNothing arbiter only covers the
+    // partial `driver` unique index (environments_local_driver_idx). The
+    // table also has an unconditional unique index on `name`
+    // (environments_name_idx), and DEFAULT_LOCAL_ENVIRONMENT_NAME is a fixed
+    // literal ("Local"). If a second inserter's row becomes visible on the
+    // name index while a first inserter's row is still uncommitted/pending
+    // on the (covered) driver index, Postgres can raise 23505 on the
+    // *uncovered* name index instead of the covered driver index — and that
+    // exception must not escape `ensureLocalEnvironment`.
+    //
+    // We force that exact window deterministically: hold a transaction open
+    // that has already inserted (and NOT yet committed) the "Local" /
+    // driver=local row, then invoke the real service call in a second,
+    // independent connection while the first transaction is still pending.
+    // The service call's insert has to wait on the row-level lock, then
+    // observe the now-committed name conflict outside of its own covered
+    // arbiter, following exactly the flow the bug report describes.
+    const companyId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Acme",
+      status: "active",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+
+    let releaseHeldTransaction: (() => void) | null = null;
+    const heldTransactionCanCommit = new Promise<void>((resolve) => {
+      releaseHeldTransaction = resolve;
+    });
+    let heldRowId: string | null = null;
+
+    const heldTransaction = db.transaction(async (tx) => {
+      const now = new Date();
+      const [heldRow] = await tx
+        .insert(environments)
+        .values({
+          name: "Local",
+          description: "Default execution environment for Paperclip runs on this machine.",
+          driver: "local",
+          status: "active",
+          config: {},
+          envVars: {},
+          metadata: { managedByPaperclip: true, defaultForInstance: true },
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({
+          target: [environments.driver],
+          where: sql`${environments.driver} = 'local'`,
+        })
+        .returning();
+      heldRowId = heldRow?.id ?? null;
+      await heldTransactionCanCommit;
+    });
+
+    // Give the held transaction time to perform its insert (uncommitted)
+    // before the real service call races against it.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(heldRowId).not.toBeNull();
+
+    const ensurePromise = svc.ensureLocalEnvironment(companyId);
+
+    // Let the racing insert block on the row-level lock, then let the held
+    // transaction commit so the racer observes a definite name-index
+    // conflict rather than a covered driver-index conflict.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    releaseHeldTransaction?.();
+    await heldTransaction;
+
+    const ensured = await ensurePromise;
+
+    expect(ensured.id).toBe(heldRowId);
+    expect(ensured.driver).toBe("local");
+
+    const rows = await db.select().from(environments).where(eq(environments.driver, "local"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe(heldRowId);
   });
 
   it("ensures, refreshes, and finds a managed Kubernetes sandbox environment", async () => {
