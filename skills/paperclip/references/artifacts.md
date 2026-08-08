@@ -52,33 +52,31 @@ workspace root; do not use host-local absolute paths in `resourceRef`.
 Create the work product with:
 
 ```bash
-curl -sS -X POST \
-  "$PAPERCLIP_API_URL/api/issues/$PAPERCLIP_TASK_ID/work-products" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
-  -H "X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID" \
-  -H "Content-Type: application/json" \
-  --data-binary @workspace-file-work-product.json
+scripts/pc-api.sh post "/api/issues/$PAPERCLIP_TASK_ID/work-products" \
+  < workspace-file-work-product.json
 ```
 
-If the helper is unavailable, use the Paperclip API directly:
+File uploads are the one case `scripts/pc-api.sh` does not cover — it only
+sends JSON bodies, not multipart form data. Use `curl` directly for the
+upload step, but still check the exit status: a non-2xx here means the
+attachment was not created, and bare `curl -sS` alone would otherwise let
+that fail silently.
 
 ```bash
-curl -sS -X POST \
+curl -sS -f -X POST \
   "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues/$PAPERCLIP_TASK_ID/attachments" \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   -H "X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID" \
   -F 'file=@"path/to/output.webm";type=video/webm'
 ```
 
+`-f` makes `curl` itself exit non-zero on a 4xx/5xx response instead of
+silently returning the error body with exit code 0.
+
 Then create a work product when the file is the deliverable. The server canonicalizes attachment-backed artifact metadata from the `attachmentId`:
 
 ```bash
-curl -sS -X POST \
-  "$PAPERCLIP_API_URL/api/issues/$PAPERCLIP_TASK_ID/work-products" \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
-  -H "X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID" \
-  -H "Content-Type: application/json" \
-  --data-binary '{
+scripts/pc-api.sh post "/api/issues/$PAPERCLIP_TASK_ID/work-products" '{
     "type": "artifact",
     "provider": "paperclip",
     "title": "Walkthrough render",
