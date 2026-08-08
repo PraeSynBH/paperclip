@@ -280,8 +280,8 @@ Check levels:
 # Settings → Adapters → Install from npm → "my-paperclip-adapter"
 
 # Or via API
-curl -X POST http://localhost:3102/api/adapters \
-  -H "Authorization: Bearer <token>" \
+curl -f -sS -X POST http://localhost:3102/api/adapters \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
   -d '{"packageName": "my-paperclip-adapter"}'
 ```
@@ -289,8 +289,8 @@ curl -X POST http://localhost:3102/api/adapters \
 ### From local directory
 
 ```sh
-curl -X POST http://localhost:3102/api/adapters \
-  -H "Authorization: Bearer <token>" \
+curl -f -sS -X POST http://localhost:3102/api/adapters \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
   -d '{"localPath": "/home/user/my-adapter"}'
 ```
