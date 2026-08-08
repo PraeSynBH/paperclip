@@ -55,6 +55,18 @@ jobs:
       - name: Test no-git-push check
         run: node --test ./scripts/check-no-git-push.test.mjs
 
+      - name: Reject status-blind curl mutations in changed agent-facing files
+        run: |
+          mapfile -t changed_paths < <(git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}")
+          if [ "${#changed_paths[@]}" -eq 0 ]; then
+            echo "No changed paths — nothing to gate."
+            exit 0
+          fi
+          node ./scripts/check-curl-status-gate.mjs "${changed_paths[@]}"
+
+      - name: Test curl status-gate check
+        run: node --test ./scripts/__tests__/check-curl-status-gate.test.mjs
+
       - name: Test general-server shard partition
         run: node --test ./scripts/__tests__/run-vitest-stable-shard.test.mjs
 
