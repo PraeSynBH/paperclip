@@ -9,7 +9,7 @@ description: >
 
 # Paperclip Board Skill
 
-You are a board-level assistant helping a human manage their AI-agent company through Paperclip. The user interacts with you conversationally — they do not need to know API details, curl commands, or technical jargon. Your job is to translate natural language into Paperclip API calls and present results clearly.
+You are a board-level assistant helping a human manage their AI-agent company through Paperclip. The user interacts with you conversationally — they do not need to know API details or technical jargon. Your job is to translate natural language into Paperclip API calls and present results clearly.
 
 ## Authentication & Environment
 
@@ -17,9 +17,9 @@ You are a board-level assistant helping a human manage their AI-agent company th
 - `PAPERCLIP_API_URL` — base URL of the Paperclip server (e.g., `http://localhost:3100`)
 - `PAPERCLIP_COMPANY_ID` — the active company ID (may be empty if no company exists yet)
 
-**Auth mode:** In `local_trusted` mode (default for local dev), no auth headers are needed — the server auto-grants board access to all local requests. If `PAPERCLIP_API_KEY` is set, include `Authorization: Bearer $PAPERCLIP_API_KEY` on all requests.
+**Auth mode:** In `local_trusted` mode (default for local dev), no auth headers are needed — the server auto-grants board access to all local requests. If `PAPERCLIP_API_KEY` is set, include `Authorization: Bearer $PAPER...KEY` on all requests.
 
-**Making API calls:** Use `curl -sS` via bash. All endpoints are under `/api`. All request/response bodies are JSON. Always use `Content-Type: application/json` on POST/PATCH/PUT requests.
+**Making API calls:** Use `scripts/pc-api.sh` via bash, not bare `curl`. Bare `curl -sS` exits 0 on 4xx/5xx, so a rejected write and a successful one are indistinguishable once piped into `jq` — writes can silently drop. `scripts/pc-api.sh` fails loudly on any non-2xx status and writes the server's error to stderr; on success it emits only the JSON body, so it drops in wherever raw curl output was expected. All endpoints are under `/api`. All request/response bodies are JSON. `pc-api.sh` adds `Content-Type: application/json` automatically whenever a body is supplied.
 
 **Critical rules:**
 - Always re-read a document or config from the API before modifying it (write-path freshness)
@@ -40,7 +40,7 @@ Every time you begin a new conversation with the user:
 
 ```bash
 # Fetch dashboard
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/dashboard"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/dashboard"
 ```
 
 Present the dashboard as:
@@ -64,12 +64,10 @@ Guide the user through these steps when they're setting up for the first time.
 
 ```bash
 # List existing companies
-curl -sS "$PAPERCLIP_API_URL/api/companies"
+scripts/pc-api.sh get "/api/companies"
 
 # Create a new company
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh post "/api/companies" '{
     "name": "Company Name",
     "description": "Company mission / description",
     "budgetMonthlyCents": 50000
@@ -86,9 +84,7 @@ The response includes the company `id` and auto-generated `issuePrefix`. Tell th
 After creating, set `PAPERCLIP_COMPANY_ID` for subsequent calls. Also set `requireBoardApprovalForNewAgents: true` so all hires go through governance:
 
 ```bash
-curl -sS -X PATCH "$PAPERCLIP_API_URL/api/companies/{companyId}" \
-  -H "Content-Type: application/json" \
-  -d '{"requireBoardApprovalForNewAgents": true}'
+scripts/pc-api.sh patch "/api/companies/{companyId}" '{"requireBoardApprovalForNewAgents": true}'
 ```
 
 ### Step 2: Create the CEO Agent
@@ -97,18 +93,16 @@ The CEO is the first agent. Use the agent-hire endpoint:
 
 ```bash
 # Discover available adapters
-curl -sS "$PAPERCLIP_API_URL/llms/agent-configuration.txt"
+scripts/pc-api.sh get "/llms/agent-configuration.txt"
 
 # Read adapter-specific docs (e.g., claude_local)
-curl -sS "$PAPERCLIP_API_URL/llms/agent-configuration/claude_local.txt"
+scripts/pc-api.sh get "/llms/agent-configuration/claude_local.txt"
 
 # Discover available icons
-curl -sS "$PAPERCLIP_API_URL/llms/agent-icons.txt"
+scripts/pc-api.sh get "/llms/agent-icons.txt"
 
 # Submit hire request
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh post "/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" '{
     "name": "CEO Name",
     "role": "ceo",
     "title": "Chief Executive Officer",
@@ -139,12 +133,10 @@ If the company has `requireBoardApprovalForNewAgents: true`, the hire will need 
 
 ```bash
 # Check pending approvals
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/approvals?status=pending"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/approvals?status=pending"
 
 # Approve the CEO hire
-curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{approvalId}/approve" \
-  -H "Content-Type: application/json" \
-  -d '{"decisionNote": "CEO hire approved by board during onboarding"}'
+scripts/pc-api.sh post "/api/approvals/{approvalId}/approve" '{"decisionNote": "CEO hire approved by board during onboarding"}'
 ```
 
 ### Step 3: Create the Board Operations Issue
@@ -152,9 +144,7 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{approvalId}/approve" \
 Create a standing issue for decision logging and board operations:
 
 ```bash
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh post "/api/companies/$PAPERCLIP_COMPANY_ID/issues" '{
     "title": "Board Operations",
     "description": "Standing issue for board decision log and operations tracking",
     "status": "in_progress",
@@ -165,9 +155,7 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues"
 Then create the decision log document:
 
 ```bash
-curl -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{boardIssueId}/documents/decision-log" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh put "/api/issues/{boardIssueId}/documents/decision-log" '{
     "title": "Decision Log",
     "format": "markdown",
     "body": "# Decision Log — {Company Name}\n\n## {today date}\n- Created company {name} with mission: {description}\n- Hired CEO agent \"{ceo name}\"\n"
@@ -181,8 +169,7 @@ Also write this to a local file at `./artifacts/decision-log.md` so the user can
 Start the CEO's first heartbeat:
 
 ```bash
-curl -sS -X POST "$PAPERCLIP_API_URL/api/agents/{ceoId}/heartbeat/invoke" \
-  -H "Content-Type: application/json"
+scripts/pc-api.sh post "/api/agents/{ceoId}/heartbeat/invoke" '{}'
 ```
 
 ## Hiring Plan Loop
@@ -195,9 +182,7 @@ When the user wants to build a hiring plan:
 
 ```bash
 # Create the hiring plan issue
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh post "/api/companies/$PAPERCLIP_COMPANY_ID/issues" '{
     "title": "Hiring Plan",
     "description": "Develop and execute the team hiring plan",
     "status": "in_progress",
@@ -205,9 +190,7 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues"
   }'
 
 # Attach the plan document
-curl -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/hiring-plan" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh put "/api/issues/{issueId}/documents/hiring-plan" '{
     "title": "Hiring Plan",
     "format": "markdown",
     "body": "# Hiring Plan\n\n## Roles\n\n### 1. Role Name\n- Focus: ...\n- Reports to: ...\n- Budget: ...\n"
@@ -260,12 +243,10 @@ For each agent to hire:
 
 ```bash
 # Compare existing agent configurations
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-configurations"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/agent-configurations"
 
 # Submit hire request
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh post "/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" '{
     "name": "Agent Name",
     "role": "general",
     "title": "Role Title",
@@ -316,12 +297,10 @@ Approve these updates? (approve all / review individually / edit)
 
 ```bash
 # Fetch current config first (write-path freshness)
-curl -sS "$PAPERCLIP_API_URL/api/agents/{agentId}"
+scripts/pc-api.sh get "/api/agents/{agentId}"
 
 # Update the agent's config with new escalation paths
-curl -sS -X PATCH "$PAPERCLIP_API_URL/api/agents/{agentId}" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh patch "/api/agents/{agentId}" '{
     "adapterConfig": { ... updated config with new Collaboration section ... }
   }'
 ```
@@ -332,22 +311,16 @@ curl -sS -X PATCH "$PAPERCLIP_API_URL/api/agents/{agentId}" \
 
 ```bash
 # List pending approvals
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/approvals?status=pending"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/approvals?status=pending"
 
 # Approve
-curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{id}/approve" \
-  -H "Content-Type: application/json" \
-  -d '{"decisionNote": "Approved by board"}'
+scripts/pc-api.sh post "/api/approvals/{id}/approve" '{"decisionNote": "Approved by board"}'
 
 # Reject
-curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{id}/reject" \
-  -H "Content-Type: application/json" \
-  -d '{"decisionNote": "Reason for rejection"}'
+scripts/pc-api.sh post "/api/approvals/{id}/reject" '{"decisionNote": "Reason for rejection"}'
 
 # Request revision
-curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{id}/request-revision" \
-  -H "Content-Type: application/json" \
-  -d '{"decisionNote": "Please adjust X, Y, Z"}'
+scripts/pc-api.sh post "/api/approvals/{id}/request-revision" '{"decisionNote": "Please adjust X, Y, Z"}'
 ```
 
 Present approvals as:
@@ -368,18 +341,16 @@ For batch approval: list all pending, let the user approve all or review individ
 
 ```bash
 # List open tasks
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues?status=todo,in_progress,blocked"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/issues?status=todo,in_progress,blocked"
 
 # Get task detail
-curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}"
+scripts/pc-api.sh get "/api/issues/{issueId}"
 
 # Get task comments
-curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/comments"
+scripts/pc-api.sh get "/api/issues/{issueId}/comments"
 
 # Create a task
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh post "/api/companies/$PAPERCLIP_COMPANY_ID/issues" '{
     "title": "Task title",
     "description": "What needs to be done",
     "status": "todo",
@@ -390,17 +361,13 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues"
   }'
 
 # Update a task
-curl -sS -X PATCH "$PAPERCLIP_API_URL/api/issues/{issueId}" \
-  -H "Content-Type: application/json" \
-  -d '{"status": "done", "comment": "Completed"}'
+scripts/pc-api.sh patch "/api/issues/{issueId}" '{"status": "done", "comment": "Completed"}'
 
 # Add a comment
-curl -sS -X POST "$PAPERCLIP_API_URL/api/issues/{issueId}/comments" \
-  -H "Content-Type: application/json" \
-  -d '{"body": "Comment text in markdown"}'
+scripts/pc-api.sh post "/api/issues/{issueId}/comments" '{"body": "Comment text in markdown"}'
 
 # Search issues
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues?q=search+term"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/issues?q=search+term"
 ```
 
 Present tasks as:
@@ -415,13 +382,13 @@ Present tasks as:
 
 ```bash
 # List all agents
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agents"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/agents"
 
 # Get agent detail
-curl -sS "$PAPERCLIP_API_URL/api/agents/{id}"
+scripts/pc-api.sh get "/api/agents/{id}"
 
 # Get agent config revisions (change history)
-curl -sS "$PAPERCLIP_API_URL/api/agents/{id}/config-revisions"
+scripts/pc-api.sh get "/api/agents/{id}/config-revisions"
 ```
 
 Present agents as:
@@ -441,16 +408,16 @@ Team Overview
 
 ```bash
 # Overall summary
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/costs/summary"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/costs/summary"
 
 # Breakdown by agent
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/costs/by-agent"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/costs/by-agent"
 
 # Breakdown by project
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/costs/by-project"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/costs/by-project"
 
 # Optional date range
-curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/costs/summary?from=2026-03-01&to=2026-03-31"
+scripts/pc-api.sh get "/api/companies/$PAPERCLIP_COMPANY_ID/costs/summary?from=2026-03-01&to=2026-03-31"
 ```
 
 Present costs as:
@@ -469,13 +436,13 @@ By Agent:
 
 ```bash
 # List work products for an issue
-curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/work-products"
+scripts/pc-api.sh get "/api/issues/{issueId}/work-products"
 
 # View a document
-curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/{key}"
+scripts/pc-api.sh get "/api/issues/{issueId}/documents/{key}"
 
 # View document revisions
-curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/{key}/revisions"
+scripts/pc-api.sh get "/api/issues/{issueId}/documents/{key}/revisions"
 ```
 
 Present work products with status and links:
@@ -496,12 +463,10 @@ Three ways the user can edit system prompts:
 **In chat:** User describes changes, you update via API:
 ```bash
 # Always re-fetch before modifying
-curl -sS "$PAPERCLIP_API_URL/api/agents/{id}"
+scripts/pc-api.sh get "/api/agents/{id}"
 
 # Then update
-curl -sS -X PATCH "$PAPERCLIP_API_URL/api/agents/{id}" \
-  -H "Content-Type: application/json" \
-  -d '{"adapterConfig": { ... updated config ... }}'
+scripts/pc-api.sh patch "/api/agents/{id}" '{"adapterConfig": { ... updated config ... }}'
 ```
 
 **Direct file edit:** If the agent uses `instructionsFilePath`, the user can edit the file directly. When they tell you they're done, re-read the file and confirm changes.
@@ -510,7 +475,7 @@ curl -sS -X PATCH "$PAPERCLIP_API_URL/api/agents/{id}" \
 
 **Viewing change history:**
 ```bash
-curl -sS "$PAPERCLIP_API_URL/api/agents/{id}/config-revisions"
+scripts/pc-api.sh get "/api/agents/{id}/config-revisions"
 ```
 
 Present as a changelog:
@@ -545,12 +510,10 @@ Maintain a decision log for session continuity. Log major decisions — not ever
 1. Update the API document:
 ```bash
 # Fetch current log
-curl -sS "$PAPERCLIP_API_URL/api/issues/{boardIssueId}/documents/decision-log"
+scripts/pc-api.sh get "/api/issues/{boardIssueId}/documents/decision-log"
 
 # Update with new entries appended
-curl -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{boardIssueId}/documents/decision-log" \
-  -H "Content-Type: application/json" \
-  -d '{
+scripts/pc-api.sh put "/api/issues/{boardIssueId}/documents/decision-log" '{
     "title": "Decision Log",
     "format": "markdown",
     "body": "... existing content ... \n\n## {date}\n- New decision\n",
@@ -617,4 +580,3 @@ All web UI links must include the company prefix:
 | Adapter detail | GET | `/llms/agent-configuration/:adapterType.txt` |
 | Agent icons | GET | `/llms/agent-icons.txt` |
 | Set instructions | PATCH | `/api/agents/:id/instructions-path` |
-| Search issues | GET | `/api/companies/:companyId/issues?q=term` |
