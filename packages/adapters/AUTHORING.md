@@ -56,3 +56,24 @@ above) so the opt-in shows up in code review.
 
 For the architecture-level write-up of cross-run persistence, see
 [`docs/guides/board-operator/execution-workspaces-and-runtime-services.md`](../../docs/guides/board-operator/execution-workspaces-and-runtime-services.md#cross-run-persistence-no-remote-git-contract).
+
+## No status-blind `curl` mutations of the Paperclip API
+
+Agent-facing text must never hand an agent a `curl` that mutates the Paperclip
+API without observing the HTTP status. `curl -sS -X POST ... | jq` exits `0` on
+a 4xx/5xx, and the API's auth-denial envelope is success-shaped, so a dropped
+write is indistinguishable from a landed one (RBR-882). RBR-919 made the safe
+path mandatory for generated prompts; this check stops the old idiom being
+copied back in.
+
+[`scripts/check-curl-status-gate.mjs`](../../scripts/check-curl-status-gate.mjs)
+scans `skills/`, `docs/`, and `packages/adapters/*/src/server/` and fails the
+`policy` CI job when a changed file adds a mutating `curl`
+(`-X POST|PATCH|PUT|DELETE`) against a Paperclip API path with no status gate —
+none of `--fail-with-body`, `--fail`/`-f`, `-w '%{http_code}'`, or the blessed
+`pc-api.sh` helper. Run it locally with `pnpm check:curl-status-gate` (changed
+files) or `--all` (full audit). If a site must stay status-blind — e.g. a doc
+example deliberately demonstrating the failure mode — add
+`paperclip:allow-bare-curl: <reason>` on the invocation or within three lines
+above it; the reason is required and an unjustified marker fails too.
+
