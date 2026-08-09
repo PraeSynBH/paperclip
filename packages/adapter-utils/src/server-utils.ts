@@ -15,6 +15,15 @@ export interface RunProcessResult {
   exitCode: number | null;
   signal: string | null;
   timedOut: boolean;
+  /**
+   * The signal our own timeout/cleanup path actually sent to the child
+   * (or its process group), independent of what the OS later reports as
+   * the terminating signal on the "close" event. Populated only when
+   * `timedOut` is true. Some CLIs re-report a different signal on exit
+   * (observed: SIGTERM sent, SIGINT reported), so `signal` alone is not
+   * trustworthy for attributing a timeout kill.
+   */
+  signalSent?: string | null;
   stdout: string;
   stderr: string;
   pid: number | null;
@@ -2812,6 +2821,7 @@ export async function runChildProcess(
         runningProcesses.set(runId, { child, graceSec: opts.graceSec, processGroupId });
 
         let timedOut = false;
+        let signalSent: string | null = null;
         let stdout = "";
         let stderr = "";
         let logChain: Promise<void> = Promise.resolve();
@@ -2868,6 +2878,7 @@ export async function runChildProcess(
           opts.timeoutSec > 0
             ? setTimeout(() => {
                 timedOut = true;
+                signalSent = "SIGTERM";
                 clearTerminalCleanupTimers();
                 signalRunningProcess({ child, processGroupId }, "SIGTERM");
                 setTimeout(() => {
@@ -2947,6 +2958,7 @@ export async function runChildProcess(
                 exitCode: code,
                 signal,
                 timedOut,
+                signalSent,
                 stdout,
                 stderr,
                 pid: child.pid ?? null,

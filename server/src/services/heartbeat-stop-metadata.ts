@@ -14,12 +14,34 @@ export interface HeartbeatRunTimeoutPolicy {
   effectiveTimeoutSec: number | null;
   effectiveTimeoutMs?: number | null;
   timeoutConfigured: boolean;
-  timeoutSource: "config" | "default" | "unknown";
+  timeoutSource: "config" | "default" | "adapter_default" | "unknown";
+  /**
+   * Stable identifier for who owns/armed this timeout value. Populated once
+   * an adapter self-reports its actual armed timeout via
+   * `AdapterExecutionResult.adapterTimeoutPolicy` (see AC1/AC2 of RBR-938);
+   * `null` for adapters that don't report one, in which case the value
+   * below is only ever a guess derived from `adapterConfig`.
+   */
+  timeoutOwner?: string | null;
 }
 
 export interface HeartbeatRunStopMetadata extends HeartbeatRunTimeoutPolicy {
   stopReason: HeartbeatRunStopReason;
   timeoutFired: boolean;
+}
+
+/**
+ * The subset of `AdapterExecutionResult` this module cares about. Adapters
+ * that self-manage a child-process timeout report the timeout they actually
+ * armed here; the server must prefer this over guessing from
+ * `agent.adapterConfig`, which is empty for every agent unless a user
+ * explicitly set `timeoutSec`.
+ */
+export interface AdapterReportedTimeoutPolicy {
+  effectiveTimeoutSec: number;
+  timeoutConfigured: boolean;
+  timeoutSource: "config" | "adapter_default";
+  timeoutOwner: string;
 }
 
 function readFiniteNumber(value: unknown): number | null {
@@ -50,7 +72,22 @@ export function normalizeMaxTurnStopReason(value: unknown): Extract<HeartbeatRun
 export function resolveHeartbeatRunTimeoutPolicy(
   adapterType: string,
   adapterConfig: Record<string, unknown> | null | undefined,
+  adapterReportedTimeoutPolicy?: AdapterReportedTimeoutPolicy | null,
 ): HeartbeatRunTimeoutPolicy {
+  // AC1/AC2: if the adapter told us what it actually armed, that is
+  // authoritative — it is a fact about the run, not a guess derived from
+  // config the adapter may never have consulted (e.g. hermes_local, whose
+  // own DEFAULT_TIMEOUT_SEC never round-trips through adapterConfig).
+  if (adapterReportedTimeoutPolicy) {
+    const timeoutSec = Math.max(0, Math.floor(adapterReportedTimeoutPolicy.effectiveTimeoutSec));
+    return {
+      effectiveTimeoutSec: timeoutSec,
+      timeoutConfigured: adapterReportedTimeoutPolicy.timeoutConfigured,
+      timeoutSource: adapterReportedTimeoutPolicy.timeoutSource,
+      timeoutOwner: adapterReportedTimeoutPolicy.timeoutOwner,
+    };
+  }
+
   const config = adapterConfig ?? {};
 
   if (adapterType === "http") {
@@ -102,8 +139,13 @@ export function buildHeartbeatRunStopMetadata(input: {
   outcome: HeartbeatRunOutcome;
   errorCode?: string | null;
   errorMessage?: string | null;
+  adapterReportedTimeoutPolicy?: AdapterReportedTimeoutPolicy | null;
 }): HeartbeatRunStopMetadata {
-  const timeoutPolicy = resolveHeartbeatRunTimeoutPolicy(input.adapterType, input.adapterConfig);
+  const timeoutPolicy = resolveHeartbeatRunTimeoutPolicy(
+    input.adapterType,
+    input.adapterConfig,
+    input.adapterReportedTimeoutPolicy,
+  );
   const stopReason = inferHeartbeatRunStopReason(input);
   return {
     ...timeoutPolicy,
@@ -125,5 +167,6 @@ export function mergeHeartbeatRunStopMetadata(
     timeoutSource: metadata.timeoutSource,
     timeoutFired: metadata.timeoutFired,
     ...(metadata.effectiveTimeoutMs != null ? { effectiveTimeoutMs: metadata.effectiveTimeoutMs } : {}),
+    ...(metadata.timeoutOwner != null ? { timeoutOwner: metadata.timeoutOwner } : {}),
   };
 }

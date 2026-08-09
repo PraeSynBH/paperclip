@@ -465,6 +465,11 @@ describe("runChildProcess", () => {
 
     descendantPid = Number.parseInt(result.stdout.trim(), 10);
     expect(result.timedOut).toBe(true);
+    // RBR-938 AC4: the signal our own timeout path actually sent must be
+    // recorded independently of `result.signal`, which reflects whatever the
+    // OS/CLI reports and has been observed to disagree with the real kill
+    // signal for some CLIs.
+    expect(result.signalSent).toBe("SIGTERM");
     expect(Number.isInteger(descendantPid) && descendantPid > 0).toBe(true);
 
     expect(await waitForPidExit(descendantPid!, 2_000)).toBe(true);

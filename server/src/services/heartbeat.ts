@@ -8912,6 +8912,12 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       resultJson?: Record<string, unknown> | null;
       errorCode?: string | null;
       errorMessage?: string | null;
+      adapterReportedTimeoutPolicy?: {
+        effectiveTimeoutSec: number;
+        timeoutConfigured: boolean;
+        timeoutSource: "config" | "adapter_default";
+        timeoutOwner: string;
+      } | null;
     },
   ) {
     const stopMetadata = buildHeartbeatRunStopMetadata({
@@ -8920,6 +8926,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       outcome,
       errorCode: options?.errorCode ?? null,
       errorMessage: options?.errorMessage ?? null,
+      adapterReportedTimeoutPolicy: options?.adapterReportedTimeoutPolicy ?? null,
     });
     return mergeHeartbeatRunStopMetadata(options?.resultJson ?? null, stopMetadata);
   }
@@ -11218,6 +11225,9 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
               resultJson: {
                 ...parseObject(adapterResult.resultJson),
                 configFreshness: configFreshnessResultMetadata,
+                ...(adapterResult.unmeteredSetupSec != null
+                  ? { unmeteredSetupSec: adapterResult.unmeteredSetupSec }
+                  : {}),
               },
               errorFamily: adapterResult.errorFamily ?? null,
               retryNotBefore: adapterResult.retryNotBefore ?? null,
@@ -11226,16 +11236,28 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           ),
           errorCode: runErrorCode,
           errorMessage: runErrorMessage,
+          adapterReportedTimeoutPolicy: adapterResult.adapterTimeoutPolicy ?? null,
         }),
         adapterResult.summary ?? null,
       );
+
+      // AC4: the persisted `signal` column should reflect the signal our own
+      // timeout path actually sent when a timeout fired, not whatever the
+      // OS/CLI happens to report after the fact — some CLIs (observed:
+      // hermes) re-report a different signal (e.g. SIGINT) than the SIGTERM
+      // the adapter's timeout logic actually delivered, which makes `signal`
+      // alone untrustworthy for attributing a timeout kill.
+      const persistedSignal =
+        outcome === "timed_out" && adapterResult.signalSent
+          ? adapterResult.signalSent
+          : adapterResult.signal;
 
       const persistedRunWrite = await setRunStatusIfRunning(run.id, status, {
         finishedAt: new Date(),
         error: runErrorMessage,
         errorCode: runErrorCode,
         exitCode: adapterResult.exitCode,
-        signal: adapterResult.signal,
+        signal: persistedSignal,
         usageJson,
         resultJson: persistedResultJson,
         sessionIdAfter: nextSessionState.displayId ?? nextSessionState.legacySessionId,

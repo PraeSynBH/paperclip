@@ -40,6 +40,7 @@ import {
 
 import {
   HERMES_CLI,
+  ADAPTER_TYPE,
   DEFAULT_TIMEOUT_SEC,
   DEFAULT_GRACE_SEC,
   DEFAULT_MODEL,
@@ -327,11 +328,13 @@ function parseHermesOutput(stdout: string, stderr: string): ParsedOutput {
 export async function execute(
   ctx: AdapterExecutionContext,
 ): Promise<AdapterExecutionResult> {
+  const executeStartedAtMs = Date.now();
   const config = (ctx.config ?? ctx.agent?.adapterConfig ?? {}) as Record<string, unknown>;
 
   // ── Resolve configuration ──────────────────────────────────────────────
   const hermesCmd = resolveHermesCommand(config);
   const model = cfgString(config.model) || DEFAULT_MODEL;
+  const timeoutSecConfigured = Object.prototype.hasOwnProperty.call(config, "timeoutSec");
   const timeoutSec = cfgNumber(config.timeoutSec) || DEFAULT_TIMEOUT_SEC;
   const graceSec = cfgNumber(config.graceSec) || DEFAULT_GRACE_SEC;
   const maxTurns = cfgNumber(config.maxTurnsPerRun);
@@ -544,13 +547,36 @@ export async function execute(
   }
 
   // ── Build result ───────────────────────────────────────────────────────
+  // AC1/AC2: report the timeout we actually armed above (`timeoutSec`), not
+  // a guess derived server-side from an empty adapterConfig. `timeoutOwner`
+  // names this adapter as the source when the value came from our own
+  // DEFAULT_TIMEOUT_SEC rather than an explicit user-set timeoutSec.
+  // AC3: report the unmetered setup phase (everything before this adapter's
+  // own timeout was armed and the child spawned) as its own field, so
+  // wall-clock (startedAt -> finishedAt) duration spread is not misread as
+  // timeout variance.
+  const unmeteredSetupSec = Math.max(0, Math.round((Date.now() - executeStartedAtMs) / 1000));
   const executionResult: AdapterExecutionResult = {
     exitCode: result.exitCode,
     signal: result.signal,
+    // AC4: `signalSent` is the signal our own timeout path actually sent
+    // (SIGTERM, then SIGKILL after graceSec). `result.signal` reflects
+    // whatever the OS/CLI reports after the fact, which has been observed
+    // to disagree (e.g. SIGINT reported for a SIGTERM kill) and is not
+    // reliable for attribution on its own.
+    signalSent: result.signalSent,
     timedOut: result.timedOut,
     provider: resolvedProvider,
     model,
+    adapterTimeoutPolicy: {
+      effectiveTimeoutSec: timeoutSec,
+      timeoutConfigured: timeoutSecConfigured,
+      timeoutSource: timeoutSecConfigured ? "config" : "adapter_default",
+      timeoutOwner: ADAPTER_TYPE,
+    },
+    unmeteredSetupSec,
   };
+
 
   if (parsed.errorMessage) {
     executionResult.errorMessage = parsed.errorMessage;
