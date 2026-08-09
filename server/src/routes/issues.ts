@@ -6095,6 +6095,14 @@ export function issueRoutes(
               ...updateFields,
               actorAgentId: actor.agentId ?? null,
               actorUserId: actor.actorType === "user" ? actor.actorId : null,
+              // RBR-953: this is the explicit board/API status-write path. `status` here
+              // is client-supplied intent for *this* request, not a value derived from a
+              // status snapshot this process read earlier, so a reopen of a terminal
+              // issue is deliberate. Agent actors reaching this point have additionally
+              // cleared `agentStatusTransitionRequiresResumeAuthority` above, which is
+              // the stricter of the two checks. Without this opt-in the gate would break
+              // ordinary human reopen from the board.
+              allowTerminalReopen: true,
             },
             tx,
           );
@@ -6120,6 +6128,10 @@ export function issueRoutes(
           ...updateFields,
           actorAgentId: actor.agentId ?? null,
           actorUserId: actor.actorType === "user" ? actor.actorId : null,
+          // RBR-953: see the analogous comment on the transaction branch above —
+          // this is the same explicit board/API status-write path, just without a
+          // decision record to persist alongside it.
+          allowTerminalReopen: true,
         });
       }
     } catch (err) {
@@ -7730,7 +7742,11 @@ export function issueRoutes(
             actor,
           })
         : null;
-      const reopenedIssue = await svc.update(id, { status: "todo" });
+      // RBR-953: this is the board/human comment reopen path. `isClosed` is
+      // computed from the issue this handler fetched and the target is the
+      // constant `todo`, so the terminal regression is the intended product
+      // behaviour, not a stale-snapshot artifact. Opt in explicitly.
+      const reopenedIssue = await svc.update(id, { status: "todo", allowTerminalReopen: true });
       if (!reopenedIssue) {
         res.status(404).json({ error: "Issue not found" });
         return;

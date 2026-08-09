@@ -1174,6 +1174,10 @@ export function taskWatchdogService(db: Db, deps: TaskWatchdogServiceDeps = {}) 
           goalId: input.sourceIssue.goalId,
           billingCode: input.sourceIssue.billingCode,
           originFingerprint: input.classification.stopFingerprint,
+          // RBR-953: `shouldReopen` is true precisely because the watchdog issue
+          // is terminal (or backlog, or needs a fresh wake) and a new stop needs
+          // it live again. Reviving the watchdog is the whole point of this call.
+          allowTerminalReopen: true,
         }) ?? fallback
         : fallback;
       if (!shouldReopen && watchdogIssue.originFingerprint !== input.classification.stopFingerprint) {

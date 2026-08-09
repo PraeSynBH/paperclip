@@ -113,10 +113,58 @@ const ISSUE_COMMENT_RUN_LOG_DERIVATION_CHUNK_BYTES = 256_000;
 const ISSUE_COMMENT_RUN_LOG_DERIVATION_END_SLACK_MS = 60_000;
 const ISSUE_COMMENT_RUN_LOG_DERIVATION_MAX_PARALLEL_READS = 8;
 const DELETED_ISSUE_COMMENT_BODY = "";
-function assertTransition(from: string, to: string) {
+/**
+ * RBR-953 (CEO ruling on the RBR-929 AC-3 open question): the *only* from→to
+ * edge class `assertTransition` gates is terminal → non-terminal.
+ *
+ * There is deliberately no full transition matrix. A complete matrix would be a
+ * high-blast-radius change across ~70 in-repo `issuesSvc.update` call sites to
+ * defend against a hazard exactly one of them exhibited: the RBR-864 incident
+ * was specifically the recovery reconciler writing `done -> blocked` from a
+ * status snapshot it had read earlier, outside the row lock.
+ *
+ * The distinction is not new taxonomy — the write path below already treats
+ * terminal → non-terminal as a special case, emitting
+ * `execution_workspace.source_issue_reopened` for workspaces that were archived
+ * with an `issue_terminal%` cleanup reason. This gates a line the code already
+ * draws.
+ *
+ * Legitimate reopens are real (board reopen, comment-driven reopen, watchdog
+ * revive, status-card/summary regeneration, workspace restore), so the gate is
+ * opt-in rather than absolute: those callers pass `allowTerminalReopen: true`
+ * to `update`. A caller that derives its target status from a stale snapshot
+ * does not, and is rejected. See RBR-950's `expectedStatus`/`expectedStatuses`
+ * compare-and-set for the complementary defence that makes a *losing* write
+ * touch zero rows; this gate is the one that stops a write that never should
+ * have been attempted at all.
+ */
+const TERMINAL_ISSUE_STATUSES = ["done", "cancelled"] as const;
+
+function isTerminalIssueStatusValue(status: string) {
+  return (TERMINAL_ISSUE_STATUSES as readonly string[]).includes(status);
+}
+
+function assertTransition(from: string, to: string, options?: { allowTerminalReopen?: boolean }) {
   if (from === to) return;
   if (!ALL_ISSUE_STATUSES.includes(to)) {
     throw conflict(`Unknown issue status: ${to}`);
+  }
+  // RBR-953: name the rejected edge in the message. The RBR-864 postmortem cost
+  // real time because the logs said nothing about *which* transition was wrong,
+  // so `done -> blocked` has to be greppable straight out of the error text.
+  if (isTerminalIssueStatusValue(from) && !isTerminalIssueStatusValue(to) && !options?.allowTerminalReopen) {
+    throw conflict(
+      `Refusing terminal issue status regression: ${from} -> ${to}. `
+      + "Moving an issue out of a terminal status requires an explicit "
+      + "allowTerminalReopen opt-in; a caller deriving status from an earlier "
+      + "snapshot must not silently revert a completed issue.",
+      {
+        code: "issue_terminal_status_regression",
+        from,
+        to,
+        transition: `${from} -> ${to}`,
+      },
+    );
   }
 }
 
@@ -134,6 +182,30 @@ function applyStatusSideEffects(
   }
   if (status === "cancelled") {
     patch.cancelledAt = new Date();
+  }
+  return patch;
+}
+
+// RBR-929 AC3: every patch field that is derived from the issue's *current*
+// row state must be computed from a baseline that was read under the same row
+// lock as the write. Derived from an unlocked snapshot, a winning write can
+// persist bookkeeping for a status (or an assignee) the row no longer had by
+// the time the UPDATE landed. Callers must pass the row they read with
+// `select ... for update` inside the writing transaction — never the
+// pre-transaction snapshot.
+function applyLockedBaselinePatchFields(
+  baseline: Pick<typeof issues.$inferSelect, "assigneeAgentId" | "assigneeUserId">,
+  issueData: Partial<typeof issues.$inferInsert>,
+  patch: Partial<typeof issues.$inferInsert>,
+): Partial<typeof issues.$inferInsert> {
+  if (
+    (issueData.assigneeAgentId !== undefined && issueData.assigneeAgentId !== baseline.assigneeAgentId) ||
+    (issueData.assigneeUserId !== undefined && issueData.assigneeUserId !== baseline.assigneeUserId)
+  ) {
+    patch.checkoutRunId = null;
+    patch.executionRunId = null;
+    patch.executionAgentNameKey = null;
+    patch.executionLockedAt = null;
   }
   return patch;
 }
@@ -5495,6 +5567,31 @@ export function issueService(db: Db) {
         blockedByIssueIds?: string[];
         actorAgentId?: string | null;
         actorUserId?: string | null;
+        /**
+         * RBR-929 AC1/AC2: opt-in status compare-and-set.
+         *
+         * When either is supplied, the write carries an extra WHERE predicate on
+         * `issues.status`, so a caller holding a stale status snapshot loses the
+         * race *in SQL* -- it affects zero rows -- rather than being talked out
+         * of it by a JS pre-check that a concurrent commit can invalidate.
+         *
+         * A losing CAS throws `conflict`; see the `!updated` branch on the write
+         * for why a throw and not `null`. Absent both keys there is no predicate
+         * at all, which is what leaves the ~100 existing callers unchanged.
+         */
+        expectedStatus?: string;
+        expectedStatuses?: string[];
+        /**
+         * RBR-953: explicit opt-in for a terminal → non-terminal transition
+         * (`done`/`cancelled` back to any live status).
+         *
+         * Deliberately absent from the wire schema: this is an in-process
+         * capability, not a client-supplied one. Route handlers decide whether
+         * the request they are serving is a real reopen and set it themselves;
+         * a caller that computed its target status from an earlier snapshot
+         * must leave it off so the gate can reject the write.
+         */
+        allowTerminalReopen?: boolean;
       },
       dbOrTx: any = db,
     ) => {
@@ -5510,8 +5607,32 @@ export function issueService(db: Db) {
         blockedByIssueIds,
         actorAgentId,
         actorUserId,
+        expectedStatus,
+        expectedStatuses,
+        allowTerminalReopen,
         ...issueData
       } = data;
+
+      // RBR-929 AC1: fold the two opt-in CAS spellings into one list of accepted
+      // statuses. `expectedStatus` and `expectedStatuses` are destructured out
+      // above so neither can leak into `issueData` and become a column in `patch`.
+      //
+      // An explicitly empty `expectedStatuses` is a caller bug, not "no CAS": it
+      // can never match, so it would silently turn every write into a no-op.
+      // Reject it loudly rather than degrading to an unguarded write.
+      if (expectedStatuses !== undefined && expectedStatuses.length === 0) {
+        throw unprocessable("expectedStatuses must not be empty");
+      }
+      const casExpectedStatuses: string[] | null = (() => {
+        if (expectedStatus === undefined && expectedStatuses === undefined) return null;
+        return [
+          ...new Set([
+            ...(expectedStatus !== undefined ? [expectedStatus] : []),
+            ...(expectedStatuses ?? []),
+          ]),
+        ];
+      })();
+
       const isolatedWorkspacesEnabled = (await instanceSettings.getExperimental()).enableIsolatedWorkspaces;
       if (!isolatedWorkspacesEnabled) {
         delete issueData.executionWorkspaceId;
@@ -5520,13 +5641,16 @@ export function issueService(db: Db) {
       }
 
       if (issueData.status) {
-        assertTransition(existing.status, issueData.status);
+        assertTransition(existing.status, issueData.status, { allowTerminalReopen });
       }
 
       const patch: Partial<typeof issues.$inferInsert> = {
         ...issueData,
         updatedAt: new Date(),
       };
+      // RBR-929 AC3: the blocked-transition bookkeeping that keys off the
+      // current status is computed inside runUpdate, under the same row lock
+      // as the write (see applyLockedBaselinePatchFields).
       if (issueData.requestDepth !== undefined) {
         patch.requestDepth = clampIssueRequestDepth(issueData.requestDepth);
       }
@@ -5626,34 +5750,102 @@ export function issueService(db: Db) {
         patch.executionAgentNameKey = null;
         patch.executionLockedAt = null;
       }
+      // RBR-929 AC3: assignee-change lock clearing keys off the current
+      // assignee, so it too is applied under the row lock in runUpdate via
+      // applyLockedBaselinePatchFields.
 
       const runUpdate = async (tx: any) => {
+        // The receipt baseline must be read under the same row lock as the
+        // write. Otherwise a concurrent update can be mistaken for a change
+        // made by this request.
+        const receiptExisting = await tx
+          .select()
+          .from(issues)
+          .where(eq(issues.id, id))
+          .for("update")
+          .then((rows: Array<typeof issues.$inferSelect>) => rows[0] ?? null);
+        if (!receiptExisting) return null;
+        // RBR-929 AC3: recompute the patch fields that are derived from the
+        // row's current state now that the row is locked. `existing` was read
+        // outside any lock at the top of `update`, so anything keyed off it
+        // could describe a status/assignee the row no longer has.
+        applyLockedBaselinePatchFields(receiptExisting, issueData, patch);
+        // RBR-953: re-assert the terminal-regression gate against the *locked*
+        // row, not the snapshot `existing` read before the transaction. The
+        // pre-lock check at the top of `update` is a fast fail for the obvious
+        // case, but it cannot be the enforcement point: the RBR-864 incident is
+        // exactly the interleaving where the reconciler reads a non-terminal
+        // snapshot, the run commits `done`, and the reconciler then writes
+        // `blocked`. Checked only against `existing`, that write still passes
+        // the gate. Checked here, `receiptExisting.status` is already `done` and
+        // the write is refused with the edge named.
+        if (issueData.status) {
+          assertTransition(receiptExisting.status, issueData.status, { allowTerminalReopen });
+        }
         const defaultCompanyGoal = await getDefaultCompanyGoal(tx, existing.companyId);
         const [currentProjectGoalId, nextProjectGoalId] = await Promise.all([
-          getProjectDefaultGoalId(tx, existing.companyId, existing.projectId),
+          getProjectDefaultGoalId(tx, existing.companyId, receiptExisting.projectId),
           getProjectDefaultGoalId(
             tx,
             existing.companyId,
-            issueData.projectId !== undefined ? issueData.projectId : existing.projectId,
+            issueData.projectId !== undefined ? issueData.projectId : receiptExisting.projectId,
           ),
         ]);
 
+        // RBR-929 AC3: patch.goalId derives from the row's current project and
+        // goal, so it uses the locked baseline rather than the unlocked read.
         patch.goalId = resolveNextIssueGoalId({
-          currentProjectId: existing.projectId,
-          currentGoalId: existing.goalId,
+          currentProjectId: receiptExisting.projectId,
+          currentGoalId: receiptExisting.goalId,
           currentProjectGoalId,
           projectId: issueData.projectId,
           goalId: issueData.goalId,
           projectGoalId: nextProjectGoalId,
           defaultGoalId: defaultCompanyGoal?.id ?? null,
         });
+        // RBR-929 AC1: the compare-and-set lives here, in the WHERE clause of the
+        // write itself -- not as a JS comparison against `existing` / `receiptExisting`.
+        // A JS pre-check can be invalidated by a commit landing between the read
+        // and the write; a SQL predicate cannot, because the predicate is evaluated
+        // by the same statement that does the writing.
+        //
+        // `checkout` (see the `inArray(issues.status, expectedStatuses)` predicate
+        // further down this file) is the in-repo precedent this copies.
+        const casPredicate = casExpectedStatuses
+          ? inArray(issues.status, casExpectedStatuses)
+          : null;
         const updated = await tx
           .update(issues)
           .set(patch)
-          .where(eq(issues.id, id))
+          .where(casPredicate ? and(eq(issues.id, id), casPredicate) : eq(issues.id, id))
           .returning()
           .then((rows: Array<typeof issues.$inferSelect>) => rows[0] ?? null);
-        if (!updated) return null;
+        if (!updated) {
+          // RBR-929 AC2: a losing CAS must be distinguishable from "issue not found".
+          // `null` is already spoken for by not-found (see the early return above),
+          // so a lost CAS throws `conflict` instead.
+          //
+          // Chosen over a discriminated result because a new result shape would have
+          // to be threaded through ~100 existing call sites to stay type-honest,
+          // and because a `conflict` throw fails loudly by default: a caller that
+          // forgets to check cannot silently proceed as if its write had landed.
+          // `conflict` maps to HTTP 409, which is the correct wire answer for a
+          // lost race, and matches how `checkout` already reports the same class
+          // of failure.
+          //
+          // `receiptExisting` was read FOR UPDATE in this transaction, so if we are
+          // here with a row in hand the row exists and it is the status predicate
+          // that failed -- not a vanished row.
+          if (casExpectedStatuses) {
+            throw conflict("Issue status compare-and-set failed", {
+              issueId: id,
+              expectedStatuses: casExpectedStatuses,
+              actualStatus: receiptExisting.status,
+              requestedStatus: issueData.status ?? null,
+            });
+          }
+          return null;
+        }
         if (nextLabelIds !== undefined) {
           await syncIssueLabels(updated.id, existing.companyId, nextLabelIds, tx);
         }
