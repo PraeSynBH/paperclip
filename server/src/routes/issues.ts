@@ -57,6 +57,7 @@ import {
   updateDocumentAnnotationThreadSchema,
   upsertIssueDocumentSchema,
   updateIssueSchema,
+  rejectUnsupportedIssuePatchMonitorSchedulingFields,
   getClosedIsolatedExecutionWorkspaceMessage,
   isClosedIsolatedExecutionWorkspace,
   isUuidLike,
@@ -155,9 +156,18 @@ import {
 import { externalObjectService } from "../services/external-objects.js";
 
 const MAX_ISSUE_COMMENT_LIMIT = 500;
-const updateIssueRouteSchema = updateIssueSchema.extend({
-  interrupt: z.boolean().optional(),
-});
+const updateIssueRouteSchema = rejectUnsupportedIssuePatchMonitorSchedulingFields(
+  updateIssueSchema.extend({
+    interrupt: z.boolean().optional(),
+  }),
+);
+
+function prefersMinimalIssueUpdateResponse(req: Request) {
+  return (req.get("Prefer") ?? "")
+    .split(",")
+    .some((preference) => preference.trim().toLowerCase() === "return=minimal");
+}
+
 const refreshExternalObjectsSchema = z.object({
   objectIds: z.array(z.string().uuid()).max(50).optional(),
 }).strict();

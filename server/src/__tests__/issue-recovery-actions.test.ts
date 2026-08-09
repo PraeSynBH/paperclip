@@ -771,6 +771,90 @@ describeEmbeddedPostgres("issue recovery actions", () => {
     });
   });
 
+  // RBR-1101: PATCH /issues/:id has no write path for monitor-scheduling fields
+  // (monitorNextCheckAt / monitorNotes / monitorScheduledBy / executionState.monitor.*). Previously
+  // these were silently stripped by the non-strict Zod schema and the PATCH returned 200 with no
+  // persistence (RBR-1094). Assert each of these now returns a 4xx naming the unsupported field(s)
+  // instead of a silent no-op.
+  it("rejects monitorNextCheckAt on PATCH /issues/:id with a 4xx naming the field", async () => {
+    const { sourceIssueId } = await seedCompany();
+    const app = createApp();
+
+    const res = await request(app)
+      .patch(`/api/issues/${sourceIssueId}`)
+      .send({ monitorNextCheckAt: "2026-06-01T00:00:00.000Z" });
+
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(JSON.stringify(res.body)).toContain("monitorNextCheckAt");
+
+    const [issueRow] = await db.select().from(issues).where(eq(issues.id, sourceIssueId));
+    expect(issueRow?.monitorNextCheckAt ?? null).toBeNull();
+  });
+
+  it("rejects monitorNotes on PATCH /issues/:id with a 4xx naming the field", async () => {
+    const { sourceIssueId } = await seedCompany();
+    const app = createApp();
+
+    const res = await request(app)
+      .patch(`/api/issues/${sourceIssueId}`)
+      .send({ monitorNotes: "checking back later" });
+
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(JSON.stringify(res.body)).toContain("monitorNotes");
+  });
+
+  it("rejects monitorScheduledBy on PATCH /issues/:id with a 4xx naming the field", async () => {
+    const { sourceIssueId } = await seedCompany();
+    const app = createApp();
+
+    const res = await request(app)
+      .patch(`/api/issues/${sourceIssueId}`)
+      .send({ monitorScheduledBy: "assignee" });
+
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(JSON.stringify(res.body)).toContain("monitorScheduledBy");
+  });
+
+  it("rejects executionState.monitor.* on PATCH /issues/:id with a 4xx naming the field", async () => {
+    const { sourceIssueId } = await seedCompany();
+    const app = createApp();
+
+    const res = await request(app)
+      .patch(`/api/issues/${sourceIssueId}`)
+      .send({
+        executionState: {
+          monitor: {
+            status: "scheduled",
+            nextCheckAt: "2026-06-01T00:00:00.000Z",
+            lastTriggeredAt: null,
+            notes: null,
+            scheduledBy: null,
+            clearedAt: null,
+            clearReason: null,
+          },
+        },
+      });
+
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBeLessThan(500);
+    expect(JSON.stringify(res.body)).toContain("executionState.monitor");
+  });
+
+  it("still allows a legitimate PATCH without monitor-scheduling fields", async () => {
+    const { sourceIssueId } = await seedCompany();
+    const app = createApp();
+
+    const res = await request(app)
+      .patch(`/api/issues/${sourceIssueId}`)
+      .send({ status: "todo", priority: "high" })
+      .expect(200);
+
+    expect(res.body).toMatchObject({ id: sourceIssueId, status: "todo", priority: "high" });
+  });
+
   it("folds stale recovery during read projection after the source issue reaches done", async () => {
     const { companyId, managerId, sourceIssueId } = await seedCompany();
     const recoveryActionSvc = issueRecoveryActionService(db);

@@ -1155,6 +1155,8 @@ export {
   issueBlockedInboxSeveritySchema,
   issueBlockedInboxStateSchema,
   updateIssueSchema,
+  rejectUnsupportedIssuePatchMonitorSchedulingFields,
+  stalledReviewDecisionSchema,
   issueExecutionPolicySchema,
   issueExecutionStateSchema,
   resolveIssueRecoveryActionSchema,
