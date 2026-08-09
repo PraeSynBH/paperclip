@@ -577,6 +577,14 @@ Expected:
 - `/api/health` returns `{"status":"ok"}`
 - `/api/companies` returns a JSON array
 
+`/api/health` also returns `version`/`serverVersion` and `commit` (the running build's git SHA) once
+the caller has full-details access (board/agent actor, or any caller in `local_trusted` dev). Compare
+that `commit` against the commit you are trying to verify before treating a running server's behavior
+as proof your change is live — a long-lived primary/production instance is not guaranteed to be
+running the commit you just merged. See `doc/PRIMARY-DEPLOY-GAP.md` for the full deploy path, the
+operator-restart requirement, and the standing rule for saying explicitly which server ("local dev"
+vs. "primary instance") a fix was verified against.
+
 ## Reset Local Dev Database
 
 To wipe local dev data and start fresh:
