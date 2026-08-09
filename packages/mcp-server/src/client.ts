@@ -22,6 +22,22 @@ export class PaperclipApiError extends Error {
   }
 }
 
+/**
+ * Thrown for a `401` response from the Paperclip API. Distinct from the
+ * generic `PaperclipApiError` so a rejected/expired agent credential is
+ * classified as a terminal auth failure immediately, never mistaken for a
+ * timeout/5xx/network hiccup that is safe to retry (RBR-1036). MCP tool
+ * callers should surface this error class as-is rather than retrying —
+ * retrying a dead credential only burns wall clock a live run needs
+ * elsewhere.
+ */
+export class PaperclipApiAuthError extends PaperclipApiError {
+  constructor(input: { method: string; path: string; body: unknown; message: string }) {
+    super({ ...input, status: 401 });
+    this.name = "PaperclipApiAuthError";
+  }
+}
+
 export interface JsonRequestOptions {
   body?: unknown;
   includeRunId?: boolean;
@@ -100,6 +116,14 @@ export class PaperclipApiClient {
     const parsedBody = await parseResponseBody(response);
 
     if (!response.ok) {
+      if (response.status === 401) {
+        throw new PaperclipApiAuthError({
+          method: method.toUpperCase(),
+          path,
+          body: parsedBody,
+          message: buildErrorMessage(method.toUpperCase(), path, response.status, parsedBody),
+        });
+      }
       throw new PaperclipApiError({
         status: response.status,
         method: method.toUpperCase(),

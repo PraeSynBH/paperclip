@@ -67,6 +67,8 @@ Headers: Authorization: Bearer $PAPERCLIP_API_KEY, X-Paperclip-Run-Id: $PAPERCLI
 
 If already checked out by you, returns normally. If owned by another agent: `409 Conflict` — stop, pick a different task. **Never retry a 409.**
 
+**Never retry a 401.** A `401` from any Paperclip API call means your credential (JWT/API key) was rejected or has expired — not a slow/unreachable server. The bundled `PaperclipApiClient` (CLI `client/http.ts` and the MCP server client) classifies a `401` as a distinct auth-failure error (`ApiAuthError` / `PaperclipApiAuthError`) immediately and does not fold it into timeout/5xx/network-error retry logic. If you write your own retry/backoff wrapper around Paperclip API calls, special-case that class and fail fast on the first `401` rather than looping — retrying a dead credential only burns the heartbeat's wall clock on a call that can never succeed.
+
 **Step 6 — Understand context.** Prefer `GET /api/issues/{issueId}/heartbeat-context` first. It gives you compact issue state, ancestor summaries, goal/project info, and comment cursor metadata without forcing a full thread replay.
 
 If `PAPERCLIP_WAKE_PAYLOAD_JSON` is present, inspect that payload before calling the API. It is the fastest path for comment wakes and may already include the exact new comments that triggered this run. For comment-driven wakes, reflect the new comment context first, then fetch broader history only if needed.
