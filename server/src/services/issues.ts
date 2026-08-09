@@ -137,9 +137,12 @@ const ALL_ISSUE_STATUSES = ["backlog", "todo", "in_progress", "in_review", "bloc
 // single update path (not a guard clause inside any individual recovery function), so
 // no future recovery call site can bypass it by omission.
 export const RECOVERY_AUTOMATION_ACTOR_KIND = "recovery_automation" as const;
-const RECOVERY_WRITE_BLOCKED_TERMINAL_STATUSES = new Set(["done", "cancelled"]);
+// Array form (not a Set) so it can be passed directly to drizzle's `notInArray`
+// as the atomic guard on the UPDATE statement itself — see RBR-1078.
+const RECOVERY_WRITE_BLOCKED_TERMINAL_STATUSES = ["done", "cancelled"] as const;
 function isRecoveryWriteBlockedTerminalStatus(status: string | null | undefined) {
-  return typeof status === "string" && RECOVERY_WRITE_BLOCKED_TERMINAL_STATUSES.has(status);
+  return typeof status === "string" &&
+    (RECOVERY_WRITE_BLOCKED_TERMINAL_STATUSES as readonly string[]).includes(status);
 }
 const MAX_ISSUE_COMMENT_PAGE_LIMIT = 500;
 export const ISSUE_LIST_DEFAULT_LIMIT = 500;
@@ -7484,11 +7487,19 @@ export function issueService(db: Db) {
       // function — so no recovery call site can bypass it by omission.
       // If the reconciler believes a terminal issue is stranded, it must raise a
       // flag/notification instead of moving the issue; this no-ops the write.
-      if (
-        actorKind === RECOVERY_AUTOMATION_ACTOR_KIND &&
-        issueData.status !== undefined &&
-        isRecoveryWriteBlockedTerminalStatus(existing.status)
-      ) {
+      const isRecoveryStatusWrite =
+        actorKind === RECOVERY_AUTOMATION_ACTOR_KIND && issueData.status !== undefined;
+
+      // This pre-transaction check is a fast-path optimization only, so an
+      // already-terminal issue skips the transaction (and its several awaited
+      // DB round trips) entirely in the common case. It is NOT the source of
+      // truth for correctness: `existing` can go stale between this read and
+      // the actual UPDATE inside `runUpdate` below (lock contention, slow
+      // query, GC pause), during which a concurrent legitimate write could
+      // move the issue to done/cancelled. The atomic guard that closes that
+      // race (RBR-1078) lives on the UPDATE statement's own WHERE clause,
+      // further down — this check existing.status can miss it.
+      if (isRecoveryStatusWrite && isRecoveryWriteBlockedTerminalStatus(existing.status)) {
         logger.warn(
           {
             issueId: id,
@@ -7680,13 +7691,37 @@ export function issueService(db: Db) {
           projectGoalId: nextProjectGoalId,
           defaultGoalId: defaultCompanyGoal?.id ?? null,
         });
+        // RBR-1078: when this write is an automated-recovery status write, fold
+        // the terminal-status ban into the UPDATE's own WHERE clause so the
+        // check is atomic with the write itself, rather than a decision made
+        // off the `existing` read taken before this transaction opened (which
+        // can be stale by the time we get here — see the comment above this
+        // function's pre-transaction check). A concurrent legitimate write that
+        // lands the issue in done/cancelled between that read and this UPDATE
+        // will cause this WHERE to match zero rows; treat that the same as the
+        // pre-transaction refusal: no-op the write rather than mutating a
+        // terminal issue.
+        const updateWhere = isRecoveryStatusWrite
+          ? and(eq(issues.id, id), notInArray(issues.status, [...RECOVERY_WRITE_BLOCKED_TERMINAL_STATUSES]))
+          : eq(issues.id, id);
         const updated = await tx
           .update(issues)
           .set(patch)
-          .where(eq(issues.id, id))
+          .where(updateWhere)
           .returning()
           .then((rows: Array<typeof issues.$inferSelect>) => rows[0] ?? null);
-        if (!updated) return null;
+        if (!updated) {
+          if (isRecoveryStatusWrite) {
+            logger.warn(
+              {
+                issueId: id,
+                attemptedStatus: issueData.status,
+              },
+              "refused automated recovery status write on a terminal issue (race detected at UPDATE time)",
+            );
+          }
+          return null;
+        }
         if (existing.status !== updated.status) {
           if (
             (existing.status === "done" || existing.status === "cancelled")

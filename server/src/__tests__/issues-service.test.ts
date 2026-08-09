@@ -4558,6 +4558,77 @@ describeEmbeddedPostgres("issueService.update recovery-automation terminal-statu
     expect(result?.priority).toBe("high");
     expect(result?.status).toBe("done");
   });
+
+  it("refuses a recovery-automation write that races a concurrent done transition landing between the pre-transaction read and the UPDATE (RBR-1078)", async () => {
+    const companyId = randomUUID();
+    const issueId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+    await db.insert(issues).values({
+      id: issueId,
+      companyId,
+      title: "Still running",
+      status: "in_progress",
+      priority: "medium",
+    });
+
+    // This models the exact defect class RBR-1078 closes: `existing.status` is
+    // read via a plain (unlocked) SELECT *before* the update's own transaction
+    // opens. Here we hold a real row lock across a competing transaction that
+    // transitions the issue to `done`, forcing the service's later internal
+    // `SELECT ... FOR UPDATE` (and the atomic UPDATE after it) to observe the
+    // post-race `done` state — even though the service's own pre-transaction
+    // read upstream of this call saw `in_progress`. If the write path were
+    // still deciding off that stale pre-transaction read (as it was before
+    // RBR-1078), it would incorrectly let the write land.
+    const rowLocked = deferred<void>();
+    const canCommitDoneTransition = deferred<void>();
+
+    const concurrentDoneTransition = db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select ${issues.id} from ${issues} where ${issues.id} = ${issueId} for update`,
+      );
+      rowLocked.resolve();
+      await canCommitDoneTransition.promise;
+      await tx
+        .update(issues)
+        .set({ status: "done", updatedAt: new Date() })
+        .where(eq(issues.id, issueId));
+    });
+
+    await rowLocked.promise;
+
+    // svc.update's pre-transaction `existing` read runs now, while the
+    // concurrent transaction above still holds the row lock uncommitted, so it
+    // observes the pre-race status: `in_progress`.
+    const recoveryUpdatePromise = svc.update(issueId, {
+      status: "blocked",
+      actorKind: "recovery_automation" as const,
+    });
+
+    // Give the recovery update time to pass its pre-transaction read, open its
+    // own transaction, and block on the row lock inside `runUpdate`'s
+    // `SELECT ... FOR UPDATE` — the same lock the concurrent transaction is
+    // holding.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    canCommitDoneTransition.resolve();
+    await concurrentDoneTransition;
+
+    const result = await recoveryUpdatePromise;
+
+    // The atomic WHERE-clause guard on the UPDATE itself (not the stale
+    // pre-transaction read) must catch this: zero rows match `status NOT IN
+    // ('done','cancelled')` once the concurrent transition has landed, so the
+    // write no-ops.
+    expect(result).toBeNull();
+
+    const [row] = await db.select().from(issues).where(eq(issues.id, issueId));
+    expect(row.status).toBe("done");
+  });
 });
 
 describeEmbeddedPostgres("issueService.create workspace inheritance", () => {
