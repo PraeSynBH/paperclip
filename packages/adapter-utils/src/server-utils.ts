@@ -23,7 +23,7 @@ export interface RunProcessResult {
    * (observed: SIGTERM sent, SIGINT reported), so `signal` alone is not
    * trustworthy for attributing a timeout kill.
    */
-  signalSent: string | null;
+  signalSent?: string | null;
   stdout: string;
   stderr: string;
   pid: number | null;
