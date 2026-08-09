@@ -461,6 +461,60 @@ export const updateIssueSchema = createIssueBaseSchema.omit({ watchdog: true }).
 export type UpdateIssue = z.infer<typeof updateIssueSchema>;
 export type IssueExecutionWorkspaceSettings = z.infer<typeof issueExecutionWorkspaceSettingsSchema>;
 
+// RBR-1101: PATCH /issues/:id has no write path for monitor-scheduling fields today
+// (monitorNextCheckAt / monitorNotes / monitorScheduledBy / executionState.monitor.*) — they are
+// read-only summaries populated elsewhere. `updateIssueSchema` is intentionally not `.strict()`'d
+// (see RBR-1094), so Zod's default parse silently strips these keys instead of raising an error.
+// Wrap the route-level PATCH schema with this guard so unsupported monitor-scheduling keys are
+// rejected loudly (4xx naming the field) instead of silently no-op'd.
+const UNSUPPORTED_ISSUE_PATCH_MONITOR_SCHEDULING_KEYS = [
+  "monitorNextCheckAt",
+  "monitorNotes",
+  "monitorScheduledBy",
+] as const;
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function rejectUnsupportedIssuePatchMonitorSchedulingFields<T extends z.ZodTypeAny>(schema: T) {
+  return z.preprocess((raw, ctx) => {
+    if (!isPlainObject(raw)) return raw;
+    const unsupported: string[] = UNSUPPORTED_ISSUE_PATCH_MONITOR_SCHEDULING_KEYS.filter(
+      (key) => Object.prototype.hasOwnProperty.call(raw, key),
+    );
+    const executionState = raw.executionState;
+    if (isPlainObject(executionState) && Object.prototype.hasOwnProperty.call(executionState, "monitor")) {
+      unsupported.push("executionState.monitor");
+    }
+    if (unsupported.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Unsupported field(s) for PATCH /issues/:id: ${unsupported.join(", ")}. `
+          + "Monitor-scheduling is not settable via PATCH.",
+        path: unsupported,
+      });
+      return z.NEVER;
+    }
+    return raw;
+  }, schema);
+}
+
+export const stalledReviewDecisionSchema = z.object({
+  action: z.enum(["approve", "request_changes", "send_back"]),
+  note: multilineTextSchema.pipe(z.string().min(1)).optional(),
+}).strict().superRefine((value, ctx) => {
+  if (value.action === "request_changes" && !value.note?.trim()) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["note"],
+      message: "Request changes requires a note",
+    });
+  }
+});
+
+export type StalledReviewDecision = z.infer<typeof stalledReviewDecisionSchema>;
+
 export const checkoutIssueSchema = z.object({
   agentId: z.string().uuid(),
   expectedStatuses: z.array(z.enum(ISSUE_STATUSES)).nonempty(),
