@@ -583,6 +583,75 @@ describeEmbeddedPostgres("issue recovery actions", () => {
     expect(recoveryIssues[0]?.status).toBe("blocked");
   });
 
+  // RBR-1104 AC4: a terminal (done/cancelled) recovery issue survives a
+  // reconcile pass whose escalation decision was derived from a stale
+  // snapshot. `reconcileStrandedAssignedIssues` reads a full-row snapshot,
+  // then runs a 6+-round-trip per-issue loop before calling
+  // `escalateStrandedRecoveryIssueInPlace`, so `issue.status` on that snapshot
+  // can be arbitrarily stale by write time. This exercises exactly that: the
+  // snapshot still says `in_progress`, but the row has since reached a
+  // terminal status. The write must be a silent no-op (RBR-953's
+  // terminal-reopen gate rejects it before RBR-929's CAS predicate is even
+  // evaluated, since `blocked` is a non-terminal target and the actual row is
+  // terminal) — not a clobber back to `blocked`, and not an unhandled
+  // exception that could abort the recovery sweep loop.
+  it.each(["done", "cancelled"] as const)(
+    "does not revert a recovery issue that already reached %s from a stale escalation snapshot",
+    async (terminalStatus) => {
+      const { companyId, managerId, sourceIssueId, prefix } = await seedCompany();
+      const recoveryIssueId = randomUUID();
+      await db.insert(issues).values({
+        id: recoveryIssueId,
+        companyId,
+        title: "Recover stalled issue",
+        status: "in_progress",
+        priority: "medium",
+        assigneeAgentId: managerId,
+        parentId: sourceIssueId,
+        issueNumber: 2,
+        identifier: `${prefix}-2`,
+        originKind: "stranded_issue_recovery",
+        originId: sourceIssueId,
+        originFingerprint: `stranded_issue_recovery:${sourceIssueId}`,
+      });
+      const [staleSnapshot] = await db.select().from(issues).where(eq(issues.id, recoveryIssueId));
+
+      // The row moves on (someone else resolved this recovery issue, e.g. the
+      // owning agent marked it done) after the reconcile loop read its
+      // snapshot but before this escalation write runs.
+      await db.update(issues).set({ status: terminalStatus }).where(eq(issues.id, recoveryIssueId));
+
+      const recovery = recoveryService(db, { enqueueWakeup: vi.fn(async () => null) });
+      const result = await recovery.escalateStrandedRecoveryIssueInPlace({
+        issue: staleSnapshot!,
+        previousStatus: "in_progress",
+        latestRun: {
+          id: randomUUID(),
+          agentId: managerId,
+          status: "failed",
+          error: "adapter failed",
+          errorCode: "adapter_failed",
+          contextSnapshot: {},
+          livenessState: "needs_followup",
+        },
+      });
+
+      expect(result).toBeNull();
+
+      const [afterEscalation] = await db.select().from(issues).where(eq(issues.id, recoveryIssueId));
+      expect(afterEscalation?.status).toBe(terminalStatus);
+
+      const comments = await db.select().from(issueComments).where(eq(issueComments.issueId, recoveryIssueId));
+      expect(comments).toHaveLength(0);
+
+      const activity = await db
+        .select()
+        .from(activityLog)
+        .where(and(eq(activityLog.entityId, recoveryIssueId), eq(activityLog.action, "issue.updated")));
+      expect(activity).toHaveLength(0);
+    },
+  );
+
   it("exposes active recovery actions on the issue read API", async () => {
     const { companyId, managerId, sourceIssueId } = await seedCompany();
     const recoveryActionSvc = issueRecoveryActionService(db);

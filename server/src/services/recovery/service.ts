@@ -26,7 +26,7 @@ import {
 } from "@paperclipai/db";
 import { parseObject, asBoolean, asNumber } from "../../adapters/utils.js";
 import { runningProcesses } from "../../adapters/index.js";
-import { forbidden, notFound } from "../../errors.js";
+import { forbidden, notFound, HttpError } from "../../errors.js";
 import { logger } from "../../middleware/logger.js";
 import { isPidAlive, isProcessGroupAlive, terminateLocalService } from "../local-service-supervisor.js";
 import { redactCurrentUserText } from "../../log-redaction.js";
@@ -507,6 +507,37 @@ function buildLivenessOriginalIssueComment(finding: IssueLivenessFinding, escala
     "",
     "This issue now keeps its existing blockers and is also blocked by the escalation issue so dependency wakeups remain explicit.",
   ].join("\n");
+}
+
+// RBR-1104 (RBR-933 Tier 1): a status compare-and-set (RBR-929) reports a lost
+// race by throwing `conflict()` (HTTP 409) rather than returning `null` --
+// `null` is already spoken for by "issue not found" on `issuesSvc.update`. A
+// recovery call site that now passes `expectedStatus`/`expectedStatuses` must
+// treat a lost CAS as a no-op, exactly like the pre-existing
+// `if (!updated) return null` branches treat a not-found: skip, do not write
+// anything further, and let the caller's loop move on. This helper narrows
+// the catch to that one known-shape conflict so an unrelated error (a real
+// bug) still propagates.
+//
+// It also has to recognize RBR-953's terminal-reopen gate
+// (`issue_terminal_status_regression`), not just the CAS predicate's own
+// conflict. `assertTransition` re-checks the *actual current* status (fresh
+// `existing` at the top of `update`, then again against the row-locked
+// `receiptExisting` inside the transaction) before the CAS predicate ever
+// runs. The write this issue converts is exactly the shape that gate exists
+// for: a `blocked` write whose target status was derived from an earlier,
+// now-stale snapshot, with no `allowTerminalReopen` opt-in. If the issue has
+// already reached `done`/`cancelled` by write time, the gate throws *before*
+// the CAS WHERE clause is evaluated -- so a lost race here surfaces as
+// `issue_terminal_status_regression`, not "Issue status compare-and-set
+// failed". Both are the same class of event (someone else already resolved
+// this issue; this recovery write is stale) and both must be a no-op, not an
+// unhandled exception that could abort the recovery sweep loop.
+function isIssueStatusCasConflict(error: unknown): boolean {
+  if (!(error instanceof HttpError) || error.status !== 409) return false;
+  if (error.message === "Issue status compare-and-set failed") return true;
+  const details = error.details as { code?: string } | undefined;
+  return details?.code === "issue_terminal_status_regression";
 }
 
 export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup }) {
@@ -2534,7 +2565,24 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     previousStatus: StrandedPreviousStatus;
     latestRun: LatestIssueRun;
   }) {
-    const updated = await issuesSvc.update(input.issue.id, { status: "blocked" });
+    // RBR-1104 (RBR-933 Tier 1, AC2 recovery-issue variant): `status: "blocked"`
+    // here is derived entirely from `input.previousStatus`/`input.issue`, a
+    // snapshot the caller (`reconcileStrandedAssignedIssues`) read earlier in
+    // its per-issue loop, several `await`s before this write. Without a CAS
+    // this could silently revert a recovery issue that already reached `done`
+    // or `cancelled` concurrently (RBR-864's class of bug). A lost race is a
+    // no-op, not an error: the issue moved on for a legitimate reason and this
+    // recovery decision is stale.
+    let updated: Awaited<ReturnType<typeof issuesSvc.update>>;
+    try {
+      updated = await issuesSvc.update(input.issue.id, {
+        status: "blocked",
+        expectedStatus: input.previousStatus,
+      });
+    } catch (error) {
+      if (!isIssueStatusCasConflict(error)) throw error;
+      updated = null;
+    }
     if (!updated) return null;
 
     const prefix = await getCompanyIssuePrefix(input.issue.companyId);
@@ -2837,6 +2885,36 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     return updated;
   }
 
+  // RBR-1104 AC4 (RBR-933 Tier 1's aggregate AC4, scoped to this file's
+  // read-side loop): this function snapshots full issue rows once above, then
+  // iterates a per-issue `await` loop below with 6+ sequential DB round trips
+  // (getAgent, isAgentInvokable, hasActiveExecutionPath, hasPendingWakeInteraction,
+  // isAutomaticRecoverySuppressedByPauseHold, getLatestIssueRun, ...) before any
+  // write reachable from this loop. `issue.status`/`issue.assigneeAgentId` are
+  // therefore arbitrarily stale by write time.
+  //
+  // Decision: this read window is left as-is, not narrowed. Narrowing it (e.g.
+  // re-`select`ing each candidate immediately before its write, or moving each
+  // per-issue decision into its own `db.transaction` with `for update`) would
+  // shrink the staleness window but cannot close it -- there is always a gap
+  // between the last read and the write's own statement, however small. It is
+  // also a throughput/latency change to a hot recovery sweep (this loop already
+  // does several round trips per candidate; adding a re-read or a transaction
+  // wrapper per candidate multiplies that further), not a correctness one.
+  //
+  // The correctness fix already lives at the write layer: every status write
+  // reachable from this loop -- `escalateStrandedRecoveryIssueInPlace` (RBR-1104
+  // AC2, the recovery-issue variant), and the other `escalateStrandedAssignedIssue`
+  // paths converted separately under RBR-933's remaining tiers -- passes
+  // `expectedStatus`/`expectedStatuses` matching the snapshot status this loop
+  // read. A write that lands after the row changed underneath the snapshot is
+  // therefore a guaranteed no-op in SQL (RBR-929's compare-and-set), or is
+  // refused by RBR-953's terminal-reopen gate if the row already reached
+  // `done`/`cancelled`. Either way it is a 409 the caller here already treats
+  // as "skip, do not count as escalated" -- not a silent clobber. A stale read
+  // is therefore safe by construction: it can only ever attempt a write that
+  // the write layer will reject if the row moved on, never one that succeeds
+  // against a row it should not have touched.
   async function reconcileStrandedAssignedIssues() {
     const candidates = await db
       .select()
