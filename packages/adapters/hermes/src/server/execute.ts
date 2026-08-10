@@ -559,9 +559,24 @@ export async function execute(
   }
 
   // ── Build environment ──────────────────────────────────────────────────
+  // RBR-1108: do NOT spread raw `process.env` here. This adapter runs inside
+  // the single long-lived, multi-tenant Paperclip server process. Any
+  // PAPERCLIP_TASK_ID / PAPERCLIP_WAKE_REASON / PAPERCLIP_WAKE_PAYLOAD_JSON
+  // (or any other PAPERCLIP_* value) left over in that server process's own
+  // env — e.g. from a previous run's env leaking via some other code path,
+  // or from how the server itself was launched — would otherwise leak
+  // unscoped into every subsequent hermes_local run across every company,
+  // whenever the current wake's own context doesn't happen to override it.
+  // This is the tenant-isolation leak that produced the same stale Voyonder
+  // issue id showing up twice in a row for the Rambur CEO. Every sibling
+  // local adapter (claude-local, opencode-local, codex-local, grok-local,
+  // gemini-local, pi-local, acpx-local, cursor-local) avoids this by never
+  // spreading process.env at the adapter layer; `runChildProcess` merges
+  // process.env safely later via `sanitizeInheritedPaperclipEnv`, which
+  // strips all inherited PAPERCLIP_* keys (except a small allow-list of
+  // process-identity vars) before merging. Match that pattern here.
   const userEnv = config.env as Record<string, string> | undefined;
   const env: Record<string, string> = {
-    ...(process.env as Record<string, string>),
     ...(userEnv && typeof userEnv === "object" ? userEnv : {}),
     ...buildPaperclipEnv(ctx.agent),
   };
@@ -576,8 +591,13 @@ export async function execute(
       typeof (ctx as any).context.paperclipWorkspace === "object"
         ? ((ctx as any).context.paperclipWorkspace as Record<string, unknown>)
         : {};
+    // `env` deliberately does not inherit raw `process.env` (see RBR-1108
+    // note above), so read the host process's own AGENT_HOME directly here
+    // as the "inherited" input — this is the same value `runChildProcess`
+    // would otherwise merge in later, and `resolveAgentHomeEnv` validates it
+    // against this run's own agent id before ever trusting it.
     const agentHomeResolution = resolveAgentHomeEnv({
-      inherited: env.AGENT_HOME,
+      inherited: env.AGENT_HOME ?? process.env.AGENT_HOME,
       resolvedAgentHome: cfgString(workspaceContext.agentHome) ?? null,
       agentId: ctx.agent?.id ?? null,
     });
