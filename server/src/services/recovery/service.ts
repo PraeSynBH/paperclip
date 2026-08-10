@@ -26,7 +26,7 @@ import {
 } from "@paperclipai/db";
 import { parseObject, asBoolean, asNumber } from "../../adapters/utils.js";
 import { runningProcesses } from "../../adapters/index.js";
-import { forbidden, notFound } from "../../errors.js";
+import { forbidden, notFound, HttpError } from "../../errors.js";
 import { logger } from "../../middleware/logger.js";
 import { isPidAlive, isProcessGroupAlive, terminateLocalService } from "../local-service-supervisor.js";
 import { redactCurrentUserText } from "../../log-redaction.js";
@@ -507,6 +507,37 @@ function buildLivenessOriginalIssueComment(finding: IssueLivenessFinding, escala
     "",
     "This issue now keeps its existing blockers and is also blocked by the escalation issue so dependency wakeups remain explicit.",
   ].join("\n");
+}
+
+// RBR-1106 (RBR-933 Tier 3): a status compare-and-set (RBR-929) reports a lost
+// race by throwing `conflict()` (HTTP 409) rather than returning `null` --
+// `null` is already spoken for by "issue not found" on `issuesSvc.update`. A
+// recovery call site that now passes `expectedStatus`/`expectedStatuses` must
+// treat a lost CAS as a no-op, exactly like the pre-existing
+// `if (!updated) return null` branches treat a not-found: skip, do not write
+// anything further, and let the caller's loop move on. This helper narrows
+// the catch to that one known-shape conflict so an unrelated error (a real
+// bug) still propagates.
+//
+// It also has to recognize RBR-953's terminal-reopen gate
+// (`issue_terminal_status_regression`), not just the CAS predicate's own
+// conflict. `assertTransition` re-checks the *actual current* status (fresh
+// `existing` at the top of `update`, then again against the row-locked
+// `receiptExisting` inside the transaction) before the CAS predicate ever
+// runs. Every write this issue converts derives its target status from an
+// earlier, potentially stale snapshot, with no `allowTerminalReopen` opt-in.
+// If the issue has already reached `done`/`cancelled` by write time, the gate
+// throws *before* the CAS WHERE clause is evaluated -- so a lost race here
+// surfaces as `issue_terminal_status_regression`, not "Issue status
+// compare-and-set failed". Both are the same class of event (someone else
+// already resolved this issue; this recovery write is stale) and both must
+// be a no-op, not an unhandled exception that could abort the recovery sweep
+// loop.
+function isIssueStatusCasConflict(error: unknown): boolean {
+  if (!(error instanceof HttpError) || error.status !== 409) return false;
+  if (error.message === "Issue status compare-and-set failed") return true;
+  const details = error.details as { code?: string } | undefined;
+  return details?.code === "issue_terminal_status_regression";
 }
 
 export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup }) {
@@ -3658,7 +3689,29 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         result.activeSkipped += 1;
         continue;
       }
-      await issuesSvc.update(recovery.id, { status: "cancelled" });
+      // RBR-1106: `recovery.status` is the status this loop's initial
+      // `openRecoveries` snapshot saw. The `sourceIssue` re-check a few lines
+      // above narrows the window for the *source* issue, but says nothing
+      // about the *recovery* issue itself reaching a terminal status between
+      // that snapshot and this write -- e.g. another concurrent recovery pass
+      // (or a human) closing it out. Pin the write to the snapshot status so
+      // that race is a guaranteed no-op (RBR-929 CAS, or RBR-953's
+      // terminal-reopen gate) rather than a silent revert of a `done`/
+      // `cancelled` issue back to `cancelled`-via-clobber of other fields.
+      let cancelled: Awaited<ReturnType<typeof issuesSvc.update>>;
+      try {
+        cancelled = await issuesSvc.update(recovery.id, {
+          status: "cancelled",
+          expectedStatus: recovery.status,
+        });
+      } catch (error) {
+        if (!isIssueStatusCasConflict(error)) throw error;
+        cancelled = null;
+      }
+      if (!cancelled) {
+        result.activeSkipped += 1;
+        continue;
+      }
       result.retired += 1;
       result.retiredIssueIds.push(recovery.id);
     }
@@ -3866,14 +3919,33 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       return input.issue;
     }
 
-    const update: Partial<typeof issues.$inferInsert> & { blockedByIssueIds: string[] } = {
+    const update: Partial<typeof issues.$inferInsert> & {
+      blockedByIssueIds: string[];
+      expectedStatus: string;
+    } = {
       blockedByIssueIds: nextBlockerIds,
+      // RBR-1106: `isAlreadyBlocked` (and, when false, `update.status =
+      // "blocked"` below) is derived from `input.issue.status`, a snapshot
+      // read by the caller before the several `await`s in
+      // `createIssueGraphLivenessEscalation` that precede this write. Pin the
+      // write to that same snapshot status so a concurrent status change --
+      // most importantly the issue reaching a terminal status in the
+      // meantime -- makes this a no-op (RBR-929 CAS, or RBR-953's
+      // terminal-reopen gate when the target status is also changing) instead
+      // of silently reverting a `done`/`cancelled` issue back to `blocked`.
+      expectedStatus: input.issue.status,
     };
     if (!isAlreadyBlocked) {
       update.status = "blocked";
     }
 
-    const updated = await issuesSvc.update(input.issue.id, update);
+    let updated: Awaited<ReturnType<typeof issuesSvc.update>>;
+    try {
+      updated = await issuesSvc.update(input.issue.id, update);
+    } catch (error) {
+      if (!isIssueStatusCasConflict(error)) throw error;
+      updated = null;
+    }
     if (!updated) return null;
 
     await logActivity(db, {
@@ -4259,5 +4331,10 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     buildIssueGraphLivenessAutoRecoveryPreview,
     reconcileIssueGraphLiveness,
     readRecoveryTimerIntervalMs,
+    // RBR-1106: exposed for direct regression coverage of the CAS guard, same
+    // as escalateStrandedRecoveryIssueInPlace above -- this function is not
+    // otherwise reachable from the public API without driving the full
+    // liveness-finding pipeline through reconcileIssueGraphLiveness.
+    ensureIssueBlockedByEscalation,
   };
 }

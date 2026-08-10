@@ -324,6 +324,76 @@ describeEmbeddedPostgres("issue recovery actions", () => {
     });
   });
 
+  it("RBR-1106: ensureIssueBlockedByEscalation is a no-op when the issue reached a terminal status before the write", async () => {
+    // AC3 regression coverage for the CAS conversion of the site 1 write in
+    // `ensureIssueBlockedByEscalation` (recovery/service.ts). The function
+    // derives its target status from `input.issue.status`, a snapshot taken
+    // by the caller before this call. If the issue has since completed
+    // (`done`), the pre-RBR-1106 unguarded write would silently revert it
+    // back to `blocked` (the RBR-864 hazard). Post-conversion, the write
+    // carries `expectedStatus: input.issue.status` (the stale snapshot
+    // value); the CAS/terminal-reopen gate loses the race and the call must
+    // return null without mutating status or assignee.
+    const { companyId, coderId, prefix, sourceIssue } = await seedCompany();
+    const escalationIssueId = randomUUID();
+    await db.insert(issues).values({
+      id: escalationIssueId,
+      companyId,
+      title: "Liveness escalation",
+      status: "todo",
+      priority: "medium",
+      issueNumber: 2,
+      identifier: `${prefix}-2`,
+    });
+
+    // Snapshot taken before the concurrent completion (mirrors the caller's
+    // pre-await read in createIssueGraphLivenessEscalation).
+    const staleSnapshot = { ...sourceIssue, status: "in_progress" as const };
+
+    // The issue actually reaches `done` before this write lands.
+    await db.update(issues).set({ status: "done" }).where(eq(issues.id, sourceIssue.id));
+
+    const enqueueWakeup = vi.fn(async () => null);
+    const recovery = recoveryService(db, { enqueueWakeup });
+    const finding = {
+      issueId: sourceIssue.id,
+      companyId,
+      identifier: sourceIssue.identifier,
+      state: "blocked_by_assigned_backlog_issue",
+      severity: "warning",
+      reason: "test finding",
+      dependencyPath: [],
+      recoveryIssueId: escalationIssueId,
+      recommendedOwnerAgentId: null,
+      recommendedOwnerCandidateAgentIds: [],
+      recommendedOwnerCandidates: [],
+      recommendedAction: "escalate",
+      incidentKey: "test-incident-key",
+    } as const;
+
+    const result = await recovery.ensureIssueBlockedByEscalation({
+      issue: staleSnapshot,
+      escalationIssueId,
+      finding,
+    });
+
+    expect(result).toBeNull();
+
+    const [afterIssue] = await db.select().from(issues).where(eq(issues.id, sourceIssue.id));
+    expect(afterIssue).toMatchObject({
+      status: "done",
+      assigneeAgentId: coderId,
+    });
+
+    // The blocker relation write is part of the same CAS-guarded update; it
+    // must not have landed either.
+    const blockerRelations = await db
+      .select()
+      .from(issueRelations)
+      .where(and(eq(issueRelations.companyId, companyId), eq(issueRelations.relatedIssueId, sourceIssue.id)));
+    expect(blockerRelations).toHaveLength(0);
+  });
+
   it("reuses the same source-scoped action when latest run IDs change while the cause stays the same", async () => {
     const { companyId, managerId, coderId, sourceIssue } = await seedCompany();
     const enqueueWakeup = vi.fn(async () => null);
