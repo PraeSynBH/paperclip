@@ -539,6 +539,82 @@ describeEmbeddedPostgres("issue recovery actions", () => {
     expect(comments[0]?.body).toContain("Recovery action:");
   });
 
+  // RBR-1107 (RBR-933 Tier 2, AC3 -- the reblock retry named in the parent
+  // chain): `escalateStrandedAssignedIssue`'s reblock-retry re-reads and
+  // compares the issue's current status/assignee (service.ts, right after
+  // `enqueueSourceScopedStrandedRecoveryWake`) before writing `blocked` again.
+  // That re-read narrows the race window but, before RBR-1107, did not close
+  // it -- there was still a gap between the compare and the write's own
+  // statement. This test forces something to land in that gap: the wakeup
+  // hook (awaited synchronously, same as the "claimed synchronously" test
+  // above) completes the issue to `done` with a different assignee right
+  // between the compare and the write. A pre-fix build would have silently
+  // reverted that `done` issue back to `blocked` with the recovery owner
+  // reassigned; post-fix the CAS predicate on the reblock write loses the
+  // race (or the terminal-reopen gate rejects the done->blocked edge first),
+  // and the issue's real status/assignee survive untouched.
+  it("reblock retry: a terminal issue survives when its compare-at-write status goes stale before the write lands", async () => {
+    const { companyId, managerId, coderId, sourceIssue } = await seedCompany();
+    // Pause the manager so recovery ownership resolves to the coder itself --
+    // the same setup the "claimed synchronously" test above uses to land in
+    // the `recoveryAction.ownerAgentId === input.issue.assigneeAgentId`
+    // branch that gates the reblock retry.
+    await db.update(agents).set({ status: "paused" }).where(eq(agents.id, managerId));
+
+    let wakeupCalls = 0;
+    const enqueueWakeup = vi.fn(async () => {
+      wakeupCalls += 1;
+      if (wakeupCalls === 2) {
+        // Simulate a concurrent run completing the issue in the gap between
+        // the reblock retry's compare (which will read this `done` row) and
+        // its own write.
+        await db
+          .update(issues)
+          .set({ status: "done", assigneeAgentId: null })
+          .where(eq(issues.id, sourceIssue.id));
+      }
+      return null;
+    });
+    const recovery = recoveryService(db, { enqueueWakeup });
+    const firstLatestRun = {
+      id: randomUUID(),
+      agentId: coderId,
+      status: "failed",
+      error: "adapter failed",
+      errorCode: "adapter_failed",
+      contextSnapshot: { retryReason: "issue_continuation_needed" },
+      livenessState: "needs_followup",
+    } as const;
+
+    await recovery.escalateStrandedAssignedIssue({
+      issue: sourceIssue,
+      previousStatus: "in_progress",
+      latestRun: firstLatestRun,
+      comment: "Automatic continuation recovery failed.",
+    });
+    const [afterFirst] = await db.select().from(issues).where(eq(issues.id, sourceIssue.id));
+    expect(afterFirst?.status).toBe("blocked");
+    expect(afterFirst?.assigneeAgentId).toBe(coderId);
+
+    const secondLatestRun = { ...firstLatestRun, id: randomUUID() };
+    // `sourceIssue` is intentionally the same stale snapshot passed to the
+    // first call -- exactly the shape the parent issue calls out: the
+    // caller's in-memory issue object does not reflect the concurrent `done`
+    // transition the wakeup hook performs mid-call. The call itself must not
+    // throw: a lost CAS/terminal-reopen conflict on the reblock retry is a
+    // no-op, not an unhandled exception that could abort the recovery sweep.
+    await recovery.escalateStrandedAssignedIssue({
+      issue: sourceIssue,
+      previousStatus: "in_progress",
+      latestRun: secondLatestRun,
+      comment: "Automatic continuation recovery failed.",
+    });
+
+    const [afterSecond] = await db.select().from(issues).where(eq(issues.id, sourceIssue.id));
+    expect(afterSecond?.status).toBe("done");
+    expect(afterSecond?.assigneeAgentId).toBeNull();
+  });
+
   it("does not create nested recovery artifacts when issue-backed fallback work itself fails", async () => {
     const { companyId, managerId, sourceIssueId, prefix } = await seedCompany();
     const recoveryIssueId = randomUUID();
