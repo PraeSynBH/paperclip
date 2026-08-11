@@ -28,8 +28,8 @@ Never print or paste API keys. The helper reads credentials from environment var
 Create the key from a board-authenticated Paperclip API session and store the returned token once:
 
 ```sh
-curl -X POST "$PAPERCLIP_API_URL/api/agents/$HERMES_AGENT_ID/keys" \
-  -H "Authorization: Bearer $BOARD_API_KEY" \
+curl -f -sS -X POST "$PAPERCLIP_API_URL/api/agents/$HERMES_AGENT_ID/keys" \
+  -H "Authorization: Bearer ***" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Hermes task bridge",

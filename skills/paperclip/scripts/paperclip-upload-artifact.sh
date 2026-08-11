@@ -44,6 +44,32 @@ require_command() {
   fi
 }
 
+# Surfaces the server's `error`/`message` string on stderr when the response
+# is JSON, otherwise dumps the raw body. Mirrors scripts/pc-api.sh's status
+# gate: multipart file uploads can't go through pc-api.sh (it only supports
+# JSON bodies), so this script implements the same non-2xx-exits-non-zero,
+# error-to-stderr, body-only-on-success contract directly.
+report_failure() {
+  local label="$1"
+  local status_code="$2"
+  local url="$3"
+  local response_file="$4"
+  local err
+
+  printf '%s (%s): %s\n' "$label" "$status_code" "$url" >&2
+  if [[ -s "$response_file" ]]; then
+    err="$(jq -r 'if type == "object" then (.error // .message // empty) else empty end' <"$response_file" 2>/dev/null || true)"
+    if [[ -n "$err" && "$err" != "null" ]]; then
+      printf 'pc-api: error: %s\n' "$err" >&2
+    else
+      cat "$response_file" >&2
+      printf '\n' >&2
+    fi
+  else
+    printf 'pc-api: (empty response body)\n' >&2
+  fi
+}
+
 json_bool() {
   if [[ "${1:-0}" == "1" ]]; then
     printf 'true'
@@ -110,9 +136,7 @@ request_json() {
   fi
 
   if [[ "$status_code" -lt 200 || "$status_code" -ge 300 ]]; then
-    printf 'Request failed (%s): %s\n' "$status_code" "$url" >&2
-    cat "$response_file" >&2
-    printf '\n' >&2
+    report_failure "Request failed" "$status_code" "$url" "$response_file"
     rm -f "$response_file"
     exit 1
   fi
@@ -141,9 +165,7 @@ upload_file() {
   )"
 
   if [[ "$status_code" -lt 200 || "$status_code" -ge 300 ]]; then
-    printf 'Upload failed (%s): %s\n' "$status_code" "$url" >&2
-    cat "$response_file" >&2
-    printf '\n' >&2
+    report_failure "Upload failed" "$status_code" "$url" "$response_file"
     rm -f "$response_file"
     exit 1
   fi

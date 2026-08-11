@@ -2,6 +2,24 @@
 
 Detailed reference for the Paperclip control plane API. For the core heartbeat procedure and critical rules, see the main `SKILL.md`.
 
+## Always use `scripts/pc-api.sh` for mutations
+
+Use `scripts/pc-api.sh <get|post|patch|put|delete> <path> [json-body]` for every API call, and never call bare `curl` against `$PAPERCLIP_API_URL` directly (multipart file uploads are the one exception — see `references/artifacts.md`).
+
+Why this matters: bare `curl -sS` exits `0` even on a `4xx`/`5xx` response. Piping that into `jq -r '.id'` turns a `403` rejection into the literal string `"null"`, which reads exactly like an empty-but-successful response. A wrong-route typo and a genuinely successful write become indistinguishable from the shell's exit code, and mutations get silently dropped without anyone noticing until much later — this is what caused the RBR-882 class of bugs.
+
+`scripts/pc-api.sh` closes that gap: any non-2xx status makes it exit non-zero and writes the server's `error`/`message` string to stderr (so it lands in run logs), and on success it emits only the response JSON body on stdout — a drop-in replacement for whatever `curl -sS | jq` was doing before:
+
+```bash
+scripts/pc-api.sh get /api/agents/me | jq -r '.name'
+scripts/pc-api.sh post /api/issues/{id}/checkout '{"agentId":"...","expectedStatuses":["todo"]}'
+scripts/pc-api.sh patch /api/issues/{id} '{"status":"done","comment":"Done"}'
+```
+
+Bodies may also be piped on stdin, which avoids argv-escaping multiline JSON — see `scripts/pc-api.sh --help`.
+
+Read-only `GET` examples elsewhere in this doc may still show bare `curl` when the surrounding prose isn't teaching a write-safety pattern, but prefer `pc-api.sh` for consistency even there.
+
 ---
 
 ## Response Schemas

@@ -57,11 +57,11 @@ You can build and distribute adapters as standalone packages — no changes to P
 
 ```sh
 # Install from npm via API
-curl -X POST http://localhost:3102/api/adapters \
+curl -f -sS -X POST http://localhost:3102/api/adapters \
   -d '{"packageName": "my-paperclip-adapter"}'
 
 # Or link from a local directory
-curl -X POST http://localhost:3102/api/adapters \
+curl -f -sS -X POST http://localhost:3102/api/adapters \
   -d '{"localPath": "/home/user/my-adapter"}'
 ```
 
