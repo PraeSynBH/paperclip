@@ -43,6 +43,35 @@ type AgentRow = typeof agents.$inferSelect;
 type HeartbeatRunRow = typeof heartbeatRuns.$inferSelect;
 type ProductivityReviewTrigger = "no_comment_streak" | "long_active_duration" | "high_churn";
 
+/**
+ * RBR-1038 item 4 — degradation signals that suppress `no_comment_streak`.
+ *
+ * A `no_comment_streak` trigger must be suppressed when:
+ * (a) the sample window's API p50 exceeded threshold (run ended with a
+ *     transient infra error code like `timeout` or `adapter_failed`), or
+ * (b) the run's credential expired before the window closed (run ended
+ *     with an auth-related error code from RBR-1035/RBR-1036's
+ *     `PaperclipApiAuthError` taxonomy, e.g. `*_auth_required`,
+ *     `*_auth_failed`).
+ *
+ * In either case the no-comment streak is not a real productivity signal —
+ * it is an artifact of degraded infrastructure or expired credentials.
+ */
+const DEGRADED_WINDOW_ERROR_CODES = new Set<string>([
+  "timeout",
+  "adapter_failed",
+  "codex_transient_upstream",
+  "claude_transient_upstream",
+]);
+
+/**
+ * Auth-related error codes signal that the run's credential expired or was
+ * rejected. These are the server-side equivalents of RBR-1036's
+ * `PaperclipApiAuthError` — adapters surface them as distinct error codes
+ * rather than folding 401s into the generic timeout path.
+ */
+const AUTH_EXPIRY_ERROR_CODE_PATTERN = /auth_required|auth_failed|credential_expired|api_auth_error/i;
+
 type ProductivityReviewThresholds = {
   noCommentStreakRuns: number;
   longActiveMs: number;
@@ -77,6 +106,8 @@ type ProductivityReviewEvidence = {
   nextAction: string | null;
   thresholds: ProductivityReviewThresholds;
   generatedAt: Date;
+  /** RBR-1038 item 4: set when `no_comment_streak` was suppressed due to degraded window. */
+  noCommentStreakSuppressedReason?: string;
 };
 
 type EnqueueWakeup = (
@@ -193,6 +224,52 @@ function choosePrimaryTrigger(input: {
 function isSoftStopTrigger(trigger: ProductivityReviewTrigger) {
   return trigger === "no_comment_streak" || trigger === "high_churn";
 }
+
+/**
+ * RBR-1038 item 4: check whether a no-comment streak is an artifact of a
+ * degraded window rather than a genuine productivity signal.
+ *
+ * Returns a suppression reason if the streak should be suppressed, or
+ * `null` if the streak is genuine.
+ */
+function checkNoCommentStreakDegradedWindow(
+  streakRuns: HeartbeatRunRow[],
+): { suppressed: true; reason: string } | null {
+  // (a) API p50 degradation: any streak run ended with a transient infra
+  // error code (timeout, adapter_failed, etc.)
+  const degradedRun = streakRuns.find(
+    (run) => run.errorCode && DEGRADED_WINDOW_ERROR_CODES.has(run.errorCode),
+  );
+  if (degradedRun) {
+    return {
+      suppressed: true,
+      reason: `no_comment_streak suppressed: streak run ${degradedRun.id} ended with degraded-window error code '${degradedRun.errorCode}' (API p50 likely exceeded threshold)`,
+    };
+  }
+
+  // (b) Credential expiry: any streak run ended with an auth-related error
+  // code (RBR-1035/RBR-1036's `PaperclipApiAuthError` taxonomy)
+  const authExpiredRun = streakRuns.find(
+    (run) => run.errorCode && AUTH_EXPIRY_ERROR_CODE_PATTERN.test(run.errorCode),
+  );
+  if (authExpiredRun) {
+    return {
+      suppressed: true,
+      reason: `no_comment_streak suppressed: streak run ${authExpiredRun.id} ended with auth-expiry error code '${authExpiredRun.errorCode}' (credential expired before window closed)`,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * RBR-1038 item 4 — export for testing. These constants and the check
+ * function are internal implementation details, exposed only so the degraded
+ * window guard can be unit-tested without a database.
+ */
+export const _DEGRADED_WINDOW_ERROR_CODES = DEGRADED_WINDOW_ERROR_CODES;
+export const _AUTH_EXPIRY_ERROR_CODE_PATTERN = AUTH_EXPIRY_ERROR_CODE_PATTERN;
+export { checkNoCommentStreakDegradedWindow };
 
 function formatTrigger(trigger: ProductivityReviewTrigger) {
   if (trigger === "no_comment_streak") return "No-comment streak";
@@ -476,13 +553,28 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       : null;
 
     const noComment = noCommentStreak >= thresholds.noCommentStreakRuns;
+    // RBR-1038 item 4: suppress `no_comment_streak` when the streak is an
+    // artifact of degraded infrastructure or expired credentials, not a
+    // genuine productivity signal. The streak runs are the first N terminal
+    // runs with no run-created comment — exactly the runs whose error codes
+    // reveal whether the no-comment outcome was caused by infra/auth failure
+    // rather than agent behavior.
+    let noCommentSuppressed: { reason: string } | null = null;
+    if (noComment) {
+      const streakRuns = terminalRuns.slice(0, noCommentStreak);
+      const degradation = checkNoCommentStreakDegradedWindow(streakRuns);
+      if (degradation) {
+        noCommentSuppressed = { reason: degradation.reason };
+      }
+    }
+    const effectiveNoComment = noComment && !noCommentSuppressed;
     const longActive = elapsedMs !== null && elapsedMs >= thresholds.longActiveMs;
     const highChurn =
       runCountLastHour >= thresholds.highChurnHourly ||
       assigneeRunCommentCountLastHour >= thresholds.highChurnHourly ||
       runCountLastSixHours >= thresholds.highChurnSixHours ||
       assigneeRunCommentCountLastSixHours >= thresholds.highChurnSixHours;
-    const trigger = choosePrimaryTrigger({ noComment, longActive, highChurn });
+    const trigger = choosePrimaryTrigger({ noComment: effectiveNoComment, longActive, highChurn });
     if (!trigger) return null;
 
     const triggerReasons: string[] = [];
@@ -519,6 +611,7 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       nextAction: latestRuns.find((run) => run.nextAction)?.nextAction ?? null,
       thresholds,
       generatedAt: now,
+      ...(noCommentSuppressed ? { noCommentStreakSuppressedReason: noCommentSuppressed.reason } : {}),
     };
   }
 
@@ -788,6 +881,7 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       existing: 0,
       snoozed: 0,
       creationCapped: 0,
+      degradedWindowSuppressed: 0,
       skipped: 0,
       failed: 0,
       reviewIssueIds: [] as string[],
@@ -817,6 +911,24 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       if (!evidence) {
         result.skipped += 1;
         continue;
+      }
+      // RBR-1038 item 4: when the no_comment_streak trigger was suppressed
+      // due to a degraded window (and no other trigger fired to create the
+      // evidence object), count it separately. The evidence is still returned
+      // when another trigger (long_active_duration, high_churn) also fired;
+      // in that case the suppression is informational but doesn't prevent the
+      // review — only the `no_comment_streak` signal was suppressed.
+      if (evidence.noCommentStreakSuppressedReason) {
+        result.degradedWindowSuppressed += 1;
+        logger.info(
+          {
+            issueId: candidate.id,
+            companyId: candidate.companyId,
+            trigger: evidence.trigger,
+            noCommentStreakSuppressedReason: evidence.noCommentStreakSuppressedReason,
+          },
+          "productivity review no_comment_streak suppressed by degraded window guard",
+        );
       }
       let prefix = prefixCache.get(candidate.companyId);
       if (!prefix) {
