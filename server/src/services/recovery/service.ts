@@ -63,6 +63,7 @@ import {
   withRecoveryModelProfileHint,
 } from "./model-profile-hint.js";
 import { isAutomaticRecoverySuppressedByPauseHold } from "./pause-hold-guard.js";
+import { evaluateRecoveryLoadGuard, type RecoveryLoadGuardDecision } from "./load-guard.js";
 
 const EXECUTION_PATH_HEARTBEAT_RUN_STATUSES = ["queued", "running", "scheduled_retry"] as const;
 const UNSUCCESSFUL_HEARTBEAT_RUN_TERMINAL_STATUSES = ["failed", "cancelled", "timed_out"] as const;
@@ -2942,9 +2943,28 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       escalated: 0,
       waitingOnReviewResolved: 0,
       recentProgressExempted: 0,
+      loadDeferrals: 0,
       skipped: 0,
       issueIds: [] as string[],
     };
+
+    // RBR-1038 item 3: load-aware recovery deferral.
+    // When the host is overloaded, the recovery sweep must defer (not dispatch).
+    // Deferred wakes queue — they do not spawn. This guard checks once before
+    // iterating candidates; the load snapshot is a point-in-time measurement
+    // and re-checking per-candidate would be redundant within a single sweep.
+    const loadGuard = evaluateRecoveryLoadGuard();
+    if (loadGuard.deferred) {
+      logger.warn(
+        {
+          candidateCount: candidates.length,
+          loadGuard,
+        },
+        loadGuard.detail,
+      );
+      result.loadDeferrals = candidates.length;
+      return result;
+    }
 
     for (const issue of candidates) {
       const executionState = issue.status === "in_review"
