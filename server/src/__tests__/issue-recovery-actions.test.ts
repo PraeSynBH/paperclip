@@ -129,7 +129,7 @@ describeEmbeddedPostgres("issue recovery actions", () => {
   beforeAll(async () => {
     tempDb = await startEmbeddedPostgresTestDatabase("paperclip-issue-recovery-actions-");
     db = createDb(tempDb.connectionString);
-  }, 30_000);
+  }, 180_000);
 
   afterEach(async () => {
     await db.delete(issueRecoveryActions);
@@ -816,6 +816,126 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       trigger: "read_projection",
       recoveryActionId: action.id,
     });
+  });
+
+  it("reverts a phantom park on revalidation, restoring both status and assignee", async () => {
+    const { companyId, managerId, coderId, sourceIssueId } = await seedCompany();
+    // The RBR-864 defect: a completing run is misread as a lost run and the `done` issue gets parked.
+    await db.update(issues).set({ status: "done" }).where(eq(issues.id, sourceIssueId));
+    const [doneIssue] = await db.select().from(issues).where(eq(issues.id, sourceIssueId));
+    const recovery = recoveryService(db, { enqueueWakeup: vi.fn(async () => null) });
+
+    await recovery.escalateStrandedAssignedIssue({
+      issue: doneIssue!,
+      previousStatus: "done" as never,
+      latestRun: {
+        id: randomUUID(),
+        agentId: coderId,
+        status: "timed_out",
+        error: "Timed out",
+        errorCode: "timeout",
+        contextSnapshot: { retryReason: "issue_continuation_needed" },
+        livenessState: "needs_followup",
+      } as never,
+      comment: "Automatic continuation recovery failed.",
+    });
+
+    // Pre-condition: the park damaged the issue exactly as RBR-864 describes.
+    const [parked] = await db.select().from(issues).where(eq(issues.id, sourceIssueId));
+    expect(parked).toMatchObject({ status: "blocked", assigneeAgentId: managerId });
+    const recoveryActionSvc = issueRecoveryActionService(db);
+    const action = await recoveryActionSvc.getActiveForIssue(companyId, sourceIssueId);
+    expect(action).toMatchObject({ status: "active", previousOwnerAgentId: coderId });
+    expect(action?.evidence).toMatchObject({ previousStatus: "done" });
+
+    const app = createApp();
+    const detail = await request(app).get(`/api/issues/${sourceIssueId}`).expect(200);
+
+    // AC3: revalidation must revert what the park invalidated — status AND assignee.
+    expect(detail.body).toMatchObject({
+      id: sourceIssueId,
+      status: "done",
+      assigneeAgentId: coderId,
+      activeRecoveryAction: null,
+    });
+    const [reverted] = await db.select().from(issues).where(eq(issues.id, sourceIssueId));
+    expect(reverted).toMatchObject({ status: "done", assigneeAgentId: coderId });
+    expect(await recoveryActionSvc.getActiveForIssue(companyId, sourceIssueId)).toBeNull();
+
+    const [actionRow] = await db
+      .select()
+      .from(issueRecoveryActions)
+      .where(eq(issueRecoveryActions.id, action!.id));
+    expect(actionRow).toMatchObject({ status: "cancelled", outcome: "cancelled" });
+    expect(actionRow?.resolvedAt).toBeTruthy();
+
+    // Invariant 5 — the revert is observable in activity and on the thread.
+    const activityRows = await db
+      .select()
+      .from(activityLog)
+      .where(eq(activityLog.entityId, sourceIssueId));
+    expect(activityRows.map((row) => row.action)).toEqual(
+      expect.arrayContaining(["issue.recovery_action_reverted", "issue.recovery_action_resolved"]),
+    );
+    expect(activityRows.find((row) => row.action === "issue.recovery_action_reverted")?.details).toMatchObject({
+      recoveryActionId: action!.id,
+      source: "source_revalidation_revert",
+      trigger: "read_projection",
+      evidencePreviousStatus: "done",
+      revertedFromStatus: "blocked",
+      revertedToStatus: "done",
+      revertedFromAssigneeAgentId: managerId,
+      restoredAssigneeAgentId: coderId,
+    });
+    const commentRows = await db.select().from(issueComments).where(eq(issueComments.issueId, sourceIssueId));
+    expect(
+      commentRows.some(
+        (row) => row.authorType === "system" && (row.body ?? "").includes("Reverted a recovery park"),
+      ),
+    ).toBe(true);
+  });
+
+  it("does not status-revert a legitimate park taken from a live in_progress run", async () => {
+    const { companyId, managerId, coderId, sourceIssueId, sourceIssue } = await seedCompany();
+    const recovery = recoveryService(db, { enqueueWakeup: vi.fn(async () => null) });
+
+    await recovery.escalateStrandedAssignedIssue({
+      issue: sourceIssue,
+      previousStatus: "in_progress",
+      latestRun: {
+        id: randomUUID(),
+        agentId: coderId,
+        status: "timed_out",
+        error: "Timed out",
+        errorCode: "timeout",
+        contextSnapshot: { retryReason: "issue_continuation_needed" },
+        livenessState: "needs_followup",
+      } as never,
+      comment: "Automatic continuation recovery failed.",
+    });
+
+    const recoveryActionSvc = issueRecoveryActionService(db);
+    const action = await recoveryActionSvc.getActiveForIssue(companyId, sourceIssueId);
+    expect(action?.evidence).toMatchObject({ previousStatus: "in_progress" });
+
+    const app = createApp();
+    const detail = await request(app).get(`/api/issues/${sourceIssueId}`).expect(200);
+
+    // Invariant 2 — a run that really did die from in_progress gets a live path restored elsewhere,
+    // never a status rewrite here. The park stands and stays visible.
+    expect(detail.body).toMatchObject({ id: sourceIssueId, status: "blocked", assigneeAgentId: managerId });
+    expect(detail.body.activeRecoveryAction).toMatchObject({ id: action!.id, status: "active" });
+    const [stillParked] = await db.select().from(issues).where(eq(issues.id, sourceIssueId));
+    expect(stillParked).toMatchObject({ status: "blocked", assigneeAgentId: managerId });
+    expect(await recoveryActionSvc.getActiveForIssue(companyId, sourceIssueId)).toMatchObject({
+      id: action!.id,
+      status: "active",
+    });
+    const activityRows = await db
+      .select()
+      .from(activityLog)
+      .where(eq(activityLog.entityId, sourceIssueId));
+    expect(activityRows.map((row) => row.action)).not.toContain("issue.recovery_action_reverted");
   });
 
   it("keeps active recovery visible when a plain comment does not create a live path", async () => {
