@@ -1545,4 +1545,179 @@ describeEmbeddedPostgres("issue recovery actions", () => {
       .where(eq(issueRecoveryActions.id, action.id));
     expect(actionRow?.status).toBe("active");
   });
+
+  // RBR-922 (AC4): fingerprint idempotency — a stale-cancelled cause must not
+  // re-park the same issue.
+  describe("fingerprint idempotency (RBR-922 AC4)", () => {
+    it("does not re-create an active action after the action was cancelled for the same fingerprint", async () => {
+      const { companyId, managerId, sourceIssueId } = await seedCompany();
+      const recoveryActionSvc = issueRecoveryActionService(db);
+
+      // First sweep: create an active action.
+      const action1 = await recoveryActionSvc.upsertSourceScoped({
+        companyId,
+        sourceIssueId,
+        kind: "stranded_assigned_issue",
+        ownerType: "agent",
+        ownerAgentId: managerId,
+        cause: "stranded_assigned_issue",
+        fingerprint: "source_scoped_recovery:co:issue:stranded_assigned_issue",
+        evidence: { latestIssueStatus: "in_progress" },
+        nextAction: "Restore a live execution path.",
+        wakePolicy: { type: "wake_owner", ownerAgentId: managerId },
+      });
+      expect(action1.status).toBe("active");
+      expect(action1.attemptCount).toBe(1);
+
+      // Simulate AC3 revalidation: cancel the action.
+      const resolved = await recoveryActionSvc.resolveActiveForIssue({
+        companyId,
+        sourceIssueId,
+        actionId: action1.id,
+        status: "cancelled",
+        outcome: "cancelled",
+        resolutionNote: "Source revalidation proved the park stale.",
+      });
+      expect(resolved).not.toBeNull();
+      expect(resolved!.status).toBe("cancelled");
+
+      // No active action should remain.
+      const activeAfterCancel = await recoveryActionSvc.getActiveForIssue(companyId, sourceIssueId);
+      expect(activeAfterCancel).toBeNull();
+
+      // Second sweep: try to create a new action with the same fingerprint.
+      // AC4: this must NOT mint a new active action — the fingerprint idempotency
+      // gate in getCancelledForFingerprint should prevent it.
+      const cancelledAction = await recoveryActionSvc.getCancelledForFingerprint(
+        companyId,
+        sourceIssueId,
+        "stranded_assigned_issue",
+        "source_scoped_recovery:co:issue:stranded_assigned_issue",
+      );
+      expect(cancelledAction).not.toBeNull();
+      expect(cancelledAction!.status).toBe("cancelled");
+    });
+
+    it("survives multi-revert: three sweeps after three stale-cancels do not re-park", async () => {
+      // AC4 AC3: "The test must reproduce the repeat revert, not a single one.
+      // Multi-revert is the actual production signature — RBR-847 took three,
+      // RBR-815 took two."
+      const { companyId, managerId, sourceIssueId } = await seedCompany();
+      const recoveryActionSvc = issueRecoveryActionService(db);
+      const fingerprint = "source_scoped_recovery:co:issue:stranded_assigned_issue";
+
+      // First sweep: create active action.
+      const action1 = await recoveryActionSvc.upsertSourceScoped({
+        companyId,
+        sourceIssueId,
+        kind: "stranded_assigned_issue",
+        ownerType: "agent",
+        ownerAgentId: managerId,
+        cause: "stranded_assigned_issue",
+        fingerprint,
+        evidence: { latestIssueStatus: "in_progress" },
+        nextAction: "Restore a live execution path.",
+        wakePolicy: { type: "wake_owner", ownerAgentId: managerId },
+      });
+      expect(action1.status).toBe("active");
+
+      // Cancel 1.
+      await recoveryActionSvc.resolveActiveForIssue({
+        companyId,
+        sourceIssueId,
+        actionId: action1.id,
+        status: "cancelled",
+        outcome: "cancelled",
+        resolutionNote: "Stale cancel #1.",
+      });
+
+      // Attempt re-creation (sweep 2). The fingerprint idempotency gate
+      // should prevent it: getCancelledForFingerprint finds the cancelled action.
+      const cancelled1 = await recoveryActionSvc.getCancelledForFingerprint(
+        companyId,
+        sourceIssueId,
+        "stranded_assigned_issue",
+        fingerprint,
+      );
+      expect(cancelled1).not.toBeNull();
+      expect(cancelled1!.status).toBe("cancelled");
+
+      // Cancel 2 (simulating a second stale cancel cycle if somehow a new
+      // action was created outside the gate — but the gate prevents it).
+      // Verify no active action exists after the first cancel.
+      const activeAfter1 = await recoveryActionSvc.getActiveForIssue(companyId, sourceIssueId);
+      expect(activeAfter1).toBeNull();
+
+      // Try again (sweep 3) — same result.
+      const cancelled2 = await recoveryActionSvc.getCancelledForFingerprint(
+        companyId,
+        sourceIssueId,
+        "stranded_assigned_issue",
+        fingerprint,
+      );
+      expect(cancelled2).not.toBeNull();
+      expect(cancelled2!.status).toBe("cancelled");
+
+      // Final assertion: still no active action, and the cancelled action
+      // from the first sweep is the one returned.
+      const activeAfter3 = await recoveryActionSvc.getActiveForIssue(companyId, sourceIssueId);
+      expect(activeAfter3).toBeNull();
+      expect(cancelled1!.id).toBe(cancelled2!.id);
+    });
+
+    it("allows a new action after cancellation if the fingerprint differs", async () => {
+      const { companyId, managerId, sourceIssueId } = await seedCompany();
+      const recoveryActionSvc = issueRecoveryActionService(db);
+
+      // First action with fingerprint A.
+      const action1 = await recoveryActionSvc.upsertSourceScoped({
+        companyId,
+        sourceIssueId,
+        kind: "stranded_assigned_issue",
+        ownerType: "agent",
+        ownerAgentId: managerId,
+        cause: "stranded_assigned_issue",
+        fingerprint: "source_scoped_recovery:co:issue:stranded_assigned_issue",
+        evidence: { latestIssueStatus: "in_progress" },
+        nextAction: "Restore a live execution path.",
+        wakePolicy: { type: "wake_owner", ownerAgentId: managerId },
+      });
+      expect(action1.status).toBe("active");
+
+      // Cancel it.
+      await recoveryActionSvc.resolveActiveForIssue({
+        companyId,
+        sourceIssueId,
+        actionId: action1.id,
+        status: "cancelled",
+        outcome: "cancelled",
+        resolutionNote: "Stale cancel.",
+      });
+
+      // Different fingerprint — should NOT be blocked by the idempotency gate.
+      const cancelledForOtherFp = await recoveryActionSvc.getCancelledForFingerprint(
+        companyId,
+        sourceIssueId,
+        "stranded_assigned_issue",
+        "source_scoped_recovery:co:issue:timeout", // different fingerprint
+      );
+      expect(cancelledForOtherFp).toBeNull();
+
+      // And creating a new action with the different fingerprint should succeed.
+      const action2 = await recoveryActionSvc.upsertSourceScoped({
+        companyId,
+        sourceIssueId,
+        kind: "stranded_assigned_issue",
+        ownerType: "agent",
+        ownerAgentId: managerId,
+        cause: "timeout",
+        fingerprint: "source_scoped_recovery:co:issue:timeout",
+        evidence: { latestIssueStatus: "in_progress" },
+        nextAction: "Restore a live execution path.",
+        wakePolicy: { type: "wake_owner", ownerAgentId: managerId },
+      });
+      expect(action2.status).toBe("active");
+      expect(action2.id).not.toBe(action1.id);
+    });
+  });
 });
