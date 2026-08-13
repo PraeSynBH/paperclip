@@ -68,6 +68,37 @@ Confirm the global install actually moved:
 cat /opt/homebrew/lib/node_modules/paperclipai/package.json | grep '"version"'
 ```
 
+**CAVEAT — this command is only safe once the target version has actually been published to the
+npm registry via the real release pipeline (RBR-939 incident follow-up, RBR-1156):**
+
+`npm install -g paperclipai@latest` (or a pinned `@<version>`) resolves `@paperclipai/server` from
+the npm registry at install time. `cli/esbuild.config.mjs` deliberately excludes
+`@paperclipai/server` from the CLI's bundle (see its "resolved at runtime" comment), and
+`cli/package.json` pins `@paperclipai/server` as a normal dependency (`workspace:*` in-repo,
+rewritten to a real pinned version by `scripts/release.sh` at publish time) — **not** a bundled
+artifact. That means the only way `@paperclipai/server` code actually reaches this host is if that
+exact version was published to npm first.
+
+The full, real publish pipeline is `scripts/release.sh stable` (or `canary`): it runs the
+verification gate (`pnpm -r typecheck`, `pnpm test:run`, `pnpm build`), builds workspace artifacts,
+bumps every public package to the same target version, publishes `@paperclipai/server` **and then**
+`cli` pinned to that version, and verifies both landed on the registry before tagging. Only after
+that pipeline has actually published the target version does `npm install -g paperclipai@<version>`
+pull the fork's real server code.
+
+A local fork build shortcut — `npm pack` in `cli/` (or `server/`) followed by
+`npm install -g` from the resulting tarball, or any variant that skips `scripts/release.sh`'s
+publish steps — is **not equivalent** to the command above and must not be used as a substitute for
+it. It does not publish `@paperclipai/server` anywhere; a subsequent `npm install -g
+paperclipai@latest` on this host will still resolve `@paperclipai/server` from whatever was last
+actually published to the registry (which can be an old, stale, or entirely unrelated placeholder
+version), silently deploying the wrong server code while `paperclipai` (the CLI) itself appears to
+have "upgraded." This is exactly what caused the RBR-939 incident's brief production outage: a
+local-build shortcut pulled a stale placeholder `@paperclipai/server@0.3.1` instead of the fork's
+built server code, and a follow-on hand-patch (copying `server/dist` into the global install
+directly) broke module resolution and crash-looped the launchd service for ~60-90s before rollback.
+See section 4 (AC3) for how this interacts with the standing verification rule.
+
 ### 2.2. Exact restart command
 
 ```sh
@@ -127,6 +158,17 @@ Concretely:
 - This is now the standing rule for this instance, not a one-time note for RBR-939 alone. See also
   `doc/RELEASING.md` "Smoke Testing" for the CI-side canary/stable smoke gate, which is separate from
   this local-dev-verification rule and does not substitute for it.
+- **False-positive verification pattern to watch for**: "fixed and verified via npm-install-g" is
+  not automatically valid evidence, even when the `commit`/`version` on `/api/health` looks fresh.
+  If the upgrade that produced that running process was `npm install -g paperclipai@latest` (or a
+  pinned version) run *before* that exact version was actually published to npm via
+  `scripts/release.sh` — e.g. after only a local fork build/`npm pack` shortcut — then
+  `@paperclipai/server` on the box can still be a stale/wrong registry-resolved build even though
+  the CLI-level version string reads as expected. See the section 2.1 caveat above for the mechanism
+  (`@paperclipai/server` is registry-resolved at install time, not bundled into the CLI). Do not
+  treat "I ran npm install -g from a fork build and it looked upgraded" as verification — confirm
+  the target version was actually published (`npm view @paperclipai/server@<version>` returns
+  metadata) before trusting a post-upgrade health check as proof the fix is live.
 
 ## 5. AC4 — the version is visible without ps/npm forensics
 
