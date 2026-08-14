@@ -146,7 +146,7 @@ describeEmbeddedPostgres("issue blocker attention", () => {
     return runId;
   }
 
-  it("classifies a blocked parent as covered when its child has a running execution path", async () => {
+  it("classifies a blocked parent as needs_attention when its only blocker is a child (remediation attempt, not a real dependency)", async () => {
     const { companyId, agentId } = await createCompany("PBC");
     const parentId = await insertIssue({ companyId, identifier: "PBC-1", title: "Parent", status: "blocked" });
     const childId = await insertIssue({
@@ -162,12 +162,15 @@ describeEmbeddedPostgres("issue blocker attention", () => {
 
     const parent = (await svc.list(companyId, { status: "blocked" })).find((issue) => issue.id === parentId);
 
+    // Children that act as blockers are almost always remediation/unblock
+    // attempts (PRA-121 → PRA-346/354/360 loop). Treat as needs_attention
+    // rather than covered so the parent isn't misrepresented as handled.
     expect(parent?.blockerAttention).toMatchObject({
-      state: "covered",
-      reason: "active_child",
+      state: "needs_attention",
+      reason: "attention_required",
       unresolvedBlockerCount: 1,
-      coveredBlockerCount: 1,
-      attentionBlockerCount: 0,
+      coveredBlockerCount: 0,
+      attentionBlockerCount: 1,
       sampleBlockerIdentifier: "PBC-2",
     });
   });
