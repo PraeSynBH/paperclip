@@ -14067,6 +14067,31 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         const elapsedMs = now.getTime() - baseline;
         if (elapsedMs < policy.intervalSec * 1000) continue;
 
+        // RBR-974 / PRA-553: enforce per-agent maxConcurrentRuns and the
+        // instance-wide ceiling BEFORE enqueueing. The admission gate in
+        // admitAndClaimQueuedRuns catches this at claim time, but that still
+        // lets queued runs pile up every tick while the agent is saturated.
+        // Skipping here prevents queue bloat and is the cheaper path.
+        if (policy.maxConcurrentRuns > 0) {
+          const agentRunning = await countRunningRunsForAgent(agent.id);
+          const globalRunning = await countRunningRunsInstanceWide();
+          const admission = evaluateRunAdmission({
+            agentCap: policy.maxConcurrentRuns,
+            runningForAgent: agentRunning,
+            runningGlobal: globalRunning,
+            load: readHostLoadSnapshot(),
+          });
+          if (admission.availableSlots <= 0) {
+            // Advance the timer so we don't re-check on every scheduler tick.
+            // The agent will be reconsidered after a full interval once a slot
+            // opens up (finalizeRun -> startNextQueuedRunForAgent will handle
+            // the immediate promotion when a running run finishes).
+            await markTimerHeartbeatChecked(agent.id, "timer");
+            skipped += 1;
+            continue;
+          }
+        }
+
         const run = await enqueueWakeup(agent.id, {
           source: "timer",
           triggerDetail: "system",

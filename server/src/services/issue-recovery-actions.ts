@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { issueRecoveryActions } from "@paperclipai/db";
 import type {
@@ -257,6 +257,37 @@ export function issueRecoveryActionService(db: Db) {
     return runExclusiveUpsert(input, () => upsertSourceScopedUnlocked(input));
   }
 
+  // RBR-922 (AC4): fingerprint idempotency — a stale-cancelled cause must not
+  // re-park the same issue. When source revalidation (AC3) cancels a recovery
+  // action, it moves out of the `active`/`escalated` partial unique index, so
+  // the next sweep's `upsertSourceScoped` sees no active action and creates a
+  // fresh one — re-parking the issue. This method checks whether a
+  // previously-cancelled/resolved action exists with the same fingerprint, so
+  // the caller can skip the upsert and prevent the re-park.
+  async function getCancelledForFingerprint(
+    companyId: string,
+    sourceIssueId: string,
+    cause: string,
+    fingerprint: string,
+  ): Promise<IssueRecoveryAction | null> {
+    const row = await db
+      .select()
+      .from(issueRecoveryActions)
+      .where(
+        and(
+          eq(issueRecoveryActions.companyId, companyId),
+          eq(issueRecoveryActions.sourceIssueId, sourceIssueId),
+          eq(issueRecoveryActions.cause, cause),
+          eq(issueRecoveryActions.fingerprint, fingerprint),
+          sql`${issueRecoveryActions.status} not in ('active', 'escalated')`,
+        ),
+      )
+      .orderBy(desc(issueRecoveryActions.resolvedAt))
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
+    return row ? toReadModel(row) : null;
+  }
+
   async function resolveActiveForIssue(
     input: ResolveIssueRecoveryActionInput,
     dbOrTx: DbOrTransaction = db,
@@ -288,6 +319,7 @@ export function issueRecoveryActionService(db: Db) {
 
   return {
     getActiveForIssue,
+    getCancelledForFingerprint,
     listActiveForIssues,
     resolveActiveForIssue,
     upsertSourceScoped,

@@ -1503,6 +1503,9 @@ type IssueBlockerAttentionInputNode =
 type IssueBlockerAttentionEdge = {
   issueId: string;
   blockerIssueId: string;
+  /** How the blocker was discovered: "explicit" via issue_relations blocks,
+   *  or "child" via parentId child-of-root fallback. */
+  source: "explicit" | "child";
 };
 type IssueBlockerAttentionQueryRow = IssueBlockerAttentionNode & {
   issueId: string | null;
@@ -1955,10 +1958,10 @@ async function listIssueBlockerAttentionMap(
       appendBlockerAttentionEdges(edgesByIssueId, [
         ...explicitBlockerRows
           .filter((row): row is IssueBlockerAttentionQueryRow & { issueId: string } => row.issueId !== null)
-          .map((row) => ({ issueId: row.issueId, blockerIssueId: row.blockerIssueId })),
+          .map((row) => ({ issueId: row.issueId, blockerIssueId: row.blockerIssueId, source: "explicit" as const })),
         ...childRows
           .filter((row): row is IssueBlockerAttentionQueryRow & { issueId: string } => row.issueId !== null)
-          .map((row) => ({ issueId: row.issueId, blockerIssueId: row.blockerIssueId })),
+          .map((row) => ({ issueId: row.issueId, blockerIssueId: row.blockerIssueId, source: "child" as const })),
       ]);
 
       for (const row of [...explicitBlockerRows, ...childRows]) {
@@ -2235,11 +2238,18 @@ async function listIssueBlockerAttentionMap(
     } else if (stalledBlockerCount > 0) {
       state = "stalled";
       reason = "stalled_review";
+    } else if (
+      topLevelEdges.every((edge) => nodesById.get(edge.blockerIssueId)?.parentId === root.id)
+    ) {
+      // All "blockers" are children of the blocked issue — no explicit first-class
+      // blockers exist. These children are almost certainly remediation/unblock
+      // attempts (PRA-121 → PRA-346/354/360 loop). Treat as needs_attention
+      // rather than covered so the parent doesn't look handled when it isn't.
+      state = "needs_attention";
+      reason = "attention_required";
     } else {
       state = "covered";
-      reason = topLevelEdges.every((edge) => nodesById.get(edge.blockerIssueId)?.parentId === root.id)
-        ? "active_child"
-        : "active_dependency";
+      reason = "active_dependency";
     }
 
     attentionMap.set(root.id, createIssueBlockerAttention({

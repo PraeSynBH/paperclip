@@ -2439,6 +2439,25 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       input.issue,
       input.recoveryOwnerAgentId,
     );
+
+    // RBR-922 (AC4): fingerprint idempotency. If a previously-cancelled action
+    // exists for this (issue + cause + fingerprint), the revalidation sweep
+    // already determined this park was stale. Do not mint a new action — that
+    // would re-park the same issue the guard just released. Return the
+    // cancelled action so callers can detect and skip the re-park.
+    const fingerprint = strandedRecoveryActionFingerprint({
+      issue: input.issue,
+      recoveryCause,
+      latestRun: input.latestRun,
+    });
+    const cancelledAction = await recoveryActionsSvc.getCancelledForFingerprint(
+      input.issue.companyId,
+      input.issue.id,
+      recoveryCause,
+      fingerprint,
+    );
+    if (cancelledAction) return cancelledAction;
+
     const now = new Date();
     const action = await recoveryActionsSvc.upsertSourceScoped({
       companyId: input.issue.companyId,
@@ -2736,6 +2755,16 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       recoveryOwnerAgentId: input.recoveryOwnerAgentId,
       successfulRunHandoffEvidence: input.successfulRunHandoffEvidence,
     });
+
+    // RBR-922 (AC4): if the returned action is not active (e.g. it was a
+    // previously-cancelled action found by the fingerprint idempotency check),
+    // do NOT re-park the issue. The revalidation sweep already determined
+    // this park was stale — re-parking would manufacture the exact repeat
+    // revert this guard exists to prevent.
+    if (recoveryAction.status !== "active" && recoveryAction.status !== "escalated") {
+      return null;
+    }
+
     const blockerIds = await existingUnresolvedBlockerIssueIds(input.issue.companyId, input.issue.id);
     const updated = await issuesSvc.update(input.issue.id, {
       status: "blocked",
