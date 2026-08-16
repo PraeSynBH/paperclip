@@ -68,6 +68,9 @@ A: Milestones are part of `planMetadata`. You update them by creating a new plan
 **Q: What's the difference between sections and milestones?**
 A: Sections organize the plan content (like chapters). Milestones track progress (like checkpoints). Milestones can have acceptance criteria and gates; sections are purely informational.
 
+**Q: I rejected a gate but my plan still says in_review — shouldn't it auto-approve the other gates?**
+A: No. A rejected gate means that gate's acceptance criteria were not met. The plan will not auto-approve while any gate is rejected. Even if all other gates are approved, the rejection blocks the plan from transitioning to `approved`. To proceed, create a new plan revision with fixes addressing the rejection, then create fresh gates for that revision.
+
 ## Troubleshooting
 
 ### User reports "stale revision" error
@@ -128,7 +131,7 @@ A: Sections organize the plan content (like chapters). Milestones track progress
 | Issue | Severity | Escalate to | Notes |
 |---|---|---|---|
 | Plan update creates phantom child issues | Critical | CTO | Data integrity issue — immediate escalation |
-| Gates approve but plan status doesn't change to approved | High | Staff Engineer | Auto-transition logic failure |
+| Gates approve but plan status doesn't change to approved | High | Staff Engineer | Check for rejected gates (blocks auto-approval). If no rejected gates exist, auto-transition logic may have failed. |
 | Decomposition creates issues outside the plan's scope | High | CTO | Security/scope violation |
 | Plan revision diff returns empty or wrong data | Medium | Staff Engineer | Diff computation issue |
 | Agent not woken on plan update or gate resolve | Medium | Staff Engineer | Wake reason may not be delivered |

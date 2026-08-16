@@ -184,8 +184,39 @@ PATCH /issues/{issueId}/plan/gates/{gateId}
 | `status` | enum (required) | `approved` or `rejected` |
 | `resolutionComment` | string? | Optional context for the resolution (max 4000 chars) |
 
+**Response**: Returns the resolved gate and the overall approval status for the revision.
+
+```json
+{
+  "gate": {
+    "id": "uuid",
+    "companyId": "uuid",
+    "documentId": "uuid",
+    "revisionId": "uuid",
+    "milestoneId": "uuid",
+    "status": "approved",
+    "acceptanceCriteria": ["...", "..."],
+    "assignedAgentId": "uuid",
+    "createdByAgentId": "uuid",
+    "resolvedByAgentId": "uuid",
+    "resolvedByUserId": null,
+    "resolvedAt": "2026-08-16T00:00:00.000Z",
+    "resolutionComment": "All criteria verified — Redis integration is solid.",
+    "supersededByGateId": null,
+    "createdAt": "2026-08-15T00:00:00.000Z",
+    "updatedAt": "2026-08-16T00:00:00.000Z"
+  },
+  "allApproved": true
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `gate` | PlanReviewGate | The resolved gate, now with updated status and resolution fields |
+| `allApproved` | boolean | `true` when all gates for the current revision are approved (zero pending, zero rejected) and the plan is ready for decomposition |
+
 **Behavior**:
-- When all gates for the current revision are approved, the plan status auto-transitions to `approved`.
+- When `allApproved` is `true`, the plan status auto-transitions to `approved`. A rejected gate (even if all other gates are approved) prevents auto-approval — the plan stays `in_review` until the rejection is resolved by creating a new revision.
 - Agents are woken (`issue_plan_gate_resolved`) on gate resolution so they can react to the outcome.
 - A live `plan.gate_resolved` event is emitted for real-time UI updates.
 

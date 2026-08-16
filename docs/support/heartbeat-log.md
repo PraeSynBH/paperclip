@@ -648,3 +648,52 @@ Documentation updates **required** this time (unlike the previous test-only comm
 - **VOY-1263 review completion** → VOY-1264 release proceeds; confirm release notes/KB coverage before staging ship
 - **VOY-1265 QA completion** → any UI behavior findings worth a support note
 - **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
+
+## 2026-08-16 — Heartbeat: Commit 885a6740b3 assessed — H-2 fix, resolveGate transaction + rejected-gate allApproved (VOY-1269)
+
+### Trigger
+
+New commit `885a6740b3` — `"fix(v0.4.0): wrap resolveGate in transaction, count rejected gates for allApproved (H-2, VOY-1269)"` (2 files, +60/-36).
+
+### Diff assessment
+
+| Change area | Files | User-facing impact | Docs action |
+|---|---|---|---|
+| `resolveGate` wrapped in DB transaction | `plan-review-gates.ts` | Internal — closes concurrent-resolution race condition | None — existing docs already describe correct behavior. Added transactional note to release notes support notes. |
+| `allApproved` predicate now counts rejected gates (was `remainingPending === 0`, now `pending === 0 && rejected === 0`) | `plan-review-gates.ts` | **Bug fix**: previously, approving the last pending gate while a rejected gate existed would incorrectly set `allApproved = true` and flip the plan to `approved`. Now a rejected gate correctly blocks auto-approval. | Docs already stated "when all gates are approved" — fix aligns code with documented behavior. Updated: response shape for resolve gate in `docs/api/plans.md` now documents `allApproved` field; support assessment FAQ covers rejected-gate scenario; escalation paths updated. |
+| Regression test for H-2 scenario (rejected gate blocks approval) | `plan-review-gates.test.ts` | Test-only | None |
+
+### Verdict
+
+**No user-facing documentation changes strictly required** — the fix aligns code with documented behavior. However, two documentation improvements were applied:
+1. The `allApproved` response field on the resolve gate endpoint was previously undocumented; added response shape with description to `docs/api/plans.md`.
+2. Support assessment FAQ and release notes support notes now explicitly cover the rejected-gate-blocking-approval scenario.
+
+### Updates applied
+
+1. `docs/api/plans.md` — Added response shape (gate + allApproved fields) to Resolve Plan Review Gate endpoint; clarified behavior note about rejected gates blocking auto-approval.
+2. `docs/support/assessments/support-case-v0.4.0-deep-planning.md` — Added FAQ entry for "rejected gate blocks approval"; updated escalation matrix row.
+3. `docs/support/releases/v0.4.0-alpha-deep-planning.md` — Added support note about H-2 fix (rejected gates, transactional resolution); updated escalation path.
+4. `docs/support/heartbeat-log.md` — This entry.
+
+### Board state (support-relevant)
+
+- **VOY-1269** (Fix H-2: allApproved predicate) — `in_progress`. Fix committed in `885a6740b3`, issue not yet updated to done.
+- **VOY-1278** (Fix H-2: Server allApproved predicate) — `done`.
+- **VOY-1264** (Release: Phase 5 Plan Board UI) — blocked on VOY-1263 review (Staff Engineer). Release notes and KB coverage already prepared.
+- **VOY-1265** (QA: Phase 5 Plan Board UI) — todo, blocked on VOY-1263/1264.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 when released |
+| Release notes currency | Up to date through v0.4.0-alpha (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- **VOY-1264 unblocks** → confirm release notes and support docs are ready for staging ship
+- **VOY-1265 QA starts** → provide support assessment inputs for test scenarios
+- **v0.4.0 release to main** → final release notes refresh
