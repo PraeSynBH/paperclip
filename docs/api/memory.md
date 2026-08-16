@@ -179,10 +179,13 @@ GET /companies/{companyId}/memory/query?q=authentication+timeout&topK=10&scope={
 |---|---|---|
 | `q` / `query` | string | The search query |
 | `topK` | integer | Number of results (default: 10) |
-| `scope` | JSON object | Scope filter: `{ "companyId": "...", "agentId": "..." }` |
+| `scope` | JSON object | Scope filter: `{ "companyId": "...", "agentId": "..." }` — must be valid JSON |
+| `metadata` | JSON object | Optional JSONB containment filter: e.g. `{ "key": "value" }` filters to records whose metadata contains all key-value pairs |
 | `bindingKey` | string | Optional binding key filter |
 
 Searches memory records using **semantic + full-text hybrid retrieval**.
+
+**Note**: The `scope` parameter must be valid JSON. Malformed JSON returns a `400 Bad Request` with `"Invalid scope query parameter: must be valid JSON"`.
 
 **Auth**: Board or Agent. Agent scope is auto-enforced.
 
@@ -194,7 +197,8 @@ GET /companies/{companyId}/memory/records?scope={...}&cursor={cursor}&limit=50
 
 | Query Param | Type | Description |
 |---|---|---|
-| `scope` | JSON object | Scope filter |
+| `scope` | JSON object | Scope filter — must be valid JSON |
+| `metadata` | JSON object | Optional JSONB containment filter: e.g. `{ "key": "value" }` filters to records whose metadata contains all key-value pairs |
 | `cursor` | string | Cursor for pagination |
 | `limit` | integer | Page size (default: 50) |
 | `bindingKey` | string | Optional binding key filter |

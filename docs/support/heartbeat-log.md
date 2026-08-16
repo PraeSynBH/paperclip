@@ -596,3 +596,55 @@ No documentation updates required. Commit `380cc921b4` is test-only (904 inserti
 - **v0.4.0 release to main** → support case assessment for Deep Planning, Memory & Knowledge, onboarding role assets
 - PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
 - COO request for documentation health report
+
+## 2026-08-16 — Heartbeat: Commit b495d95b9c assessed — Phase 5 Plan Board UI, Memory Browser, knowledge fixes, OpenAPI registrations
+
+### Trigger
+
+Heartbeat activation. One new commit since the previous assessment (`380cc921b4`): `b495d95b9c` — "feat(v0.4.0): Phase 5 plan board UI, memory browser, knowledge fixes, OpenAPI registrations" (24 files, +2982/-84).
+
+### Diff assessment (b495d95b9c)
+
+| Change area | Files | User-facing impact | Docs action |
+|---|---|---|---|
+| Plan Board UI — `/plans` page: list view w/ status badges, detail w/ markdown sections, approval gates approve/reject UI, revision browser w/ inline diff, sidebar nav + routes + query keys | `ui/src/pages/Plans.tsx`, `PlanApprovalGatesSection.tsx`, `PlanDetailSection.tsx`, `PlanRevisionBrowser.tsx`, `PlanStatusBadge.tsx`, `App.tsx`, `Sidebar.tsx`, `issues.ts` api | **New operator-facing UI surface** for plan browsing/approval (VOY-1252). Plans UI also mounts in IssueDetail. | Updated `support-case-v0.4.0-deep-planning.md` + release notes with Plan Board UI section |
+| Memory Browser UI — `/memory` page: browse records, hybrid search, metadata filter, record detail, forget, operations audit log | `ui/src/pages/MemoryBrowser.tsx` (+705), `ui/src/api/memory.ts` (+155), `memory.test.ts` | **New operator-facing UI surface** for memory inspection (VOY-1204). | Updated `support-case-v0.4.0-memory-knowledge.md` + release notes with Memory Browser section |
+| Memory scope query parse — malformed `scope` JSON now returns 400 instead of crashing | `server/src/routes/memory.ts` | Error behavior improvement: clear 400 "Invalid scope query parameter" on malformed JSON | Added error state row to memory-knowledge assessment + release notes support note |
+| Memory adapter batch embedding + metadata jsonb containment filter (`metadata` param on query/records) | `server/src/services/memory-adapter.ts` | Performance + new metadata filtering capability for memory records | Added metadata filter mention to memory-knowledge assessment + release notes |
+| Knowledge publish stale-approval guard (VOY-1255) — publish requires approved review on latest revision only | `server/src/services/knowledge-documents.ts` | Behavior change: stale approvals from prior review cycles are rejected at publish | Added FAQ + troubleshooting + error state to memory-knowledge assessment + release notes highlight |
+| Knowledge `latestReviewStatus` accuracy fix (VOY-1256) — latest review fetched regardless of status | `server/src/services/knowledge-documents.ts` | Behavior change: list views now surface `pending`/`changes_requested` correctly | Added FAQ to memory-knowledge assessment + release notes highlight |
+| OpenAPI registrations for plan documents, review gates, memory, knowledge routes | `server/src/routes/openapi.ts` (+165), `openapi-routes.test.ts` | Documentation-surface improvement — same routes already documented | No — `docs/api/plans.md`, `memory.md`, `knowledge.md` already cover them |
+| Shared plan revision/diff types (`PlanDocumentRevision`, `PlanBodyDiffLine`, `PlanRevisionDiff`, `planMetadata` on IssueDocument) | `packages/shared/src/types/issue.ts` | Type-level additions; no behavior change | No — types only |
+
+### Verdict
+
+Documentation updates **required** this time (unlike the previous test-only commit). The Phase 5 commit ships two new operator-facing UI surfaces (Plan Board `/plans`, Memory Browser `/memory`) and two knowledge behavior changes (VOY-1255 stale-approval guard, VOY-1256 review status accuracy) that support staff must know about when v0.4.0 ships.
+
+### Updates applied
+
+1. `docs/support/assessments/support-case-v0.4.0-deep-planning.md` — added Plan Board UI section (browse/detail/gates/revisions), related VOY-1252
+2. `docs/support/assessments/support-case-v0.4.0-memory-knowledge.md` — added VOY-1255/1256 behavior, Memory Browser UI section, memory scope 400 error state, stale-publish FAQ + troubleshooting, related VOY-1255/1256
+3. `docs/support/releases/v0.4.0-alpha-deep-planning.md` — added Plan Board UI (highlight 4), Memory Browser UI (highlight 6), knowledge stale-approval guard (highlight 8), latest review status (highlight 9), support notes for scope 400 + metadata filter
+4. `docs/support/heartbeat-log.md` — this entry
+
+### Board state (support-relevant)
+
+- **VOY-1263** (Code Review: Phase 5 Plan Board UI) — `in_progress`, Staff Engineer. Blocks release.
+- **VOY-1264** (Release: Phase 5 Plan Board UI) — `blocked` on VOY-1263. Shipping step includes "Notify Support Engineer before shipping".
+- **VOY-1265** (QA: Phase 5 Plan Board UI) — `todo`, blocked on VOY-1263/1264. Test scenarios cover /plans, plan detail, gates, revisions, IssueDetail mount, sidebar nav.
+- **VOY-1252** (Phase 5 implementation) — done.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 when released |
+| Release notes currency | Up to date through v0.4.0-alpha (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- **VOY-1263 review completion** → VOY-1264 release proceeds; confirm release notes/KB coverage before staging ship
+- **VOY-1265 QA completion** → any UI behavior findings worth a support note
+- **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)

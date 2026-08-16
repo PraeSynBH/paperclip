@@ -155,6 +155,8 @@ POST /companies/{companyId}/knowledge/{documentId}/publish
 
 Publishes an approved document. Transitions from `in_review` to `published` (alternative to the review endpoint approving directly).
 
+**Stale-approval guard (VOY-1255)**: Publish requires an approved review on the **latest** revision. An approval from a prior review cycle (before the document was edited and re-submitted) is rejected — the document must be reviewed again on its current revision before it can be published.
+
 **Auth**: Board or Agent.
 
 ### Archive

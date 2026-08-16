@@ -3,7 +3,7 @@
 **Feature**: Agent memory (pgvector-based bindings, capture, query, records) and knowledge document management (CRUD, lifecycle, revisions, search)
 **Assessed by**: Support Engineer
 **Date**: 2026-08-16
-**Related**: VOY-1190, VOY-1191, VOY-1192, VOY-1203, VOY-1204
+**Related**: VOY-1190, VOY-1191, VOY-1192, VOY-1203, VOY-1204, VOY-1255, VOY-1256
 **Release**: v0.4.0-alpha
 
 ## Feature Overview (User Perspective)
@@ -37,6 +37,21 @@ The Knowledge Documents system provides a full knowledge base within Paperclip:
 4. **Backlinks** — Documents can reference issues, creating a two-way link between knowledge and work items.
 
 5. **Review Workflow** — Documents go through a review cycle before publication.
+
+6. **Stale-Approval Guard (VOY-1255)** — Publishing requires an approved review on the **latest** revision. An approval from a prior review cycle (before the document was edited and re-submitted) is no longer accepted. This prevents publishing with stale approvals.
+
+7. **Latest Review Status Accuracy (VOY-1256)** — The `latestReviewStatus` field in document listings accurately reflects the most recent review (`pending`, `approved`, `changes_requested`) regardless of outcome, not just approved reviews.
+
+### Memory Browser UI
+
+A dedicated **Memory Browser** page is available at `/memory` in the sidebar (visible under the Work section). Operators can:
+
+- Browse memory records with cursor-based pagination
+- Search records via semantic + full-text hybrid query
+- View record details (text, summary, scope, source, metadata)
+- Filter records by metadata using JSONB containment (`metadata` parameter)
+- Forget individual records by handle
+- View recent memory operations in the audit log
 
 ## Potential User Confusion Points
 
@@ -72,6 +87,12 @@ A: Not directly. You must archive or create a new draft version. Direct editing 
 **Q: What happens if I delete a knowledge document?**
 A: The document and all its revisions are permanently deleted. There is no soft-delete. Backlinks are also removed.
 
+**Q: I have an approved review but publish still fails. Why?**
+A: Starting with v0.4.0 (VOY-1255), publish requires an approved review on the **latest** revision. If you edited the document and re-submitted it after the approval was granted, the old approval is stale. A new review cycle is needed on the current revision.
+
+**Q: What does the `latestReviewStatus` field show?**
+A: It shows the outcome of the most recent review — `pending`, `approved`, or `changes_requested` — regardless of the result. Previously it only showed `approved` reviews; now it accurately reflects all review outcomes.
+
 ## Troubleshooting
 
 ### Agent memory seems empty
@@ -93,8 +114,9 @@ A: The document and all its revisions are permanently deleted. There is no soft-
 
 1. Check document status: `GET /companies/{id}/knowledge/{docId}`
 2. If `draft`, submit for review first: `POST .../submit-review`
-3. If `in_review`, either approve directly via `POST .../review` or use `POST .../publish`
-4. If already `published` or `archived`, publishing is a no-op or rejected
+3. If `in_review`, check `latestReviewStatus` field: if not `approved`, approve via `POST .../review`
+4. If `in_review` with `approved` status, but publish still fails — the approval may be stale (VOY-1255): submit a new review cycle, get approval on the latest revision
+5. If already `published` or `archived`, publishing is a no-op or rejected
 
 ### Knowledge document search missing expected results
 
@@ -108,11 +130,13 @@ A: The document and all its revisions are permanently deleted. There is no soft-
 | Error | User sees | Root cause | Recovery |
 |---|---|---|---|
 | Memory binding resolve 404 | "No active memory binding" | No binding configured for company/agent | Create a binding |
+| Memory scope parse failure | 400 "Invalid scope query parameter: must be valid JSON" | `scope` query param is malformed JSON | Fix the JSON in the `scope` parameter |
 | Capture fails | Missing pgvector extension | PostgreSQL not configured for pgvector | Run migration 0129 |
 | Agent can't see memory records | 403 Forbidden | Agent trying to access another agent's scope | Use correct agent auth |
 | Knowledge document create fails | Validation error | Missing title or body, or body too large | Provide required fields |
 | Knowledge document edit fails | "Document is not in draft status" | Trying to edit published/archived doc | Create new draft or transition lifecycle |
 | Knowledge document delete fails | 403 Forbidden | Agent trying to delete (board-only) | Use board authentication |
+| Knowledge publish fails despite approved review | Publish rejected | Stale approval from prior review cycle (VOY-1255) | Re-run review cycle on the latest revision |
 | Search returns empty | "q parameter is required" | Missing search query | Provide query string |
 
 ## Related Documentation

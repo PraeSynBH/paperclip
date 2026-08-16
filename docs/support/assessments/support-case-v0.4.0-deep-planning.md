@@ -3,7 +3,7 @@
 **Feature**: Structured plan documents with revision history, milestone-based review gates, and approved-plan decomposition into child issues
 **Assessed by**: Support Engineer
 **Date**: 2026-08-16
-**Related**: VOY-1195, VOY-1196, VOY-1197, VOY-1203, VOY-1204, VOY-1209
+**Related**: VOY-1195, VOY-1196, VOY-1197, VOY-1203, VOY-1204, VOY-1209, VOY-1252
 **Release**: v0.4.0-alpha
 
 ## Feature Overview (User Perspective)
@@ -21,6 +21,18 @@ Deep Planning introduces a structured plan document system that replaces ad-hoc 
 5. **Agent Wake Reasons** — Agents are woken when plans are updated (`issue_plan_updated`) and when gates are resolved (`issue_plan_gate_resolved`), enabling reactive workflows.
 
 For users: Plans are now visible in the Issue Detail page with section navigation, milestone progress bars, and gate status indicators.
+
+### Plan Board UI (VOY-1252)
+
+A dedicated **Plans** page is available at `/plans` in the sidebar (under the Work section). Operators can:
+
+- **Browse plans** — list view with status badges (`draft`, `in_review`, `approved`, `superseded`), section count, and milestone progress indicators
+- **Filter and sort** — by status and priority; click through to plan detail
+- **View plan detail** — structured sections with markdown rendering, milestone status, version info, and metadata display
+- **Manage approval gates** — see pending gates with acceptance criteria, approve/reject with a comment, view gate history; an "All gates approved" transition notice appears when the plan is ready to auto-approve
+- **Browse revision history** — revision list with diff metadata (who, when, version); select a revision to view an inline diff (added/removed/unchanged lines)
+
+The plan UI also mounts inside the Issue Detail page when an issue has a plan document (plan document sections, approval gates section, revision browser).
 
 ## Potential User Confusion Points
 
