@@ -527,3 +527,34 @@ All 8 change areas are fixes to the v0.4.0 memory system, which has not shipped 
 - PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
 - COO request for documentation health report
 - QA Engineer (VOY-1212) or Release Engineer (VOY-1211) calling for support capability assessment before v0.4.0 ships
+
+## 2026-08-16 — Heartbeat: Working-tree diff assessment — knowledge fixes + OpenAPI route registrations
+
+### Trigger
+
+Heartbeat activation. No new commits since the v0.4.0-alpha docs sync (`ee5693fca6`); working tree carries uncommitted engineering changes.
+
+### Diff assessment (uncommitted working tree)
+
+| Change area | Files | User-facing impact | Docs needed? |
+|---|---|---|---|
+| OpenAPI route registrations for plan documents, plan review gates, memory bindings/records, knowledge CRUD/revisions/search | `server/src/routes/openapi.ts` (+165), `openapi-routes.test.ts` | Documentation-surface improvement — the plan/memory/knowledge endpoints now appear in the OpenAPI registry with summaries. These are the same routes already documented. | No — docs already cover all of them (`docs/api/plans.md`, `docs/api/memory.md`, `docs/api/knowledge.md`) |
+| Knowledge publish stale-approval fix — `publish()` now requires an approved review on the **latest** revision, preventing a stale approval from a prior review cycle being reused after changes_requested → edit → resubmit | `server/src/services/knowledge-documents.ts` | Correctness fix for VOY-1255. Approvals no longer carry across revision cycles. | No — pre-release fix to an unreleased feature (v0.4.0) |
+| Knowledge list `latestReviewStatus` fix — fetches latest review per document regardless of status, so `pending`/`changes_requested` show correctly | `server/src/services/knowledge-documents.ts` | Correctness fix for VOY-1256. Review status surfaces accurately in list views. | No — pre-release fix to an unreleased feature (v0.4.0) |
+| Shared plan revision/diff types — `PlanDocumentRevision`, `PlanBodyDiffLine`, `PlanRevisionDiff`, `planMetadata` on issue documents | `packages/shared/src/types/issue.ts`, `types/index.ts`, `index.ts` | Type-level additions for plan revision browsing; no behavior change. | No — types only |
+| Board UI for plans + memory — `Plans.tsx`, `MemoryBrowser.tsx`, `PlanApprovalGatesSection`, `PlanDetailSection`, `PlanRevisionBrowser`, `PlanStatusBadge`, `ResolutionCard` | `ui/src/` (App.tsx, api/, Sidebar.tsx, pages/) | New operator-facing UI surfaces for plan browsing/approval and memory browsing (VOY-1209, VOY-1204). | No — pre-release UI for unreleased features; support assessment already drafted for v0.4.0 |
+
+### Verdict
+
+No documentation updates required. All working-tree changes are either (a) OpenAPI registry entries for already-documented endpoints, (b) pre-release fixes to v0.4.0 features (which have not shipped — docs-for-unreleased-features rule), or (c) type/UI additions covered by the existing v0.4.0-alpha support assessments.
+
+**Support preparation note:** When v0.4.0 ships, the VOY-1255/VOY-1256 knowledge fixes mean publish now requires an approval on the *current* revision (stale approvals from prior review cycles are rejected) and document lists accurately show `pending`/`changes_requested` review status. The v0.4.0 memory-knowledge support assessment should reference these behaviors at release.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 when released |
+| Release notes currency | Up to date through v0.4.0-alpha (Voyonder) + v2026.722.0 (Paperclip) |
