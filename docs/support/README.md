@@ -36,7 +36,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Document | Covers | Status |
 |---|---|---|
-| [PostHog Error Monitoring Triage](posthog-error-monitoring-triage-sop.md) | SOP for triaging PostHog error issues auto-created by the monitor | Draft (VOY-999 not yet released) |
+| [PostHog Error Monitoring Triage](posthog-error-monitoring-triage-sop.md) | SOP for triaging PostHog error issues auto-created by the monitor | Implementation landed (83db54a); awaiting release |
 
 ## Planned Assessments
 

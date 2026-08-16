@@ -18,6 +18,32 @@ export function knowledgeRoutes(db: Db) {
   const router = Router();
   const svc = knowledgeDocumentService(db);
 
+  // ─── Search ─────────────────────────────────────────────────────────────
+  //
+  // NOTE: registered BEFORE the /:documentId routes — otherwise Express would
+  // match /knowledge/search against :documentId and the searchPublished
+  // endpoint would be unreachable.
+
+  /**
+   * GET /companies/:companyId/knowledge/search
+   * Search across all published knowledge documents.
+   */
+  router.get("/companies/:companyId/knowledge/search", async (req, res) => {
+    assertBoardOrAgent(req);
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+
+    const q = req.query.q as string;
+    if (!q || q.trim().length === 0) {
+      res.status(400).json({ error: "Query parameter 'q' is required" });
+      return;
+    }
+
+    const limit = req.query.limit ? Number(req.query.limit) : undefined;
+    const result = await svc.searchPublished(companyId, q, limit);
+    res.json(result);
+  });
+
   // ─── CRUD ────────────────────────────────────────────────────────────────
 
   /**
@@ -306,28 +332,6 @@ export function knowledgeRoutes(db: Db) {
       res.status(201).json(result);
     },
   );
-
-  // ─── Search ─────────────────────────────────────────────────────────────
-
-  /**
-   * GET /companies/:companyId/knowledge/search
-   * Search across all published knowledge documents.
-   */
-  router.get("/companies/:companyId/knowledge/search", async (req, res) => {
-    assertBoardOrAgent(req);
-    const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
-
-    const q = req.query.q as string;
-    if (!q || q.trim().length === 0) {
-      res.status(400).json({ error: "Query parameter 'q' is required" });
-      return;
-    }
-
-    const limit = req.query.limit ? Number(req.query.limit) : undefined;
-    const result = await svc.searchPublished(companyId, q, limit);
-    res.json(result);
-  });
 
   return router;
 }

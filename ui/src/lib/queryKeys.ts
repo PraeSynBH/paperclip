@@ -316,4 +316,18 @@ export const queryKeys = {
     operations: (companyId: string) => ["memory", companyId, "operations"] as const,
     bindings: (companyId: string) => ["memory", companyId, "bindings"] as const,
   },
+  knowledge: {
+    list: (companyId: string, status?: string, cursor?: string) =>
+      ["knowledge", companyId, "list", status ?? "__all__", cursor ?? "__start__"] as const,
+    detail: (companyId: string, documentId: string) =>
+      ["knowledge", companyId, "detail", documentId] as const,
+    revisions: (companyId: string, documentId: string) =>
+      ["knowledge", companyId, "revisions", documentId] as const,
+    revisionDiff: (companyId: string, documentId: string, revA: string, revB: string) =>
+      ["knowledge", companyId, "diff", documentId, revA, revB] as const,
+    backlinks: (companyId: string, documentId: string) =>
+      ["knowledge", companyId, "backlinks", documentId] as const,
+    search: (companyId: string, q: string) =>
+      ["knowledge", companyId, "search", q] as const,
+  },
 };

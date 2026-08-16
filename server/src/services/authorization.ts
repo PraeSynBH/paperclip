@@ -1443,6 +1443,22 @@ export function authorizationService(db: Db) {
       ) {
         return allowIssueMentionGrant(input.action);
       }
+      // Managers may comment on and mutate issues assigned to agents in their
+      // reporting subtree (direct and transitive reports). This mirrors the
+      // tasks:manage_active_checkouts manager-chain grant below: without it,
+      // the boundary decision denies peer-issue mutations before that grant
+      // can ever be consulted, so a CTO/COO could not close, reassign, or
+      // unblock issues owned by their own team.
+      if (
+        resource?.assigneeAgentId &&
+        (await isManagerOf(companyId, actorAgentId, resource.assigneeAgentId))
+      ) {
+        return allow({
+          action: input.action,
+          reason: "allow_manager_chain",
+          explanation: "Allowed because the actor manages the issue assignee in the reporting chain.",
+        });
+      }
     }
     if (
       input.action === "agent_config:update" &&
