@@ -222,6 +222,18 @@ export function builtinPgvectorAdapter(
   }
 
   /**
+   * Build a jsonb containment WHERE condition from a metadata filter map.
+   * Returns a condition that checks whether metadataJson contains all key-value pairs.
+   * Returns undefined if filter is empty or undefined.
+   */
+  function metadataFilterCondition(
+    filter: Record<string, unknown> | undefined,
+  ): import("drizzle-orm").SQL | undefined {
+    if (!filter || Object.keys(filter).length === 0) return undefined;
+    return sql`${memoryRecords.metadataJson} @> ${JSON.stringify(filter)}::jsonb` as import("drizzle-orm").SQL;
+  }
+
+  /**
    * Resolve binding ID from a binding key + company ID.
    */
   async function resolveBindingId(
@@ -387,50 +399,52 @@ export function builtinPgvectorAdapter(
 
     const insertedIds: string[] = [];
 
-    for (const entry of req.records) {
-      // Generate embedding for each record
-      let embedding: number[] | null = null;
-      try {
-        const result = await embeddingSvc.embed(entry.text);
-        if (result.model !== "none") {
-          embedding = result.embedding;
+    // Batch embed all texts, then multi-row insert
+    const embeddings: Array<number[] | null> = await Promise.all(
+      req.records.map(async (entry) => {
+        try {
+          const result = await embeddingSvc.embed(entry.text);
+          return result.model !== "none" ? result.embedding : null;
+        } catch (err) {
+          logger.warn({ err }, "Embedding generation failed during upsertRecords");
+          return null;
         }
-      } catch (err) {
-        logger.warn({ err }, "Embedding generation failed during upsertRecords");
-      }
+      }),
+    );
 
-      const rows = await db
-        .insert(memoryRecords)
-        .values({
-          companyId: req.scope.companyId,
-          bindingId,
-          recordType: "curated_note",
-          text: entry.text,
-          summary: entry.summary ?? null,
-          embedding: embedding ?? null,
-          scopeCompanyId: req.scope.companyId,
-          scopeAgentId: req.scope.agentId ?? null,
-          scopeProjectId: req.scope.projectId ?? null,
-          scopeIssueId: req.scope.issueId ?? null,
-          scopeRunId: req.scope.runId ?? null,
-          scopeSubjectId: req.scope.subjectId ?? null,
-          scopeSessionKey: req.scope.sessionKey ?? null,
-          scopeNamespace: req.scope.namespace ?? null,
-          sourceKind: req.source?.kind ?? "manual_note",
-          sourceIssueId: req.source?.issueId ?? null,
-          sourceCommentId: req.source?.commentId ?? null,
-          sourceDocumentKey: req.source?.documentKey ?? null,
-          sourceRunId: req.source?.runId ?? null,
-          sourceActivityId: req.source?.activityId ?? null,
-          sourceExternalRef: req.source?.externalRef ?? null,
-          metadataJson: (entry.metadata ?? {}) as Record<string, unknown>,
-          // Curated notes don't expire by default
-          expiresAt: null,
-        })
-        .returning({ id: memoryRecords.id });
+    const values = req.records.map((entry, i) => ({
+      companyId: req.scope.companyId,
+      bindingId,
+      recordType: "curated_note" as const,
+      text: entry.text,
+      summary: entry.summary ?? null,
+      embedding: embeddings[i] ?? null,
+      scopeCompanyId: req.scope.companyId,
+      scopeAgentId: req.scope.agentId ?? null,
+      scopeProjectId: req.scope.projectId ?? null,
+      scopeIssueId: req.scope.issueId ?? null,
+      scopeRunId: req.scope.runId ?? null,
+      scopeSubjectId: req.scope.subjectId ?? null,
+      scopeSessionKey: req.scope.sessionKey ?? null,
+      scopeNamespace: req.scope.namespace ?? null,
+      sourceKind: req.source?.kind ?? "manual_note",
+      sourceIssueId: req.source?.issueId ?? null,
+      sourceCommentId: req.source?.commentId ?? null,
+      sourceDocumentKey: req.source?.documentKey ?? null,
+      sourceRunId: req.source?.runId ?? null,
+      sourceActivityId: req.source?.activityId ?? null,
+      sourceExternalRef: req.source?.externalRef ?? null,
+      metadataJson: (entry.metadata ?? {}) as Record<string, unknown>,
+      // Curated notes don't expire by default
+      expiresAt: null,
+    }));
 
-      insertedIds.push(...rows.map((r) => r.id));
-    }
+    const rows = await db
+      .insert(memoryRecords)
+      .values(values)
+      .returning({ id: memoryRecords.id });
+
+    insertedIds.push(...rows.map((r) => r.id));
 
     const latencyMs = Date.now() - start;
 
@@ -468,6 +482,7 @@ export function builtinPgvectorAdapter(
 
       // Empty query — return most recent records instead of semantic/full-text search
       if (!req.query || !req.query.trim()) {
+        const metaFilter = metadataFilterCondition(req.metadataFilter);
         const recentRows = await db
           .select(getRecordColumns())
           .from(memoryRecords)
@@ -476,6 +491,7 @@ export function builtinPgvectorAdapter(
               scopeFilter,
               eq(memoryRecords.bindingId, bindingId),
               nonExpiredFilter(),
+              ...(metaFilter ? [metaFilter] : []),
             ),
           )
           .orderBy(desc(memoryRecords.createdAt))
@@ -522,6 +538,7 @@ export function builtinPgvectorAdapter(
         // Semantic search via cosine similarity using parameterized vector cast
         // CAST($1 AS vector) is fully parameterized — no sql.raw with untrusted data
         const embeddingJson = JSON.stringify(embedding);
+        const metaFilter = metadataFilterCondition(req.metadataFilter);
         rows = (await db
           .select({
             ...getRecordColumns(),
@@ -534,6 +551,7 @@ export function builtinPgvectorAdapter(
               eq(memoryRecords.bindingId, bindingId),
               sql`${memoryRecords.embedding} IS NOT NULL`,
               nonExpiredFilter(),
+              ...(metaFilter ? [metaFilter] : []),
             ),
           )
           .orderBy(
@@ -542,46 +560,28 @@ export function builtinPgvectorAdapter(
           .limit(topK)) as Array<typeof memoryRecords.$inferSelect & { score?: number }>;
       } else {
         // Full-text search fallback using GIN tsvector index
-        // Sanitize each word: strip characters unsafe for to_tsquery lexemes
-        const tsQuery = req.query
-          .split(/\s+/)
-          .filter(Boolean)
-          .map((w) => w.replace(/[^\w\-\']/g, '').replace(/'{2,}/g, "'"))
-          .filter((w) => w.length > 0)
-          .map((w) => `${w}:*`)
-          .join(" & ");
+        // plainto_tsquery handles punctuation and natural language safely
+        const tsQuery = req.query.trim();
 
-        if (!tsQuery) {
-          // All words were stripped — nothing to search
-          const latencyMs = Date.now() - start;
-          await logOperation({
-            companyId: req.scope.companyId,
-            bindingId,
-            operationType: "query",
-            scope: req.scope,
-            success: true,
-            latencyMs,
-            recordCount: 0,
-          });
-          return { snippets: [] };
-        }
+        const metaFilter = metadataFilterCondition(req.metadataFilter);
 
         rows = (await db
           .select({
             ...getRecordColumns(),
-            score: sql<number>`ts_rank(to_tsvector('english', ${memoryRecords.text}), to_tsquery('english', ${tsQuery}))`,
+            score: sql<number>`ts_rank(to_tsvector('english', ${memoryRecords.text}), plainto_tsquery('english', ${tsQuery}))`,
           })
           .from(memoryRecords)
           .where(
             and(
               scopeFilter,
               eq(memoryRecords.bindingId, bindingId),
-              sql`to_tsvector('english', ${memoryRecords.text}) @@ to_tsquery('english', ${tsQuery})`,
+              sql`to_tsvector('english', ${memoryRecords.text}) @@ plainto_tsquery('english', ${tsQuery})`,
               nonExpiredFilter(),
+              ...(metaFilter ? [metaFilter] : []),
             ),
           )
           .orderBy(
-            sql`ts_rank(to_tsvector('english', ${memoryRecords.text}), to_tsquery('english', ${tsQuery})) DESC`,
+            sql`ts_rank(to_tsvector('english', ${memoryRecords.text}), plainto_tsquery('english', ${tsQuery})) DESC`,
           )
           .limit(topK)) as Array<typeof memoryRecords.$inferSelect & { score?: number }>;
       }
@@ -647,23 +647,49 @@ export function builtinPgvectorAdapter(
       );
       const scopeFilter = buildScopeFilters(req.scope);
 
-      const conditions = [scopeFilter, eq(memoryRecords.bindingId, bindingId), nonExpiredFilter()];
+      const conditions: import("drizzle-orm").SQL[] = [
+        scopeFilter,
+        eq(memoryRecords.bindingId, bindingId),
+        nonExpiredFilter(),
+      ];
 
+      // Composite cursor: "createdAtISO:id" — avoids ties-loss with identical createdAt
       if (req.cursor) {
-        conditions.push(gt(memoryRecords.createdAt, new Date(req.cursor)));
+        const colonIdx = req.cursor.lastIndexOf(":");
+        if (colonIdx > 0) {
+          const cursorCreatedAt = req.cursor.slice(0, colonIdx);
+          const cursorId = req.cursor.slice(colonIdx + 1);
+          conditions.push(
+            or(
+              gt(memoryRecords.createdAt, new Date(cursorCreatedAt)),
+              and(
+                eq(memoryRecords.createdAt, new Date(cursorCreatedAt)),
+                gt(memoryRecords.id, cursorId),
+              ),
+            ) as import("drizzle-orm").SQL,
+          );
+        } else {
+          // Legacy bare-ISO cursor fallback
+          conditions.push(gt(memoryRecords.createdAt, new Date(req.cursor)));
+        }
       }
+
+      // Metadata filter
+      const metaFilter = metadataFilterCondition(req.metadataFilter);
+      if (metaFilter) conditions.push(metaFilter);
 
       const rows = await db
         .select()
         .from(memoryRecords)
         .where(and(...conditions))
-        .orderBy(asc(memoryRecords.createdAt))
+        .orderBy(asc(memoryRecords.createdAt), asc(memoryRecords.id))
         .limit(limit + 1); // fetch one extra to detect next page
 
       const hasMore = rows.length > limit;
       const pageRows = rows.slice(0, limit);
-      const nextCursor = hasMore
-        ? pageRows[pageRows.length - 1]?.createdAt.toISOString()
+      const lastRow = pageRows[pageRows.length - 1];
+      const nextCursor = hasMore && lastRow
+        ? `${lastRow.createdAt.toISOString()}:${lastRow.id}`
         : undefined;
 
       const latencyMs = Date.now() - start;

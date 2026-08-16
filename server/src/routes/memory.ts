@@ -16,7 +16,18 @@ import { validate } from "../middleware/validate.js";
 import { assertBoard, assertCompanyAccess, assertBoardOrAgent } from "./authz.js";
 import { memoryBindingService } from "../services/index.js";
 import { builtinPgvectorAdapter } from "../services/memory-adapter.js";
-import { forbidden, notFound } from "../errors.js";
+import { forbidden, notFound, badRequest } from "../errors.js";
+
+/**
+ * Safely parse a JSON scope query parameter, returning a 400 error on malformed input.
+ */
+function parseScopeQuery(raw: string, companyId: string): Record<string, unknown> {
+  try {
+    return { ...JSON.parse(raw), companyId };
+  } catch {
+    throw badRequest("Invalid scope query parameter: must be valid JSON");
+  }
+}
 
 export function memoryRoutes(db: Db) {
   const router = Router();
@@ -278,7 +289,7 @@ export function memoryRoutes(db: Db) {
       assertCompanyAccess(req, companyId);
 
       const scope = req.query.scope
-        ? { ...JSON.parse(req.query.scope as string), companyId }
+        ? parseScopeQuery(req.query.scope as string, companyId)
         : { companyId };
       enforceAgentScope(scope, req);
 
@@ -307,7 +318,7 @@ export function memoryRoutes(db: Db) {
       assertCompanyAccess(req, companyId);
 
       const scope = req.query.scope
-        ? { ...JSON.parse(req.query.scope as string), companyId }
+        ? parseScopeQuery(req.query.scope as string, companyId)
         : { companyId };
       enforceAgentScope(scope, req);
 

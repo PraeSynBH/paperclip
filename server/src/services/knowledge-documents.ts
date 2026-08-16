@@ -384,10 +384,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
           })
           .from(knowledgeDocumentReviews)
           .where(
-            and(
-              inArray(knowledgeDocumentReviews.documentId, docIds as [string, ...string[]]),
-              eq(knowledgeDocumentReviews.status, "approved"),
-            ),
+            inArray(knowledgeDocumentReviews.documentId, docIds as [string, ...string[]]),
           )
           .orderBy(desc(knowledgeDocumentReviews.decidedAt))
       : [];
@@ -568,17 +565,32 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       );
     }
 
-    // Check for an approved review on the current version
+    // Find the latest revision for this document (most recent review cycle)
+    const revisions = await db
+      .select()
+      .from(knowledgeDocumentRevisions)
+      .where(eq(knowledgeDocumentRevisions.documentId, documentId))
+      .orderBy(desc(knowledgeDocumentRevisions.createdAt))
+      .limit(1);
+
+    if (revisions.length === 0) {
+      throw new Error("No revision found for the document.");
+    }
+
+    // Check for an approved review on the latest revision only.
+    // This prevents a stale approval from a previous review cycle
+    // (before the document was published) from being reused after
+    // changes were requested and the document was re-submitted.
     const approvedReviews = await db
       .select()
       .from(knowledgeDocumentReviews)
       .where(
         and(
           eq(knowledgeDocumentReviews.documentId, documentId),
+          eq(knowledgeDocumentReviews.revisionId, revisions[0].id),
           eq(knowledgeDocumentReviews.status, "approved"),
         ),
       )
-      .orderBy(desc(knowledgeDocumentReviews.decidedAt))
       .limit(1);
 
     if (approvedReviews.length === 0) {

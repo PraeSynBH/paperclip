@@ -74,6 +74,9 @@ import { IssueAttachmentsSection } from "../components/IssueAttachmentsSection";
 import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
 import { IssuePlanDecompositionsSection } from "../components/IssuePlanDecompositionsSection";
 import { PlanDecompositionWizard } from "../components/PlanDecompositionWizard";
+import { PlanDetailSection } from "../components/PlanDetailSection";
+import { PlanApprovalGatesSection } from "../components/PlanApprovalGatesSection";
+import { PlanRevisionBrowser } from "../components/PlanRevisionBrowser";
 import { IssueOutputSection } from "../components/issue-output/IssueOutputSection";
 import { isImageAttachment, isVideoAttachment } from "../lib/issue-attachments";
 import {
@@ -4132,6 +4135,23 @@ export function IssueDetail() {
           </Button>
         </div>
       )}
+
+      {issue.planDocument ? (
+        <div className="space-y-4 rounded-lg border border-border bg-card/30 p-4">
+          <PlanDetailSection
+            issueId={issue.id}
+            issueIdentifier={issue.identifier}
+            planDocument={issue.planDocument}
+          />
+          <Separator />
+          <PlanApprovalGatesSection
+            issueId={issue.id}
+            revisionId={issue.planDocument.latestRevisionId}
+          />
+          <Separator />
+          <PlanRevisionBrowser issueId={issue.id} />
+        </div>
+      ) : null}
 
       {showPlanDecompositionsSection ? (
         <div className="flex items-start justify-between gap-2">

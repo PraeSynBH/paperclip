@@ -340,10 +340,12 @@ describe("KnowledgeDocumentService", () => {
     });
 
     it("publishes an approved document", async () => {
-      // Select: assertDocumentExists
       hookSelectSequence(db, [
+        // Select: assertDocumentExists
         [makeDocRow({ status: "in_review", version: 1 })],
-        // Select: approved reviews lookup
+        // Select: latest revision lookup
+        [makeRevisionRow({ version: 1 })],
+        // Select: approved review for latest revision
         [makeReviewRow()],
       ]);
 
@@ -362,6 +364,33 @@ describe("KnowledgeDocumentService", () => {
       });
       expect(result.document.status).toBe("published");
       expect(result.document.version).toBe(2);
+    });
+
+    it("rejects stale approval from previous review cycle", async () => {
+      // Simulate: document was approved in a previous cycle, then changes
+      // were requested, author resubmitted (creating a new revision), but
+      // the new revision hasn't been approved yet. The old approval (linked
+      // to the old revision) must NOT allow publishing.
+      hookSelectSequence(db, [
+        // Select: assertDocumentExists
+        [makeDocRow({ status: "in_review", version: 1 })],
+        // Select: latest revision lookup — returns NEW revision (different id)
+        [
+          makeRevisionRow({
+            id: "00000000-0000-0000-0000-000000000021",
+            version: 1,
+            createdAt: new Date("2026-08-17T00:00:00Z"),
+          }),
+        ],
+        // Select: approved review for latest revision — empty (no approval yet)
+        [],
+      ]);
+
+      await expect(
+        svc.publish(companyId, docId, { changeDescription: "Version 2" }),
+      ).rejects.toThrow(
+        "Document must be approved before publishing. Submit for review and get approval first.",
+      );
     });
 
     it("archives a published document", async () => {
@@ -400,6 +429,26 @@ describe("KnowledgeDocumentService", () => {
       const result = await svc.list(companyId, { status: "draft" });
       expect(result.items.length).toBe(1);
       expect(result.items[0].status).toBe("draft");
+    });
+
+    it("shows latestReviewStatus for pending reviews", async () => {
+      const now = new Date("2026-08-16T00:00:00Z");
+      const docRow = makeDocRow({ status: "in_review", updatedAt: now });
+
+      hookSelectSequence(db, [
+        [{ document: docRow, revisionCount: 1 }],
+        [
+          {
+            documentId: docId,
+            status: "pending",
+            decidedAt: now,
+          },
+        ],
+      ]);
+
+      const result = await svc.list(companyId, { limit: 10 });
+      expect(result.items.length).toBe(1);
+      expect(result.items[0].latestReviewStatus).toBe("pending");
     });
   });
 

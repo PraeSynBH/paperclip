@@ -19,6 +19,8 @@ const apiPrefixes: Record<string, string> = {
   "assets.ts": "/api",
   "auth.ts": "/api/auth",
   "board-chat.ts": "/api",
+  "knowledge.ts": "/api",
+  "memory.ts": "/api",
   "cloud-upstreams.ts": "/api",
   "companies.ts": "/api/companies",
   "company-skills.ts": "/api",
@@ -171,6 +173,38 @@ describe("openapi routes", () => {
       missingInSpec: [],
       extraInSpec: [],
     });
+  });
+
+  it("documents plan management endpoints with UUID validation", () => {
+    const { spec } = loadSpecRoutes();
+
+    const expectedEndpoints: Array<[string, string]> = [
+      ["post", "/api/issues/{id}/documents/plan"],
+      ["get", "/api/issues/{id}/documents/plan"],
+      ["get", "/api/issues/{id}/documents/plan/revisions"],
+      ["get", "/api/issues/{id}/documents/plan/revisions/{revId}/diff"],
+      ["post", "/api/issues/{id}/plan/gates"],
+      ["get", "/api/issues/{id}/plan/gates"],
+      ["patch", "/api/issues/{id}/plan/gates/{gateId}"],
+      ["get", "/api/issues/{id}/accepted-plan-decompositions"],
+    ];
+    for (const [method, routePath] of expectedEndpoints) {
+      expect(spec.paths[routePath]?.[method]).toBeDefined();
+    }
+
+    // revId path param must carry UUID format
+    const diffParams = spec.paths["/api/issues/{id}/documents/plan/revisions/{revId}/diff"].get.parameters;
+    const revIdParam = diffParams.find((param) => param.name === "revId");
+    expect(revIdParam).toMatchObject({ in: "path", required: true, schema: { type: "string", format: "uuid" } });
+
+    // againstRevisionId query param (plan diff)
+    const againstParam = diffParams.find((param) => param.name === "againstRevisionId");
+    expect(againstParam).toMatchObject({ in: "query", required: true, schema: { type: "string", format: "uuid" } });
+
+    // revisionId query param (list gates)
+    const gatesParams = spec.paths["/api/issues/{id}/plan/gates"].get.parameters;
+    const revisionParam = gatesParams.find((param) => param.name === "revisionId");
+    expect(revisionParam).toMatchObject({ in: "query", required: false, schema: { type: "string", format: "uuid" } });
   });
 
   it("documents auth and reviewed response-code invariants", () => {
