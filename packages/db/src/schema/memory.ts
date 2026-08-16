@@ -132,8 +132,8 @@ export const memoryOperations = pgTable(
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
     bindingId: uuid("binding_id")
-      .notNull()
       .references(() => memoryBindings.id, { onDelete: "cascade" }),
+    providerKey: text("provider_key"),
     operationType: text("operation_type").notNull(),
     scopeJson: jsonb("scope_json").$type<Record<string, unknown>>().notNull().default({}),
     sourceRefJson: jsonb("source_ref_json").$type<Record<string, unknown>>().notNull().default({}),
