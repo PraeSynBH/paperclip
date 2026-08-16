@@ -2,8 +2,13 @@ import { and, desc, eq, lt } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
 import { planMetadataSchema } from "@paperclipai/shared";
-import { notFound, unprocessable } from "../errors.js";
+import { notFound, unprocessable, unprocessable as unprocessableEntity } from "../errors.js";
 import { documentService } from "./documents.js";
+
+// Maximum total lines for LCS diff to prevent OOM (C-2 guard)
+// 10K lines × 10K lines = 100M entries ≈ 800MB at 8 bytes — still too high.
+// 2K × 2K = 4M entries ≈ 32MB — acceptable peak.
+const MAX_DIFF_LINES = 2_000;
 
 export function planDocumentService(db: Db) {
   const docsSvc = documentService(db);
@@ -61,6 +66,7 @@ export function planDocumentService(db: Db) {
 
     /**
      * List plan document revisions with plan metadata snapshots.
+     * Tenant-safe: filters by issue companyId (C-1 defense-in-depth).
      */
     listPlanRevisions: async (issueId: string) => {
       const issue = await db
@@ -89,13 +95,20 @@ export function planDocumentService(db: Db) {
         .from(issueDocuments)
         .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
         .innerJoin(documentRevisions, eq(documentRevisions.documentId, documents.id))
-        .where(and(eq(issueDocuments.issueId, issueId), eq(issueDocuments.key, "plan")))
+        .where(and(
+          eq(issueDocuments.issueId, issueId),
+          eq(issueDocuments.companyId, issue.companyId),
+          eq(issueDocuments.key, "plan"),
+          eq(documents.companyId, issue.companyId),
+        ))
         .orderBy(desc(documentRevisions.revisionNumber));
     },
 
     /**
      * Compute a line-level diff between two plan document revisions.
      * Uses simple LCS-based line diff — no external dependency.
+     * Tenant-safe: verifies all resources belong to the issue's company (C-1).
+     * Memory-safe: rejects documents exceeding MAX_DIFF_LINES (C-2).
      */
     computePlanDiff: async (
       issueId: string,
@@ -103,34 +116,53 @@ export function planDocumentService(db: Db) {
       againstRevisionId?: string,
     ) => {
       const issue = await db
-        .select({ id: issues.id })
+        .select({ id: issues.id, companyId: issues.companyId })
         .from(issues)
         .where(eq(issues.id, issueId))
         .then((rows) => rows[0] ?? null);
       if (!issue) throw notFound("Issue not found");
 
       const planDoc = await db
-        .select({ id: documents.id })
+        .select({ id: documents.id, companyId: documents.companyId })
         .from(issueDocuments)
         .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
-        .where(and(eq(issueDocuments.issueId, issueId), eq(issueDocuments.key, "plan")))
+        .where(and(
+          eq(issueDocuments.issueId, issueId),
+          eq(issueDocuments.companyId, issue.companyId),
+          eq(issueDocuments.key, "plan"),
+        ))
         .then((rows) => rows[0] ?? null);
       if (!planDoc) throw notFound("Plan document not found");
 
       const targetRevision = await db
-        .select({ id: documentRevisions.id, revisionNumber: documentRevisions.revisionNumber, body: documentRevisions.body })
+        .select({
+          id: documentRevisions.id,
+          companyId: documentRevisions.companyId,
+          revisionNumber: documentRevisions.revisionNumber,
+          body: documentRevisions.body,
+        })
         .from(documentRevisions)
-        .where(and(eq(documentRevisions.id, revisionId), eq(documentRevisions.documentId, planDoc.id)))
+        .where(and(
+          eq(documentRevisions.id, revisionId),
+          eq(documentRevisions.documentId, planDoc.id),
+          eq(documentRevisions.companyId, issue.companyId),
+        ))
         .then((rows) => rows[0] ?? null);
       if (!targetRevision) throw notFound("Revision not found");
 
       if (!againstRevisionId) {
         // Diff against previous revision
         const prevRevision = await db
-          .select({ id: documentRevisions.id, revisionNumber: documentRevisions.revisionNumber, body: documentRevisions.body })
+          .select({
+            id: documentRevisions.id,
+            companyId: documentRevisions.companyId,
+            revisionNumber: documentRevisions.revisionNumber,
+            body: documentRevisions.body,
+          })
           .from(documentRevisions)
           .where(and(
             eq(documentRevisions.documentId, planDoc.id),
+            eq(documentRevisions.companyId, issue.companyId),
             lt(documentRevisions.revisionNumber, targetRevision.revisionNumber),
           ))
           .orderBy(desc(documentRevisions.revisionNumber))
@@ -153,9 +185,18 @@ export function planDocumentService(db: Db) {
       }
 
       const againstRevision = await db
-        .select({ id: documentRevisions.id, revisionNumber: documentRevisions.revisionNumber, body: documentRevisions.body })
+        .select({
+          id: documentRevisions.id,
+          companyId: documentRevisions.companyId,
+          revisionNumber: documentRevisions.revisionNumber,
+          body: documentRevisions.body,
+        })
         .from(documentRevisions)
-        .where(and(eq(documentRevisions.id, againstRevisionId), eq(documentRevisions.documentId, planDoc.id)))
+        .where(and(
+          eq(documentRevisions.id, againstRevisionId),
+          eq(documentRevisions.documentId, planDoc.id),
+          eq(documentRevisions.companyId, issue.companyId),
+        ))
         .then((rows) => rows[0] ?? null);
       if (!againstRevision) throw notFound("Against revision not found");
 
@@ -179,10 +220,21 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   const oldLines = oldText.split("\n");
   const newLines = newText.split("\n");
 
-  // LCS table
   const m = oldLines.length;
   const n = newLines.length;
-  const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0));
+
+  // C-2: reject diffs that would exceed memory budget
+  if (m > MAX_DIFF_LINES || n > MAX_DIFF_LINES) {
+    throw unprocessableEntity(
+      `Document too large for line diff (max ${MAX_DIFF_LINES} lines, got ${Math.max(m, n)})`,
+    );
+  }
+
+  // LCS table — standard full matrix, bounded by MAX_DIFF_LINES check above.
+  const dp: number[][] = [];
+  for (let i = 0; i <= m; i++) {
+    dp[i] = new Array(n + 1).fill(0);
+  }
 
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
