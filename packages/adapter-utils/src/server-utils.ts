@@ -524,6 +524,16 @@ type PaperclipWakePlanReviewInteraction = {
   resolvedAt: string | null;
 };
 
+type PaperclipWakeParentPlanReviewContext = {
+  sourceIssueId: string | null;
+  sourceIssueIdentifier: string | null;
+  sourceIssueTitle: string | null;
+  acceptedRevisionId: string | null;
+  acceptedRevisionNumber: number | null;
+  acceptedRevisionBody: string | null;
+  acceptedRevisionBodyTruncated: boolean;
+};
+
 type PaperclipWakePlanReviewContext = {
   documentKey: string | null;
   issueId: string | null;
@@ -531,6 +541,9 @@ type PaperclipWakePlanReviewContext = {
   latestRevisionNumber: number | null;
   threads: PaperclipWakePlanReviewThread[];
   interaction: PaperclipWakePlanReviewInteraction | null;
+  acceptedRevisionBody: string | null;
+  acceptedRevisionBodyTruncated: boolean;
+  parentPlanContext: PaperclipWakeParentPlanReviewContext | null;
   totals: {
     openThreadCount: number;
     includedThreadCount: number;
@@ -852,7 +865,21 @@ function normalizePaperclipWakePlanReviewContext(value: unknown): PaperclipWakeP
     totalsRaw.includedCommentCount,
     threads.reduce((sum, thread) => sum + thread.comments.length, 0),
   );
-  if (!documentKey && !issueId && threads.length === 0 && !interaction) return null;
+  const acceptedRevisionBody = asString(context.acceptedRevisionBody, "") || null;
+  const acceptedRevisionBodyTruncated = asBoolean(context.acceptedRevisionBodyTruncated, false);
+  const parentPlanRaw = parseObject(context.parentPlanContext);
+  const parentPlanContext = Object.keys(parentPlanRaw).length > 0
+    ? {
+        sourceIssueId: asString(parentPlanRaw.sourceIssueId, "").trim() || null,
+        sourceIssueIdentifier: asString(parentPlanRaw.sourceIssueIdentifier, "").trim() || null,
+        sourceIssueTitle: asString(parentPlanRaw.sourceIssueTitle, "").trim() || null,
+        acceptedRevisionId: asString(parentPlanRaw.acceptedRevisionId, "").trim() || null,
+        acceptedRevisionNumber: asNumber(parentPlanRaw.acceptedRevisionNumber, 0) > 0 ? asNumber(parentPlanRaw.acceptedRevisionNumber, 0) : null,
+        acceptedRevisionBody: asString(parentPlanRaw.acceptedRevisionBody, "") || null,
+        acceptedRevisionBodyTruncated: asBoolean(parentPlanRaw.acceptedRevisionBodyTruncated, false),
+      }
+    : null;
+  if (!documentKey && !issueId && threads.length === 0 && !interaction && !acceptedRevisionBody && !parentPlanContext) return null;
   return {
     documentKey,
     issueId,
@@ -860,6 +887,9 @@ function normalizePaperclipWakePlanReviewContext(value: unknown): PaperclipWakeP
     latestRevisionNumber: latestRevisionNumber > 0 ? latestRevisionNumber : null,
     threads,
     interaction,
+    acceptedRevisionBody,
+    acceptedRevisionBodyTruncated,
+    parentPlanContext,
     totals: {
       openThreadCount: Math.max(0, openThreadCount),
       includedThreadCount: Math.max(0, includedThreadCount),
@@ -1378,6 +1408,44 @@ export function renderPaperclipWakePrompt(
     }
     if (context.totals.omittedThreadCount > 0 || context.totals.omittedCommentCount > 0 || context.truncated) {
       lines.push("[plan review context truncated]");
+    }
+    if (context.acceptedRevisionBody) {
+      lines.push(
+        "",
+        "Accepted plan revision content:",
+        "This is the locked content of the accepted plan revision. Use it as the authoritative plan for creating child issues or executing follow-up work.",
+      );
+      if (context.interaction?.acceptedTargetRevision?.revisionNumber) {
+        lines.push(`- accepted plan revision: #${context.interaction.acceptedTargetRevision.revisionNumber}`);
+      }
+      lines.push(context.acceptedRevisionBody);
+      if (context.acceptedRevisionBodyTruncated) {
+        lines.push("[accepted plan revision body truncated]");
+      }
+    }
+    if (context.parentPlanContext) {
+      const parent = context.parentPlanContext;
+      lines.push(
+        "",
+        "Parent accepted plan context:",
+        "This child issue was decomposed from an accepted plan. The parent plan content below is locked to the accepted revision at decomposition time.",
+      );
+      if (parent.sourceIssueTitle || parent.sourceIssueIdentifier) {
+        lines.push(
+          `- source plan issue: ${parent.sourceIssueTitle ?? "unknown"}${parent.sourceIssueIdentifier ? ` (${parent.sourceIssueIdentifier})` : ""}`,
+        );
+      }
+      if (parent.acceptedRevisionNumber) {
+        lines.push(`- accepted plan revision: #${parent.acceptedRevisionNumber}`);
+      }
+      if (parent.acceptedRevisionBody) {
+        lines.push(parent.acceptedRevisionBody);
+        if (parent.acceptedRevisionBodyTruncated) {
+          lines.push("[parent accepted plan revision body truncated]");
+        }
+      } else {
+        lines.push("[parent accepted plan revision body unavailable]");
+      }
     }
   }
 

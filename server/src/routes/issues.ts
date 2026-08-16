@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   activityLog,
@@ -56,6 +56,10 @@ import {
   updateIssueWorkProductSchema,
   updateDocumentAnnotationThreadSchema,
   upsertIssueDocumentSchema,
+  upsertPlanDocumentSchema,
+  createPlanReviewGateSchema,
+  resolvePlanReviewGateSchema,
+  planDiffQuerySchema,
   updateIssueSchema,
   rejectUnsupportedIssuePatchMonitorSchedulingFields,
   getClosedIsolatedExecutionWorkspaceMessage,
@@ -97,6 +101,9 @@ import {
   projectService,
   routineService,
   workProductService,
+  planDocumentService,
+  planReviewGateService,
+  publishLiveEvent,
 } from "../services/index.js";
 import { buildPlanReviewContext } from "../services/plan-review-context.js";
 import {
@@ -1194,6 +1201,8 @@ export function issueRoutes(
   const executionWorkspacesSvc = executionWorkspaceServiceDirect(db);
   const workProductsSvc = workProductService(db);
   const documentsSvc = documentService(db);
+  const planDocumentsSvc = planDocumentService(db);
+  const planReviewGatesSvc = planReviewGateService(db);
   const documentAnnotationsSvc = documentAnnotationService(db);
   const issueReferencesSvc = issueReferenceService(db);
   const issueThreadInteractionsSvc = issueThreadInteractionService(db);
@@ -4426,6 +4435,7 @@ export function issueRoutes(
       createdByRunId: actor.runId ?? null,
       sourceTrust,
       lockedDocumentStrategy: req.actor.type === "agent" ? "create_new_document" : "conflict",
+      planMetadata: req.body.planMetadata ?? null,
     });
     const doc = result.document;
     const redirectedFromLockedDocument =
@@ -5706,6 +5716,266 @@ export function issueRoutes(
     await queueTaskWatchdogEvaluation(issue, actor.runId);
 
     res.status(201).json(issue);
+  });
+
+  // ─── Plan Document Routes ──────────────────────────────────────────────
+
+  router.post("/issues/:id/documents/plan", validate(upsertPlanDocumentSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
+    if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
+
+    const actor = getActorInfo(req);
+    const sourceTrust = await sourceTrustForActorWrite(issue, actor);
+    const referenceSummaryBefore = await issueReferencesSvc.listIssueReferenceSummary(issue.id);
+    const result = await planDocumentsSvc.upsertPlanDocument({
+      issueId: issue.id,
+      title: req.body.title ?? null,
+      body: req.body.body,
+      changeSummary: req.body.changeSummary ?? null,
+      baseRevisionId: req.body.baseRevisionId ?? null,
+      createdByAgentId: actor.agentId ?? null,
+      createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+      createdByRunId: actor.runId ?? null,
+      planMetadata: req.body.planMetadata ?? null,
+    });
+
+    const doc = result.document;
+    await issueReferencesSvc.syncDocument(doc.id);
+    await externalObjectsSvc.syncDocumentSafely(doc.id);
+    const referenceSummaryAfter = await issueReferencesSvc.listIssueReferenceSummary(issue.id);
+    const referenceDiff = issueReferencesSvc.diffIssueReferenceSummary(referenceSummaryBefore, referenceSummaryAfter);
+
+    // Log activity
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: result.created ? "issue.plan_created" : "issue.plan_updated",
+      entityType: "issue",
+      entityId: issue.id,
+      details: {
+        documentId: doc.id,
+        title: doc.title,
+        revisionNumber: doc.latestRevisionNumber,
+        ...summarizeIssueReferenceActivityDetails({
+          addedReferencedIssues: referenceDiff.addedReferencedIssues.map(summarizeIssueRelationForActivity),
+          removedReferencedIssues: referenceDiff.removedReferencedIssues.map(summarizeIssueRelationForActivity),
+          currentReferencedIssues: referenceDiff.currentReferencedIssues.map(summarizeIssueRelationForActivity),
+        }),
+      },
+    });
+
+    // Auto-supersede any pending review gates from previous revisions
+    if (!result.created && doc.latestRevisionId) {
+      await planReviewGatesSvc.supersedeGatesForPreviousRevisions(doc.id, doc.latestRevisionId);
+    }
+
+    // Emit live event for real-time UI updates
+    publishLiveEvent({
+      companyId: issue.companyId,
+      type: "plan.updated",
+      payload: {
+        issueId: issue.id,
+        documentId: doc.id,
+        revisionNumber: doc.latestRevisionNumber,
+        planMetadata: req.body.planMetadata ?? null,
+      },
+    });
+
+    res.status(result.created ? 201 : 200).json(doc);
+  });
+
+  router.get("/issues/:id/documents/plan", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertIssueReadAllowed(req, res, issue))) return;
+
+    const planDoc = await planDocumentsSvc.getPlanDocument(issue.id);
+    if (!planDoc) {
+      res.status(404).json({ error: "Plan document not found for this issue" });
+      return;
+    }
+
+    res.json(planDoc);
+  });
+
+  router.get("/issues/:id/documents/plan/revisions", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertIssueReadAllowed(req, res, issue))) return;
+
+    const revisions = await planDocumentsSvc.listPlanRevisions(issue.id);
+    res.json(revisions);
+  });
+
+  router.get("/issues/:id/documents/plan/revisions/:revId/diff", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertIssueReadAllowed(req, res, issue))) return;
+
+    const revisionId = req.params.revId as string;
+    const againstRevisionId = req.query.againstRevisionId as string | undefined;
+
+    // Validate query params
+    if (againstRevisionId) {
+      const parsed = planDiffQuerySchema.safeParse({ againstRevisionId });
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid query parameters", details: parsed.error.issues });
+        return;
+      }
+    }
+
+    const diff = await planDocumentsSvc.computePlanDiff(issue.id, revisionId, againstRevisionId);
+    res.json(diff);
+  });
+
+  // ─── Plan Review Gate Routes ───────────────────────────────────────────
+
+  router.post("/issues/:id/plan/gates", validate(createPlanReviewGateSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
+    if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
+
+    const actor = getActorInfo(req);
+    const gate = await planReviewGatesSvc.createGate({
+      issueId: issue.id,
+      milestoneId: req.body.milestoneId ?? null,
+      acceptanceCriteria: req.body.acceptanceCriteria,
+      assignedAgentId: req.body.assignedAgentId ?? null,
+      createdByAgentId: actor.agentId ?? null,
+      createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+    });
+
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "issue.plan_gate_created",
+      entityType: "issue",
+      entityId: issue.id,
+      details: {
+        gateId: gate.id,
+        revisionId: gate.revisionId,
+        milestoneId: gate.milestoneId,
+        acceptanceCriteria: gate.acceptanceCriteria,
+      },
+    });
+
+    res.status(201).json(gate);
+  });
+
+  router.get("/issues/:id/plan/gates", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertIssueReadAllowed(req, res, issue))) return;
+
+    const revisionId = req.query.revisionId as string | undefined;
+    const gates = await planReviewGatesSvc.listGates({
+      issueId: issue.id,
+      revisionId: revisionId ?? null,
+    });
+    res.json(gates);
+  });
+
+  router.patch("/issues/:id/plan/gates/:gateId", validate(resolvePlanReviewGateSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
+    if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
+
+    const actor = getActorInfo(req);
+    const gateId = req.params.gateId as string;
+    const result = await planReviewGatesSvc.resolveGate(gateId, {
+      status: req.body.status,
+      resolutionComment: req.body.resolutionComment ?? null,
+      resolvedByAgentId: actor.agentId ?? null,
+      resolvedByUserId: actor.actorType === "user" ? actor.actorId : null,
+    });
+
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: `issue.plan_gate_${result.gate.status}`,
+      entityType: "issue",
+      entityId: issue.id,
+      details: {
+        gateId: result.gate.id,
+        revisionId: result.gate.revisionId,
+        status: result.gate.status,
+        allGatesApproved: result.allApproved,
+      },
+    });
+
+    // If all gates for this revision are now approved, transition plan status
+    if (result.allApproved) {
+      await db
+        .update(documents)
+        .set({
+          planMetadata: sql`jsonb_set(COALESCE(plan_metadata, '{}'::jsonb), '{status}', '"approved"')`,
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, result.gate.documentId));
+    }
+
+    // Emit live event for real-time UI updates
+    publishLiveEvent({
+      companyId: issue.companyId,
+      type: "plan.gate_resolved",
+      payload: {
+        issueId: issue.id,
+        gateId: result.gate.id,
+        revisionId: result.gate.revisionId,
+        status: result.gate.status,
+        allGatesApproved: result.allApproved,
+      },
+    });
+
+    res.json(result);
   });
 
   router.get("/issues/:id/accepted-plan-decompositions", async (req, res) => {

@@ -73,6 +73,7 @@ import { IssueContinuationHandoff } from "../components/IssueContinuationHandoff
 import { IssueAttachmentsSection } from "../components/IssueAttachmentsSection";
 import { IssueDocumentsSection } from "../components/IssueDocumentsSection";
 import { IssuePlanDecompositionsSection } from "../components/IssuePlanDecompositionsSection";
+import { PlanDecompositionWizard } from "../components/PlanDecompositionWizard";
 import { IssueOutputSection } from "../components/issue-output/IssueOutputSection";
 import { isImageAttachment, isVideoAttachment } from "../lib/issue-attachments";
 import {
@@ -148,6 +149,7 @@ import {
   ScanEye,
   Flag,
   FileCode2,
+  GitBranch,
   Hexagon,
   ListTree,
   MessageSquare,
@@ -1334,6 +1336,7 @@ export function IssueDetail() {
   const { isMobile } = useSidebar();
   const [moreOpen, setMoreOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [decompositionWizardOpen, setDecompositionWizardOpen] = useState(false);
   const [mobilePropsOpen, setMobilePropsOpen] = useState(false);
   const [fileViewerPromptOpen, setFileViewerPromptOpen] = useState(false);
   const [detailTab, setDetailTab] = useState("chat");
@@ -4131,12 +4134,31 @@ export function IssueDetail() {
       )}
 
       {showPlanDecompositionsSection ? (
-        <IssuePlanDecompositionsSection
-          issueId={issue.id}
-          issueIdentifier={issue.identifier}
-          agentMap={agentMap}
-        />
+        <div className="flex items-start justify-between gap-2">
+          <IssuePlanDecompositionsSection
+            issueId={issue.id}
+            issueIdentifier={issue.identifier}
+            agentMap={agentMap}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setDecompositionWizardOpen(true)}
+            className="shrink-0 shadow-none"
+          >
+            <GitBranch className="mr-1.5 h-3.5 w-3.5" />
+            Decompose plan
+          </Button>
+        </div>
       ) : null}
+
+      <PlanDecompositionWizard
+        issueId={issue.id}
+        issueIdentifier={issue.identifier}
+        agents={agents}
+        open={decompositionWizardOpen}
+        onOpenChange={setDecompositionWizardOpen}
+      />
 
       <IssueDocumentsSection
         issue={issue}

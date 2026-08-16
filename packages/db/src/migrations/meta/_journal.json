@@ -897,6 +897,27 @@
       "when": 1782526500000,
       "tag": "0127_environment_custom_images_instance_scoped",
       "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1786826410992,
+      "tag": "0128_deep_planning_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1786830000000,
+      "tag": "0129_memory_store_phase2",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1786840000000,
+      "tag": "0130_memory_store_indexes",
+      "breakpoints": true
     }
   ]
 }

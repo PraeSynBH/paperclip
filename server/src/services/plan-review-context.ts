@@ -3,11 +3,15 @@ import type { Db } from "@paperclipai/db";
 import {
   documentAnnotationComments,
   documentAnnotationThreads,
+  documentRevisions,
   documents,
   issueDocuments,
+  issuePlanDecompositions,
+  issues,
   issueThreadInteractions,
 } from "@paperclipai/db";
 import type {
+  ParentPlanReviewContext,
   PlanReviewContext,
   PlanReviewContextAuthor,
   PlanReviewInteractionContext,
@@ -22,6 +26,7 @@ export const PLAN_REVIEW_CONTEXT_LIMITS = {
   maxBodyChars: 1_200,
   maxTotalBodyChars: 12_000,
   maxAnchorTextChars: 500,
+  maxAcceptedRevisionBodyChars: 20_000,
 } as const;
 
 type BuildPlanReviewContextInput = {
@@ -130,6 +135,103 @@ async function getPlanInteractionContext(input: {
   };
 }
 
+async function fetchAcceptedRevisionBody(
+  db: Db,
+  companyId: string,
+  acceptedTargetRevision: PlanReviewInteractionTargetContext | null,
+): Promise<{ body: string | null; truncated: boolean }> {
+  if (!acceptedTargetRevision?.revisionId) return { body: null, truncated: false };
+  const revision = await db
+    .select({ body: documentRevisions.body })
+    .from(documentRevisions)
+    .where(and(
+      eq(documentRevisions.id, acceptedTargetRevision.revisionId),
+      eq(documentRevisions.companyId, companyId),
+    ))
+    .then((rows) => rows[0] ?? null);
+  if (!revision?.body) return { body: null, truncated: false };
+  const maxChars = PLAN_REVIEW_CONTEXT_LIMITS.maxAcceptedRevisionBodyChars;
+  if (revision.body.length <= maxChars) return { body: revision.body, truncated: false };
+  return { body: revision.body.slice(0, maxChars), truncated: true };
+}
+
+async function fetchParentPlanContext(
+  db: Db,
+  companyId: string,
+  issueId: string,
+): Promise<ParentPlanReviewContext | null> {
+  // Check if this issue has a parent with an accepted plan decomposition
+  const parentIssue = await db
+    .select({
+      parentId: issues.parentId,
+    })
+    .from(issues)
+    .where(and(
+      eq(issues.id, issueId),
+      eq(issues.companyId, companyId),
+    ))
+    .then((rows) => rows[0] ?? null);
+  if (!parentIssue?.parentId) return null;
+
+  // Look for the most recent completed or in_flight decomposition from the parent
+  const decomposition = await db
+    .select({
+      acceptedPlanRevisionId: issuePlanDecompositions.acceptedPlanRevisionId,
+      status: issuePlanDecompositions.status,
+      sourceIssueId: issuePlanDecompositions.sourceIssueId,
+    })
+    .from(issuePlanDecompositions)
+    .where(and(
+      eq(issuePlanDecompositions.companyId, companyId),
+      eq(issuePlanDecompositions.sourceIssueId, parentIssue.parentId),
+      sql`${issuePlanDecompositions.status} IN ('completed', 'in_flight')`,
+    ))
+    .orderBy(desc(issuePlanDecompositions.createdAt))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
+  if (!decomposition?.acceptedPlanRevisionId) return null;
+
+  // Fetch the accepted revision body
+  const revision = await db
+    .select({
+      body: documentRevisions.body,
+      revisionNumber: documentRevisions.revisionNumber,
+    })
+    .from(documentRevisions)
+    .where(and(
+      eq(documentRevisions.id, decomposition.acceptedPlanRevisionId),
+      eq(documentRevisions.companyId, companyId),
+    ))
+    .then((rows) => rows[0] ?? null);
+
+  // Fetch the source issue identifier and title
+  const sourceIssue = await db
+    .select({
+      identifier: issues.identifier,
+      title: issues.title,
+    })
+    .from(issues)
+    .where(and(
+      eq(issues.id, decomposition.sourceIssueId),
+      eq(issues.companyId, companyId),
+    ))
+    .then((rows) => rows[0] ?? null);
+
+  const maxChars = PLAN_REVIEW_CONTEXT_LIMITS.maxAcceptedRevisionBodyChars;
+  const body = revision?.body ?? null;
+  const truncated = body !== null && body.length > maxChars;
+
+  return {
+    sourceIssueId: decomposition.sourceIssueId,
+    sourceIssueIdentifier: sourceIssue?.identifier ?? null,
+    sourceIssueTitle: sourceIssue?.title ?? null,
+    acceptedRevisionId: decomposition.acceptedPlanRevisionId,
+    acceptedRevisionNumber: revision?.revisionNumber ?? null,
+    acceptedRevisionBody: body ? (body.length > maxChars ? body.slice(0, maxChars) : body) : null,
+    acceptedRevisionBodyTruncated: truncated,
+  };
+}
+
 export async function buildPlanReviewContext(input: BuildPlanReviewContextInput): Promise<PlanReviewContext | null> {
   const interaction = await getPlanInteractionContext({
     db: input.db,
@@ -159,7 +261,46 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
       eq(documents.companyId, input.companyId),
     ))
     .then((rows) => rows[0] ?? null);
-  if (!planDocument) return null;
+
+  // Fetch accepted revision body when interaction targets an accepted revision
+  const acceptedTargetRevision = interaction?.acceptedTargetRevision ?? null;
+  const { body: acceptedRevisionBody, truncated: acceptedRevisionBodyTruncated } =
+    await fetchAcceptedRevisionBody(input.db, input.companyId, acceptedTargetRevision);
+
+  // Fetch parent plan context when this issue has no plan document of its own
+  // but its parent has an accepted plan decomposition
+  const parentPlanContext = !planDocument
+    ? await fetchParentPlanContext(input.db, input.companyId, input.issueId)
+    : null;
+
+  // If there's no plan document and no parent plan context, return null
+  if (!planDocument && !parentPlanContext) return null;
+
+  // When we have no plan document but DO have parent plan context,
+  // return a minimal context with just the parent's accepted plan info
+  if (!planDocument) {
+    return {
+      documentKey: "plan",
+      issueId: input.issueId,
+      latestRevisionId: null,
+      latestRevisionNumber: null,
+      threads: [],
+      interaction: interaction ?? null,
+      acceptedRevisionBody: null,
+      acceptedRevisionBodyTruncated: false,
+      parentPlanContext,
+      totals: {
+        openThreadCount: 0,
+        includedThreadCount: 0,
+        omittedThreadCount: 0,
+        commentCount: 0,
+        includedCommentCount: 0,
+        omittedCommentCount: 0,
+      },
+      limits: { ...PLAN_REVIEW_CONTEXT_LIMITS },
+      truncated: false,
+    };
+  }
 
   const [{ count: openThreadCount }] = await input.db
     .select({ count: sql<number>`count(*)::int` })
@@ -308,6 +449,7 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
 
   const omittedCommentCount = Math.max(0, commentCount - includedCommentCount);
   if (omittedCommentCount > 0) truncated = true;
+  if (acceptedRevisionBodyTruncated) truncated = true;
 
   return {
     documentKey: "plan",
@@ -316,6 +458,9 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
     latestRevisionNumber: planDocument.latestRevisionNumber,
     threads,
     interaction,
+    acceptedRevisionBody,
+    acceptedRevisionBodyTruncated,
+    parentPlanContext,
     totals: {
       openThreadCount,
       includedThreadCount: threads.length,

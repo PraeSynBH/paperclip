@@ -772,6 +772,8 @@ export const LIVE_EVENT_TYPES = [
   "plugin.ui.updated",
   "plugin.worker.crashed",
   "plugin.worker.restarted",
+  "plan.updated",
+  "plan.gate_resolved",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
 
@@ -1283,3 +1285,12 @@ export const PLUGIN_BRIDGE_ERROR_CODES = [
   "UNKNOWN",
 ] as const;
 export type PluginBridgeErrorCode = (typeof PLUGIN_BRIDGE_ERROR_CODES)[number];
+
+export const PLAN_REVIEW_GATE_STATUSES = ["pending", "approved", "rejected", "superseded"] as const;
+export type PlanReviewGateStatus = (typeof PLAN_REVIEW_GATE_STATUSES)[number];
+
+export const PLAN_DOCUMENT_STATUSES = ["draft", "in_review", "approved", "superseded"] as const;
+export type PlanDocumentStatus = (typeof PLAN_DOCUMENT_STATUSES)[number];
+
+export const PLAN_MILESTONE_STATUSES = ["pending", "in_progress", "completed", "cancelled"] as const;
+export type PlanMilestoneStatus = (typeof PLAN_MILESTONE_STATUSES)[number];

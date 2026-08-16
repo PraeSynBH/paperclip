@@ -56,9 +56,39 @@ We want agents to run in more remote and sandboxed environments while preserving
 
 Paperclip should make outputs first-class. That means generated artifacts, previews, deployable outputs, and the handoff from "agent did work" to "here is the result" should become more visible and easier to operate.
 
-### ⚪ Memory / Knowledge
+---
+
+## Project Polaris (v0.4.0) — Active
+
+The next major cycle: making agents more capable of independent, long-running work through structured planning, persistent memory, and a lighter-weight leadership interface. The three workstreams below are being tracked as active child issues under [VOY-1184](https://github.com/nousresearch/paperclip/issues/1184).
+
+### 🔵 Deep Planning (Workstream A — v0.4.0-alpha)
+
+Some work needs more than a task description before execution starts. Deeper planning means stronger issue documents, revisionable plans, and clearer review loops for strategy-heavy work before agents begin execution.
+
+**Key deliverables**: Structured plan documents with milestones, revision history with diffs, plan-level approval gates, plan→issue decomposition, Board UI for plan browsing.
+
+**[VOY-1186](https://github.com/nousresearch/paperclip/issues/1186) — assigned to CTO for technical assessment.**
+
+### 🔵 Memory & Knowledge (Workstream B — v0.4.0-beta)
 
 We want a stronger memory and knowledge surface for companies, agents, and projects. That includes durable memory, better recall of prior decisions and context, and a clearer path for knowledge-style capabilities without turning Paperclip into a generic chat app.
+
+**Key deliverables**: Agent-level memory store (key-value, time-scoped, searchable), company-level knowledge base, automatic context injection, memory browser UI.
+
+**[VOY-1187](https://github.com/nousresearch/paperclip/issues/1187) — assigned to Staff Engineer for memory store evaluation.**
+
+### 🔵 CEO Chat & Board Interface (Workstream C — v0.4.0)
+
+We want a lighter-weight way to talk to leadership agents, but those conversations should still resolve to real work objects like plans, issues, approvals, or decisions. This should improve interaction without changing the core task-and-comments model.
+
+**Key deliverables**: Surface board-chat.ts in the UI, chat-to-work resolution flow, integration with plans and memory.
+
+**[VOY-1188](https://github.com/nousresearch/paperclip/issues/1188)**
+
+> **v0.4.0 boundary**: These three workstreams are the entire scope of v0.4.0. MAXIMIZER MODE, Work Queues, and Self-Organization are explicitly deferred to v0.5.0.
+
+---
 
 ### ⚪ Enforced Outcomes
 
@@ -67,10 +97,6 @@ Paperclip should get stricter about what counts as finished work. Tasks, approva
 ### ⚪ MAXIMIZER MODE
 
 This is the direction for higher-autonomy execution: more aggressive delegation, deeper follow-through, and stronger operating loops with clear budgets, visibility, and governance. The point is not hidden autonomy; the point is more output per human supervisor.
-
-### ⚪ Deep Planning
-
-Some work needs more than a task description before execution starts. Deeper planning means stronger issue documents, revisionable plans, and clearer review loops for strategy-heavy work before agents begin execution.
 
 ### ⚪ Work Queues
 
@@ -83,10 +109,6 @@ As companies grow, agents should be able to propose useful structural changes su
 ### ⚪ Automatic Organizational Learning
 
 Paperclip should get better at turning completed work into reusable organizational knowledge. That includes capturing playbooks, recurring fixes, and decision patterns so future work starts from what the company has already learned.
-
-### ⚪ CEO Chat
-
-We want a lighter-weight way to talk to leadership agents, but those conversations should still resolve to real work objects like plans, issues, approvals, or decisions. This should improve interaction without changing the core task-and-comments model.
 
 ### ⚪ Cloud deployments
 

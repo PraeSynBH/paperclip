@@ -267,6 +267,7 @@ export function buildPrompt(
   });
   const paperclipTaskMarkdown = cfgString(context.paperclipTaskMarkdown)?.trim() || "";
   const sessionHandoffMarkdown = cfgString(context.paperclipSessionHandoffMarkdown)?.trim() || "";
+  const memoryPreamble = cfgString(context.paperclipMemoryPreamble)?.trim() || "";
   const wakePayloadJson = stringifyPaperclipWakePayload(context.paperclipWake) || "";
 
   const vars: Record<string, unknown> = {
@@ -289,6 +290,7 @@ export function buildPrompt(
     paperclipWakePrompt: wakePrompt,
     paperclipTaskMarkdown,
     taskContext: paperclipTaskMarkdown,
+    paperclipMemoryPreamble: memoryPreamble,
     paperclipWakeJson: wakePayloadJson,
     wakePayloadJson,
     paperclipApiKeyEnv: "PAPERCLIP_API_KEY",
@@ -299,6 +301,7 @@ export function buildPrompt(
   return joinPromptSections([
     wakePrompt,
     sessionHandoffMarkdown,
+    memoryPreamble,
     paperclipTaskMarkdown,
     rendered,
   ]);

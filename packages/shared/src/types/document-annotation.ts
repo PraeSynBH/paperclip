@@ -206,6 +206,16 @@ export interface PlanReviewInteractionContext {
   resolvedAt: string | null;
 }
 
+export interface ParentPlanReviewContext {
+  sourceIssueId: string;
+  sourceIssueIdentifier: string | null;
+  sourceIssueTitle: string | null;
+  acceptedRevisionId: string | null;
+  acceptedRevisionNumber: number | null;
+  acceptedRevisionBody: string | null;
+  acceptedRevisionBodyTruncated: boolean;
+}
+
 export interface PlanReviewContext {
   documentKey: "plan";
   issueId: string;
@@ -213,6 +223,9 @@ export interface PlanReviewContext {
   latestRevisionNumber: number | null;
   threads: PlanReviewContextThread[];
   interaction: PlanReviewInteractionContext | null;
+  acceptedRevisionBody: string | null;
+  acceptedRevisionBodyTruncated: boolean;
+  parentPlanContext: ParentPlanReviewContext | null;
   totals: {
     openThreadCount: number;
     includedThreadCount: number;

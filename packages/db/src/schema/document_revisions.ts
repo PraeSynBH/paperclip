@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, timestamp, index, uniqueIndex, jsonb } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { agents } from "./agents.js";
 import { documents } from "./documents.js";
@@ -14,6 +14,7 @@ export const documentRevisions = pgTable(
     title: text("title"),
     format: text("format").notNull().default("markdown"),
     body: text("body").notNull(),
+    planMetadata: jsonb("plan_metadata").$type<Record<string, unknown> | null>(),
     changeSummary: text("change_summary"),
     createdByAgentId: uuid("created_by_agent_id").references(() => agents.id, { onDelete: "set null" }),
     createdByUserId: text("created_by_user_id"),

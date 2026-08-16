@@ -526,6 +526,89 @@ Rev 2 (2026-03-21 10:15) — changed: budgetMonthlyCents
 Rev 1 (2026-03-20 16:00) — initial configuration
 ```
 
+## Plan Management
+
+Plans are structured documents attached to an issue under the `plan` document key. They support sections, milestones, revision history, diffs, and review gates. When the user wants to plan work, create or update the plan document, then optionally raise a review gate for the current revision.
+
+```bash
+# Create/update a plan document (upserts; creates a new revision)
+curl -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/plan" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Launch Plan",
+    "format": "markdown",
+    "body": "# Launch Plan\n\n## Milestones\n\n### M1: Setup\n- ...\n",
+    "planMetadata": {
+      "status": "in_review",
+      "version": 1,
+      "sections": [
+        {"id": "sec-1", "title": "Overview", "body": "What we are building", "order": 1}
+      ],
+      "milestones": [
+        {"id": "m1", "title": "Setup", "status": "pending", "order": 1, "acceptanceCriteria": ["..." ]}
+      ]
+    }
+  }'
+
+# Get the plan document
+curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/plan"
+
+# List plan revisions
+curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/plan/revisions"
+
+# Diff a revision against the previous one
+curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/plan/revisions/{revId}/diff"
+```
+
+**Review gates** let the board approve or reject a plan revision before work starts:
+
+```bash
+# Create a review gate on the current plan revision
+curl -sS -X POST "$PAPERCLIP_API_URL/api/issues/{issueId}/plan/gates" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Approve launch plan",
+    "acceptanceCriteria": ["All milestones have owners", "Budget within limits"]
+  }'
+
+# List gates
+curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/plan/gates"
+
+# Approve / reject a gate (approve auto-supersedes other open gates)
+curl -sS -X PATCH "$PAPERCLIP_API_URL/api/issues/{issueId}/plan/gates/{gateId}" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "approved", "decisionNote": "Approved by board"}'
+```
+
+When the user asks for a plan, present it conversationally: summarize the milestones, note the current plan status, and ask whether they want to approve it via a review gate.
+
+## Memory Operations
+
+Paperclip has a company-scoped memory store (pgvector-backed). The board assistant can capture notes, query past context, and manage what the company remembers.
+
+```bash
+# Capture a fact into memory (auto-capture, 30d TTL)
+curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/capture" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "text": "Company decided to focus on the European market in Q3.",
+    "scope": {"companyId": "$PAPERCLIP_COMPANY_ID"}
+  }'
+
+# Query memory (semantic + full-text hybrid)
+curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/query?q=market+focus"
+
+# List recent memory records
+curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/records?limit=20"
+
+# Forget a record
+curl -sS -X DELETE "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/records" \
+  -H "Content-Type: application/json" \
+  -d '{"handles": [{"providerKey": "builtin_pgvector", "providerRecordId": "{recordId}"}]}'
+```
+
+**When to use memory:** before answering a question that references prior decisions, goals, or context ("what did we decide about X?"), query memory first. After major decisions, capture a short summary so future sessions can recall it. Present query results as a short list with the record text and recency.
+
 ## Decision Log
 
 Maintain a decision log for session continuity. Log major decisions — not every interaction.
@@ -604,17 +687,33 @@ All web UI links must include the company prefix:
 | Add comment | POST | `/api/issues/:id/comments` |
 | Issue documents | GET | `/api/issues/:id/documents` |
 | Get document | GET | `/api/issues/:id/documents/:key` |
-| Create/update doc | PUT | `/api/issues/:id/documents/:key` |
-| Work products | GET | `/api/issues/:id/work-products` |
-| List approvals | GET | `/api/companies/:companyId/approvals` |
-| Approve | POST | `/api/approvals/:id/approve` |
-| Reject | POST | `/api/approvals/:id/reject` |
-| Request revision | POST | `/api/approvals/:id/request-revision` |
-| Cost summary | GET | `/api/companies/:companyId/costs/summary` |
-| Costs by agent | GET | `/api/companies/:companyId/costs/by-agent` |
-| Costs by project | GET | `/api/companies/:companyId/costs/by-project` |
-| Adapter docs | GET | `/llms/agent-configuration.txt` |
-| Adapter detail | GET | `/llms/agent-configuration/:adapterType.txt` |
-| Agent icons | GET | `/llms/agent-icons.txt` |
-| Set instructions | PATCH | `/api/agents/:id/instructions-path` |
-| Search issues | GET | `/api/companies/:companyId/issues?q=term` |
+|| Create/update doc | PUT | `/api/issues/:id/documents/:key` |
+|| Work products | GET | `/api/issues/:id/work-products` |
+|| List approvals | GET | `/api/companies/:companyId/approvals` |
+|| Approve | POST | `/api/approvals/:id/approve` |
+|| Reject | POST | `/api/approvals/:id/reject` |
+|| Request revision | POST | `/api/approvals/:id/request-revision` |
+|| Cost summary | GET | `/api/companies/:companyId/costs/summary` |
+|| Costs by agent | GET | `/api/companies/:companyId/costs/by-agent` |
+|| Costs by project | GET | `/api/companies/:companyId/costs/by-project` |
+|| Adapter docs | GET | `/llms/agent-configuration.txt` |
+|| Adapter detail | GET | `/llms/agent-configuration/:adapterType.txt` |
+|| Agent icons | GET | `/llms/agent-icons.txt` |
+|| Set instructions | PATCH | `/api/agents/:id/instructions-path` |
+|| Memory: Capture | POST | `/api/companies/:companyId/memory/capture` |
+|| Memory: Query | GET | `/api/companies/:companyId/memory/query?q=...` |
+|| Memory: List records | GET | `/api/companies/:companyId/memory/records` |
+|| Memory: Get record | GET | `/api/companies/:companyId/memory/records/:id` |
+|| Memory: Forget | DELETE | `/api/companies/:companyId/memory/records` |
+|| Memory: Bindings | GET | `/api/companies/:companyId/memory/bindings` |
+|| Memory: Operations | GET | `/api/companies/:companyId/memory/operations` |
+|| Plan: Get document | GET | `/api/issues/:id/documents/plan` |
+|| Plan: Create/update doc | PUT | `/api/issues/:id/documents/plan` |
+|| Plan: List revisions | GET | `/api/issues/:id/documents/plan/revisions` |
+|| Plan: Revision diff | GET | `/api/issues/:id/documents/plan/revisions/:revId/diff` |
+|| Plan: Create review gate | POST | `/api/issues/:id/plan/gates` |
+|| Plan: List gates | GET | `/api/issues/:id/plan/gates` |
+|| Plan: Resolve gate | PATCH | `/api/issues/:id/plan/gates/:gateId` |
+|| Accepted decompositions | GET | `/api/issues/:id/accepted-plan-decompositions` |
+|| Agent memory config | GET | `/api/companies/:companyId/memory/agents/:agentId/config` |
+|| Search issues | GET | `/api/companies/:companyId/issues?q=term` |

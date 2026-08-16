@@ -58,6 +58,7 @@ function mapIssueDocumentRow(
     lockedByAgentId: string | null;
     lockedByUserId: string | null;
     sourceTrust: typeof documents.$inferSelect.sourceTrust;
+    planMetadata: Record<string, unknown> | null;
     createdAt: Date;
     updatedAt: Date;
   },
@@ -81,6 +82,7 @@ function mapIssueDocumentRow(
     lockedByAgentId: row.lockedByAgentId,
     lockedByUserId: row.lockedByUserId,
     sourceTrust: row.sourceTrust ?? null,
+    planMetadata: row.planMetadata ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -104,6 +106,7 @@ const issueDocumentSelect = {
   lockedByAgentId: documents.lockedByAgentId,
   lockedByUserId: documents.lockedByUserId,
   sourceTrust: documents.sourceTrust,
+  planMetadata: documents.planMetadata,
   createdAt: documents.createdAt,
   updatedAt: documents.updatedAt,
 };
@@ -207,6 +210,7 @@ export function documentService(db: Db) {
       createdByRunId?: string | null;
       sourceTrust?: typeof documents.$inferInsert.sourceTrust;
       lockedDocumentStrategy?: "conflict" | "create_new_document";
+      planMetadata?: Record<string, unknown> | null;
     }) => {
       const key = normalizeDocumentKey(input.key);
       const issue = await db
@@ -274,6 +278,7 @@ export function documentService(db: Db) {
                     lockedByAgentId: null,
                     lockedByUserId: null,
                     sourceTrust: input.sourceTrust ?? null,
+                    planMetadata: input.planMetadata ?? null,
                     createdAt: now,
                     updatedAt: now,
                   })
@@ -288,6 +293,7 @@ export function documentService(db: Db) {
                     title: input.title ?? null,
                     format: input.format,
                     body: input.body,
+                    planMetadata: input.planMetadata ?? null,
                     changeSummary: input.changeSummary ?? null,
                     createdByAgentId: input.createdByAgentId ?? null,
                     createdByUserId: input.createdByUserId ?? null,
@@ -368,6 +374,7 @@ export function documentService(db: Db) {
                 title: input.title ?? null,
                 format: input.format,
                 body: input.body,
+                planMetadata: input.planMetadata ?? null,
                 changeSummary: input.changeSummary ?? null,
                 createdByAgentId: input.createdByAgentId ?? null,
                 createdByUserId: input.createdByUserId ?? null,
@@ -382,6 +389,7 @@ export function documentService(db: Db) {
                 title: input.title ?? null,
                 format: input.format,
                 latestBody: input.body,
+                planMetadata: input.planMetadata ?? null,
                 latestRevisionId: revision.id,
                 latestRevisionNumber: nextRevisionNumber,
                 updatedByAgentId: input.createdByAgentId ?? null,
@@ -437,6 +445,7 @@ export function documentService(db: Db) {
               lockedByAgentId: null,
               lockedByUserId: null,
               sourceTrust: input.sourceTrust ?? null,
+              planMetadata: input.planMetadata ?? null,
               createdAt: now,
               updatedAt: now,
             })
@@ -451,6 +460,7 @@ export function documentService(db: Db) {
               title: input.title ?? null,
               format: input.format,
               body: input.body,
+              planMetadata: input.planMetadata ?? null,
               changeSummary: input.changeSummary ?? null,
               createdByAgentId: input.createdByAgentId ?? null,
               createdByUserId: input.createdByUserId ?? null,
@@ -741,5 +751,289 @@ export function documentService(db: Db) {
         };
       });
     },
+
+    // ─── Plan-Specific Methods ────────────────────────────────────────────
+
+    /**
+     * Upsert a plan document with structured metadata (sections, milestones).
+     * Creates or updates both the document body and plan_metadata in one transaction.
+     */
+    upsertPlanDocument: async (input: {
+      issueId: string;
+      title?: string | null;
+      body: string;
+      changeSummary?: string | null;
+      baseRevisionId?: string | null;
+      planMetadata?: Record<string, unknown> | null;
+      createdByAgentId?: string | null;
+      createdByUserId?: string | null;
+      createdByRunId?: string | null;
+      sourceTrust?: typeof documents.$inferInsert.sourceTrust;
+    }) => {
+      const key = normalizeDocumentKey("plan");
+      const issue = await db
+        .select({ id: issues.id, companyId: issues.companyId })
+        .from(issues)
+        .where(eq(issues.id, input.issueId))
+        .then((rows) => rows[0] ?? null);
+      if (!issue) throw notFound("Issue not found");
+
+      return db.transaction(async (tx) => {
+        const now = new Date();
+        const existing = await tx
+          .select(issueDocumentSelect)
+          .from(issueDocuments)
+          .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
+          .where(and(eq(issueDocuments.issueId, issue.id), eq(issueDocuments.key, key)))
+          .then((rows) => rows[0] ?? null);
+
+        if (existing) {
+          if (existing.lockedAt) {
+            throw conflict("Document is locked", {
+              key: existing.key,
+              documentId: existing.id,
+              lockedAt: existing.lockedAt,
+            });
+          }
+
+          if (!input.baseRevisionId) {
+            throw conflict("Document update requires baseRevisionId", {
+              currentRevisionId: existing.latestRevisionId,
+            });
+          }
+          if (input.baseRevisionId !== existing.latestRevisionId) {
+            throw conflict("Document was updated by someone else", {
+              currentRevisionId: existing.latestRevisionId,
+            });
+          }
+
+          const nextRevisionNumber = existing.latestRevisionNumber + 1;
+          const [revision] = await tx
+            .insert(documentRevisions)
+            .values({
+              companyId: issue.companyId,
+              documentId: existing.id,
+              revisionNumber: nextRevisionNumber,
+              title: input.title ?? null,
+              format: "markdown",
+              body: input.body,
+              planMetadata: input.planMetadata ?? null,
+              changeSummary: input.changeSummary ?? null,
+              createdByAgentId: input.createdByAgentId ?? null,
+              createdByUserId: input.createdByUserId ?? null,
+              createdByRunId: input.createdByRunId ?? null,
+              createdAt: now,
+            })
+            .returning();
+
+          await tx
+            .update(documents)
+            .set({
+              title: input.title ?? null,
+              format: "markdown",
+              latestBody: input.body,
+              planMetadata: input.planMetadata ?? null,
+              latestRevisionId: revision.id,
+              latestRevisionNumber: nextRevisionNumber,
+              updatedByAgentId: input.createdByAgentId ?? null,
+              updatedByUserId: input.createdByUserId ?? null,
+              sourceTrust: input.sourceTrust ?? null,
+              updatedAt: now,
+            })
+            .where(eq(documents.id, existing.id));
+
+          await tx
+            .update(issueDocuments)
+            .set({ updatedAt: now })
+            .where(eq(issueDocuments.documentId, existing.id));
+
+          return {
+            created: false as const,
+            document: {
+              ...existing,
+              title: input.title ?? null,
+              body: input.body,
+              planMetadata: input.planMetadata ?? null,
+              latestRevisionId: revision.id,
+              latestRevisionNumber: nextRevisionNumber,
+              updatedByAgentId: input.createdByAgentId ?? null,
+              updatedByUserId: input.createdByUserId ?? null,
+              updatedAt: now,
+            },
+          };
+        }
+
+        if (input.baseRevisionId) {
+          throw conflict("Document does not exist yet", { key });
+        }
+
+        const [document] = await tx
+          .insert(documents)
+          .values({
+            companyId: issue.companyId,
+            title: input.title ?? null,
+            format: "markdown",
+            latestBody: input.body,
+            planMetadata: input.planMetadata ?? null,
+            latestRevisionId: null,
+            latestRevisionNumber: 1,
+            createdByAgentId: input.createdByAgentId ?? null,
+            createdByUserId: input.createdByUserId ?? null,
+            updatedByAgentId: input.createdByAgentId ?? null,
+            updatedByUserId: input.createdByUserId ?? null,
+            lockedAt: null,
+            lockedByAgentId: null,
+            lockedByUserId: null,
+            sourceTrust: input.sourceTrust ?? null,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning();
+
+        const [revision] = await tx
+          .insert(documentRevisions)
+          .values({
+            companyId: issue.companyId,
+            documentId: document.id,
+            revisionNumber: 1,
+            title: input.title ?? null,
+            format: "markdown",
+            body: input.body,
+            planMetadata: input.planMetadata ?? null,
+            changeSummary: input.changeSummary ?? null,
+            createdByAgentId: input.createdByAgentId ?? null,
+            createdByUserId: input.createdByUserId ?? null,
+            createdByRunId: input.createdByRunId ?? null,
+            createdAt: now,
+          })
+          .returning();
+
+        await tx
+          .update(documents)
+          .set({ latestRevisionId: revision.id })
+          .where(eq(documents.id, document.id));
+
+        await tx.insert(issueDocuments).values({
+          companyId: issue.companyId,
+          issueId: issue.id,
+          documentId: document.id,
+          key,
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        return {
+          created: true as const,
+          document: {
+            id: document.id,
+            companyId: issue.companyId,
+            issueId: issue.id,
+            key,
+            title: document.title,
+            body: document.latestBody,
+            planMetadata: document.planMetadata ?? null,
+            latestRevisionId: revision.id,
+            latestRevisionNumber: 1,
+            createdByAgentId: document.createdByAgentId,
+            createdByUserId: document.createdByUserId,
+            updatedByAgentId: document.updatedByAgentId,
+            updatedByUserId: document.updatedByUserId,
+            lockedAt: document.lockedAt,
+            lockedByAgentId: document.lockedByAgentId,
+            lockedByUserId: document.lockedByUserId,
+            sourceTrust: document.sourceTrust ?? null,
+            createdAt: document.createdAt,
+            updatedAt: document.updatedAt,
+          },
+        };
+      });
+    },
+
+    /**
+     * List all revisions for a plan document (key="plan").
+     */
+    listPlanDocumentRevisions: async (issueId: string) => {
+      return listIssueDocumentRevisions(db, issueId, "plan");
+    },
+
+    /**
+     * Get the plan document with metadata for an issue.
+     */
+    getPlanDocument: async (issueId: string) => {
+      const row = await getIssueDocumentByKey(db, issueId, "plan");
+      return row;
+    },
   };
+}
+
+// ─── Standalone helpers for plan document operations ───────────────────────
+
+/**
+ * Fetch raw document revision pairs for diff computation.
+ */
+export async function getRevisionPair(
+  db: Db,
+  revisionId: string,
+  againstRevisionId: string,
+) {
+  const [revision, againstRevision] = await Promise.all([
+    db
+      .select()
+      .from(documentRevisions)
+      .where(eq(documentRevisions.id, revisionId))
+      .then((rows) => rows[0] ?? null),
+    db
+      .select()
+      .from(documentRevisions)
+      .where(eq(documentRevisions.id, againstRevisionId))
+      .then((rows) => rows[0] ?? null),
+  ]);
+  if (!revision) throw notFound("Revision not found");
+  if (!againstRevision) throw notFound("Against revision not found");
+  return { revision, againstRevision };
+}
+
+export async function listIssueDocumentRevisions(
+  db: Db,
+  issueId: string,
+  key: string,
+) {
+  const normalizedKey = normalizeDocumentKey(key);
+  return db
+    .select({
+      id: documentRevisions.id,
+      companyId: documentRevisions.companyId,
+      documentId: documentRevisions.documentId,
+      issueId: issueDocuments.issueId,
+      key: issueDocuments.key,
+      revisionNumber: documentRevisions.revisionNumber,
+      title: documentRevisions.title,
+      format: documentRevisions.format,
+      body: documentRevisions.body,
+      planMetadata: documentRevisions.planMetadata,
+      changeSummary: documentRevisions.changeSummary,
+      createdByAgentId: documentRevisions.createdByAgentId,
+      createdByUserId: documentRevisions.createdByUserId,
+      createdAt: documentRevisions.createdAt,
+    })
+    .from(issueDocuments)
+    .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
+    .innerJoin(documentRevisions, eq(documentRevisions.documentId, documents.id))
+    .where(and(eq(issueDocuments.issueId, issueId), eq(issueDocuments.key, normalizedKey)))
+    .orderBy(desc(documentRevisions.revisionNumber));
+}
+
+export async function getIssueDocumentByKey(
+  db: Db,
+  issueId: string,
+  key: string,
+) {
+  const normalizedKey = normalizeDocumentKey(key);
+  const row = await db
+    .select(issueDocumentSelect)
+    .from(issueDocuments)
+    .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
+    .where(and(eq(issueDocuments.issueId, issueId), eq(issueDocuments.key, normalizedKey)))
+    .then((rows) => rows[0] ?? null);
+  return row ? mapIssueDocumentRow(row, true) : null;
 }

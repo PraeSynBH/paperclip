@@ -1045,6 +1045,7 @@ export const upsertIssueDocumentSchema = z.object({
   body: multilineTextSchema.pipe(z.string().max(524288)),
   changeSummary: z.string().trim().max(500).nullable().optional(),
   baseRevisionId: z.string().uuid().nullable().optional(),
+  planMetadata: z.record(z.unknown()).nullable().optional(),
 });
 
 export const restoreIssueDocumentRevisionSchema = z.object({});

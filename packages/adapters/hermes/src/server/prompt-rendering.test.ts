@@ -273,3 +273,38 @@ test("preserves custom prompt templates while exposing runtime and wake variable
   expect(prompt).toContain("Issue description:\n```text\nUse the wake payload as runtime authority.\n```");
   expect(prompt).not.toContain("Paperclip runtime identity:");
 });
+
+test("injects memory preamble between session handoff and task markdown when present", () => {
+  const memoryText = "=== Context from Past Work ===\n\n- From issue VOY-123: \"Prior decision about authentication.\"\n- Regarding project Alpha: \"Historical context for the deployment.\"\n\n=== End Context ===";
+  const prompt = buildPrompt(baseContext({
+    paperclipMemoryPreamble: memoryText,
+  }), {});
+
+  expect(prompt).toContain("=== Context from Past Work ===");
+  expect(prompt).toContain("Prior decision about authentication.");
+  expect(prompt).toContain("Historical context for the deployment.");
+  expect(prompt).toContain("=== End Context ===");
+  // Should appear after wake payload/session handoff, before task markdown
+  expect(prompt.indexOf("=== Context from Past Work ===")).toBeLessThan(
+    prompt.indexOf("Paperclip task context:"),
+  );
+});
+
+test("exposes paperclipMemoryPreamble in custom prompt template variables", () => {
+  const memoryText = "Custom preamble for template test.";
+  const prompt = buildPrompt(baseContext({
+    paperclipMemoryPreamble: memoryText,
+  }), {
+    paperclipApiUrl: "http://paperclip.local/api",
+    promptTemplate: "preamble={{paperclipMemoryPreamble}}",
+  });
+
+  expect(prompt).toContain("preamble=Custom preamble for template test.");
+});
+
+test("does not inject memory preamble when context is absent", () => {
+  const prompt = buildPrompt(baseContext(), {});
+
+  expect(prompt).not.toContain("=== Context from Past Work ===");
+  expect(prompt).not.toContain("=== End Context ===");
+});

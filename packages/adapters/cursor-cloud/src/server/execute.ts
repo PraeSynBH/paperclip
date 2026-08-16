@@ -407,7 +407,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     renderedPrompt,
   ]);
   const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
-  const finalPrompt = joinPromptSections([prompt, sessionHandoffNote]);
+  const memoryPreambleNote = asString(context.paperclipMemoryPreamble, "").trim();
+  const finalPrompt = joinPromptSections([prompt, sessionHandoffNote, memoryPreambleNote]);
 
   const agentOptions = buildAgentOptions({
     apiKey,
