@@ -5,6 +5,43 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-15 — Heartbeat: Committed 30-file documentation sync (1cb3953775)
+
+### What was done
+
+1. **Committed the accumulated documentation work** as `1cb3953775` (30 files, +1902/-14):
+   - **Status CAS documentation** added to `docs/api/issues.md` — `expectedStatus` / `expectedStatuses` / `allowTerminalReopen`, 409 Conflict semantics. Verified against `server/src/routes/issues.ts` (409 sites + `allowTerminalReopen` opt-in).
+   - **Hermes adapter docs** — new `docs/adapters/hermes-local.md` and `docs/adapters/hermes-gateway.md`. Verified adapter type keys exist in `packages/shared/src/constants.ts` (`hermes_local`, `hermes_gateway`) and `packages/adapters/hermes/` has both `cli/` and `gateway/` entrypoints.
+   - **Version frontmatter** added to 11 existing docs pages (version + last_updated).
+   - **Curated releases page** `docs/releases.md` — Paperclip v2026.525.0 through v2026.722.0.
+   - **docs.json navigation** — added `releases` page to Get Started, Hermes adapter pages to Adapters tab.
+   - **Support KB committed** — 4 KB articles, 5 feature assessments (CAS, Task Watchdogs, Ask Work Mode, Skills Store, Company Artifacts), PostHog triage SOP, v0.2.10 + v0.2.12 release notes.
+
+2. **Verified docs against live code** before committing:
+   - CAS: server returns 409 with `details.actualStatus`; `allowTerminalReopen` gate present at route level
+   - Hermes adapters: both type keys in shared constants; adapter package has cli + gateway entrypoints
+
+### Diff assessment (since last commit)
+
+- No new commits landed since `0668ffb98f` (docs v0.2.10). Working tree had only my in-flight documentation changes — now committed.
+- Remaining uncommitted working tree changes are engineering work (Deep Planning / Memory / onboarding assets / plans) — not documentation, and not yet released; no docs action per the "no docs for unreleased features" rule.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog: Sandbox Execution, Workspace File Viewer, Inline Annotations, Skills CLI, Routine Secrets) |
+| Working tree docs changes | 0 (all committed) |
+| Release notes currency | Up to date through v2026.722.0 (Paperclip) + v0.2.12 (Voyonder) |
+
+### Next triggers to watch for
+
+- PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
+- Deep Planning / Memory v0.4.0 phases unblocking → support case assessments needed at release
+- COO request for documentation health report
+
 ## 2026-08-15 — Documentation Health Report
 
 ### What was done
