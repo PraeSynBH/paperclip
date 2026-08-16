@@ -234,18 +234,28 @@ export function memoryBindingService(db: Db) {
   ): Promise<BindingRow> {
     const parsed = createMemoryBindingSchema.parse(input);
 
-    const rows = await db
-      .insert(memoryBindings)
-      .values({
-        companyId,
-        key: parsed.key,
-        providerType: parsed.providerType,
-        configJson: parsed.configJson as Record<string, unknown>,
-        capabilitiesJson: parsed.capabilitiesJson as Record<string, unknown>,
-        enabled: parsed.enabled,
-      })
-      .returning()
-      .then(normalizeRows);
+    let rows: BindingRow[];
+    try {
+      rows = await db
+        .insert(memoryBindings)
+        .values({
+          companyId,
+          key: parsed.key,
+          providerType: parsed.providerType,
+          configJson: parsed.configJson as Record<string, unknown>,
+          capabilitiesJson: parsed.capabilitiesJson as Record<string, unknown>,
+          enabled: parsed.enabled,
+        })
+        .returning()
+        .then(normalizeRows);
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        throw conflict(
+          `Memory binding with key "${parsed.key}" already exists for this company`,
+        );
+      }
+      throw err;
+    }
 
     return rows[0];
   }
@@ -307,16 +317,17 @@ export function memoryBindingService(db: Db) {
         ),
       );
 
-    const result = await db
+    const deleted = await db
       .delete(memoryBindings)
       .where(
         and(
           eq(memoryBindings.id, bindingId),
           eq(memoryBindings.companyId, companyId),
         ),
-      );
+      )
+      .returning({ id: memoryBindings.id });
 
-    if (result.length === 0) {
+    if (deleted.length === 0) {
       throw notFound(`Memory binding ${bindingId} not found`);
     }
   }
@@ -366,17 +377,27 @@ export function memoryBindingService(db: Db) {
     // Verify binding exists and belongs to company
     await getBinding(companyId, parsed.bindingId);
 
-    const rows = await db
-      .insert(memoryBindingTargets)
-      .values({
-        companyId,
-        targetType: parsed.targetType,
-        targetId: parsed.targetId,
-        bindingId: parsed.bindingId,
-        priority: parsed.priority,
-      })
-      .returning()
-      .then(normalizeRows);
+    let rows: BindingTargetRow[];
+    try {
+      rows = await db
+        .insert(memoryBindingTargets)
+        .values({
+          companyId,
+          targetType: parsed.targetType,
+          targetId: parsed.targetId,
+          bindingId: parsed.bindingId,
+          priority: parsed.priority,
+        })
+        .returning()
+        .then(normalizeRows);
+    } catch (err) {
+      if (isUniqueConstraintError(err)) {
+        throw conflict(
+          `Memory binding target for ${parsed.targetType} ${parsed.targetId} already exists`,
+        );
+      }
+      throw err;
+    }
 
     return rows[0];
   }
@@ -385,16 +406,17 @@ export function memoryBindingService(db: Db) {
     companyId: string,
     targetId: string,
   ): Promise<void> {
-    const result = await db
+    const deleted = await db
       .delete(memoryBindingTargets)
       .where(
         and(
           eq(memoryBindingTargets.id, targetId),
           eq(memoryBindingTargets.companyId, companyId),
         ),
-      );
+      )
+      .returning({ id: memoryBindingTargets.id });
 
-    if (result.length === 0) {
+    if (deleted.length === 0) {
       throw notFound(`Memory binding target ${targetId} not found`);
     }
   }
@@ -454,6 +476,15 @@ export function memoryBindingService(db: Db) {
 }
 
 // ─── Internal Helpers ───────────────────────────────────────────────────────
+
+/**
+ * Detect whether a Postgres error is a unique-constraint violation (code 23505).
+ */
+function isUniqueConstraintError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const err = error as { code?: string };
+  return err.code === "23505";
+}
 
 function normalizeRows<T>(rows: T[]): T[] {
   return rows as T[];

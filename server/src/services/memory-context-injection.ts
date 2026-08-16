@@ -63,16 +63,39 @@ export function buildMemoryPreamble(snippets: MemorySnippet[]): string {
 
   for (let i = 0; i < snippets.length; i++) {
     const s = snippets[i];
-    const scoreLine = s.score !== undefined ? ` [relevance: ${(s.score * 100).toFixed(0)}%]` : "";
+
+    // Handle missing/empty text gracefully
+    const text =
+      typeof s.text === "string" && s.text.length > 0
+        ? s.text
+        : s.summary && typeof s.summary === "string"
+          ? s.summary
+          : "(empty memory)";
+
+    // Safely render score, guarding against NaN/Infinity
+    let scoreLine = "";
+    if (s.score !== undefined && s.score !== null) {
+      const pct = Math.round(s.score * 100);
+      if (Number.isFinite(pct)) {
+        scoreLine = ` [relevance: ${pct}%]`;
+      }
+    }
+
+    // Safely render source reference, truncating issueId to 8 chars
     const sourceLine = s.source
       ? ` (source: ${s.source.kind}${s.source.issueId ? ` #${s.source.issueId.slice(0, 8)}` : ""})`
       : "";
-    const summaryLine = s.summary ? `\n> ${s.summary}` : "";
+
+    // Safely render summary with blockquote formatting
+    const summaryLine =
+      s.summary && typeof s.summary === "string" && s.summary.trim().length > 0
+        ? `\n> ${s.summary.trim()}`
+        : "";
 
     lines.push(`- **Memory ${i + 1}**${scoreLine}${sourceLine}:`);
     // Truncate the text to a reasonable length for preamble
     const truncatedText =
-      s.text.length > 500 ? s.text.slice(0, 500).trimEnd() + "…" : s.text;
+      text.length > 500 ? text.slice(0, 500).trimEnd() + "…" : text;
     lines.push(`  ${truncatedText}${summaryLine}`);
     lines.push("");
   }
@@ -152,16 +175,21 @@ export async function warmUpAgentMemory(
   const topK = config?.topK ?? DEFAULT_TOP_K;
   const timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
+  // Use AbortController to cancel the warm-up if timeout fires
+  const controller = new AbortController();
+  const signal = controller.signal;
+
   // Wrap everything in a timeout
   try {
     const result = await Promise.race([
-      doWarmUp(db, companyId, agentId, scope, topK),
-      timeout(timeoutMs),
+      doWarmUp(db, companyId, agentId, scope, topK, signal),
+      timeout(timeoutMs, controller),
     ]);
 
     const latencyMs = Date.now() - start;
 
     if (result === "timeout") {
+      // doWarmUp was cancelled — signal is already aborted by timeout()
       logger.warn(
         { companyId, agentId, latencyMs },
         "Memory warm-up timed out, continuing without context",
@@ -192,6 +220,21 @@ export async function warmUpAgentMemory(
         snippetCount: 0,
         latencyMs,
         status: "skipped_no_config",
+      };
+    }
+
+    // Signal may have been aborted by timeout during processing — double-check
+    if (signal.aborted) {
+      logger.warn(
+        { companyId, agentId, latencyMs },
+        "Memory warm-up completed after timeout, discarding result",
+      );
+      return {
+        preamble: null,
+        snippetCount: 0,
+        latencyMs,
+        status: "error",
+        error: "timeout",
       };
     }
 
@@ -240,10 +283,13 @@ export async function warmUpCompanyKnowledge(
   const timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const limit = config?.limit ?? 3;
 
+  const controller = new AbortController();
+  const signal = controller.signal;
+
   try {
     const result = await Promise.race([
-      doKnowledgeWarmUp(db, companyId, contextScope, limit),
-      timeout(timeoutMs),
+      doKnowledgeWarmUp(db, companyId, contextScope, limit, signal),
+      timeout(timeoutMs, controller),
     ]);
 
     const latencyMs = Date.now() - start;
@@ -268,6 +314,20 @@ export async function warmUpCompanyKnowledge(
         articleCount: 0,
         latencyMs,
         status: "skipped_no_knowledge",
+      };
+    }
+
+    if (signal.aborted) {
+      logger.warn(
+        { companyId, latencyMs },
+        "Knowledge warm-up completed after timeout, discarding result",
+      );
+      return {
+        preamble: null,
+        articleCount: 0,
+        latencyMs,
+        status: "error",
+        error: "timeout",
       };
     }
 
@@ -305,7 +365,11 @@ async function doWarmUp(
   agentId: string,
   scope: Partial<MemoryScope> & { companyId: string },
   topK: number,
+  signal: AbortSignal,
 ): Promise<{ bundle: MemoryContextBundle; bindingKey: string } | null> {
+  // Check for cancellation before each async step
+  if (signal.aborted) return null;
+
   // Resolve the active binding for the agent
   const bindingSvc = memoryBindingService(db);
   const resolved = await bindingSvc.findActiveBinding(companyId, agentId);
@@ -314,15 +378,16 @@ async function doWarmUp(
     return null;
   }
 
+  if (signal.aborted) return null;
+
   const bindingKey = resolved.binding.key;
 
   // Check if the resolved binding uses the built-in pgvector adapter
-  // (or could be a plugin — but for now we only have the built-in)
   if (resolved.binding.providerType !== "builtin_pgvector") {
-    // For plugin providers, we would delegate to the plugin's memory adapter
-    // For now, skip since only the built-in is available
     return null;
   }
+
+  if (signal.aborted) return null;
 
   // Build the memory scope for the query
   const memoryScope: MemoryScope = {
@@ -336,14 +401,10 @@ async function doWarmUp(
   // Use the built-in adapter to query for relevant context
   const adapter = builtinPgvectorAdapter(db);
 
-  // We need a query string to find relevant context.
-  // For the preamble warm-up, we fetch recent high-importance memories
-  // scoped to this agent. In a more advanced implementation, we could
-  // use the issue title/description as the query.
   const bundle = await adapter.query({
     bindingKey,
     scope: memoryScope,
-    query: "", // Empty query triggers full-text fallback with broad match
+    query: "", // Empty query returns most recent records (handled by adapter)
     topK,
     intent: "agent_preamble",
   });
@@ -358,12 +419,17 @@ async function doKnowledgeWarmUp(
   companyId: string,
   contextScope: { issueId?: string; projectId?: string; query?: string },
   limit: number,
+  signal: AbortSignal,
 ): Promise<Array<{ id: string; title: string; summary?: string; body: string; score?: number }>> {
+  if (signal.aborted) return [];
+
   // Search published knowledge documents using full-text search
   const searchQuery = contextScope.query ?? "";
 
   if (searchQuery.trim().length === 0) {
     // If no query is provided, fetch the most recently published documents
+    if (signal.aborted) return [];
+
     const rows = await db
       .select({
         id: knowledgeDocuments.id,
@@ -394,8 +460,15 @@ async function doKnowledgeWarmUp(
   const tsQuery = searchQuery
     .split(/\s+/)
     .filter(Boolean)
+    .map((w) => w.replace(/[^\w\-\']/g, '').replace(/'{2,}/g, "'"))
+    .filter((w) => w.length > 0)
     .map((w) => `${w}:*`)
     .join(" & ");
+
+  if (!tsQuery) {
+    // All words stripped — no results
+    return [];
+  }
 
   const rows = await db
     .select({
@@ -432,10 +505,14 @@ async function doKnowledgeWarmUp(
 
 /**
  * Create a promise that resolves to "timeout" after the given duration.
+ * Also aborts the given controller so in-flight work can check for cancellation.
  * Used via Promise.race to enforce a timeout on the warm-up operation.
  */
-function timeout(ms: number): Promise<"timeout"> {
+function timeout(ms: number, controller?: AbortController): Promise<"timeout"> {
   return new Promise((resolve) => {
-    setTimeout(() => resolve("timeout"), ms);
+    setTimeout(() => {
+      controller?.abort();
+      resolve("timeout");
+    }, ms);
   });
 }

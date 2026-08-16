@@ -74,7 +74,9 @@ function makeDb() {
       })),
     })),
     delete: vi.fn(() => ({
-      where: vi.fn().mockResolvedValue([]),
+      where: vi.fn(() => ({
+        returning: vi.fn().mockResolvedValue([]),
+      })),
     })),
     _makeChain: makeChain,
   };
@@ -476,9 +478,11 @@ describe("memoryBindingService", () => {
       const svc = memoryBindingService(db as never);
 
       // Mock two delete calls: first targets, then binding
-      const targetDel = { where: vi.fn().mockResolvedValue([{ id: "t1" }]) };
+      const targetDel = {
+        where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: "t1" }]) }),
+      };
       const bindingDel = {
-        where: vi.fn().mockResolvedValue([{ id: "binding-1" }]),
+        where: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: "binding-1" }]) }),
       };
 
       db.delete
@@ -580,7 +584,7 @@ describe("memoryBindingService", () => {
   describe("deleteTarget", () => {
     it("deletes target within company scope", async () => {
       const svc = memoryBindingService(db as never);
-      const delWhere = vi.fn().mockResolvedValue([{ id: "t1" }]);
+      const delWhere = vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: "t1" }]) });
       db.delete.mockReturnValue({ where: delWhere });
 
       await svc.deleteTarget("company-1", "t1");

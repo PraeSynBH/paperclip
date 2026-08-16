@@ -119,7 +119,8 @@ export function builtinPgvectorAdapter(
    */
   async function logOperation(input: {
     companyId: string;
-    bindingId: string;
+    bindingId: string | null;
+    providerKey?: string;
     operationType: string;
     scope: MemoryScope;
     source?: MemorySourceRef;
@@ -133,6 +134,7 @@ export function builtinPgvectorAdapter(
       await db.insert(memoryOperations).values({
         companyId: input.companyId,
         bindingId: input.bindingId,
+        providerKey: input.providerKey ?? null,
         operationType: input.operationType,
         scopeJson: input.scope as unknown as Record<string, unknown>,
         sourceRefJson: input.source as unknown as Record<string, unknown> ?? {},
@@ -190,9 +192,33 @@ export function builtinPgvectorAdapter(
     if (scope.namespace) {
       extras.push(eq(memoryRecords.scopeNamespace, scope.namespace));
     }
+    if (scope.subjectId) {
+      extras.push(
+        or(
+          eq(memoryRecords.scopeSubjectId, scope.subjectId),
+          isNull(memoryRecords.scopeSubjectId),
+        ) as import("drizzle-orm").SQL,
+      );
+    }
+    if (scope.sessionKey) {
+      extras.push(
+        or(
+          eq(memoryRecords.scopeSessionKey, scope.sessionKey),
+          isNull(memoryRecords.scopeSessionKey),
+        ) as import("drizzle-orm").SQL,
+      );
+    }
 
     if (extras.length === 0) return companyFilter;
     return and(companyFilter, ...extras) as import("drizzle-orm").SQL;
+  }
+
+  /**
+   * Filter out expired records: returns a condition that keeps records
+   * where expiresAt IS NULL (no expiration) OR expiresAt is in the future.
+   */
+  function nonExpiredFilter(): import("drizzle-orm").SQL {
+    return sql`${memoryRecords.expiresAt} IS NULL OR ${memoryRecords.expiresAt} > now()` as import("drizzle-orm").SQL;
   }
 
   /**
@@ -243,7 +269,8 @@ export function builtinPgvectorAdapter(
     } catch (err) {
       await logOperation({
         companyId: req.scope.companyId,
-        bindingId: "unknown",
+        bindingId: null,
+        providerKey: req.bindingKey,
         operationType: "capture",
         scope: req.scope,
         source: req.source,
@@ -345,7 +372,8 @@ export function builtinPgvectorAdapter(
     } catch (err) {
       await logOperation({
         companyId: req.scope.companyId,
-        bindingId: "unknown",
+        bindingId: null,
+        providerKey: req.bindingKey,
         operationType: "record_upsert",
         scope: req.scope,
         source: req.source,
@@ -438,6 +466,37 @@ export function builtinPgvectorAdapter(
       );
       const scopeFilter = buildScopeFilters(req.scope);
 
+      // Empty query — return most recent records instead of semantic/full-text search
+      if (!req.query || !req.query.trim()) {
+        const recentRows = await db
+          .select(getRecordColumns())
+          .from(memoryRecords)
+          .where(
+            and(
+              scopeFilter,
+              eq(memoryRecords.bindingId, bindingId),
+              nonExpiredFilter(),
+            ),
+          )
+          .orderBy(desc(memoryRecords.createdAt))
+          .limit(topK);
+
+        const latencyMs = Date.now() - start;
+        const snippets = recentRows.map((r) => rowToSnippet(r));
+
+        await logOperation({
+          companyId: req.scope.companyId,
+          bindingId,
+          operationType: "query",
+          scope: req.scope,
+          success: true,
+          latencyMs,
+          recordCount: snippets.length,
+        });
+
+        return { snippets };
+      }
+
       // Try embedding search first if configured
       let embedding: number[] | null = null;
       try {
@@ -474,6 +533,7 @@ export function builtinPgvectorAdapter(
               scopeFilter,
               eq(memoryRecords.bindingId, bindingId),
               sql`${memoryRecords.embedding} IS NOT NULL`,
+              nonExpiredFilter(),
             ),
           )
           .orderBy(
@@ -482,11 +542,29 @@ export function builtinPgvectorAdapter(
           .limit(topK)) as Array<typeof memoryRecords.$inferSelect & { score?: number }>;
       } else {
         // Full-text search fallback using GIN tsvector index
+        // Sanitize each word: strip characters unsafe for to_tsquery lexemes
         const tsQuery = req.query
           .split(/\s+/)
           .filter(Boolean)
+          .map((w) => w.replace(/[^\w\-\']/g, '').replace(/'{2,}/g, "'"))
+          .filter((w) => w.length > 0)
           .map((w) => `${w}:*`)
           .join(" & ");
+
+        if (!tsQuery) {
+          // All words were stripped — nothing to search
+          const latencyMs = Date.now() - start;
+          await logOperation({
+            companyId: req.scope.companyId,
+            bindingId,
+            operationType: "query",
+            scope: req.scope,
+            success: true,
+            latencyMs,
+            recordCount: 0,
+          });
+          return { snippets: [] };
+        }
 
         rows = (await db
           .select({
@@ -499,6 +577,7 @@ export function builtinPgvectorAdapter(
               scopeFilter,
               eq(memoryRecords.bindingId, bindingId),
               sql`to_tsvector('english', ${memoryRecords.text}) @@ to_tsquery('english', ${tsQuery})`,
+              nonExpiredFilter(),
             ),
           )
           .orderBy(
@@ -526,19 +605,23 @@ export function builtinPgvectorAdapter(
       logger.error({ err }, "Memory query failed");
 
       // Try to get binding ID for log (best-effort)
-      let bindingId = "unknown";
+      let bindingId: string | null = null;
+      let providerKey: string | undefined;
       try {
-        bindingId = await resolveBindingId(
+        const resolved = await resolveBindingId(
           req.scope.companyId,
           req.bindingKey,
         );
+        bindingId = resolved;
+        providerKey = req.bindingKey;
       } catch {
-        // ignore
+        providerKey = req.bindingKey;
       }
 
       await logOperation({
         companyId: req.scope.companyId,
         bindingId,
+        providerKey,
         operationType: "query",
         scope: req.scope,
         success: false,
@@ -564,7 +647,7 @@ export function builtinPgvectorAdapter(
       );
       const scopeFilter = buildScopeFilters(req.scope);
 
-      const conditions = [scopeFilter, eq(memoryRecords.bindingId, bindingId)];
+      const conditions = [scopeFilter, eq(memoryRecords.bindingId, bindingId), nonExpiredFilter()];
 
       if (req.cursor) {
         conditions.push(gt(memoryRecords.createdAt, new Date(req.cursor)));
@@ -603,19 +686,23 @@ export function builtinPgvectorAdapter(
       const latencyMs = Date.now() - start;
       logger.error({ err }, "Memory list failed");
 
-      let bindingId = "unknown";
+      let bindingId: string | null = null;
+      let providerKey: string | undefined;
       try {
-        bindingId = await resolveBindingId(
+        const resolved = await resolveBindingId(
           req.scope.companyId,
           req.bindingKey,
         );
+        bindingId = resolved;
+        providerKey = req.bindingKey;
       } catch {
-        // ignore
+        providerKey = req.bindingKey;
       }
 
       await logOperation({
         companyId: req.scope.companyId,
         bindingId,
+        providerKey,
         operationType: "list",
         scope: req.scope,
         success: false,
@@ -644,6 +731,7 @@ export function builtinPgvectorAdapter(
           and(
             eq(memoryRecords.id, handle.providerRecordId),
             buildScopeFilters(scope),
+            nonExpiredFilter(),
           ),
         )
         .limit(1);
@@ -651,10 +739,33 @@ export function builtinPgvectorAdapter(
       const latencyMs = Date.now() - start;
 
       if (rows.length === 0) {
-        // Log as get-not-found
+        // Best-effort: resolve binding UUID for audit log.
+        // Try the record without scope first (exists but out-of-scope),
+        // then fall back to the active binding for this company/agent.
+        let bindingId: string | null = null;
+        try {
+          const anyRecord = await db
+            .select({ bindingId: memoryRecords.bindingId })
+            .from(memoryRecords)
+            .where(eq(memoryRecords.id, handle.providerRecordId))
+            .limit(1);
+          if (anyRecord.length > 0) {
+            bindingId = anyRecord[0].bindingId;
+          } else {
+            const resolved = await bindingSvc.findActiveBinding(
+              scope.companyId,
+              scope.agentId,
+            );
+            bindingId = resolved?.binding.id ?? null;
+          }
+        } catch {
+          // fall through with null bindingId
+        }
+
         await logOperation({
           companyId: scope.companyId,
-          bindingId: handle.providerKey,
+          bindingId,
+          providerKey: handle.providerKey,
           operationType: "get",
           scope,
           success: true,
@@ -679,9 +790,31 @@ export function builtinPgvectorAdapter(
       const latencyMs = Date.now() - start;
       logger.error({ err }, "Memory get failed");
 
+      // Best-effort binding UUID resolution for audit log
+      let bindingId: string | null = null;
+      try {
+        const anyRecord = await db
+          .select({ bindingId: memoryRecords.bindingId })
+          .from(memoryRecords)
+          .where(eq(memoryRecords.id, handle.providerRecordId))
+          .limit(1);
+        if (anyRecord.length > 0) {
+          bindingId = anyRecord[0].bindingId;
+        } else {
+          const resolved = await bindingSvc.findActiveBinding(
+            scope.companyId,
+            scope.agentId,
+          );
+          bindingId = resolved?.binding.id ?? null;
+        }
+      } catch {
+        // fall through with null bindingId
+      }
+
       await logOperation({
         companyId: scope.companyId,
-        bindingId: handle.providerKey,
+        bindingId,
+        providerKey: handle.providerKey,
         operationType: "get",
         scope,
         success: false,
@@ -704,6 +837,7 @@ export function builtinPgvectorAdapter(
     const ids = handles.map((h) => h.providerRecordId);
 
     try {
+      // Use .returning() to get bindingId and accurate deletion count
       const result = await db
         .delete(memoryRecords)
         .where(
@@ -711,14 +845,17 @@ export function builtinPgvectorAdapter(
             inArray(memoryRecords.id, ids),
             buildScopeFilters(scope),
           ),
-        );
+        )
+        .returning({ bindingId: memoryRecords.bindingId });
 
-      const deletedCount = result.length ?? 0;
+      const deletedCount = result.length;
+      const bindingId = result.length > 0 ? result[0].bindingId : null;
       const latencyMs = Date.now() - start;
 
       await logOperation({
         companyId: scope.companyId,
-        bindingId: handles[0]?.providerKey ?? "builtin_pgvector",
+        bindingId,
+        providerKey: handles[0]?.providerKey ?? "builtin_pgvector",
         operationType: "forget",
         scope,
         success: true,
@@ -731,9 +868,28 @@ export function builtinPgvectorAdapter(
       const latencyMs = Date.now() - start;
       logger.error({ err }, "Memory forget failed");
 
+      // Best-effort binding UUID resolution for audit log
+      let bindingId: string | null = null;
+      try {
+        const bindingRows = await db
+          .select({ bindingId: memoryRecords.bindingId })
+          .from(memoryRecords)
+          .where(
+            and(
+              inArray(memoryRecords.id, ids),
+              buildScopeFilters(scope),
+            ),
+          )
+          .limit(1);
+        bindingId = bindingRows.length > 0 ? bindingRows[0].bindingId : null;
+      } catch {
+        // fall through with null bindingId
+      }
+
       await logOperation({
         companyId: scope.companyId,
-        bindingId: handles[0]?.providerKey ?? "builtin_pgvector",
+        bindingId,
+        providerKey: handles[0]?.providerKey ?? "builtin_pgvector",
         operationType: "forget",
         scope,
         success: false,

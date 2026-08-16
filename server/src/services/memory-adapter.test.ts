@@ -67,7 +67,9 @@ function makeDb() {
       })),
     })),
     delete: vi.fn(() => ({
-      where: vi.fn().mockResolvedValue([]),
+      where: vi.fn(() => ({
+        returning: vi.fn().mockResolvedValue([]),
+      })),
     })),
     _makeChain: makeChain,
     _defaultChain: defaultChain,
@@ -254,7 +256,8 @@ describe("builtinPgvectorAdapter", () => {
       const a = builtinPgvectorAdapter(db as never, embedder as never);
 
       const delWhere = vi.fn().mockResolvedValue([]);
-      db.delete.mockReturnValue({ where: delWhere });
+      const delReturning = vi.fn().mockResolvedValue([]);
+      db.delete.mockReturnValue({ where: delWhere.mockReturnValue({ returning: delReturning }) });
 
       await a.forget(
         [
