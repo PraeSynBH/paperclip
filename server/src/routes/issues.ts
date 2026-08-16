@@ -5375,13 +5375,25 @@ export function issueRoutes(
       // originFingerprint="default", so fingerprint dedup would never match).
       const slaMatch = await checkPremiumSLABreachDuplicate(db, companyId, rawCreateBody.title);
       if (slaMatch) {
-        rawCreateBody.parentId = slaMatch.existingIssueId;
-        // Note: this path creates the new alert as a *child* of the tracking
-        // issue. The child still increments the issue counter but is linked
-        // under the tracking incident. This is accepted for the pre-Phase 2
-        // period before the monitor sends structured metadata; once the
-        // monitor sends originKind + originFingerprint, the inline
-        // fingerprint check below takes over with zero-creation suppression.
+        // Suppress creation entirely: add comment to tracking issue and return
+        // early instead of creating a new child issue. This closes the gap for
+        // legacy monitor payloads that send originKind="alert" (the inline
+        // fingerprint check below only activates for originKind="sla_monitor"
+        // with a non-default fingerprint).
+        await svc.addComment(
+          slaMatch.existingIssueId,
+          `## Duplicate SLA Alert Suppressed\n\nThis alert fired within the dedup window of existing incident ${slaMatch.existingIdentifier}. No new issue was created; the alert is linked as a reference to the tracking incident.\n\n*Triggered at: ${new Date().toISOString()}*`,
+          { agentId: actor.agentId ?? undefined, runId: actor.runId },
+          { authorType: "agent" },
+        );
+        const enriched = await svc.getById(slaMatch.existingIssueId);
+        res.status(200).json({
+          ...enriched,
+          deduplicated: true,
+          deduplicatedOfIssueId: slaMatch.existingIssueId,
+          deduplicatedOfIdentifier: slaMatch.existingIdentifier,
+        });
+        return;
       }
     }
     // -----------------------------------------------------------------------
