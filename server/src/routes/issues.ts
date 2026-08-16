@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   activityLog,
@@ -73,6 +73,7 @@ import {
   type IssueWatchdogDiscoveryKind,
   type SourceTrustMetadata,
   type SuccessfulRunHandoffState,
+  SLA_MONITOR_ORIGIN_KIND,
 } from "@paperclipai/shared";
 import { trackAgentTaskCompleted } from "@paperclipai/shared/telemetry";
 import { getTelemetryClient } from "../telemetry.js";
@@ -135,6 +136,7 @@ import { readAcceptedPlanConfirmationTarget } from "../services/issues.js";
 import { environmentService } from "../services/environments.js";
 import { environmentRuntimeService } from "../services/environment-runtime.js";
 import { redactSensitiveText } from "../redaction.js";
+import { checkPremiumSLABreachDuplicate } from "../services/premium-sla-dedup.js";
 import {
   createCompanySearchRateLimiter,
   type CompanySearchRateLimiter,
@@ -5352,6 +5354,37 @@ export function issueRoutes(
       watchdogDiscovery,
     );
     if (watchdogProductBugFollowUp === false) return;
+
+    const actor = getActorInfo(req);
+
+    // ---- PremiumSLABreach duplicate suppression ---------------------------
+    // When a PremiumSLABreach alert fires and a recent tracking issue for the
+    // same root cause already exists, suppress creation and link as a reference
+    // via comment rather than creating a standalone issue. Two matching
+    // strategies are tried, in order of precision:
+    //
+    // 1. Fingerprint match (originKind === 'sla_monitor' + originFingerprint) —
+    //    used when the external monitor sends structured metadata (Phase 2).
+    //    Handled inline below after createBody construction.
+    //
+    // 2. Title-pattern match — fallback for the legacy monitor (before Phase 2).
+    //    Matches on `[%]PremiumSLABreach: <client>` within the window.
+    if (!watchdogProductBugFollowUp && !rawCreateBody.parentId) {
+      // Title-pattern fallback — legacy SLA monitor (sends originKind="manual",
+      // originFingerprint="default", so fingerprint dedup would never match).
+      const slaMatch = await checkPremiumSLABreachDuplicate(db, companyId, rawCreateBody.title);
+      if (slaMatch) {
+        rawCreateBody.parentId = slaMatch.existingIssueId;
+        // Note: this path creates the new alert as a *child* of the tracking
+        // issue. The child still increments the issue counter but is linked
+        // under the tracking incident. This is accepted for the pre-Phase 2
+        // period before the monitor sends structured metadata; once the
+        // monitor sends originKind + originFingerprint, the inline
+        // fingerprint check below takes over with zero-creation suppression.
+      }
+    }
+    // -----------------------------------------------------------------------
+
     const effectiveParentId = watchdogProductBugFollowUp ? null : rawCreateBody.parentId;
     let createParent: Awaited<ReturnType<typeof svc.getById>> | null = null;
     if (req.actor.type === "agent" && !effectiveParentId && !watchdogProductBugFollowUp && !isTaskBridgeKeyActor(req)) {
@@ -5381,7 +5414,6 @@ export function issueRoutes(
       companyId,
       rawCreateBody.assigneeAgentId as string | null | undefined,
     );
-    const actor = getActorInfo(req);
     const runWorkspaceInheritanceSourceIssueId = hasExplicitIssueWorkspaceCreateSelection(rawCreateBody)
       ? null
       : await resolveRunIssueWorkspaceInheritanceSource(companyId, actor);
@@ -5438,6 +5470,57 @@ export function issueRoutes(
       actor.actorType,
     );
     await assertCanManageIssueMonitor(access, req, companyId, createBody.assigneeAgentId ?? null, Boolean(executionPolicy?.monitor));
+
+    // SLA monitor duplicate suppression: within the trailing window, re-alerts
+    // for the same fingerprint are linked to the tracking incident rather than
+    // creating a standalone issue. Both active and recently-resolved issues
+    // suppress duplicates, since a resolved incident's outage still sits in the
+    // trailing availability window and keeps re-triggering the monitor.
+    const slaFingerprint = createBody.originKind === SLA_MONITOR_ORIGIN_KIND
+      && createBody.originFingerprint
+      && createBody.originFingerprint !== "default"
+      ? createBody.originFingerprint
+      : null;
+    if (slaFingerprint) {
+      const dedupWindowHours = parseInt(process.env.PAPERCLIP_SLA_DEDUP_WINDOW_HOURS ?? "24", 10);
+      const since = new Date(Date.now() - dedupWindowHours * 60 * 60 * 1000);
+      const existing = await db
+        .select({
+          id: issueRows.id,
+          identifier: issueRows.identifier,
+        })
+        .from(issueRows)
+        .where(
+          and(
+            eq(issueRows.companyId, companyId),
+            eq(issueRows.originKind, SLA_MONITOR_ORIGIN_KIND),
+            eq(issueRows.originFingerprint, slaFingerprint),
+            gte(issueRows.createdAt, since),
+            isNull(issueRows.hiddenAt),
+            notInArray(issueRows.status, ["cancelled"]),
+          ),
+        )
+        .orderBy(asc(issueRows.createdAt))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+      if (existing) {
+        await svc.addComment(
+          existing.id,
+          `## Duplicate SLA Alert Suppressed\n\nThis alert fired within the dedup window of existing incident ${existing.identifier}. No new issue was created; this alert is linked as a reference to the tracking incident.\n\n*Triggered at: ${new Date().toISOString()}*`,
+          { agentId: actor.agentId ?? undefined, runId: actor.runId },
+          { authorType: "agent" },
+        );
+        const enriched = await svc.getById(existing.id);
+        res.status(200).json({
+          ...enriched,
+          deduplicated: true,
+          deduplicatedOfIssueId: existing.id,
+          deduplicatedOfIdentifier: existing.identifier,
+        });
+        return;
+      }
+    }
+
     const issueId = randomUUID();
     const sourceTrust = await sourceTrustForActorWrite({
       id: issueId,

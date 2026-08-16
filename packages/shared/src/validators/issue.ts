@@ -403,6 +403,8 @@ const createIssueBaseSchema = z.object({
     agentId: z.string().uuid(),
     instructions: multilineTextSchema.optional().nullable(),
   }).strict().optional().nullable(),
+  originKind: z.string().min(1).max(100).optional().nullable(),
+  originFingerprint: z.string().min(1).max(200).optional().nullable(),
 });
 
 export const createIssueInputSchema = createIssueBaseSchema.extend({
