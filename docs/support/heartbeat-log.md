@@ -431,3 +431,44 @@ Documentation is fully in sync with the live system:
 - **v0.4.0 release to main** → support case assessment for Deep Planning, Memory & Knowledge, and onboarding role assets
 - PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
 - COO request for documentation health report
+
+## 2026-08-16 — Heartbeat: Diff assessment for Phase 3 audit fixes commit (08254fbf38)
+
+### Trigger
+
+Commit `08254fbf38` landed — "fix(v0.4.0): Phase 3 audit fixes — warm-up, tsquery safety, TTL, scope, index (VOY-1242)"
+
+### Diff assessment
+
+| Change area | Files | User-facing impact | Docs needed? |
+|---|---|---|---|
+| Memory warm-up: empty query handling + AbortController timeout | `memory-context-injection.ts` | Internal — agents with no memories no longer cause Postgres errors on warm-up. Timeouts cancel properly instead of leaking background work. | No — pre-release fix |
+| tsquery sanitization: special characters stripped before full-text search | `memory-adapter.ts`, `memory-context-injection.ts` | User-facing — search queries with special characters no longer throw Postgres errors. Words are sanitized to `[\\w\\-\\']` only. | No — pre-release fix |
+| TTL filter: `expiresAt > now()` on all read queries | `memory-adapter.ts` | User-facing — expired memory records are no longer returned in query/list/get results. | No — pre-release fix |
+| Scope enforcement: `subjectId` + `sessionKey` filters added | `memory-adapter.ts` | Internal — memory queries now respect these scope dimensions for correct isolation. | No — pre-release fix |
+| Composite index: `(company_id, binding_id)` btree (migration 0133) | `0133_memory_records_company_binding_idx.sql` | Internal — query performance improvement. Not user-visible. | No |
+| Preamble boundary hardening: null/empty text, NaN scores, long refs | `memory-context-injection.ts` | Internal — robustness for edge-case memory content. | No |
+| Memory binding: unique constraint handling + delete returning | `memory-bindings.ts`, `memory-adapter.ts` | Internal — duplicate bindings now return proper conflict errors instead of opaque DB failures. | No |
+| Knowledge documents test refactoring | `knowledge-documents.test.ts` | Test infrastructure only. | No |
+
+### Verdict
+
+All 8 change areas are fixes to the v0.4.0 memory system, which has not shipped to production. Per policy, documentation for unreleased features is not created. No documentation updates required at this time.
+
+**Support preparation note:** When v0.4.0 ships, these fixes mean the memory system will be more robust than the initial implementation — fewer Postgres errors on search, no expired records leaking, no warm-up hangs, and proper conflict messages on duplicate bindings. The support case assessment for the memory system should reference these improvements.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 when released |
+| Release notes currency | Up to date through v0.2.13 (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- **v0.4.0 release to main** → support case assessment for Deep Planning, Memory & Knowledge, and onboarding role assets
+- PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
+- COO request for documentation health report
+- QA Engineer (VOY-1212) or Release Engineer (VOY-1211) calling for support capability assessment before v0.4.0 ships
