@@ -287,6 +287,10 @@ describe("KnowledgeDocumentService", () => {
     it("submits a draft document for review", async () => {
       hookSelect(db, [makeDocRow()]);
       db._returning.mockResolvedValueOnce([makeRevisionRow()]);
+      // review insert: pending review linked to the new revision
+      db._returning.mockResolvedValueOnce([
+        makeReviewRow({ status: "pending", decidedAt: null }),
+      ]);
       db._updateReturning.mockResolvedValueOnce([
         { ...makeDocRow(), status: "in_review" },
       ]);
@@ -441,13 +445,66 @@ describe("KnowledgeDocumentService", () => {
           {
             documentId: docId,
             status: "pending",
-            decidedAt: now,
+            decidedAt: null,
           },
         ],
       ]);
 
       const result = await svc.list(companyId, { limit: 10 });
       expect(result.items.length).toBe(1);
+      expect(result.items[0].latestReviewStatus).toBe("pending");
+    });
+
+    it("shows changes_requested after a decision, overriding the initial pending review", async () => {
+      const now = new Date("2026-08-16T00:00:00Z");
+      const docRow = makeDocRow({ status: "draft", updatedAt: now });
+
+      hookSelectSequence(db, [
+        [{ document: docRow, revisionCount: 1 }],
+        [
+          // ORDER BY created_at DESC: the decision was made after the pending
+          // review was created, so it sorts first.
+          {
+            documentId: docId,
+            status: "changes_requested",
+            decidedAt: now,
+          },
+          {
+            documentId: docId,
+            status: "pending",
+            decidedAt: null,
+          },
+        ],
+      ]);
+
+      const result = await svc.list(companyId, { limit: 10 });
+      expect(result.items[0].latestReviewStatus).toBe("changes_requested");
+    });
+
+    it("shows pending after resubmit, overriding stale changes_requested from a previous cycle", async () => {
+      const now = new Date("2026-08-16T00:00:00Z");
+      const docRow = makeDocRow({ status: "in_review", updatedAt: now });
+
+      hookSelectSequence(db, [
+        [{ document: docRow, revisionCount: 2 }],
+        [
+          // ORDER BY created_at DESC: the new pending review (created on
+          // resubmit) sorts before the stale changes_requested from the
+          // previous review cycle.
+          {
+            documentId: docId,
+            status: "pending",
+            decidedAt: null,
+          },
+          {
+            documentId: docId,
+            status: "changes_requested",
+            decidedAt: new Date("2026-08-15T00:00:00Z"),
+          },
+        ],
+      ]);
+
+      const result = await svc.list(companyId, { limit: 10 });
       expect(result.items[0].latestReviewStatus).toBe("pending");
     });
   });

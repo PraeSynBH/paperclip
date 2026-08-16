@@ -386,7 +386,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
           .where(
             inArray(knowledgeDocumentReviews.documentId, docIds as [string, ...string[]]),
           )
-          .orderBy(desc(knowledgeDocumentReviews.decidedAt))
+          .orderBy(desc(knowledgeDocumentReviews.createdAt))
       : [];
 
     const reviewMap = new Map<string, string>();
@@ -449,6 +449,22 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
         body: doc.body,
         changeDescription: "Submitted for review",
         authorAgentId: authorAgentId ?? null,
+      })
+      .returning();
+
+    // Create a pending review linked to the new revision.
+    // decidedAt is left NULL, which signals "pending".
+    // This ensures list() shows latestReviewStatus: "pending" after submission,
+    // and overrides stale changes_requested from a prior cycle because the
+    // new pending review has a later createdAt.
+    await db
+      .insert(knowledgeDocumentReviews)
+      .values({
+        documentId,
+        revisionId: revisionRows[0].id,
+        status: "pending",
+        reviewerAgentId: null,
+        comment: null,
       })
       .returning();
 
