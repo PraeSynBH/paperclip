@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { and, asc, desc, eq, gte, inArray, isNull, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, notInArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   activityLog,
@@ -6065,17 +6065,6 @@ export function issueRoutes(
         allGatesApproved: result.allApproved,
       },
     });
-
-    // If all gates for this revision are now approved, transition plan status
-    if (result.allApproved) {
-      await db
-        .update(documents)
-        .set({
-          planMetadata: sql`jsonb_set(COALESCE(plan_metadata, '{}'::jsonb), '{status}', '"approved"')`,
-          updatedAt: new Date(),
-        })
-        .where(eq(documents.id, result.gate.documentId));
-    }
 
     // Emit live event for real-time UI updates
     publishLiveEvent({

@@ -112,8 +112,9 @@ export function planReviewGateService(db: Db) {
         );
       }
 
-      // Use transaction to atomically update the gate and check all-approved status,
-      // preventing race conditions where concurrent resolutions could interleave.
+      // Use transaction to atomically update the gate, check all-approved status,
+      // and flip the plan metadata — preventing race conditions where concurrent
+      // resolutions could interleave.
       return db.transaction(async (tx) => {
         const now = new Date();
         const [gate] = await tx
@@ -148,6 +149,18 @@ export function planReviewGateService(db: Db) {
           .then((rows) => rows[0] ?? { pending: 0, rejected: 0 });
 
         const allApproved = counts.pending === 0 && counts.rejected === 0 && input.status === "approved";
+
+        // If all gates for this revision are now approved, flip plan status
+        // inside the same transaction to close the concurrent-resolution race.
+        if (allApproved) {
+          await tx
+            .update(documents)
+            .set({
+              planMetadata: sql`jsonb_set(COALESCE(plan_metadata, '{}'::jsonb), '{status}', '"approved"')`,
+              updatedAt: now,
+            })
+            .where(eq(documents.id, gate.documentId));
+        }
 
         return { gate, allApproved };
       });
