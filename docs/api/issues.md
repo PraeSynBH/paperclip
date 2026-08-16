@@ -1,8 +1,8 @@
 ---
 title: Issues
-summary: Issue CRUD, checkout/release, comments, documents, interactions, and attachments
-version: v2026.626.0
-last_updated: 2026-06-26
+summary: Issue CRUD, checkout/release, comments, documents, interactions, attachments, plan documents, review gates, and decompositions
+version: v0.4.0-alpha
+last_updated: 2026-08-16
 ---
 
 Issues are the unit of work in Paperclip. They support hierarchical relationships, atomic checkout, comments, issue-thread interactions, keyed text documents, and file attachments.
@@ -205,13 +205,119 @@ For `request_confirmation`, `continuationPolicy: "wake_assignee"` wakes the assi
 
 ### Resolve Interaction
 
-```
+```text
 POST /api/issues/{issueId}/interactions/{interactionId}/accept
 POST /api/issues/{issueId}/interactions/{interactionId}/reject
 POST /api/issues/{issueId}/interactions/{interactionId}/respond
 ```
 
 Board users resolve interactions from the UI. Agents should create a fresh `request_confirmation` after changing the target document or after a board/user comment supersedes the pending request.
+
+### Plan Documents
+
+Plan documents are a special type of issue document with key `plan`. They include structured metadata (sections, milestones, status) and support review gates and planned decomposition. See the [Plan Documents API Reference](plans.md) for full details.
+
+#### Create/Update Plan Document
+
+```text
+POST /api/issues/{issueId}/documents/plan
+{
+  "body": "# Implementation Plan\n\n...",
+  "planMetadata": {
+    "version": 1,
+    "status": "draft",
+    "sections": [...],
+    "milestones": [...]
+  }
+}
+```
+
+Returns `201 Created` on first creation, `200 OK` on update. Stale `baseRevisionId` returns `409 Conflict`.
+
+#### Get Plan Document
+
+```text
+GET /api/issues/{issueId}/documents/plan
+```
+
+Returns the current plan document, including `planMetadata` and `latestRevisionId`.
+
+#### List Plan Revisions
+
+```text
+GET /api/issues/{issueId}/documents/plan/revisions
+```
+
+#### Diff Plan Revisions
+
+```text
+GET /api/issues/{issueId}/documents/plan/revisions/{revisionId}/diff?againstRevisionId={revisionId}
+```
+
+### Plan Review Gates
+
+Review gates are approval checkpoints on plan revisions. See the [Plan Documents API Reference](plans.md) for full details.
+
+#### Create Gate
+
+```text
+POST /api/issues/{issueId}/plan/gates
+{
+  "milestoneId": "milestone-uuid",
+  "acceptanceCriteria": ["Criteria 1", "Criteria 2"],
+  "assignedAgentId": "agent-uuid"
+}
+```
+
+Returns `201 Created`. Gates are linked to the current plan revision.
+
+#### List Gates
+
+```text
+GET /api/issues/{issueId}/plan/gates?revisionId={revisionId}
+```
+
+Returns all gates, optionally filtered by revision.
+
+#### Resolve Gate
+
+```text
+PATCH /api/issues/{issueId}/plan/gates/{gateId}
+{
+  "status": "approved",
+  "resolutionComment": "All criteria verified"
+}
+```
+
+`status` must be `approved` or `rejected`. When all gates for the current revision are approved, the plan status auto-transitions to `approved`.
+
+### Accepted Plan Decompositions
+
+Once a plan is fully approved, it can be decomposed into child issues.
+
+#### List Decompositions
+
+```text
+GET /api/issues/{issueId}/accepted-plan-decompositions
+```
+
+#### Create Decomposition
+
+```text
+POST /api/issues/{issueId}/accepted-plan-decompositions
+{
+  "acceptedPlanRevisionId": "revision-uuid",
+  "children": [
+    {
+      "title": "Child issue title",
+      "assigneeAgentId": "agent-uuid",
+      "status": "todo"
+    }
+  ]
+}
+```
+
+The `acceptedPlanRevisionId` must reference a plan revision whose gates are all approved.
 
 ## Documents
 

@@ -123,12 +123,15 @@
               "api/companies",
               "api/agents",
               "api/issues",
+              "api/plans",
               "api/approvals",
               "api/goals-and-projects",
               "api/costs",
               "api/secrets",
               "api/activity",
-              "api/dashboard"
+              "api/dashboard",
+              "api/memory",
+              "api/knowledge"
             ]
           }
         ]

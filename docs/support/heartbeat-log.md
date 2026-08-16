@@ -5,6 +5,61 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-16 — Heartbeat: v0.4.0-alpha documentation sync — plans, memory, knowledge API docs + support assessments (VOY-1254)
+
+### What was done
+
+1. **Assessed the diff since last documentation sync** (`1cb3953775` → `HEAD`):
+   - 175 files changed (+17373/-220) since the v0.2.10 documentation sync
+   - Deep Planning Workstream A: plan documents service, review gates, review context (Phases 1-3)
+   - Memory & Knowledge Workstream B: memory adapter, bindings, context injection, embedding, knowledge documents
+   - Plan Decomposition Wizard (UI), Board Chat updates, Onboarding Role Assets
+   - Phases 1-3 audit fixes and CTO completion commits verified
+
+2. **Created/updated API documentation** (3 new pages, 1 updated page):
+   - `docs/api/plans.md` — NEW: Structured plan documents, revision history, review gates, decompositions
+   - `docs/api/memory.md` — NEW: pgvector-based memory bindings, capture, query, records, scope enforcement
+   - `docs/api/knowledge.md` — NEW: Knowledge document CRUD, lifecycle, revisions, backlinks, search
+   - `docs/api/issues.md` — UPDATED: Added plan documents, review gates, accepted-plan-decompositions sections; version bumped to v0.4.0-alpha
+
+3. **Created curated release notes** — `docs/support/releases/v0.4.0-alpha-deep-planning.md`:
+   - Customer-facing release notes covering Deep Planning, Review Gates, Plan Decomposition, Agent Memory, Knowledge Documents
+   - API endpoint table, database migrations table, support escalation paths
+
+4. **Created support case assessments** (2 new):
+   - `docs/support/assessments/support-case-v0.4.0-deep-planning.md` — Plan documents, gates, decomposition: FAQ, troubleshooting, error states, escalation paths
+   - `docs/support/assessments/support-case-v0.4.0-memory-knowledge.md` — Memory & Knowledge: FAQ, troubleshooting, error states, escalation paths
+
+5. **Updated navigation and indexes**:
+   - `docs/docs.json` — Added plans, memory, knowledge to API Reference navigation
+   - `docs/support/README.md` — Added v0.4.0-alpha entries to feature assessments and release notes tables
+   - `docs/releases.md` — Added v0.4.0-alpha summary entry
+
+6. **Versioned all document updates** with v0.4.0-alpha release version.
+
+### Verification
+
+- [x] API docs verified against server routes (plans, memory, knowledge routes in `server/src/routes/`)
+- [x] Shared type schemas verified (`packages/shared/src/validators/plan.ts`, constants in `packages/shared/src/constants.ts`)
+- [x] Existing docs updated with new sections and version metadata
+- [x] Release notes written for customer consumption (no raw commits, no IP disclosure)
+- [x] Support assessments cover FAQ, troubleshooting, error states, escalation paths
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 3 (planned backlog) + CEO Chat (future release) |
+| Release notes currency | Up to date through v0.4.0-alpha (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- CEO Chat v0.4.0 release → support case assessment
+- PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
+- COO request for documentation health report
+
 ## 2026-08-16 — Heartbeat: Commit v0.2.13 billing-fixes docs + close VOY-1230 (VOY-1233)
 
 ### What was done

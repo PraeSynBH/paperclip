@@ -11,6 +11,26 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
+## v0.4.0-alpha — August 16, 2026
+
+[Full release notes →](/support/releases/v0.4.0-alpha-deep-planning)
+
+### Highlights
+
+- **Deep Planning (Workstream A)** — Structured plan documents with sections, milestones, revision history, and approval gates. Plans are now revisioned, gate-approved, and decomposable into child issues. Replaces ad-hoc plan descriptions.
+
+- **Plan Review Gates** — Approval gates on plan revisions with per-milestone acceptance criteria. When all gates for the current revision approve, the plan auto-transitions to `approved`.
+
+- **Approved Plan Decomposition** — Approved plans can be decomposed into child issues, creating a direct link from the approved plan to executable work items.
+
+- **Agent Memory (pgvector)** — A durable, queryable agent memory system. Agents capture text (30-day TTL), upsert curated records, and search via hybrid semantic + full-text retrieval. Memory is scoped per-agent with shared company-wide records.
+
+- **Knowledge Documents** — A full knowledge base with lifecycle management (draft → review → published → archived), revision history, diff, backlinks to issues, and full-text search.
+
+[Full release notes →](/support/releases/v0.4.0-alpha-deep-planning)
+
+---
+
 ## v2026.722.0 — July 22, 2026
 
 [Full release notes →](/releases/v2026.722.0)

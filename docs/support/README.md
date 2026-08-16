@@ -11,6 +11,8 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|
+| Deep Planning — Plan Documents, Review Gates, Decomposition | v0.4.0-alpha | Aug 16, 2026 | [View](assessments/support-case-v0.4.0-deep-planning.md) |
+| Memory & Knowledge — pgvector Memory, Knowledge Documents | v0.4.0-alpha | Aug 16, 2026 | [View](assessments/support-case-v0.4.0-memory-knowledge.md) |
 | Stripe Billing Robustness Fixes | v0.2.13 | Aug 15, 2026 | [View](assessments/support-case-stripe-billing-fixes.md) |
 | Legal Pages (Privacy Policy + Terms of Service) | v0.2.12 | Aug 15, 2026 | [View](assessments/support-case-legal-pages.md) |
 | Domain Revert to voyonder.com | v0.2.10 | Aug 15, 2026 | [View](assessments/support-case-domain-revert.md) |
@@ -71,6 +73,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
+| v0.4.0-alpha — Deep Planning + Memory & Knowledge | [View](releases/v0.4.0-alpha-deep-planning.md) |
 | v0.2.13 — Stripe billing fixes | [View](releases/v0.2.13-stripe-fixes.md) |
 | v0.2.12 — Legal pages | [View](releases/v0.2.12-legal-pages.md) |
 | v0.2.10 — Domain revert | [View](releases/v0.2.10-domain-revert.md) |
