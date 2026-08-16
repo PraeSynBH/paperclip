@@ -355,3 +355,49 @@ Documentation is fully in sync with the live system:
 - **v0.4.0 release to main** → support case assessment for Deep Planning, Memory & Knowledge, and onboarding role assets
 - PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
 - COO request for documentation health report
+
+## 2026-08-16 — Heartbeat: v0.2.13 Stripe fixes — support docs synced (VOY-1233)
+
+### What happened since last heartbeat
+
+1. **VOY-1233 assigned** — Support sync for v0.2.13 Stripe billing robustness fixes. QA verification (VOY-1227) complete, all checks passed.
+
+2. **Release notes created** — `docs/support/releases/v0.2.13-stripe-fixes.md` covering all five fixes:
+   - Deleted Stripe customer detection (`{deleted: true}` flag check)
+   - Safe subscription status mapping (`mapStripeStatus()` with Prisma enum)
+   - Downgrade-to-free on full cancellation (auto-downgrade on next login)
+   - Stale-customer auto-repair (self-healing on checkout/billing visits)
+   - Trialing subscription sync (active||trialing filter)
+
+3. **KB article created** — `docs/support/kb/billing-cancellation-downgrade.md` — comprehensive troubleshooting for cancellation tier issues, including legacy stuck-tier cases and trialing sync edge cases.
+
+4. **Support case assessment created** — `docs/support/assessments/support-case-stripe-billing-fixes.md` — full assessment covering FAQ, troubleshooting, error states, and escalation paths.
+
+5. **README updated** — Added v0.2.13 entries to assessment table, KB articles table, and Voyonder release notes table.
+
+### Documentation assessment
+
+| Area | Status |
+|---|---|
+| Customer-facing /documentation | ✅ In sync — v0.2.12 content live on voyonder.com |
+| v0.2.10 release notes + assessment | ✅ Committed |
+| v0.2.12 release notes + assessment | ✅ Committed |
+| **v0.2.13 release notes + assessment** | **✅ Committed (this heartbeat)** |
+| v0.4.0 Deep Planning + Memory | ⏳ Pre-release — no customer docs created yet |
+| Onboarding role assets (12 roles) | ⏳ Pre-release — KB entry needed when shipped |
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 1 (this one — VOY-1233, completing now) |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 when released |
+| Working tree docs changes | 4 files created + README updated this heartbeat |
+| Release notes currency | Up to date through v0.2.13 (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- **v0.4.0 release to main** → support case assessment for Deep Planning, Memory & Knowledge, and onboarding role assets
+- PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
+- COO request for documentation health report
