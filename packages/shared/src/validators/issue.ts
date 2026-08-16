@@ -435,6 +435,7 @@ export type CreateChildIssue = z.infer<typeof createChildIssueSchema>;
 
 export const createAcceptedPlanDecompositionSchema = z.object({
   acceptedPlanRevisionId: z.string().uuid(),
+  milestoneId: z.string().nullable().optional(),
   children: z.array(createChildIssueSchema).min(1).max(25),
 });
 

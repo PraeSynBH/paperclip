@@ -9,11 +9,14 @@ import {
   issuePlanDecompositions,
   issues,
   issueThreadInteractions,
+  planReviewGates,
 } from "@paperclipai/db";
 import type {
+  MilestoneProgress,
   ParentPlanReviewContext,
   PlanReviewContext,
   PlanReviewContextAuthor,
+  PlanReviewGateContext,
   PlanReviewInteractionContext,
   PlanReviewInteractionResultContext,
   PlanReviewInteractionTargetContext,
@@ -289,6 +292,8 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
       acceptedRevisionBody: null,
       acceptedRevisionBodyTruncated: false,
       parentPlanContext,
+      gates: [],
+      milestoneProgress: [],
       totals: {
         openThreadCount: 0,
         includedThreadCount: 0,
@@ -296,6 +301,12 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
         commentCount: 0,
         includedCommentCount: 0,
         omittedCommentCount: 0,
+        gateCount: 0,
+        approvedGateCount: 0,
+        pendingGateCount: 0,
+        rejectedGateCount: 0,
+        milestoneCount: 0,
+        completedMilestoneCount: 0,
       },
       limits: { ...PLAN_REVIEW_CONTEXT_LIMITS },
       truncated: false,
@@ -312,6 +323,119 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
       eq(documentAnnotationThreads.documentKey, "plan"),
       eq(documentAnnotationThreads.status, "open"),
     ));
+
+  // ─── Fetch plan review gates for the current revision ─────────────────
+  const gateRows = planDocument.latestRevisionId
+    ? await input.db
+        .select()
+        .from(planReviewGates)
+        .where(and(
+          eq(planReviewGates.documentId, planDocument.documentId),
+          eq(planReviewGates.revisionId, planDocument.latestRevisionId),
+        ))
+        .orderBy(asc(planReviewGates.createdAt))
+    : [];
+
+  const gates: PlanReviewGateContext[] = gateRows.map((g) => ({
+    id: g.id,
+    milestoneId: g.milestoneId ?? null,
+    status: g.status,
+    acceptanceCriteria: g.acceptanceCriteria,
+    assignedAgentId: g.assignedAgentId ?? null,
+    createdByAgentId: g.createdByAgentId ?? null,
+    resolvedByAgentId: g.resolvedByAgentId ?? null,
+    resolvedAt: g.resolvedAt ? g.resolvedAt.toISOString() : null,
+    resolutionComment: g.resolutionComment ?? null,
+    createdAt: g.createdAt.toISOString(),
+  }));
+
+  const gateCount = gateRows.length;
+  const approvedGateCount = gateRows.filter((g) => g.status === "approved").length;
+  const pendingGateCount = gateRows.filter((g) => g.status === "pending").length;
+  const rejectedGateCount = gateRows.filter((g) => g.status === "rejected").length;
+
+  // ─── Compute milestone progress ──────────────────────────────────────
+  // Fetch the document's plan_metadata to extract milestone definitions
+  const docMetadata = await input.db
+    .select({ planMetadata: documents.planMetadata })
+    .from(documents)
+    .where(eq(documents.id, planDocument.documentId))
+    .then((rows) => rows[0] ?? null);
+
+  const planMetadata = parseObject(docMetadata?.planMetadata);
+  const milestones: Array<{ id: string; title: string; status: string; acceptanceCriteria: string[] }> =
+    Array.isArray(planMetadata?.milestones) ? planMetadata.milestones : [];
+
+  // Fetch child issues for this issue grouped by milestoneId
+  const childDecompositions = await input.db
+    .select({
+      milestoneId: issuePlanDecompositions.milestoneId,
+      childIssueIds: issuePlanDecompositions.childIssueIds,
+      status: issuePlanDecompositions.status,
+    })
+    .from(issuePlanDecompositions)
+    .where(and(
+      eq(issuePlanDecompositions.companyId, input.companyId),
+      eq(issuePlanDecompositions.sourceIssueId, input.issueId),
+      sql`${issuePlanDecompositions.status} IN ('in_flight', 'completed')`,
+    ));
+
+  // Collect all child issue IDs
+  const allChildIds = childDecompositions.reduce<string[]>((acc, d) => {
+    const ids = Array.isArray(d.childIssueIds) ? d.childIssueIds : [];
+    return acc.concat(ids);
+  }, []);
+
+  // Fetch child issue statuses for completed count
+  const childStatuses = allChildIds.length > 0
+    ? await input.db
+        .select({ id: issues.id, status: issues.status })
+        .from(issues)
+        .where(inArray(issues.id, allChildIds))
+    : [];
+  const childStatusMap = new Map(childStatuses.map((c) => [c.id, c.status]));
+
+  // Identify which milestoneIds have child decompositions
+  const decompositionMilestoneIds = new Set(
+    childDecompositions.filter((d) => d.milestoneId).map((d) => d.milestoneId!),
+  );
+
+  // Build milestone progress — only for milestones that have child issues
+  const milestoneProgress = milestones
+    .filter((m) => decompositionMilestoneIds.has(m.id))
+    .map((m): MilestoneProgress => {
+      const decomposition = childDecompositions.find(
+        (d) => d.milestoneId === m.id,
+      );
+      const childIds = Array.isArray(decomposition?.childIssueIds)
+        ? decomposition.childIssueIds
+        : [];
+      const totalChildIssues = childIds.length;
+      const completedChildIssues = childIds.filter(
+        (id) => childStatusMap.get(id) === "done",
+      ).length;
+
+      // Find the gate for this milestone
+      const milestoneGate = gateRows.find((g) => g.milestoneId === m.id);
+      const gatesStatus: MilestoneProgress["gatesStatus"] = milestoneGate
+        ? (milestoneGate.status as MilestoneProgress["gatesStatus"])
+        : null;
+
+      return {
+        milestoneId: m.id,
+        milestoneTitle: m.title,
+        status: m.status,
+        totalChildIssues,
+        completedChildIssues,
+        acceptanceCriteria: m.acceptanceCriteria ?? [],
+        gatesStatus,
+      };
+    });
+
+  const milestoneCount = milestoneProgress.length;
+  const completedMilestoneCount = milestoneProgress.filter(
+    (mp) => mp.status === "completed",
+  ).length;
 
   const threadRows = await input.db
     .select({
@@ -457,6 +581,8 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
     latestRevisionId: planDocument.latestRevisionId,
     latestRevisionNumber: planDocument.latestRevisionNumber,
     threads,
+    gates,
+    milestoneProgress,
     interaction,
     acceptedRevisionBody,
     acceptedRevisionBodyTruncated,
@@ -468,6 +594,12 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
       commentCount,
       includedCommentCount,
       omittedCommentCount,
+      gateCount,
+      approvedGateCount,
+      pendingGateCount,
+      rejectedGateCount,
+      milestoneCount,
+      completedMilestoneCount,
     },
     limits: { ...PLAN_REVIEW_CONTEXT_LIMITS },
     truncated,

@@ -107,3 +107,9 @@ export {
   memoryOperations,
   memoryExtractionJobs,
 } from "./memory.js";
+export {
+  knowledgeDocuments,
+  knowledgeDocumentRevisions,
+  knowledgeDocumentReviews,
+  knowledgeSourceBacklinks,
+} from "./knowledge.js";

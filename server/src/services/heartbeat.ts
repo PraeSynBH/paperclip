@@ -9943,20 +9943,36 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     // ── Memory warm-up: pre-fetch relevant context from past work ──────
     // Runs asynchronously with other startup I/O; failure is non-fatal.
     // Result is injected into context.paperclipMemoryPreamble when ready.
+    // Knowledge warm-up runs in parallel for published company knowledge.
     memoryWarmUpPromise = (async () => {
       try {
-        const { warmUpAgentMemory } = await import("./memory-context-injection.js");
-        const memoryResult = await warmUpAgentMemory(
-          db,
-          agent.companyId,
-          agent.id,
-          { companyId: agent.companyId, issueId: issueId ?? undefined },
-        );
+        const { warmUpAgentMemory, warmUpCompanyKnowledge } = await import("./memory-context-injection.js");
+        const [memoryResult, knowledgeResult] = await Promise.all([
+          warmUpAgentMemory(
+            db,
+            agent.companyId,
+            agent.id,
+            { companyId: agent.companyId, issueId: issueId ?? undefined },
+          ),
+          warmUpCompanyKnowledge(
+            db,
+            agent.companyId,
+            { issueId: issueId ?? undefined },
+            { limit: 3 },
+          ),
+        ]);
+        const preambleParts: string[] = [];
         if (memoryResult.preamble) {
-          context.paperclipMemoryPreamble = memoryResult.preamble;
+          preambleParts.push(memoryResult.preamble);
+        }
+        if (knowledgeResult.preamble) {
+          preambleParts.push(knowledgeResult.preamble);
+        }
+        if (preambleParts.length > 0) {
+          context.paperclipMemoryPreamble = preambleParts.join("\n");
         }
       } catch (err) {
-        logger.warn({ err, companyId: agent.companyId, agentId: agent.id }, "Memory warm-up failed, continuing without context");
+        logger.warn({ err, companyId: agent.companyId, agentId: agent.id }, "Memory/knowledge warm-up failed, continuing without context");
       }
     })();
     // ── End memory warm-up ─────────────────────────────────────────────

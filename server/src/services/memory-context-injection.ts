@@ -1,10 +1,11 @@
 import { eq, and, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { memoryRecords, memoryBindings, memoryBindingTargets } from "@paperclipai/db";
+import { knowledgeDocuments, memoryRecords, memoryBindings, memoryBindingTargets } from "@paperclipai/db";
 import type { MemoryScope, MemorySnippet, MemoryContextBundle } from "@paperclipai/shared";
 import { builtinPgvectorAdapter } from "./memory-adapter.js";
 import { memoryBindingService } from "./memory-bindings.js";
 import { embeddingService } from "./embedding.js";
+import { knowledgeDocumentService } from "./knowledge-documents.js";
 import { logger } from "../middleware/logger.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -29,12 +30,24 @@ export interface MemoryWarmUpConfig {
   timeoutMs?: number;
 }
 
+export interface KnowledgeWarmUpResult {
+  /** The formatted knowledge preamble, or null if no knowledge was found. */
+  preamble: string | null;
+  /** Number of knowledge articles injected. */
+  articleCount: number;
+  /** Total latency in ms. */
+  latencyMs: number;
+  /** Whether the warm-up succeeded. */
+  status: "success" | "skipped_no_knowledge" | "error";
+  error?: string;
+}
+
 // ─── Defaults ───────────────────────────────────────────────────────────────
 
 const DEFAULT_TOP_K = 5;
 const DEFAULT_TIMEOUT_MS = 3_000;
 
-// ─── Preamble Builder ───────────────────────────────────────────────────────
+// ─── Preamble Builder (Memory) ──────────────────────────────────────────────
 
 /**
  * Format an array of memory snippets into a markdown preamble string
@@ -70,7 +83,45 @@ export function buildMemoryPreamble(snippets: MemorySnippet[]): string {
   return lines.join("\n");
 }
 
-// ─── Warm-Up Service ────────────────────────────────────────────────────────
+// ─── Knowledge Preamble Builder ─────────────────────────────────────────────
+
+/**
+ * Format published knowledge documents into a markdown preamble section.
+ */
+export function buildKnowledgePreamble(
+  articles: Array<{ id: string; title: string; summary?: string; body: string; score?: number }>,
+): string {
+  if (!articles || articles.length === 0) return "";
+
+  const lines: string[] = [];
+  lines.push("");
+  lines.push("=== Company Knowledge ===");
+  lines.push("");
+
+  for (let i = 0; i < articles.length; i++) {
+    const a = articles[i];
+    const scoreLine = a.score !== undefined ? ` [relevance: ${(a.score * 100).toFixed(0)}%]` : "";
+
+    lines.push(`- **${a.title}**${scoreLine}:`);
+    if (a.summary) {
+      lines.push(`  > ${a.summary}`);
+    }
+    // Truncate body to a reasonable preamble length
+    if (a.body) {
+      const truncatedBody =
+        a.body.length > 800 ? a.body.slice(0, 800).trimEnd() + "…" : a.body;
+      lines.push(`  ${truncatedBody}`);
+    }
+    lines.push("");
+  }
+
+  lines.push("=== End Company Knowledge ===");
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+// ─── Warm-Up Service (Memory) ───────────────────────────────────────────────
 
 /**
  * Warm up agent memory by fetching relevant context before a run starts.
@@ -170,7 +221,83 @@ export async function warmUpAgentMemory(
   }
 }
 
-// ─── Internal ───────────────────────────────────────────────────────────────
+// ─── Knowledge Warm-Up ──────────────────────────────────────────────────────
+
+/**
+ * Warm up company knowledge by fetching published knowledge documents
+ * relevant to the current context (issue, project).
+ *
+ * Runs in parallel with memory warm-up and other pre-run I/O.
+ * Gracefully degrades on failure.
+ */
+export async function warmUpCompanyKnowledge(
+  db: Db,
+  companyId: string,
+  contextScope: { issueId?: string; projectId?: string; query?: string },
+  config?: { timeoutMs?: number; limit?: number },
+): Promise<KnowledgeWarmUpResult> {
+  const start = Date.now();
+  const timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const limit = config?.limit ?? 3;
+
+  try {
+    const result = await Promise.race([
+      doKnowledgeWarmUp(db, companyId, contextScope, limit),
+      timeout(timeoutMs),
+    ]);
+
+    const latencyMs = Date.now() - start;
+
+    if (result === "timeout") {
+      logger.warn(
+        { companyId, latencyMs },
+        "Knowledge warm-up timed out, continuing without company knowledge",
+      );
+      return {
+        preamble: null,
+        articleCount: 0,
+        latencyMs,
+        status: "error",
+        error: "timeout",
+      };
+    }
+
+    if (!result || result.length === 0) {
+      return {
+        preamble: null,
+        articleCount: 0,
+        latencyMs,
+        status: "skipped_no_knowledge",
+      };
+    }
+
+    const preamble = buildKnowledgePreamble(result);
+
+    logger.info(
+      { companyId, articleCount: result.length, latencyMs },
+      "Knowledge warm-up complete",
+    );
+
+    return {
+      preamble,
+      articleCount: result.length,
+      latencyMs,
+      status: "success",
+    };
+  } catch (err) {
+    const latencyMs = Date.now() - start;
+    logger.error({ err, companyId, latencyMs }, "Knowledge warm-up failed unexpectedly");
+    return {
+      preamble: null,
+      articleCount: 0,
+      latencyMs,
+      status: "error",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ─── Internal: Memory Warm-Up ───────────────────────────────────────────────
 
 async function doWarmUp(
   db: Db,
@@ -223,6 +350,85 @@ async function doWarmUp(
 
   return { bundle, bindingKey };
 }
+
+// ─── Internal: Knowledge Warm-Up ────────────────────────────────────────────
+
+async function doKnowledgeWarmUp(
+  db: Db,
+  companyId: string,
+  contextScope: { issueId?: string; projectId?: string; query?: string },
+  limit: number,
+): Promise<Array<{ id: string; title: string; summary?: string; body: string; score?: number }>> {
+  // Search published knowledge documents using full-text search
+  const searchQuery = contextScope.query ?? "";
+
+  if (searchQuery.trim().length === 0) {
+    // If no query is provided, fetch the most recently published documents
+    const rows = await db
+      .select({
+        id: knowledgeDocuments.id,
+        title: knowledgeDocuments.title,
+        summary: knowledgeDocuments.summary,
+        body: knowledgeDocuments.body,
+      })
+      .from(knowledgeDocuments)
+      .where(
+        and(
+          eq(knowledgeDocuments.companyId, companyId),
+          eq(knowledgeDocuments.status, "published"),
+        ),
+      )
+      .orderBy(sql`${knowledgeDocuments.publishedAt} DESC NULLS LAST`)
+      .limit(limit);
+
+    return rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      summary: r.summary ?? undefined,
+      body: r.body,
+      score: undefined,
+    }));
+  }
+
+  // Use full-text search
+  const tsQuery = searchQuery
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((w) => `${w}:*`)
+    .join(" & ");
+
+  const rows = await db
+    .select({
+      id: knowledgeDocuments.id,
+      title: knowledgeDocuments.title,
+      summary: knowledgeDocuments.summary,
+      body: knowledgeDocuments.body,
+      score: sql<number>`ts_rank(
+        to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')),
+        to_tsquery('english', ${tsQuery})
+      )`,
+    })
+    .from(knowledgeDocuments)
+    .where(
+      and(
+        eq(knowledgeDocuments.companyId, companyId),
+        eq(knowledgeDocuments.status, "published"),
+        sql`to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')) @@ to_tsquery('english', ${tsQuery})`,
+      ),
+    )
+    .orderBy(sql`score DESC`)
+    .limit(limit);
+
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    summary: r.summary ?? undefined,
+    body: r.body,
+    score: r.score ?? 0,
+  }));
+}
+
+// ─── Utility ────────────────────────────────────────────────────────────────
 
 /**
  * Create a promise that resolves to "timeout" after the given duration.

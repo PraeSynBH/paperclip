@@ -171,6 +171,7 @@ export interface AcceptedPlanDecomposition {
   requestFingerprint: string;
   requestedChildCount: number;
   childIssueIds: string[];
+  milestoneId: string | null;
   ownerAgentId: string | null;
   ownerUserId: string | null;
   ownerRunId: string | null;

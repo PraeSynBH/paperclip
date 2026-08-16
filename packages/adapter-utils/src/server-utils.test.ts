@@ -1029,6 +1029,185 @@ describe("renderPaperclipWakePrompt", () => {
     expect(prompt.indexOf("Open plan comments to incorporate:")).toBeLessThan(prompt.indexOf("New comments in order:"));
   });
 
+  it("renders plan review gates and milestone progress in the wake prompt", () => {
+    const payload = {
+      reason: "issue_plan_gate_resolved",
+      issue: {
+        id: "issue-1",
+        identifier: "PAP-3405",
+        title: "Plan with gates",
+        status: "in_progress",
+        workMode: "planning",
+      },
+      planReviewContext: {
+        documentKey: "plan",
+        issueId: "issue-1",
+        latestRevisionId: "revision-3",
+        latestRevisionNumber: 3,
+        interaction: null,
+        threads: [],
+        gates: [
+          {
+            id: "gate-1",
+            milestoneId: "milestone-1",
+            status: "approved",
+            acceptanceCriteria: ["Milestone 1 ships with tests", "Docs updated"],
+            assignedAgentId: "agent-42",
+            createdByAgentId: "agent-1",
+            resolvedByAgentId: "agent-42",
+            resolvedAt: "2026-06-02T10:00:00.000Z",
+            resolutionComment: "All acceptance criteria verified.",
+            createdAt: "2026-06-01T12:00:00.000Z",
+          },
+          {
+            id: "gate-2",
+            milestoneId: "milestone-2",
+            status: "pending",
+            acceptanceCriteria: ["Milestone 2 deployed to staging"],
+            assignedAgentId: "agent-7",
+            createdByAgentId: "agent-1",
+            resolvedByAgentId: null,
+            resolvedAt: null,
+            resolutionComment: null,
+            createdAt: "2026-06-01T12:00:00.000Z",
+          },
+        ],
+        milestoneProgress: [
+          {
+            milestoneId: "milestone-1",
+            milestoneTitle: "Core API",
+            status: "in_progress",
+            totalChildIssues: 4,
+            completedChildIssues: 4,
+            acceptanceCriteria: ["Milestone 1 ships with tests"],
+            gatesStatus: "approved",
+          },
+          {
+            milestoneId: "milestone-2",
+            milestoneTitle: "UI polish",
+            status: "in_progress",
+            totalChildIssues: 3,
+            completedChildIssues: 1,
+            acceptanceCriteria: ["Milestone 2 deployed to staging"],
+            gatesStatus: "pending",
+          },
+        ],
+        totals: {
+          openThreadCount: 0,
+          includedThreadCount: 0,
+          omittedThreadCount: 0,
+          commentCount: 0,
+          includedCommentCount: 0,
+          omittedCommentCount: 0,
+          gateCount: 2,
+          approvedGateCount: 1,
+          pendingGateCount: 1,
+          rejectedGateCount: 0,
+          milestoneCount: 2,
+          completedMilestoneCount: 0,
+        },
+      },
+      commentWindow: { requestedCount: 0, includedCount: 0, missingCount: 0 },
+      comments: [],
+      fallbackFetchNeeded: false,
+    };
+
+    const prompt = renderPaperclipWakePrompt(payload);
+    expect(prompt).toContain("Plan review gates:");
+    expect(prompt).toContain("- gates: 2 total, 1 approved, 1 pending, 0 rejected");
+    expect(prompt).toContain("- gate gate-1 (approved, milestone: milestone-1)");
+    expect(prompt).toContain("  acceptance criteria: Milestone 1 ships with tests; Docs updated");
+    expect(prompt).toContain("  assigned agent: agent-42");
+    expect(prompt).toContain("  resolved by: agent-42 at 2026-06-02T10:00:00.000Z");
+    expect(prompt).toContain("  resolution: All acceptance criteria verified.");
+    expect(prompt).toContain("- gate gate-2 (pending, milestone: milestone-2)");
+    expect(prompt).toContain("Milestone progress:");
+    expect(prompt).toContain("- milestones: 2 total, 0 completed");
+    expect(prompt).toContain("- milestone Core API (in_progress, gate: approved)");
+    expect(prompt).toContain("  progress: 4/4 child issues completed");
+    expect(prompt).toContain("- milestone UI polish (in_progress, gate: pending)");
+    expect(prompt).toContain("  progress: 1/3 child issues completed");
+  });
+
+  it("round-trips gates and milestoneProgress through stringifyPaperclipWakePayload", () => {
+    const payload = {
+      reason: "issue_plan_updated",
+      issue: { id: "issue-1", identifier: "PAP-3406", title: "Plan update wake", status: "in_progress", workMode: "planning" },
+      planReviewContext: {
+        documentKey: "plan",
+        issueId: "issue-1",
+        latestRevisionId: "revision-4",
+        latestRevisionNumber: 4,
+        interaction: null,
+        threads: [],
+        gates: [
+          {
+            id: "gate-9",
+            milestoneId: "milestone-9",
+            status: "pending",
+            acceptanceCriteria: ["AC one"],
+            assignedAgentId: "agent-7",
+            createdByAgentId: "agent-1",
+            resolvedByAgentId: null,
+            resolvedAt: null,
+            resolutionComment: null,
+            createdAt: "2026-06-02T09:00:00.000Z",
+          },
+        ],
+        milestoneProgress: [
+          {
+            milestoneId: "milestone-9",
+            milestoneTitle: "Alpha",
+            status: "pending",
+            totalChildIssues: 2,
+            completedChildIssues: 0,
+            acceptanceCriteria: ["AC one"],
+            gatesStatus: "pending",
+          },
+        ],
+        totals: {
+          openThreadCount: 0,
+          includedThreadCount: 0,
+          omittedThreadCount: 0,
+          commentCount: 0,
+          includedCommentCount: 0,
+          omittedCommentCount: 0,
+          gateCount: 1,
+          approvedGateCount: 0,
+          pendingGateCount: 1,
+          rejectedGateCount: 0,
+          milestoneCount: 1,
+          completedMilestoneCount: 0,
+        },
+      },
+      commentWindow: { requestedCount: 0, includedCount: 0, missingCount: 0 },
+      comments: [],
+      fallbackFetchNeeded: false,
+    };
+
+    const stringified = stringifyPaperclipWakePayload(payload);
+    expect(stringified).not.toBeNull();
+    const parsed = JSON.parse(stringified ?? "{}");
+    expect(parsed.planReviewContext.gates).toHaveLength(1);
+    expect(parsed.planReviewContext.gates[0]).toMatchObject({
+      id: "gate-9",
+      milestoneId: "milestone-9",
+      status: "pending",
+    });
+    expect(parsed.planReviewContext.milestoneProgress).toHaveLength(1);
+    expect(parsed.planReviewContext.milestoneProgress[0]).toMatchObject({
+      milestoneId: "milestone-9",
+      milestoneTitle: "Alpha",
+      totalChildIssues: 2,
+      completedChildIssues: 0,
+    });
+    expect(parsed.planReviewContext.totals).toMatchObject({
+      gateCount: 1,
+      pendingGateCount: 1,
+      milestoneCount: 1,
+    });
+  });
+
   it("renders dependency-blocked interaction guidance", () => {
     const prompt = renderPaperclipWakePrompt({
       reason: "issue_commented",

@@ -452,12 +452,21 @@ export function builtinPgvectorAdapter(
       let rows: Array<typeof memoryRecords.$inferSelect & { score?: number }>;
 
       if (embedding && embedding.length > 0) {
-        // Semantic search via cosine similarity using parameterized vector
-        const embeddingVec = `[${embedding.join(",")}]`;
+        // Validate embedding values to prevent SQL injection
+        for (const val of embedding) {
+          if (typeof val !== 'number' || !Number.isFinite(val)) {
+            throw new Error(
+              `Invalid embedding value at index ${embedding.indexOf(val)}: all values must be finite numbers`,
+            );
+          }
+        }
+        // Semantic search via cosine similarity using parameterized vector cast
+        // CAST($1 AS vector) is fully parameterized — no sql.raw with untrusted data
+        const embeddingJson = JSON.stringify(embedding);
         rows = (await db
           .select({
             ...getRecordColumns(),
-            score: sql<number>`1 - (${memoryRecords.embedding} <=> ${sql.raw(`'${embeddingVec}'::vector`)})`,
+            score: sql<number>`1 - (${memoryRecords.embedding} <=> CAST(${embeddingJson} AS vector))`,
           })
           .from(memoryRecords)
           .where(
@@ -468,7 +477,7 @@ export function builtinPgvectorAdapter(
             ),
           )
           .orderBy(
-            sql`1 - (${memoryRecords.embedding} <=> ${sql.raw(`'${embeddingVec}'::vector`)}) DESC`,
+            sql`1 - (${memoryRecords.embedding} <=> CAST(${embeddingJson} AS vector)) DESC`,
           )
           .limit(topK)) as Array<typeof memoryRecords.$inferSelect & { score?: number }>;
       } else {
@@ -634,7 +643,7 @@ export function builtinPgvectorAdapter(
         .where(
           and(
             eq(memoryRecords.id, handle.providerRecordId),
-            eq(memoryRecords.companyId, scope.companyId),
+            buildScopeFilters(scope),
           ),
         )
         .limit(1);
@@ -700,7 +709,7 @@ export function builtinPgvectorAdapter(
         .where(
           and(
             inArray(memoryRecords.id, ids),
-            eq(memoryRecords.companyId, scope.companyId),
+            buildScopeFilters(scope),
           ),
         );
 

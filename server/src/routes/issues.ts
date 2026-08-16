@@ -5791,6 +5791,18 @@ export function issueRoutes(
       },
     });
 
+    // Wake the issue assignee so the agent heartbeat picks up the new plan
+    // revision (gate status, milestone progress, and review context).
+    void queueIssueAssignmentWakeup({
+      heartbeat,
+      issue,
+      reason: "issue_plan_updated",
+      mutation: "plan_updated",
+      contextSource: "issue.plan_updated",
+      requestedByActorType: actor.actorType,
+      requestedByActorId: actor.actorId,
+    });
+
     res.status(result.created ? 201 : 200).json(doc);
   });
 
@@ -5975,6 +5987,19 @@ export function issueRoutes(
       },
     });
 
+    // Wake the issue assignee so the agent heartbeat can react to the gate
+    // outcome (e.g. proceed once all gates pass, or revise the plan when a
+    // gate is rejected).
+    void queueIssueAssignmentWakeup({
+      heartbeat,
+      issue,
+      reason: "issue_plan_gate_resolved",
+      mutation: "plan_gate_resolved",
+      contextSource: "issue.plan_gate_resolved",
+      requestedByActorType: actor.actorType,
+      requestedByActorId: actor.actorId,
+    });
+
     res.json(result);
   });
 
@@ -6072,6 +6097,7 @@ export function issueRoutes(
 
     const result = await svc.decomposeAcceptedPlan(sourceIssue.id, {
       acceptedPlanRevisionId: req.body.acceptedPlanRevisionId,
+      milestoneId: req.body.milestoneId ?? null,
       children: normalizedChildren,
       actorAgentId: actor.agentId,
       actorUserId: actor.actorType === "user" ? actor.actorId : null,

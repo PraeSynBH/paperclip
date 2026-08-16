@@ -5,6 +5,36 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-16 — Heartbeat: Commit v0.2.13 billing-fixes docs + close VOY-1230 (VOY-1233)
+
+### What was done
+
+1. **Committed v0.2.13 Stripe billing fixes docs** as `85d40a0327` (VOY-1233):
+   - `docs/support/releases/v0.2.13-stripe-fixes.md` — curated release notes for the 5 fixes
+   - `docs/support/kb/billing-cancellation-downgrade.md` — KB article on cancellation downgrade behavior
+   - `docs/support/assessments/support-case-stripe-billing-fixes.md` — FAQ, troubleshooting, error states, escalation paths
+   - `docs/support/README.md` — added v0.2.13 entries to all three tables (assessments, KB, releases)
+   - `docs/support/heartbeat-log.md` — logged the sync
+
+2. **Closed VOY-1230** (backlog → done) — the original docs-sync issue was superseded by the VOY-1233 work. All deliverables (release notes, KB article, support case assessment, README update) were completed.
+
+3. **Verified docs consistency** — The billing-fixes docs (canonical) cover the same v0.2.13 changes as the earlier tier-sync docs (VOY-1237). All README links point to the canonical billing-fixes versions.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 (Deep Planning, Memory, Knowledge, CEO Chat) when released |
+| Release notes currency | Up to date through v0.2.13 (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- **v0.4.0 release to main** → support case assessment for Deep Planning, Memory & Knowledge, CEO Chat
+- PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
+- COO request for documentation health report
+
 ## 2026-08-16 — Heartbeat: v0.2.13 support case assessment + release notes (VOY-1237)
 
 ### What was done

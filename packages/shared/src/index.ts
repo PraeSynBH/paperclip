@@ -612,10 +612,12 @@ export type {
   PlanReviewContextAuthor,
   PlanReviewContextComment,
   PlanReviewContextThread,
+  PlanReviewGateContext,
   PlanReviewInteractionContext,
   PlanReviewInteractionResultContext,
   PlanReviewInteractionTargetContext,
   ParentPlanReviewContext,
+  MilestoneProgress,
   DocumentTextPosition,
   DocumentTextProjection,
   DocumentTextRange,
@@ -1561,6 +1563,20 @@ export {
   memorySnippetSchema,
   memoryContextBundleSchema,
   memoryListPageSchema,
+  // Knowledge document schemas (runtime validators)
+  knowledgeDocumentStatusSchema,
+  knowledgeReviewStatusSchema,
+  knowledgeBacklinkSourceTypeSchema,
+  knowledgeDocumentCreateSchema,
+  knowledgeDocumentUpdateSchema,
+  knowledgeDocumentPublishSchema,
+  knowledgeDocumentSubmitReviewSchema,
+  knowledgeDocumentReviewDecisionSchema,
+  knowledgeDocumentListQuerySchema,
+  knowledgeCreateBacklinkSchema,
+  knowledgeDocumentListItemSchema,
+  knowledgeDocumentListPageSchema,
+  knowledgeDocumentDiffSchema,
 } from "./validators/index.js";
 
 export type {
@@ -1585,6 +1601,26 @@ export type {
   MemoryExtractionHookKind,
   MemoryExtractionJobStatus,
 } from "./types/memory.js";
+
+export type {
+  KnowledgeDocumentStatus,
+  KnowledgeReviewStatus,
+  KnowledgeBacklinkSourceType,
+  KnowledgeDocument,
+  KnowledgeDocumentRevision,
+  KnowledgeDocumentReview,
+  KnowledgeSourceBacklink,
+  KnowledgeDocumentCreateRequest,
+  KnowledgeDocumentUpdateRequest,
+  KnowledgeDocumentPublishRequest,
+  KnowledgeDocumentSubmitReviewRequest,
+  KnowledgeDocumentReviewDecision,
+  KnowledgeDocumentListQuery,
+  KnowledgeDocumentListPage,
+  KnowledgeDocumentDiff,
+  KnowledgeCreateBacklinkRequest,
+  KnowledgeCreateBacklinkResponse,
+} from "./types/knowledge.js";
 
 export { API_PREFIX, API } from "./api.js";
 export { normalizeAgentUrlKey, deriveAgentUrlKey, isUuidLike } from "./agent-url-key.js";

@@ -534,6 +534,29 @@ type PaperclipWakeParentPlanReviewContext = {
   acceptedRevisionBodyTruncated: boolean;
 };
 
+type PaperclipWakePlanReviewGate = {
+  id: string | null;
+  milestoneId: string | null;
+  status: string | null;
+  acceptanceCriteria: string[];
+  assignedAgentId: string | null;
+  createdByAgentId: string | null;
+  resolvedByAgentId: string | null;
+  resolvedAt: string | null;
+  resolutionComment: string | null;
+  createdAt: string | null;
+};
+
+type PaperclipWakeMilestoneProgress = {
+  milestoneId: string | null;
+  milestoneTitle: string | null;
+  status: string | null;
+  totalChildIssues: number;
+  completedChildIssues: number;
+  acceptanceCriteria: string[];
+  gatesStatus: string | null;
+};
+
 type PaperclipWakePlanReviewContext = {
   documentKey: string | null;
   issueId: string | null;
@@ -544,6 +567,8 @@ type PaperclipWakePlanReviewContext = {
   acceptedRevisionBody: string | null;
   acceptedRevisionBodyTruncated: boolean;
   parentPlanContext: PaperclipWakeParentPlanReviewContext | null;
+  gates: PaperclipWakePlanReviewGate[];
+  milestoneProgress: PaperclipWakeMilestoneProgress[];
   totals: {
     openThreadCount: number;
     includedThreadCount: number;
@@ -551,6 +576,12 @@ type PaperclipWakePlanReviewContext = {
     commentCount: number;
     includedCommentCount: number;
     omittedCommentCount: number;
+    gateCount: number;
+    approvedGateCount: number;
+    pendingGateCount: number;
+    rejectedGateCount: number;
+    milestoneCount: number;
+    completedMilestoneCount: number;
   };
   limits: {
     maxThreads: number;
@@ -879,7 +910,49 @@ function normalizePaperclipWakePlanReviewContext(value: unknown): PaperclipWakeP
         acceptedRevisionBodyTruncated: asBoolean(parentPlanRaw.acceptedRevisionBodyTruncated, false),
       }
     : null;
-  if (!documentKey && !issueId && threads.length === 0 && !interaction && !acceptedRevisionBody && !parentPlanContext) return null;
+
+  // Normalize gates
+  const gates: PaperclipWakePlanReviewGate[] = Array.isArray(context.gates)
+    ? context.gates
+        .map((g: Record<string, unknown>) => {
+          const gate = parseObject(g);
+          return {
+            id: asString(gate.id, "").trim() || null,
+            milestoneId: asString(gate.milestoneId, "").trim() || null,
+            status: asString(gate.status, "").trim() || null,
+            acceptanceCriteria: Array.isArray(gate.acceptanceCriteria)
+              ? gate.acceptanceCriteria.filter((s): s is string => typeof s === "string")
+              : [],
+            assignedAgentId: asString(gate.assignedAgentId, "").trim() || null,
+            createdByAgentId: asString(gate.createdByAgentId, "").trim() || null,
+            resolvedByAgentId: asString(gate.resolvedByAgentId, "").trim() || null,
+            resolvedAt: asString(gate.resolvedAt, "").trim() || null,
+            resolutionComment: asString(gate.resolutionComment, "").trim() || null,
+            createdAt: asString(gate.createdAt, "").trim() || null,
+          };
+        })
+    : [];
+
+  // Normalize milestone progress
+  const milestoneProgress: PaperclipWakeMilestoneProgress[] = Array.isArray(context.milestoneProgress)
+    ? context.milestoneProgress
+        .map((mp: Record<string, unknown>) => {
+          const entry = parseObject(mp);
+          return {
+            milestoneId: asString(entry.milestoneId, "").trim() || null,
+            milestoneTitle: asString(entry.milestoneTitle, "").trim() || null,
+            status: asString(entry.status, "").trim() || null,
+            totalChildIssues: Math.max(0, asNumber(entry.totalChildIssues, 0)),
+            completedChildIssues: Math.max(0, asNumber(entry.completedChildIssues, 0)),
+            acceptanceCriteria: Array.isArray(entry.acceptanceCriteria)
+              ? entry.acceptanceCriteria.filter((s): s is string => typeof s === "string")
+              : [],
+            gatesStatus: asString(entry.gatesStatus, "").trim() || null,
+          };
+        })
+    : [];
+
+  if (!documentKey && !issueId && threads.length === 0 && !interaction && !acceptedRevisionBody && !parentPlanContext && gates.length === 0 && milestoneProgress.length === 0) return null;
   return {
     documentKey,
     issueId,
@@ -890,6 +963,8 @@ function normalizePaperclipWakePlanReviewContext(value: unknown): PaperclipWakeP
     acceptedRevisionBody,
     acceptedRevisionBodyTruncated,
     parentPlanContext,
+    gates,
+    milestoneProgress,
     totals: {
       openThreadCount: Math.max(0, openThreadCount),
       includedThreadCount: Math.max(0, includedThreadCount),
@@ -897,6 +972,12 @@ function normalizePaperclipWakePlanReviewContext(value: unknown): PaperclipWakeP
       commentCount: Math.max(0, commentCount),
       includedCommentCount: Math.max(0, includedCommentCount),
       omittedCommentCount: Math.max(0, asNumber(totalsRaw.omittedCommentCount, Math.max(0, commentCount - includedCommentCount))),
+      gateCount: Math.max(0, asNumber(totalsRaw.gateCount, gates.length)),
+      approvedGateCount: Math.max(0, asNumber(totalsRaw.approvedGateCount, 0)),
+      pendingGateCount: Math.max(0, asNumber(totalsRaw.pendingGateCount, 0)),
+      rejectedGateCount: Math.max(0, asNumber(totalsRaw.rejectedGateCount, 0)),
+      milestoneCount: Math.max(0, asNumber(totalsRaw.milestoneCount, milestoneProgress.length)),
+      completedMilestoneCount: Math.max(0, asNumber(totalsRaw.completedMilestoneCount, 0)),
     },
     limits,
     truncated: asBoolean(context.truncated, false),
@@ -1409,6 +1490,57 @@ export function renderPaperclipWakePrompt(
     if (context.totals.omittedThreadCount > 0 || context.totals.omittedCommentCount > 0 || context.truncated) {
       lines.push("[plan review context truncated]");
     }
+
+    // ─── Plan review gates ────────────────────────────────────────────────
+    if (context.gates.length > 0) {
+      lines.push(
+        "",
+        "Plan review gates:",
+        "Review gates check acceptance criteria against completed milestones. " +
+          "Resolve gates you are assigned to via PATCH /issues/:id/plan/gates/:gateId.",
+      );
+      lines.push(
+        `- gates: ${context.totals.gateCount} total, ${context.totals.approvedGateCount} approved, ${context.totals.pendingGateCount} pending, ${context.totals.rejectedGateCount} rejected`,
+      );
+      for (const gate of context.gates) {
+        const state = [gate.status, gate.milestoneId ? `milestone: ${gate.milestoneId}` : null].filter(Boolean).join(", ");
+        lines.push(`- gate ${gate.id ?? "unknown"}${state ? ` (${state})` : ""}`);
+        if (gate.acceptanceCriteria.length > 0) {
+          lines.push(`  acceptance criteria: ${gate.acceptanceCriteria.join("; ")}`);
+        }
+        if (gate.assignedAgentId) {
+          lines.push(`  assigned agent: ${gate.assignedAgentId}`);
+        }
+        if (gate.resolvedByAgentId) {
+          lines.push(`  resolved by: ${gate.resolvedByAgentId}${gate.resolvedAt ? ` at ${gate.resolvedAt}` : ""}`);
+        }
+        if (gate.resolutionComment) {
+          lines.push(`  resolution: ${gate.resolutionComment}`);
+        }
+      }
+    }
+
+    // ─── Milestone progress ───────────────────────────────────────────────
+    if (context.milestoneProgress.length > 0) {
+      lines.push(
+        "",
+        "Milestone progress:",
+        "Milestones track progress toward major plan checkpoints. " +
+          "Milestones with totalChildIssues === completedChildIssues are ready for gate review.",
+      );
+      lines.push(
+        `- milestones: ${context.totals.milestoneCount} total, ${context.totals.completedMilestoneCount} completed`,
+      );
+      for (const mp of context.milestoneProgress) {
+        const state = [mp.status, mp.gatesStatus ? `gate: ${mp.gatesStatus}` : null].filter(Boolean).join(", ");
+        lines.push(`- milestone ${mp.milestoneTitle ?? mp.milestoneId ?? "unknown"}${state ? ` (${state})` : ""}`);
+        if (mp.acceptanceCriteria.length > 0) {
+          lines.push(`  acceptance criteria: ${mp.acceptanceCriteria.join("; ")}`);
+        }
+        lines.push(`  progress: ${mp.completedChildIssues}/${mp.totalChildIssues} child issues completed`);
+      }
+    }
+
     if (context.acceptedRevisionBody) {
       lines.push(
         "",

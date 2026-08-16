@@ -16,12 +16,32 @@ import { validate } from "../middleware/validate.js";
 import { assertBoard, assertCompanyAccess, assertBoardOrAgent } from "./authz.js";
 import { memoryBindingService } from "../services/index.js";
 import { builtinPgvectorAdapter } from "../services/memory-adapter.js";
-import { notFound } from "../errors.js";
+import { forbidden, notFound } from "../errors.js";
 
 export function memoryRoutes(db: Db) {
   const router = Router();
   const svc = memoryBindingService(db);
   const adapter = builtinPgvectorAdapter(db);
+
+  // ─── Agent Scope Enforcement ──────────────────────────────────────────────
+
+  /**
+   * For agent-authenticated requests, enforce that scope.agentId matches the
+   * caller's own agentId.  If scope.agentId is absent, inject it so the agent
+   * only sees records scoped to them or shared (scopeAgentId IS NULL).
+   * Throws 403 Forbidden on mismatch.
+   */
+  function enforceAgentScope(
+    scope: { agentId?: string },
+    req: { actor: { type: string; agentId?: string } },
+  ): void {
+    if (req.actor.type === "agent" && req.actor.agentId) {
+      if (scope.agentId && scope.agentId !== req.actor.agentId) {
+        throw forbidden("Agent cannot access another agent's memory scope");
+      }
+      scope.agentId = req.actor.agentId;
+    }
+  }
 
   // ─── Binding Resolution ──────────────────────────────────────────────────
 
@@ -37,6 +57,15 @@ export function memoryRoutes(db: Db) {
       assertCompanyAccess(req, companyId);
 
       const query = resolveMemoryBindingQuerySchema.parse(req.query);
+
+      // H3: Agent authentication enforcement — agents can only resolve
+      // their own binding and must not see configJson (may hold secrets).
+      if (req.actor.type === "agent") {
+        if (query.agentId && query.agentId !== req.actor.agentId) {
+          throw forbidden("Agent cannot resolve another agent's binding");
+        }
+      }
+
       const resolved = await svc.findActiveBinding(companyId, query.agentId);
 
       if (!resolved) {
@@ -44,6 +73,16 @@ export function memoryRoutes(db: Db) {
           error: "No active memory binding found",
           companyId,
           agentId: query.agentId ?? null,
+        });
+        return;
+      }
+
+      // Strip configJson from agent-facing responses to avoid leaking secrets
+      if (req.actor.type === "agent") {
+        const { configJson, ...safeBinding } = resolved.binding;
+        res.json({
+          ...resolved,
+          binding: safeBinding,
         });
         return;
       }
@@ -189,9 +228,12 @@ export function memoryRoutes(db: Db) {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);
 
+      const scope = { ...req.body.scope, companyId };
+      enforceAgentScope(scope, req);
+
       const result = await adapter.capture({
         ...req.body,
-        scope: { ...req.body.scope, companyId },
+        scope,
         source: { ...req.body.source, companyId },
       });
       res.status(201).json(result);
@@ -210,9 +252,12 @@ export function memoryRoutes(db: Db) {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);
 
+      const scope = { ...req.body.scope, companyId };
+      enforceAgentScope(scope, req);
+
       const result = await adapter.upsertRecords({
         ...req.body,
-        scope: { ...req.body.scope, companyId },
+        scope,
         source: req.body.source
           ? { ...req.body.source, companyId }
           : undefined,
@@ -232,12 +277,15 @@ export function memoryRoutes(db: Db) {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);
 
+      const scope = req.query.scope
+        ? { ...JSON.parse(req.query.scope as string), companyId }
+        : { companyId };
+      enforceAgentScope(scope, req);
+
       const query = memoryQueryRequestSchema.parse({
         ...req.query,
         bindingKey: req.query.bindingKey,
-        scope: req.query.scope
-          ? JSON.parse(req.query.scope as string)
-          : { companyId },
+        scope,
         query: req.query.q ?? req.query.query,
         topK: req.query.topK ? Number(req.query.topK) : undefined,
       });
@@ -258,11 +306,14 @@ export function memoryRoutes(db: Db) {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);
 
+      const scope = req.query.scope
+        ? { ...JSON.parse(req.query.scope as string), companyId }
+        : { companyId };
+      enforceAgentScope(scope, req);
+
       const listReq = memoryListRequestSchema.parse({
         bindingKey: req.query.bindingKey,
-        scope: req.query.scope
-          ? JSON.parse(req.query.scope as string)
-          : { companyId },
+        scope,
         cursor: req.query.cursor,
         limit: req.query.limit ? Number(req.query.limit) : undefined,
       });
@@ -284,9 +335,12 @@ export function memoryRoutes(db: Db) {
       const recordId = req.params.recordId as string;
       assertCompanyAccess(req, companyId);
 
+      const scope: { companyId: string; agentId?: string } = { companyId };
+      enforceAgentScope(scope, req);
+
       const result = await adapter.get(
         { providerKey: "builtin_pgvector", providerRecordId: recordId },
-        { companyId },
+        scope,
       );
 
       if (!result) {
@@ -323,7 +377,11 @@ export function memoryRoutes(db: Db) {
         return;
       }
 
-      await adapter.forget(handles, { companyId });
+      // C4: Enforce agent scope on forget operations
+      const scope: { companyId: string; agentId?: string } = { companyId };
+      enforceAgentScope(scope, req);
+
+      await adapter.forget(handles, scope);
       res.status(204).end();
     },
   );
