@@ -663,6 +663,79 @@ All web UI links must include the company prefix:
 - Projects: `/{prefix}/projects/{project-url-key}`
 - Documents: `/{prefix}/issues/{identifier}#document-{key}`
 
+## Structured Action Signals
+
+When your response creates or updates a Paperclip work object (issue, plan document, approval, memory record, or knowledge article), wrap that object's details in a `%%ACTIONS%%{...}%%/ACTIONS%%` block **at the end of your response**, after your conversational summary. The UI renders these as clickable resolution cards below your bubble.
+
+### When to emit
+
+| Object Type | Action | When |
+|-------------|--------|------|
+| Issue | create | You created a new issue via POST /api/companies/{id}/issues |
+| Issue | update | You changed an issue's status, assignee, or priority |
+| Plan | create | You created or revised a plan document (PUT /api/issues/{id}/documents/plan) |
+| Plan | update | You updated plan metadata (status, milestones, sections) |
+| Approval | create | A review gate was created and resolved (approved/rejected) |
+| Knowledge | create | You created a knowledge article |
+| Memory | create | You captured a memory record (POST /api/companies/{id}/memory/capture) |
+
+### Format
+
+Place a single `%%ACTIONS%%` block at the end of your markdown response, after your conversational summary. Include only the primary object the user asked you to create — not every intermediate API call.
+
+```
+%%ACTIONS%%
+{
+  "resolution": {
+    "type": "issue",
+    "action": "create",
+    "data": {
+      "title": "Hiring Plan for Q4",
+      "id": "PAP-42",
+      "url": "/PAP/issues/PAP-42"
+    }
+  }
+}
+%%/ACTIONS%%
+```
+
+### Examples
+
+After creating an issue:
+```
+I've created a task to research the competitor landscape. You can find it here.
+
+%%ACTIONS%%
+{"resolution":{"type":"issue","action":"create","data":{"title":"Competitor Landscape Research","id":"PAP-45","url":"/PAP/issues/PAP-45"}}}
+%%/ACTIONS%%
+```
+
+After approving a plan revision:
+```
+The launch plan is approved. I've logged the decision and the team can proceed.
+
+%%ACTIONS%%
+{"resolution":{"type":"approval","action":"create","data":{"title":"Launch Plan v2 — Approved","url":"/PAP/issues/PAP-38#document-plan"}}}
+%%/ACTIONS%%
+```
+
+After capturing a fact and logging a decision:
+```
+Noted. I'll remember that the European market is the Q3 focus.
+
+%%ACTIONS%%
+{"resolution":{"type":"memory","action":"create","data":{"title":"Q3 focus: European market"}},"decision":{"summary":"Prioritized European market for Q3","rationale":"Based on revenue projections showing 3x growth potential in EU vs US."}}
+%%/ACTIONS%%
+```
+
+### Critical rules
+
+1. **One block per response** — never emit multiple `%%ACTIONS%%` blocks in the same turn.
+2. **Include `data.url` when possible** — the "View" link on the resolution card points here.
+3. **Keep it concise** — the JSON should be minimal (title, id, url). Don't include the full object.
+4. **Place at the very end** — after your conversational closing. The block is stripped from the persisted comment and only shown in the UI as a card.
+5. **Never echo the block back in subsequent turns** — once you've emitted it, don't quote or reference the raw `%%ACTIONS%%` syntax in later messages.
+
 ## Key Endpoints Reference
 
 | Action | Method | Endpoint |

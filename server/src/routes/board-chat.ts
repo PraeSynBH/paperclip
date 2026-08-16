@@ -18,6 +18,30 @@ function stripActionSignals(response: string): string {
 }
 
 /**
+ * Parse structured action signals from a raw model response.
+ * Returns an array of parsed action objects, one per `%%ACTIONS%%{...}%%/ACTIONS%%`
+ * block found. The board skill wraps created/updated work objects in these
+ * blocks so the UI can render clickable resolution cards.
+ */
+function extractActionSignals(response: string): Record<string, unknown>[] {
+  const actions: Record<string, unknown>[] = [];
+  const regex = /%%ACTIONS%%\s*(\{[\s\S]*?\})\s*%%\/ACTIONS%%/g;
+  let match: RegExpExecArray | null;
+  while ((match = regex.exec(response)) !== null) {
+    try {
+      const parsed = JSON.parse(match[1]);
+      if (parsed && typeof parsed === "object") {
+        actions.push(parsed);
+      }
+    } catch {
+      // Malformed JSON — skip silently; the cleaned response already
+      // strips the block so the user never sees raw markup.
+    }
+  }
+  return actions;
+}
+
+/**
  * Board Concierge Chat routes.
  *
  * Implements `POST /board/chat/stream` (mounted under `/api`): a lightweight
@@ -350,6 +374,18 @@ export function boardChatRoutes(
     proc.on("close", async (exitCode) => {
       clearTimeout(timeout);
       releaseSlot();
+
+      // Emit parsed action signals as typed SSE events BEFORE persisting
+      // the cleaned response (which strips the raw markup). The UI uses
+      // these to render clickable resolution cards.
+      const actions = extractActionSignals(fullResponse);
+      if (actions.length > 0 && res.writable) {
+        for (const action of actions) {
+          res.write(
+            `data: ${JSON.stringify({ type: "action", action })}\n\n`,
+          );
+        }
+      }
 
       // Persist the board's reply under the "board-concierge" sentinel so the
       // UI renders it as an assistant bubble (see BoardChat `isUser` check).
