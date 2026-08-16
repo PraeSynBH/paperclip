@@ -555,7 +555,8 @@ export function builtinPgvectorAdapter(
             ),
           )
           .orderBy(
-            sql`1 - (${memoryRecords.embedding} <=> CAST(${embeddingJson} AS vector)) DESC`,
+            // Bare distance operator — required for pgvector HNSW index support
+            sql`${memoryRecords.embedding} <=> CAST(${embeddingJson} AS vector)`,
           )
           .limit(topK)) as Array<typeof memoryRecords.$inferSelect & { score?: number }>;
       } else {

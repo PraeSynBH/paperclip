@@ -17,6 +17,8 @@ export interface EmbeddingConfig {
   apiBaseUrl: string;
   /** Model name, defaults to text-embedding-3-small */
   model?: string;
+  /** Expected embedding dimension count, defaults to 1536 */
+  dimensions?: number;
   /** API key */
   apiKey: string;
   /** Request timeout in ms */
@@ -40,6 +42,7 @@ export function embeddingService(config?: EmbeddingConfig) {
   const resolvedConfig: EmbeddingConfig = {
     apiBaseUrl: process.env.PAPERCLIP_EMBEDDING_API_BASE ?? "https://api.openai.com/v1",
     model: process.env.PAPERCLIP_EMBEDDING_MODEL ?? DEFAULT_MODEL,
+    dimensions: DEFAULT_DIMENSIONS,
     apiKey: config?.apiKey ?? process.env.PAPERCLIP_EMBEDDING_API_KEY ?? "",
     timeoutMs: config?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
     ...config,
@@ -113,6 +116,14 @@ export function embeddingService(config?: EmbeddingConfig) {
       }
 
       embedding = data.data[0].embedding;
+
+      // Validate embedding dimension matches expected model dimensions
+      if (embedding.length !== resolvedConfig.dimensions && resolvedConfig.dimensions !== undefined) {
+        throw new Error(
+          `Embedding dimension mismatch: expected ${resolvedConfig.dimensions}, got ${embedding.length}`,
+        );
+      }
+
       inputTokens = data.usage?.prompt_tokens ?? 0;
     } catch (err) {
       logger.error({ err }, "Embedding generation failed");
