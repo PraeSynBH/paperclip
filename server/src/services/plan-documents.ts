@@ -65,6 +65,15 @@ export function planDocumentService(db: Db) {
     },
 
     /**
+     * Batch-fetch plan documents for many issues in one query (avoids N+1).
+     * Tenant-safe: rows are keyed by issueId; only issues with a 'plan'
+     * document are present in the result map.
+     */
+    listPlanDocuments: async (issueIds: string[]) => {
+      return docsSvc.getIssueDocumentsByKeys(issueIds, ["plan"]);
+    },
+
+    /**
      * List plan document revisions with plan metadata snapshots.
      * Tenant-safe: filters by issue companyId (C-1 defense-in-depth).
      */

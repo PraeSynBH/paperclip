@@ -3393,9 +3393,12 @@ export function issueRoutes(
       ? rawResult
       : await filterIssuesForActor(req, rawResult);
     const issueIds = result.map((issue) => issue.id);
-    const [handoffStates, recoveryActionByIssue] = await Promise.all([
+    const [handoffStates, recoveryActionByIssue, planDocsByIssueId] = await Promise.all([
       listSuccessfulRunHandoffStates(db, companyId, issueIds),
       recoveryActionsSvc.listActiveForIssues(companyId, issueIds),
+      hasPlanDocument === true
+        ? planDocumentsSvc.listPlanDocuments(issueIds)
+        : Promise.resolve(new Map<string, never>()),
     ]);
     const actor = getActorInfo(req);
     await Promise.all(result.map(async (issue) => {
@@ -3414,6 +3417,9 @@ export function issueRoutes(
       ...issue,
       successfulRunHandoff: handoffStates.get(issue.id) ?? null,
       activeRecoveryAction: recoveryActionByIssue.get(issue.id) ?? null,
+      ...(planDocsByIssueId.size > 0
+        ? { planDocument: planDocsByIssueId.get(issue.id) ?? null }
+        : {}),
     })));
   });
 

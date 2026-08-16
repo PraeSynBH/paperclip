@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
 import { isSystemIssueDocumentKey, issueDocumentKeySchema } from "@paperclipai/shared";
@@ -170,6 +170,24 @@ export function documentService(db: Db) {
         .where(and(eq(issueDocuments.issueId, issueId), eq(issueDocuments.key, key)))
         .then((rows) => rows[0] ?? null);
       return row ? mapIssueDocumentRow(row, true) : null;
+    },
+
+    /**
+     * Batch-fetch issue documents for many issues at once (avoids N+1).
+     * Filters by document key when provided. Returns a Map keyed by issueId.
+     * Only the latest revision body is returned, matching getIssueDocumentByKey.
+     */
+    getIssueDocumentsByKeys: async (issueIds: string[], keys: string[] | undefined) => {
+      if (issueIds.length === 0) return new Map<string, ReturnType<typeof mapIssueDocumentRow>>();
+      const rows = await db
+        .select(issueDocumentSelect)
+        .from(issueDocuments)
+        .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
+        .where(and(
+          inArray(issueDocuments.issueId, issueIds),
+          keys && keys.length > 0 ? inArray(issueDocuments.key, keys) : undefined,
+        ));
+      return new Map(rows.map((row) => [row.issueId, mapIssueDocumentRow(row, true)]));
     },
 
     listIssueDocumentRevisions: async (issueId: string, rawKey: string) => {
