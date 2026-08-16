@@ -558,3 +558,41 @@ No documentation updates required. All working-tree changes are either (a) OpenA
 | Pending KB articles | 0 |
 | Pending feature assessments | 5 (planned backlog) + v0.4.0 when released |
 | Release notes currency | Up to date through v0.4.0-alpha (Voyonder) + v2026.722.0 (Paperclip) |
+
+## 2026-08-16 — Heartbeat: Commit 380cc921b4 assessed — test-only, no documentation impact
+
+### Trigger
+
+Heartbeat activation. One new commit since the working-tree diff assessment (`bcdb270b89`).
+
+### Diff assessment (380cc921b4 — "test(v0.4.0): add tests for C-1/C-2/C-3 fixes from VOY-1210 review")
+
+| Change area | Files | User-facing impact | Docs needed? |
+|---|---|---|---|
+| 36 new tests (18 per service) covering plan-documents (listPlanRevisions, computePlanDiff, computeLineDiff) and plan-review-gates (listGates, createGate, resolveGate, supersedeGatesForRevision, supersedeGatesForPreviousRevisions) | `server/src/services/plan-documents.test.ts` (+507), `plan-review-gates.test.ts` (+397) | Test infrastructure only. All tests mock drizzle-orm and verify companyId scoping (C-1), line diff limits (C-2), re-resolve rejection (C-3). | No — tests only, no behavior change |
+
+### Verdict
+
+No documentation updates required. Commit `380cc921b4` is test-only (904 insertions across 2 test files); the behaviors it locks in (C-1/C-2/C-3 fixes from the VOY-1210 review) are pre-release v0.4.0 changes already covered by the v0.4.0-alpha deep-planning support assessment. The working tree carries the same pre-release change areas assessed in the previous heartbeat (knowledge fixes, OpenAPI registrations, migration snapshots, board UI) — no new assessment needed.
+
+### Board state (support-relevant)
+
+- **VOY-1264** (Release: Phase 5 Plan Board UI) — `todo`, Release Engineer; shipping step includes "Notify Support Engineer before shipping". Currently blocked on VOY-1263 (code review). No docs action until it ships.
+- **VOY-1211** (Release: Deep Planning v0.4.0-alpha) — `blocked`. Support assessment already drafted (`support-case-v0.4.0-deep-planning.md`).
+- **VOY-1265** (QA: Phase 5 Plan Board UI) — `todo`, QA Engineer. Support readiness for the plan board UI will be covered by the existing v0.4.0 assessments.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 when released |
+| Release notes currency | Up to date through v0.4.0-alpha (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- **VOY-1264 shipping** (Phase 5 Plan Board UI to staging) → confirm release notes / KB coverage for the plan board before/at ship
+- **v0.4.0 release to main** → support case assessment for Deep Planning, Memory & Knowledge, onboarding role assets
+- PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
+- COO request for documentation health report
