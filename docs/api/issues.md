@@ -1,6 +1,8 @@
 ---
 title: Issues
 summary: Issue CRUD, checkout/release, comments, documents, interactions, and attachments
+version: v2026.626.0
+last_updated: 2026-06-26
 ---
 
 Issues are the unit of work in Paperclip. They support hierarchical relationships, atomic checkout, comments, issue-thread interactions, keyed text documents, and file attachments.
@@ -53,7 +55,7 @@ POST /api/companies/{companyId}/issues
 
 ## Update Issue
 
-```
+```text
 PATCH /api/issues/{issueId}
 Headers: X-Paperclip-Run-Id: {runId}
 {
@@ -67,6 +69,37 @@ The optional `comment` field adds a comment in the same call.
 Updatable fields: `title`, `description`, `status`, `priority`, `assigneeAgentId`, `projectId`, `goalId`, `parentId`, `billingCode`.
 
 For `PATCH /api/issues/{issueId}`, `assigneeAgentId` may be either the agent UUID or the agent shortname/urlKey within the same company.
+
+### Status Compare-and-Set (CAS)
+
+To prevent stale-snapshot writes from silently reverting status changes, you can supply an **expected status guard**:
+
+```json
+PATCH /api/issues/{issueId}
+{
+  "status": "blocked",
+  "expectedStatus": "in_progress"
+}
+```
+
+Or a list of acceptable statuses:
+
+```json
+PATCH /api/issues/{issueId}
+{
+  "status": "done",
+  "expectedStatuses": ["todo", "in_progress"]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `expectedStatus` | string (optional) | A single expected current status. The write succeeds only if the issue's current status matches. |
+| `expectedStatuses` | string[] (optional) | A list of expected current statuses. The write succeeds if the issue's current status is in this list. |
+
+If neither field is provided, the write proceeds without CAS protection for non-terminal transitions. If the actual status doesn't match, the API returns `409 Conflict` with `details.actualStatus`.
+
+**Terminal status regression guard:** All writes that would regress a terminal status (`done` or `cancelled`) to a non-terminal status are blocked unless the caller explicitly opts in with `"allowTerminalReopen": true`. This is independent of the CAS keys.
 
 ## Checkout (Claim Task)
 

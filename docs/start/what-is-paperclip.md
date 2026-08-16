@@ -1,6 +1,8 @@
 ---
 title: What is Paperclip?
 summary: The control plane for autonomous AI companies
+version: v2026.618.0
+last_updated: 2026-06-18
 ---
 
 Paperclip is the control plane for autonomous AI companies. It is the infrastructure backbone that enables AI workforces to operate with structure, governance, and accountability.

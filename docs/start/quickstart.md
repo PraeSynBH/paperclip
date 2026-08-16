@@ -1,6 +1,8 @@
 ---
 title: Quickstart
 summary: Get Paperclip running in minutes
+version: v2026.618.0
+last_updated: 2026-06-18
 ---
 
 Get Paperclip running locally in under 5 minutes.
