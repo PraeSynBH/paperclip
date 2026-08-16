@@ -112,41 +112,45 @@ export function planReviewGateService(db: Db) {
         );
       }
 
-      const now = new Date();
-      const [gate] = await db
-        .update(planReviewGates)
-        .set({
-          status: input.status,
-          resolvedByAgentId: input.resolvedByAgentId ?? null,
-          resolvedByUserId: input.resolvedByUserId ?? null,
-          resolvedAt: now,
-          resolutionComment: input.resolutionComment ?? null,
-          updatedAt: now,
-        })
-        .where(and(
-          eq(planReviewGates.id, gateId),
-          eq(planReviewGates.status, "pending"), // safety: only resolve if still pending
-        ))
-        .returning();
-      if (!gate) throw notFound("Plan review gate not found or already resolved");
+      // Use transaction to atomically update the gate and check all-approved status,
+      // preventing race conditions where concurrent resolutions could interleave.
+      return db.transaction(async (tx) => {
+        const now = new Date();
+        const [gate] = await tx
+          .update(planReviewGates)
+          .set({
+            status: input.status,
+            resolvedByAgentId: input.resolvedByAgentId ?? null,
+            resolvedByUserId: input.resolvedByUserId ?? null,
+            resolvedAt: now,
+            resolutionComment: input.resolutionComment ?? null,
+            updatedAt: now,
+          })
+          .where(and(
+            eq(planReviewGates.id, gateId),
+            eq(planReviewGates.status, "pending"), // safety: only resolve if still pending
+          ))
+          .returning();
+        if (!gate) throw notFound("Plan review gate not found or already resolved");
 
-      // Check if all gates for this revision are now approved
-      const remainingPending = await db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(planReviewGates)
-        .where(and(
-          eq(planReviewGates.documentId, gate.documentId),
-          eq(planReviewGates.revisionId, gate.revisionId),
-          eq(planReviewGates.status, "pending"),
-        ))
-        .then((rows) => Number(rows[0]?.count ?? 0));
+        // Check if all gates for this revision are now approved.
+        // allApproved requires zero pending AND zero rejected gates.
+        const counts = await tx
+          .select({
+            pending: sql<number>`count(*) filter (where ${planReviewGates.status} = 'pending')::int`,
+            rejected: sql<number>`count(*) filter (where ${planReviewGates.status} = 'rejected')::int`,
+          })
+          .from(planReviewGates)
+          .where(and(
+            eq(planReviewGates.documentId, gate.documentId),
+            eq(planReviewGates.revisionId, gate.revisionId),
+          ))
+          .then((rows) => rows[0] ?? { pending: 0, rejected: 0 });
 
-      const allApproved = remainingPending === 0 && input.status === "approved";
+        const allApproved = counts.pending === 0 && counts.rejected === 0 && input.status === "approved";
 
-      return {
-        gate,
-        allApproved,
-      };
+        return { gate, allApproved };
+      });
     },
 
     /**

@@ -56,7 +56,8 @@ function makeDb() {
     then: vi.fn((resolve: (v: unknown) => unknown) => Promise.resolve(resolve([]))),
   };
 
-  return {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const mock: Record<string, any> = {
     insert: vi.fn(() => ({
       values: vi.fn(() => ({
         returning,
@@ -79,6 +80,8 @@ function makeDb() {
     _returning: returning,
     _updateReturning: updateReturning,
   };
+  mock.transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(mock as never));
+  return mock;
 }
 
 type TestDb = ReturnType<typeof makeDb>;
@@ -271,7 +274,7 @@ describe("planReviewGateService", () => {
     it("approves a pending gate and returns allApproved=true when no other gates are pending", async () => {
       hookSelectSequence(db, [
         [makeGateRow({ status: "pending" })],
-        [{ count: 0 }],
+        [{ pending: 0, rejected: 0 }],
       ]);
       db._updateReturning.mockResolvedValue([
         makeGateRow({ status: "approved", resolvedAt: new Date() }),
@@ -290,7 +293,7 @@ describe("planReviewGateService", () => {
     it("rejects a pending gate and returns allApproved=false", async () => {
       hookSelectSequence(db, [
         [makeGateRow({ status: "pending" })],
-        [{ count: 0 }],
+        [{ pending: 0, rejected: 0 }],
       ]);
       db._updateReturning.mockResolvedValue([
         makeGateRow({ status: "rejected", resolvedAt: new Date() }),
@@ -309,7 +312,7 @@ describe("planReviewGateService", () => {
     it("returns allApproved=false when other gates are still pending", async () => {
       hookSelectSequence(db, [
         [makeGateRow({ status: "pending" })],
-        [{ count: 2 }],
+        [{ pending: 2, rejected: 0 }],
       ]);
       db._updateReturning.mockResolvedValue([
         makeGateRow({ status: "approved", resolvedAt: new Date() }),
@@ -318,6 +321,23 @@ describe("planReviewGateService", () => {
       const result = await svc.resolveGate(gateId, { status: "approved" });
 
       expect(result.gate.status).toBe("approved");
+      expect(result.allApproved).toBe(false);
+    });
+
+    it("returns allApproved=false when a rejected gate exists even if no gates are pending", async () => {
+      hookSelectSequence(db, [
+        [makeGateRow({ status: "pending" })],
+        [{ pending: 0, rejected: 1 }],
+      ]);
+      db._updateReturning.mockResolvedValue([
+        makeGateRow({ status: "approved", resolvedAt: new Date() }),
+      ]);
+
+      const result = await svc.resolveGate(gateId, { status: "approved" });
+
+      expect(result.gate.status).toBe("approved");
+      // Even though there are zero pending gates, the existing rejected gate
+      // prevents allApproved from being true — fixes H-2 bug.
       expect(result.allApproved).toBe(false);
     });
 
