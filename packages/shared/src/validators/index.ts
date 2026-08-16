@@ -649,6 +649,7 @@ export {
   createPlanReviewGateSchema,
   resolvePlanReviewGateSchema,
   planDiffQuerySchema,
+  planGatesQuerySchema,
   type PlanSection,
   type PlanMilestone,
   type PlanMetadata,

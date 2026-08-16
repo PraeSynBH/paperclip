@@ -44,7 +44,7 @@ export const planReviewGateSchema = z.object({
   companyId: z.string().uuid(),
   documentId: z.string().uuid(),
   revisionId: z.string().uuid(),
-  milestoneId: z.string().uuid().nullable().optional(),
+  milestoneId: z.string().nullable().optional(),
   status: z.enum(PLAN_REVIEW_GATE_STATUSES).default("pending"),
   acceptanceCriteria: z.array(z.string().trim().min(1).max(2000)).max(50).default([]),
   assignedAgentId: z.string().uuid().nullable().optional(),
@@ -74,7 +74,7 @@ export type UpsertPlanDocument = z.infer<typeof upsertPlanDocumentSchema>;
 // ─── Create Review Gate ────────────────────────────────────────────────────
 
 export const createPlanReviewGateSchema = z.object({
-  milestoneId: z.string().uuid().nullable().optional(),
+  milestoneId: z.string().nullable().optional(),
   acceptanceCriteria: z.array(z.string().trim().min(1).max(2000)).max(50).default([]),
   assignedAgentId: z.string().uuid().nullable().optional(),
 });
@@ -94,3 +94,10 @@ export const planDiffQuerySchema = z.object({
   againstRevisionId: z.string().uuid(),
 });
 export type PlanDiffQuery = z.infer<typeof planDiffQuerySchema>;
+
+// ─── Plan Gates Query ──────────────────────────────────────────────────────
+
+export const planGatesQuerySchema = z.object({
+  revisionId: z.string().uuid().optional(),
+});
+export type PlanGatesQuery = z.infer<typeof planGatesQuerySchema>;

@@ -156,12 +156,13 @@ export function planReviewGateService(db: Db) {
     supersedeGatesForRevision: async (input: {
       issueId: string;
       oldRevisionId: string;
+      supersededByGateId?: string | null;
     }) => {
       const { documentId, companyId } = await resolvePlanDocumentIds(db, input.issueId);
       const now = new Date();
       await db
         .update(planReviewGates)
-        .set({ status: "superseded", updatedAt: now })
+        .set({ status: "superseded", updatedAt: now, supersededByGateId: input.supersededByGateId ?? null })
         .where(and(
           eq(planReviewGates.documentId, documentId),
           eq(planReviewGates.companyId, companyId),

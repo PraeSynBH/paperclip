@@ -60,6 +60,7 @@ import {
   createPlanReviewGateSchema,
   resolvePlanReviewGateSchema,
   planDiffQuerySchema,
+  planGatesQuerySchema,
   updateIssueSchema,
   rejectUnsupportedIssuePatchMonitorSchedulingFields,
   getClosedIsolatedExecutionWorkspaceMessage,
@@ -6002,6 +6003,13 @@ export function issueRoutes(
     if (!(await assertIssueReadAllowed(req, res, issue))) return;
 
     const revisionId = req.query.revisionId as string | undefined;
+    if (revisionId !== undefined) {
+      const parsed = planGatesQuerySchema.safeParse({ revisionId });
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid query parameters", details: parsed.error.issues });
+        return;
+      }
+    }
     const gates = await planReviewGatesSvc.listGates({
       issueId: issue.id,
       revisionId: revisionId ?? null,
