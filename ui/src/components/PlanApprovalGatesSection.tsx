@@ -84,8 +84,11 @@ export function PlanApprovalGatesSection({
     onSuccess: () => {
       setResolutionComment("");
       setActiveGateId(null);
-      queryClient.invalidateQueries({ queryKey: queryKeys.issues.planGates(issueId) });
+      // Use 3-element prefix to match both revisionId-specific and __all__ keys
+      queryClient.invalidateQueries({ queryKey: ["issues", "plan-gates", issueId] });
       queryClient.invalidateQueries({ queryKey: queryKeys.issues.planDocument(issueId) });
+      // Refresh the issue detail to reflect gate status changes in plan status
+      queryClient.invalidateQueries({ queryKey: queryKeys.issues.detail(issueId) });
     },
   });
 
