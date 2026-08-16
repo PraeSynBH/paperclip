@@ -5,6 +5,47 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-16 — Heartbeat: v0.2.13 support case assessment + release notes (VOY-1237)
+
+### What was done
+
+1. **Support case assessment created** — `docs/support/assessments/support-case-stripe-tier-sync.md` (VOY-1237):
+   - Covers `syncTierFromStripe()` hardening: active/trialing-only subscription check, deleted-customer (`{deleted: true}`) detection, auto-downgrade to free, safe `mapStripeStatus()` replacement for unsafe type casts
+   - Covers `findOrCreateStripeCustomer()` stale reference auto-repair (VOY-896)
+   - Covers NEXTAUTH_URL Google OAuth redirect fix
+   - Includes user confusion points, FAQ, troubleshooting steps, error states table, and escalation paths
+
+2. **Release notes created** — `docs/support/releases/v0.2.13-stripe-tier-sync.md`:
+   - Curated, customer-facing notes for the v0.2.13 release
+   - Before/after behavior table for support staff
+   - Support escalation path table
+
+3. **Support KB updated** — `docs/support/README.md`:
+   - Added Stripe Tier Sync Hardening to Recently Shipped Features table
+   - Added Voyonder Release Notes index section
+
+### Verification
+
+- Source: Release Engineer pipeline status (docs/release-engineer/2026-08-16-pipeline-status.md) — branch `fix/voy-944-must-fix-items` (02d2992) contains VOY-944 must-fix items, VOY-896 stale-ref auto-repair, NEXTAUTH_URL fix
+- Merge to main (VOY-1218) done, QA verification (VOY-1231) complete
+- Stripe-webhook tests 45/45 pass on branch
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 (Deep Planning, Memory, onboarding roles) when released |
+| Working tree docs changes | 3 files (2 new, 1 modified) |
+| Release notes currency | Up to date through v0.2.13 (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- **v0.4.0 release to main** → support case assessment for Deep Planning, Memory & Knowledge, onboarding role assets
+- PostHog error monitoring (VOY-999) reaching production → finalize SOP from draft
+- COO request for documentation health report
+
 ## 2026-08-15 — Heartbeat: Committed 30-file documentation sync (1cb3953775)
 
 ### What was done
