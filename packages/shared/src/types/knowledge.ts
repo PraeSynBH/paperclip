@@ -141,3 +141,16 @@ export interface KnowledgeCreateBacklinkRequest {
 export interface KnowledgeCreateBacklinkResponse {
   id: string;
 }
+
+// ─── Memory→Knowledge Promotion ──────────────────────────────────────────────
+
+export interface KnowledgePromoteFromMemoryRequest {
+  /** The memory record ID to promote */
+  memoryRecordId: string;
+  /** Optional title override (defaults to "Memory Record from <source>") */
+  title?: string;
+  /** Optional summary override */
+  summary?: string;
+  /** Optional body override (defaults to memory record text) */
+  body?: string;
+}

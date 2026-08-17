@@ -4820,6 +4820,7 @@ registerCurrentRoute({
 for (const route of [
   ["get", "/api/companies/{companyId}/memory/bindings", "List memory bindings"],
   ["get", "/api/companies/{companyId}/memory/bindings/{bindingId}", "Get a memory binding"],
+  ["get", "/api/companies/{companyId}/memory/bindings/{bindingId}/capabilities", "Get resolved capabilities for a memory binding"],
   ["post", "/api/companies/{companyId}/memory/bindings", "Create a memory binding"],
   ["patch", "/api/companies/{companyId}/memory/bindings/{bindingId}", "Update a memory binding"],
   ["delete", "/api/companies/{companyId}/memory/bindings/{bindingId}", "Delete a memory binding"],
@@ -4876,6 +4877,8 @@ for (const route of [
   ["get", "/api/companies/{companyId}/knowledge/{documentId}/backlinks", "List backlinks for a document"],
   ["post", "/api/companies/{companyId}/knowledge/{documentId}/backlinks", "Create a backlink from a document to an issue"],
   ["get", "/api/companies/{companyId}/knowledge/search", "Search published knowledge documents"],
+  ["post", "/api/companies/{companyId}/knowledge/promote-from-memory", "Promote a memory record to a knowledge document"],
+  ["post", "/api/companies/{companyId}/knowledge/maintenance/rebuild-index", "Rebuild the pgvector HNSW embedding index"],
 ] as const) {
   registerCurrentRoute({
     method: route[0],

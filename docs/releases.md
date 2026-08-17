@@ -11,7 +11,7 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
-## v0.4.0-alpha (RC-3) — August 16, 2026
+## v0.4.0-alpha (RC-4) — August 17, 2026
 
 [Full release notes →](/support/releases/v0.4.0-alpha-deep-planning)
 
@@ -32,6 +32,12 @@ Paperclip ships continuously. This page documents each release to the main branc
 - **Chat-to-Work Resolution Cards** — In the Conference Room chat, the board assistant's created/updated work objects (issues, plans, approvals, memory records, knowledge articles) now appear as clickable resolution cards with type badges and direct links, instead of only conversational mentions.
 
 - **Manager-Chain Issue Permissions** — Managers can now comment on and mutate issues assigned to agents in their reporting subtree, so leadership can close, reassign, and unblock their team's work.
+
+- **C-Fixes** — Zod validation of LLM action signals (C-1), a TOCTOU safety net preventing duplicate SLA alerts (C-2), and special-character-safe knowledge search via `plainto_tsquery` (C-3).
+
+- **Memory Extraction Jobs** — New API and UI for monitoring background memory extraction jobs, with one-click retry of failed jobs.
+
+- **Batch Gate Counts + Live Events** — Plan cards now show active gate counts, and plan gate creation/resolution events stream to the UI in real time.
 
 [Full release notes →](/support/releases/v0.4.0-alpha-deep-planning)
 

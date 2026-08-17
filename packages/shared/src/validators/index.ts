@@ -724,6 +724,7 @@ export {
   knowledgeDocumentListItemSchema,
   knowledgeDocumentListPageSchema,
   knowledgeDocumentDiffSchema,
+  knowledgePromoteFromMemorySchema,
   type KnowledgeDocumentStatus,
   type KnowledgeReviewStatus,
   type KnowledgeBacklinkSourceType,

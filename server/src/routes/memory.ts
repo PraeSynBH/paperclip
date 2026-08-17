@@ -29,6 +29,19 @@ function parseScopeQuery(raw: string, companyId: string): Record<string, unknown
   }
 }
 
+/**
+ * Default capabilities for the built-in pgvector adapter.
+ * Plugin adapters override these via capabilitiesJson in the binding config.
+ */
+const BUILTIN_PGVECTOR_CAPABILITIES = {
+  profile: false,
+  correction: false,
+  multimodal: false,
+  providerManagedExtraction: false,
+  asyncExtraction: false,
+  providerNativeBrowse: false,
+};
+
 export function memoryRoutes(db: Db) {
   const router = Router();
   const svc = memoryBindingService(db);
@@ -112,6 +125,30 @@ export function memoryRoutes(db: Db) {
     assertCompanyAccess(req, companyId);
     res.json(await svc.listBindings(companyId));
   });
+
+  /**
+   * GET /companies/:companyId/memory/bindings/:bindingId/capabilities
+   * Get the resolved capabilities for a memory binding. Merges the
+   * built-in adapter's default capabilities with any overrides stored
+   * in the binding's capabilitiesJson.
+   */
+  router.get(
+    "/companies/:companyId/memory/bindings/:bindingId/capabilities",
+    async (req, res) => {
+      assertBoard(req);
+      const companyId = req.params.companyId as string;
+      const bindingId = req.params.bindingId as string;
+      assertCompanyAccess(req, companyId);
+
+      const binding = await svc.getBinding(companyId, bindingId);
+      const declared = binding.capabilitiesJson as Record<string, unknown> ?? {};
+      const merged = {
+        ...BUILTIN_PGVECTOR_CAPABILITIES,
+        ...declared,
+      };
+      res.json({ bindingId, capabilities: merged });
+    },
+  );
 
   /** GET /companies/:companyId/memory/bindings/:bindingId — Get one binding */
   router.get(

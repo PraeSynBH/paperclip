@@ -1582,6 +1582,7 @@ export {
   knowledgeDocumentListItemSchema,
   knowledgeDocumentListPageSchema,
   knowledgeDocumentDiffSchema,
+  knowledgePromoteFromMemorySchema,
 } from "./validators/index.js";
 
 export type {
@@ -1625,6 +1626,7 @@ export type {
   KnowledgeDocumentDiff,
   KnowledgeCreateBacklinkRequest,
   KnowledgeCreateBacklinkResponse,
+  KnowledgePromoteFromMemoryRequest,
 } from "./types/knowledge.js";
 
 export { API_PREFIX, API } from "./api.js";

@@ -5,7 +5,7 @@
 **Date**: 2026-08-16
 **Related**: BOARD-1, VOY-1188, VOY-1210, VOY-1263
 **Release**: v0.4.0 (pre-release)
-**Commit**: `0d4626e82e`
+**Commit**: `0d4626e82e` (Workstream C), `75c6c27a41` (C-1 validation hardening)
 
 ## Feature Overview (User Perspective)
 
@@ -51,8 +51,11 @@ Resolution cards only appear when the feature flag is enabled and the assistant 
 
 | Limitation | Description |
 |---|---|
-| **One block per response** | The board skill emits a single `%%ACTIONS%%` block per response. Multiple cards within one block are supported (for multiple actions), but the block itself is single. |
-| **Malformed JSON silently dropped** | If the model generates invalid JSON inside `%%ACTIONS%%`, the block is silently skipped — no error is shown. The conversational text still persists normally. |
+| **One block per response (up to 10)** | The board skill emits a single `%%ACTIONS%%` block per response, but the server caps at **10 blocks max** per turn for safety. If the model emits more than 10 blocks, extra blocks are silently truncated. |
+| **Malformed or invalid actions silently dropped** | Action blocks are validated against a strict Zod schema. Blocks with unrecognized resolution types, invalid actions, non-http(s) URLs, or oversized fields are silently skipped (logged server-side). The conversational text still persists normally. |
+| **URL protocol restriction** | URLs in action data are restricted to `http:` and `https:` protocols only. Blocked protocols (javascript:, data:, file:) are rejected with a log warning. |
+| **Field length limits** | Title fields are limited to 500 characters, ID fields to 200 characters, and rationale/decision summaries to 5000 characters. Oversized fields cause the entire action block to be skipped. |
+| **Unknown keys stripped** | The Zod schema uses `.passthrough()` for action data, so unexpected keys from the model are stripped rather than causing errors. |
 | **Raw markup briefly visible during streaming** | While the model is still generating, the raw `%%ACTIONS%%{...}%%/ACTIONS%%` markup may appear as plain text in the streaming bubble. This is expected — it clears when the stream completes and the cleaned response persists. |
 | **Cards reset on new message** | When the user sends a new message, any action events from the previous turn are cleared. Cards are per-turn only and do not persist in the conversation history. |
 | **"View" link only when `data.url` provided** | The resolution card's "View" link only appears if the assistant includes a `url` in the action data. If omitted, the card shows the title without a link. |
@@ -91,8 +94,10 @@ Resolution cards only appear when the feature flag is enabled and the assistant 
 
 | Scenario | User Experience | Resolution |
 |---|---|---|
-| Model generates invalid JSON inside %%ACTIONS%% | No card appears; raw markup is stripped; conversational text persists normally | Support can ignore — no data loss. Consider reporting the conversation for model quality analysis. |
-| %%ACTIONS%% block truncated by 120s timeout | If the model is mid-generation when the 120s timeout fires, the incomplete block is stripped. Partial action signals may not parse. | User may see a partial response with no card. Retry the request with a shorter ask. |
+| **Model generates invalid JSON inside %%ACTIONS%%** | No card appears; raw markup is stripped; conversational text persists normally | Support can ignore — no data loss. Consider reporting the conversation for model quality analysis. |
+| **Model emits an action block that fails Zod validation** | The block is skipped; a server-side warning is logged (`extractActionSignals: skipping malformed action block`). No card renders; conversation persists | Check server logs for the schema issue list to confirm why the block was rejected (bad type enum, non-http(s) URL, or oversized field). Report conversation for model quality analysis. |
+| **Model emits more than 10 action blocks** | Only the first 10 blocks are processed; a server-side warning is logged (`response exceeds max blocks (10) — truncated`) | Unexpected model behavior — report for analysis. User sees cards only for the first 10 blocks. |
+| **%%ACTIONS%% block truncated by 120s timeout** | If the model is mid-generation when the 120s timeout fires, the incomplete block is stripped. Partial action signals may not parse. | User may see a partial response with no card. Retry the request with a shorter ask. |
 | Multiple %%ACTIONS%% blocks in one response | The server's `extractActionSignals` parses ALL blocks, so multiple cards render. However, the skill instructs the model to emit only one block per response. Multiple blocks is unexpected behavior — report for analysis. | Cards render correctly even with multiple blocks. No user-facing error. |
 | SSE connection drops during action event delivery | Action events are delivered as part of the SSE stream. If the connection drops before the `action` event, the card does not render. The persisted comment still has the markup stripped. | User sees the cleaned response without cards. Refreshing the page loads the comment (without raw markup) but cards do not re-render. This is a known limitation. |
 

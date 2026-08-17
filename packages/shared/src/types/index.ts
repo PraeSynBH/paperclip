@@ -649,4 +649,5 @@ export type {
   KnowledgeDocumentDiff,
   KnowledgeCreateBacklinkRequest,
   KnowledgeCreateBacklinkResponse,
+  KnowledgePromoteFromMemoryRequest,
 } from "./knowledge.js";

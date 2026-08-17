@@ -146,3 +146,15 @@ export const knowledgeDocumentDiffSchema = z.object({
 export type KnowledgeDocumentDiff = z.infer<
   typeof knowledgeDocumentDiffSchema
 >;
+
+// ─── Promote from Memory ─────────────────────────────────────────────────────
+
+export const knowledgePromoteFromMemorySchema = z.object({
+  memoryRecordId: z.string().uuid(),
+  title: z.string().min(1).max(500).optional(),
+  summary: z.string().max(2000).optional(),
+  body: z.string().optional(),
+});
+export type KnowledgePromoteFromMemory = z.infer<
+  typeof knowledgePromoteFromMemorySchema
+>;

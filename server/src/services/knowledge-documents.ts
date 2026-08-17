@@ -5,6 +5,7 @@ import {
   knowledgeDocumentRevisions,
   knowledgeDocumentReviews,
   knowledgeSourceBacklinks,
+  memoryRecords,
 } from "@paperclipai/db";
 import type {
   KnowledgeDocument,
@@ -20,9 +21,27 @@ import type {
   KnowledgeDocumentListPage,
   KnowledgeDocumentDiff,
   KnowledgeCreateBacklinkRequest,
+  KnowledgePromoteFromMemoryRequest,
 } from "@paperclipai/shared";
 import { notFound } from "../errors.js";
 import { logger } from "../middleware/logger.js";
+
+// ─── Knowledge Search Cache ──────────────────────────────────────────────────
+
+/**
+ * Simple in-memory cache for knowledge document search results.
+ * Reduces repeated full-text search overhead for common queries.
+ */
+const knowledgeSearchCache = new Map<string, {
+  result: Array<{ id: string; title: string; summary?: string; score: number }>;
+  cachedAt: number;
+}>();
+const KNOWLEDGE_SEARCH_CACHE_MAX = 200;
+const KNOWLEDGE_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function buildKnowledgeSearchCacheKey(companyId: string, query: string, limit: number): string {
+  return `${companyId}:${query.toLowerCase().trim()}:${limit}`;
+}
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -116,6 +135,13 @@ export interface KnowledgeDocumentService {
     query: string,
     limit?: number,
   ): Promise<Array<{ id: string; title: string; summary?: string; score: number }>>;
+
+  /** Promote a memory record to a draft knowledge document. */
+  promoteFromMemory(
+    companyId: string,
+    req: KnowledgePromoteFromMemoryRequest,
+    authorAgentId?: string,
+  ): Promise<KnowledgeDocument>;
 }
 
 // ─── Factory ────────────────────────────────────────────────────────────────
@@ -824,6 +850,13 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
   ): Promise<Array<{ id: string; title: string; summary?: string; score: number }>> {
     const searchLimit = Math.min(limit ?? 10, 50);
 
+    // Check cache for recent identical queries
+    const cacheKey = buildKnowledgeSearchCacheKey(companyId, query ?? "", searchLimit);
+    const cached = knowledgeSearchCache.get(cacheKey);
+    if (cached && Date.now() - cached.cachedAt < KNOWLEDGE_SEARCH_CACHE_TTL_MS) {
+      return cached.result;
+    }
+
     // Use full-text search on published documents.
     // plainto_tsquery handles natural language input safely — punctuation,
     // operators, and special characters are stripped rather than causing
@@ -849,12 +882,102 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       .orderBy(sql`score DESC`)
       .limit(searchLimit);
 
-    return rows.map((r) => ({
+    const result = rows.map((r) => ({
       id: r.id,
       title: r.title,
       summary: r.summary ?? undefined,
       score: r.score ?? 0,
     }));
+
+    // Update cache (with LRU-like eviction)
+    if (knowledgeSearchCache.size >= KNOWLEDGE_SEARCH_CACHE_MAX) {
+      const firstKey = knowledgeSearchCache.keys().next().value;
+      if (firstKey) knowledgeSearchCache.delete(firstKey);
+    }
+    knowledgeSearchCache.set(cacheKey, { result, cachedAt: Date.now() });
+
+    return result;
+  }
+
+  // ─── promoteFromMemory ─────────────────────────────────────────────────────
+
+  /**
+   * Promote a memory record into a draft knowledge document.
+   *
+   * - Looks up the memory record by id within the company.
+   * - Defaults title/body/summary from the memory record content.
+   * - Creates an originating backlink when the memory record's source
+   *   references an issue.
+   * - The promoted document enters the normal review lifecycle (draft →
+   *   in_review → published), so company knowledge stays curated.
+   */
+  async function promoteFromMemory(
+    companyId: string,
+    req: KnowledgePromoteFromMemoryRequest,
+    authorAgentId?: string,
+  ): Promise<KnowledgeDocument> {
+    const memRows = await db
+      .select()
+      .from(memoryRecords)
+      .where(
+        and(
+          eq(memoryRecords.id, req.memoryRecordId),
+          eq(memoryRecords.companyId, companyId),
+        ),
+      )
+      .limit(1);
+
+    if (memRows.length === 0) {
+      throw notFound("Memory record not found");
+    }
+    const mem = memRows[0];
+
+    const title =
+      req.title?.trim() ||
+      `Memory: ${mem.recordType.replaceAll("_", " ")}`;
+    const body = req.body ?? mem.text;
+    const summary =
+      req.summary !== undefined
+        ? req.summary
+        : (mem.summary ?? undefined);
+
+    const rows = await db
+      .insert(knowledgeDocuments)
+      .values({
+        companyId,
+        title,
+        summary: summary ?? null,
+        body,
+        status: "draft",
+        version: 1,
+        authorAgentId: authorAgentId ?? null,
+        sourceIssueId: mem.sourceIssueId ?? null,
+      })
+      .returning();
+
+    await db.insert(knowledgeDocumentRevisions).values({
+      documentId: rows[0].id,
+      version: 1,
+      title,
+      summary: summary ?? null,
+      body,
+      changeDescription: "Promoted from memory record",
+      authorAgentId: authorAgentId ?? null,
+    });
+
+    // Auto-backlink to the source issue when the memory record has one
+    if (mem.sourceIssueId) {
+      await db
+        .insert(knowledgeSourceBacklinks)
+        .values({
+          documentId: rows[0].id,
+          sourceIssueId: mem.sourceIssueId,
+          sourceType: "originating_issue",
+        })
+        .onConflictDoNothing();
+    }
+
+    return toDocument(rows[0]);
   }
 
   return {
@@ -873,5 +996,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     createBacklink,
     listBacklinks,
     searchPublished,
+    promoteFromMemory,
   };
 }

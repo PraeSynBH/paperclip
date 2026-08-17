@@ -2,7 +2,7 @@
 title: Memory API
 summary: Agent memory API — pgvector-based bindings, config, capture, query, and records
 version: v0.4.0-alpha
-last_updated: 2026-08-16
+last_updated: 2026-08-17
 ---
 
 # Memory API
@@ -241,6 +241,45 @@ GET /companies/{companyId}/memory/operations?limit=50
 ```
 
 Lists recent memory operations for audit purposes.
+
+**Auth**: Board only.
+
+### Memory Extraction Jobs
+
+#### List Extraction Jobs
+
+```text
+GET /companies/{companyId}/memory/extraction-jobs?status=&limit=50
+```
+
+| Query Param | Type | Description |
+|---|---|---|
+| `status` | string | Optional filter: `queued`, `in_progress`, `succeeded`, `failed` |
+| `limit` | integer | Max results (default: 50, max: 200) |
+
+Returns memory extraction jobs for the company, newest first. Extraction jobs record background memory-extraction work (e.g., agent runs extracting findings into memory).
+
+**Auth**: Board only.
+
+#### Get Extraction Job
+
+```text
+GET /companies/{companyId}/memory/extraction-jobs/{jobId}
+```
+
+Returns a single extraction job by ID, scoped to the company.
+
+**Auth**: Board only.
+
+#### Retry Failed Extraction Job
+
+```text
+POST /companies/{companyId}/memory/extraction-jobs/{jobId}/retry
+```
+
+Resets a `failed` extraction job back to `queued`, clearing the error message and timing fields. Only jobs with `status: "failed"` can be retried. If the job's status has already changed from `failed` (e.g., another retry won the race), a `400 Bad Request` is returned with a clear message.
+
+Returns the updated extraction job response.
 
 **Auth**: Board only.
 

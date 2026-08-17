@@ -3,7 +3,7 @@
 **Feature**: Agent memory (pgvector-based bindings, capture, query, records) and knowledge document management (CRUD, lifecycle, revisions, search)
 **Assessed by**: Support Engineer
 **Date**: 2026-08-16
-**Related**: VOY-1190, VOY-1191, VOY-1192, VOY-1203, VOY-1204, VOY-1255, VOY-1256
+**Related**: VOY-1190, VOY-1191, VOY-1192, VOY-1203, VOY-1204, VOY-1255, VOY-1256, VOY-1299 (C-3), 466c30fde7 (extraction jobs)
 **Release**: v0.4.0-alpha
 
 ## Feature Overview (User Perspective)
@@ -65,6 +65,30 @@ A dedicated **Memory Browser** page is available at `/memory` in the sidebar (vi
 - Filter records by metadata using JSONB containment (`metadata` parameter)
 - Forget individual records by handle
 - View recent memory operations in the audit log
+- **View extraction jobs** (extractions tab) — browse memory extraction job history with status, source hyperlinks, and latency/cost display; retry failed jobs with one click. The extraction jobs dashboard polls every 15s.
+
+### Memory Extraction Jobs
+
+Extraction jobs record background memory-extraction work (e.g., agent runs that extract findings into memory). They carry a lifecycle status (`queued` → `in_progress` → `succeeded` / `failed`), plus timing, error, and provider references:
+
+- **List jobs**: `GET /companies/{companyId}/memory/extraction-jobs?status=&limit=` — newest first, board-only
+- **Get job**: `GET /companies/{companyId}/memory/extraction-jobs/{jobId}`
+- **Retry failed job**: `POST /companies/{companyId}/memory/extraction-jobs/{jobId}/retry` — resets a `failed` job back to `queued`; only `failed` jobs can be retried (400 otherwise)
+
+**Support note**: if an operator reports an extraction job that is stuck in `failed`, the retry endpoint resets it to `queued` so the worker picks it up again. A retry attempt on a non-failed job (or a job whose status changed concurrently) returns `400` with a clear message — no silent double-transition.
+
+## Search Safety (plainto_tsquery)
+
+**Commit**: `75c6c27a41` (C-3 fix, VOY-1299)
+
+Both the knowledge document search endpoint and the memory warm-up path now use **`plainto_tsquery('english', query)`** instead of hand-constructed `to_tsquery` strings. User queries containing punctuation, operators, or special characters (`!@#$%^&*`, dashes, quotes, etc.) are tokenized as natural language — special characters are stripped rather than causing PostgreSQL query errors.
+
+- **Old behavior**: a query like `"Why isn't the payment @ processing?!"` could crash knowledge search with a 500 error.
+- **New behavior**: the same query is treated as `"Why isn't the payment processing"` — safe, no error.
+- **Empty/whitespace-only queries** after stripping return an empty result set immediately (no DB round-trip).
+- This is a **server-side fix** — no client-side escaping is needed, and it applies automatically to both the knowledge search API and the memory warm-up context injection path.
+
+See the [Search Safety KB article](../kb/search-safety-plainto-tsquery.md) for troubleshooting details.
 
 ## Potential User Confusion Points
 
@@ -152,6 +176,8 @@ A: It shows the outcome of the most recent review — `pending`, `approved`, or 
 | Knowledge publish fails despite approved review | Publish rejected | Stale approval from prior review cycle (VOY-1255) | Re-run review cycle on the latest revision |
 | Search returns empty | "q parameter is required" | Missing search query | Provide query string |
 | Knowledge search returns 404 | 404 on `GET /knowledge/search` | Server older than `f09cf3bc6e` — `/:documentId` route shadowed the literal `search` path | Upgrade server to `f09cf3bc6e` or later |
+| Knowledge search returns 500 on special-char queries | 500 with a PostgreSQL error | Server older than `75c6c27a41` — hand-built `to_tsquery` rejects punctuation/operators | Upgrade server to `75c6c27a41` or later (plainto_tsquery) |
+| Extraction job retry rejected | 400 "Only failed jobs can be retried" | Job status is not `failed` (or changed concurrently) | Re-check job status; only retry `failed` jobs |
 
 ## Related Documentation
 

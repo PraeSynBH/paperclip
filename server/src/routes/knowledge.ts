@@ -1,5 +1,7 @@
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
+import { sql } from "drizzle-orm";
+import { memoryRecords } from "@paperclipai/db";
 import {
   knowledgeDocumentCreateSchema,
   knowledgeDocumentUpdateSchema,
@@ -8,6 +10,7 @@ import {
   knowledgeDocumentReviewDecisionSchema,
   knowledgeDocumentListQuerySchema,
   knowledgeCreateBacklinkSchema,
+  knowledgePromoteFromMemorySchema,
 } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { assertBoard, assertBoardOrAgent, assertCompanyAccess } from "./authz.js";
@@ -23,6 +26,28 @@ export function knowledgeRoutes(db: Db) {
   // NOTE: registered BEFORE the /:documentId routes — otherwise Express would
   // match /knowledge/search against :documentId and the searchPublished
   // endpoint would be unreachable.
+
+  /**
+   * POST /companies/:companyId/knowledge/promote-from-memory
+   * Promote a memory record into a draft knowledge document.
+   * The document enters the normal draft → review → publish lifecycle.
+   */
+  router.post(
+    "/companies/:companyId/knowledge/promote-from-memory",
+    validate(knowledgePromoteFromMemorySchema),
+    async (req, res) => {
+      assertBoardOrAgent(req);
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const result = await svc.promoteFromMemory(
+        companyId,
+        req.body,
+        (req as any).actor?.agentId,
+      );
+      res.status(201).json(result);
+    },
+  );
 
   /**
    * GET /companies/:companyId/knowledge/search
@@ -330,6 +355,33 @@ export function knowledgeRoutes(db: Db) {
 
       const result = await svc.createBacklink(companyId, documentId, req.body);
       res.status(201).json(result);
+    },
+  );
+
+  /**
+   * POST /companies/:companyId/knowledge/maintenance/rebuild-index
+   * Rebuild the pgvector HNSW embedding index for improved query performance.
+   * Runs REINDEX on the memory_records embedding index — table-level lock
+   * for the duration of the operation. Use during low-traffic periods.
+   */
+  router.post(
+    "/companies/:companyId/knowledge/maintenance/rebuild-index",
+    async (req, res) => {
+      assertBoard(req);
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const start = Date.now();
+      await db.execute(
+        sql`REINDEX INDEX IF EXISTS memory_records_embedding_hnsw_idx`,
+      );
+      const latencyMs = Date.now() - start;
+
+      res.json({
+        success: true,
+        index: "memory_records_embedding_hnsw_idx",
+        latencyMs,
+      });
     },
   );
 
