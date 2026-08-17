@@ -946,3 +946,45 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **VOY-1265 QA findings** → any UI behavior deltas worth a support note
 - **PostHog cron deployment to VPS-1** → SOP goes from final to operational; may generate first PostHog error issues for triage
 - **COO request for documentation health report** — available on demand
+
+## 2026-08-17 — Heartbeat: No new code, server DOWN, working tree shows active VOY-1205 development
+
+### What was done
+
+1. **Diff assessment** — No new Voyonder code commits since last heartbeat. Branch `v0.4.0-polaris-deep-planning-memory` HEAD unchanged (`466c30fde7`). Documentation remains in sync through RC-4. No new code requiring documentation.
+
+2. **Server health check** — Product dev server (port 3100) is **DOWN** (connection refused). Previously UP as of the prior heartbeat. The Docker container stack is running (postgres, redis, litellm, enquire-mcp) but the main web server process on 3100 is not. This does not directly block documentation work but means /documentation routes are unreachable on the dev server.
+
+3. **Working tree assessment** — Uncommitted code changes visible in the working tree, likely part of VOY-1205 (Phase 5: Company Knowledge Base + Polish, `in_progress` by Founding Engineer):
+   - `POST /companies/:companyId/knowledge/promote-from-memory` — Promote a memory record to a draft knowledge document
+   - `GET /companies/:companyId/memory/bindings/:bindingId/capabilities` — Get resolved capabilities for a memory binding
+   - `POST /companies/:companyId/knowledge/maintenance/rebuild-index` — Rebuild the pgvector HNSW embedding index
+   - Knowledge search LRU cache (in-memory, 5-min TTL, 200-entry max)
+   - These are **unreleased** — not documented yet. Per policy, documentation waits until commits land.
+
+4. **Pipeline state** — No change from prior heartbeat:
+   - VOY-1205 (Phase 5: Company KB + Polish) — in_progress, Founding Engineer
+   - VOY-1307 (FOUNDER ACTION: Close 3 stale QA issues) — blocked, no assignee
+   - VOY-1182 (FOUNDER ACTION: Consolidated board cleanup) — blocked, no assignee
+   - VOY-1208 (Voyonder: implement features) — blocked, Staff Engineer
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) |
+| Release notes currency | Up to date through v0.4.0-alpha-rc.4 (Voyonder) + v2026.722.0 (Paperclip) |
+| Docs synced with live code | ✅ RC-4 (commits `75c6c27a41`, `466c30fde7`) |
+| Product dev server | DOWN (port 3100 unreachable) |
+| Branch | v0.4.0-polaris-deep-planning-memory (HEAD at `466c30fde7`, no movement) |
+
+### Next triggers to watch for
+
+- **VOY-1205 commits land** → will need KB articles for promote-from-memory, binding capabilities endpoint, search cache behavior, and index rebuild endpoint
+- **Founder action on stale QA issues** → unblocks QA verification pipeline; may trigger RC-5 or stable v0.4.0 release
+- **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable) + any last KB articles
+- **VOY-1265 QA findings** → any UI behavior deltas worth a support note
+- **PostHog cron deployment to VPS-1** → SOP goes from final to operational; may generate first PostHog error issues for triage
+- **COO request for documentation health report** — available on demand
