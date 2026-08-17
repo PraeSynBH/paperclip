@@ -1,7 +1,7 @@
 ---
 title: PostHog Error Monitoring — Support Engineer Triage SOP
 summary: SOP for triaging auto-created PostHog error issues (VOY-999)
-status: draft
+status: final
 applies_to: VOY-999 / VOY-1015 release
 ---
 

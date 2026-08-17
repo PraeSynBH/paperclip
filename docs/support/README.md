@@ -11,10 +11,11 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|
-| C-Fixes: Zod action validation (C-1), SLA dedup safety net (C-2), search safety (C-3) | v0.4.0 | Pre-release (committed `75c6c27a41`) | [Chat-to-work](assessments/support-case-v0.4.0-chat-to-work-resolution.md) + [KB search](kb/search-safety-plainto-tsquery.md) + [KB dedup](kb/sla-monitor-dedup-safety-net.md) |
-| Memory Extraction Jobs + Gate Counts + Live Events | v0.4.0 | Pre-release (committed `466c30fde7`) | [Memory & Knowledge](assessments/support-case-v0.4.0-memory-knowledge.md) + [Memory API](/docs/api/memory) |
-| Knowledge Browser UI + Manager-Chain Permissions (RC-3) | v0.4.0-alpha-rc.3 | Pre-release (committed `f09cf3bc6e`) | [View](assessments/support-case-v0.4.0-memory-knowledge.md) + [KB](kb/authorization-manager-chain-grant.md) |
-| Chat-to-Work Resolution Cards (Workstream C) | v0.4.0 | Pre-release (committed `0d4626e82e`) | [View](assessments/support-case-v0.4.0-chat-to-work-resolution.md) |
+| C-Fixes: Zod action validation (C-1), SLA dedup safety net (C-2), search safety (C-3) | v0.4.0 | Aug 17, 2026 | [Chat-to-work](assessments/support-case-v0.4.0-chat-to-work-resolution.md) + [KB search](kb/search-safety-plainto-tsquery.md) + [KB dedup](kb/sla-monitor-dedup-safety-net.md) |
+| Memory Extraction Jobs + Gate Counts + Live Events | v0.4.0 | Aug 17, 2026 | [Memory & Knowledge](assessments/support-case-v0.4.0-memory-knowledge.md) + [Memory API](/docs/api/memory) |
+| Knowledge Browser UI + Manager-Chain Permissions | v0.4.0-alpha | Aug 17, 2026 | [View](assessments/support-case-v0.4.0-memory-knowledge.md) + [KB](kb/authorization-manager-chain-grant.md) |
+| Promote from Memory + Knowledge Search Cache + REINDEX + Memory Capabilities | v0.4.0 | Aug 17, 2026 | [Memory & Knowledge assessment](assessments/support-case-v0.4.0-memory-knowledge.md) + [KB](kb/search-safety-plainto-tsquery.md) |
+| Chat-to-Work Resolution Cards (Workstream C) | v0.4.0 | Aug 17, 2026 | [View](assessments/support-case-v0.4.0-chat-to-work-resolution.md) |
 | Deep Planning — Plan Documents, Review Gates, Decomposition | v0.4.0-alpha | Aug 16, 2026 | [View](assessments/support-case-v0.4.0-deep-planning.md) |
 | Memory & Knowledge — pgvector Memory, Knowledge Documents | v0.4.0-alpha | Aug 16, 2026 | [View](assessments/support-case-v0.4.0-memory-knowledge.md) |
 | Stripe Billing Robustness Fixes | v0.2.13 | Aug 15, 2026 | [View](assessments/support-case-stripe-billing-fixes.md) |
@@ -43,7 +44,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Document | Covers | Status |
 |---|---|---|
-| [PostHog Error Monitoring Triage](posthog-error-monitoring-triage-sop.md) | SOP for triaging PostHog error issues auto-created by the monitor | Implementation landed (83db54a); awaiting release |
+| [PostHog Error Monitoring Triage](posthog-error-monitoring-triage-sop.md) | SOP for triaging PostHog error issues auto-created by the monitor | Operational (script deployed; pending VPS-1 cron setup) |
 
 ## Planned Assessments
 
@@ -80,7 +81,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
-| v0.4.0-alpha (RC-4) — Deep Planning + Memory & Knowledge + Chat-to-Work Resolution + C-Fixes + Extraction Jobs | [View](releases/v0.4.0-alpha-deep-planning.md) |
+| v0.4.0-alpha — Deep Planning + Memory & Knowledge + Chat-to-Work Resolution + C-Fixes + Extraction Jobs + Promote from Memory + REINDEX | [View](releases/v0.4.0-alpha-deep-planning.md) |
 | v0.2.13 — Stripe billing fixes | [View](releases/v0.2.13-stripe-fixes.md) |
 | v0.2.12 — Legal pages | [View](releases/v0.2.12-legal-pages.md) |
 | v0.2.10 — Domain revert | [View](releases/v0.2.10-domain-revert.md) |

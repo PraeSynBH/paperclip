@@ -11,7 +11,7 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
-## v0.4.0-alpha (RC-4) — August 17, 2026
+## v0.4.0-alpha — August 17, 2026
 
 [Full release notes →](/support/releases/v0.4.0-alpha-deep-planning)
 

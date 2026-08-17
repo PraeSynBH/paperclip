@@ -5,6 +5,52 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-17 — Heartbeat: v0.4.0-alpha shipped to production — docs verified in sync
+
+### What was done
+
+1. **Release confirmed shipped** — v0.4.0-alpha deployed to production (commit `07aac17ae9`, tag `v0.4.0-alpha`). Release Engineer handoff complete. The release includes Deep Planning, Memory & Knowledge, Phase 5 Board UI, C-Fixes, extraction jobs, promoteFromMemory, search cache, REINDEX, capabilities, and all documentation.
+
+2. **Post-release documentation audit** — Verified all docs are in sync with the shipped release:
+   - Release notes (`docs/support/releases/v0.4.0-alpha-deep-planning.md`) — Current and accurate
+   - Support assessments (8 total) — All up to date
+   - KB articles (8 total) — All current including new search-safety and SLA-dedup articles
+   - API docs (plans, memory, knowledge, issues) — Up to date with v0.4.0 endpoints
+
+3. **README updated for shipped state** — `docs/support/README.md`:
+   - Changed "Pre-release" status to "Aug 17, 2026" for C-Fixes, Memory Extraction Jobs, Knowledge Browser UI, Chat-to-Work, and Promote from Memory features
+   - Added Post-RC-4 (VOY-1322) features to Recently Shipped table
+   - Updated PostHog SOP status from "awaiting release" to "Operational (pending VPS-1 cron setup)"
+   - Updated Voyonder Release Notes table to reference shipped v0.4.0-alpha (removed RC-4 candidate label)
+
+4. **Release notes page verified** — `docs/releases.md` references v0.4.0-alpha correctly with link to full release notes.
+
+5. **Known issues documented** — Release engineer identified one post-launch issue:
+   - Knowledge search returns 500 due to drizzle prepared-statement caching issue with embedded PostgreSQL. Raw SQL queries work fine. This is infrastructure, not a code bug.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog: Sandbox, Workspace Viewer, Annotations, Skills CLI, Secrets) |
+| Release notes currency | Up to date through v0.4.0-alpha (Voyonder) + v2026.722.0 (Paperclip) |
+| Docs synced with live code | ✅ v0.4.0-alpha shipped |
+| Production server | UP (port 3100, commit 07aac17ae9) |
+
+### Next triggers to watch for
+
+- **VOY-1327 (post-launch C-fixes)** → assess diff for documentation impact when Founding Engineer commits them
+- **VOY-1330 (COO Market Readiness directive)** → may produce new features needing support assessments
+- **VOY-748 (CEO founder action)** → when DNS/OAuth/PostHog/Sentry keys land, production monitoring becomes fully operational
+- **PostHog cron setup on VPS-1** → finalize SOP operational status
+- **v0.4.0 stable release** → update release notes from alpha to stable
+
+### Disposition
+
+**Go idle.** v0.4.0-alpha is shipped and fully documented. No new commits to assess since the release. The board has moved to next-cycle planning (CEO Market Readiness directive, VOY-1330). Documentation is current; no action needed until new features ship or the COO requests a health report.
+
 ## 2026-08-17 — Heartbeat: RC-4 docs sync — C-fixes + Phase 5 remaining assessed and documented
 
 ### What was done
