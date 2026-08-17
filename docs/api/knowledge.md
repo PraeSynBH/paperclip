@@ -292,3 +292,82 @@ GET /companies/{companyId}/knowledge/search?q=deployment+guide&limit=10
 Searches across all published knowledge documents by title and body content. Documents in `draft`, `in_review`, or `archived` status are excluded.
 
 **Auth**: Board or Agent.
+
+## Knowledge Base Starter Packs
+
+Knowledge Base Starter Packs provide pre-built, curated knowledge document bundles for common industries. They enable one-click installation of a comprehensive knowledge base foundation tailored to a specific business domain.
+
+### Available Starter Packs
+
+| Pack Key | Industry | Documents | Description |
+|---|---|---|---|
+| `travel-industry` | Travel & Hospitality | 6 | Booking policies, fare rules, destination guides, travel regulations, customer service standards, supplier management |
+| `saas-support` | SaaS / Technology | 6 | SLA definitions, troubleshooting guides, escalation paths, documentation standards, communication templates, help center management |
+| `engineering` | Software Engineering | 7 | Coding standards, CI/CD practices, deployment runbooks, architecture decision records, incident response, dev environment setup, code review best practices |
+| `finance-accounting` | Finance & Accounting | 7 | Accounting standards, tax compliance, financial reporting, compliance frameworks, budgeting & forecasting, audit & risk management, AP/AR procedures |
+
+### List Available Packs
+
+```text
+GET /companies/{companyId}/knowledge/starter-packs
+```
+
+Returns a list of available starter packs (without full document bodies).
+
+**Response:**
+```json
+[
+  {
+    "key": "travel-industry",
+    "name": "Travel Industry",
+    "description": "Essential knowledge for travel companies...",
+    "industry": "Travel & Hospitality",
+    "icon": "\u2708\ufe0f",
+    "documentCount": 6
+  }
+]
+```
+
+**Auth**: Board or Agent.
+
+### Get Pack Details
+
+```text
+GET /companies/{companyId}/knowledge/starter-packs/{packKey}
+```
+
+Returns the full starter pack, including all document titles, summaries, and bodies.
+
+**Auth**: Board or Agent.
+
+### Install a Starter Pack
+
+```text
+POST /companies/{companyId}/knowledge/starter-packs/{packKey}/install
+```
+
+One-click installation of a starter pack. Creates all documents in the pack as published knowledge documents in the company's knowledge base. Skips documents with titles that already exist (deduplication by title).
+
+**Response:** `201 Created`
+```json
+{
+  "packKey": "travel-industry",
+  "documentsCreated": 6,
+  "documentIds": [
+    "uuid-1",
+    "uuid-2",
+    "uuid-3",
+    "uuid-4",
+    "uuid-5",
+    "uuid-6"
+  ]
+}
+```
+
+**Auth**: Board or Agent.
+
+**Behavior:**
+- Documents are created as published (draft -> in_review -> approved -> published) automatically
+- Idempotent: documents with the same title as existing documents are skipped
+- Partial installation: if some documents fail, the successful ones are still returned
+- Duplicate titles within a company are prevented

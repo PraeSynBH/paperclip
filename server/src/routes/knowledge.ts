@@ -14,12 +14,13 @@ import {
 } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { assertBoard, assertBoardOrAgent, assertCompanyAccess } from "./authz.js";
-import { knowledgeDocumentService } from "../services/index.js";
+import { knowledgeDocumentService, knowledgeStarterPackService } from "../services/index.js";
 import { notFound } from "../errors.js";
 
 export function knowledgeRoutes(db: Db) {
   const router = Router();
   const svc = knowledgeDocumentService(db);
+  const starterPackSvc = knowledgeStarterPackService(db);
 
   // ─── Search ─────────────────────────────────────────────────────────────
   //
@@ -382,6 +383,73 @@ export function knowledgeRoutes(db: Db) {
         index: "memory_records_embedding_hnsw_idx",
         latencyMs,
       });
+    },
+  );
+
+  // ─── Starter Packs ──────────────────────────────────────────────────────
+
+  /**
+   * GET /companies/:companyId/knowledge/starter-packs
+   * List available knowledge base starter packs (without full document bodies).
+   */
+  router.get(
+    "/companies/:companyId/knowledge/starter-packs",
+    async (req, res) => {
+      assertBoardOrAgent(req);
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const packs = await starterPackSvc.listPacks();
+      res.json(packs);
+    },
+  );
+
+  /**
+   * GET /companies/:companyId/knowledge/starter-packs/:packKey
+   * Get a starter pack by key, including full document content.
+   */
+  router.get(
+    "/companies/:companyId/knowledge/starter-packs/:packKey",
+    async (req, res) => {
+      assertBoardOrAgent(req);
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const pack = await starterPackSvc.getPack(req.params.packKey as string);
+      if (!pack) {
+        res.status(404).json({ error: `Starter pack '${req.params.packKey}' not found` });
+        return;
+      }
+      res.json(pack);
+    },
+  );
+
+  /**
+   * POST /companies/:companyId/knowledge/starter-packs/:packKey/install
+   * Install a starter pack into the company's knowledge base.
+   * Creates all documents as published and returns their IDs.
+   */
+  router.post(
+    "/companies/:companyId/knowledge/starter-packs/:packKey/install",
+    async (req, res) => {
+      assertBoardOrAgent(req);
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      try {
+        const result = await starterPackSvc.installPack(
+          companyId,
+          req.params.packKey as string,
+          (req as any).actor?.agentId,
+        );
+        res.status(201).json(result);
+      } catch (err: any) {
+        if (err?.message?.startsWith("Starter pack")) {
+          res.status(404).json({ error: err.message });
+          return;
+        }
+        throw err;
+      }
     },
   );
 
