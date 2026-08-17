@@ -14,7 +14,7 @@ import { memoryOperations } from "@paperclipai/db";
 import { eq, and, desc } from "drizzle-orm";
 import { validate } from "../middleware/validate.js";
 import { assertBoard, assertCompanyAccess, assertBoardOrAgent } from "./authz.js";
-import { memoryBindingService } from "../services/index.js";
+import { memoryBindingService, memoryExtractionJobService } from "../services/index.js";
 import { builtinPgvectorAdapter } from "../services/memory-adapter.js";
 import { forbidden, notFound, badRequest } from "../errors.js";
 
@@ -33,6 +33,7 @@ export function memoryRoutes(db: Db) {
   const router = Router();
   const svc = memoryBindingService(db);
   const adapter = builtinPgvectorAdapter(db);
+  const extractionSvc = memoryExtractionJobService(db);
 
   // ─── Agent Scope Enforcement ──────────────────────────────────────────────
 
@@ -423,6 +424,46 @@ export function memoryRoutes(db: Db) {
         .limit(limit);
 
       res.json(rows);
+    },
+  );
+
+  /**
+   * GET /companies/:companyId/memory/extraction-jobs
+   * List memory extraction jobs for the company (newest first).
+   * Supports optional ?status= filter and ?limit= pagination.
+   */
+  router.get(
+    "/companies/:companyId/memory/extraction-jobs",
+    async (req, res) => {
+      assertBoard(req);
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+
+      const result = await extractionSvc.list({
+        companyId,
+        status: req.query.status as string | undefined,
+        limit: req.query.limit ? Number(req.query.limit) : undefined,
+      });
+
+      res.json(result);
+    },
+  );
+
+  /**
+   * POST /companies/:companyId/memory/extraction-jobs/:jobId/retry
+   * Retry a failed extraction job. Resets status to "queued" and clears
+   * error message and timing fields.
+   */
+  router.post(
+    "/companies/:companyId/memory/extraction-jobs/:jobId/retry",
+    async (req, res) => {
+      assertBoard(req);
+      const companyId = req.params.companyId as string;
+      const jobId = req.params.jobId as string;
+      assertCompanyAccess(req, companyId);
+
+      const result = await extractionSvc.retry(companyId, jobId);
+      res.json(result);
     },
   );
 

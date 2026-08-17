@@ -315,6 +315,11 @@ export const queryKeys = {
       ["memory", companyId, "query", q, scope ?? "__all__"] as const,
     operations: (companyId: string) => ["memory", companyId, "operations"] as const,
     bindings: (companyId: string) => ["memory", companyId, "bindings"] as const,
+    targets: (companyId: string) => ["memory", companyId, "targets"] as const,
+    agentConfig: (companyId: string, agentId: string) =>
+      ["memory", companyId, "agent-config", agentId] as const,
+    extractionJobs: (companyId: string, status?: string) =>
+      ["memory", companyId, "extraction-jobs", status ?? "__all__"] as const,
   },
   knowledge: {
     list: (companyId: string, status?: string, cursor?: string) =>

@@ -10,6 +10,7 @@ import type {
 import { Check, ChevronRight, ExternalLink, FileText, GitBranch, Loader2, Milestone, User } from "lucide-react";
 import { issuesApi } from "../api/issues";
 import { queryKeys } from "../lib/queryKeys";
+import { parsePlanMetadata } from "../lib/plan-metadata";
 import { cn } from "../lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -211,8 +212,7 @@ export function PlanDecompositionWizard({
   // Parse plan metadata from the document
   const planMetadata = useMemo<PlanMetadata | null>(() => {
     if (!planDocument) return null;
-    const doc = planDocument as DocumentWithPlanMetadata;
-    return doc.planMetadata ?? null;
+    return parsePlanMetadata((planDocument as DocumentWithPlanMetadata).planMetadata);
   }, [planDocument]);
 
   const milestones = useMemo(() => planMetadata?.milestones ?? [], [planMetadata]);

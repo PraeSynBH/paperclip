@@ -17,9 +17,10 @@ import {
   Loader2,
   MoreHorizontal,
   Database,
+  Info,
+  Settings2,
 } from "lucide-react";
 import { memoryApi } from "../api/memory";
-import { useCompany } from "../context/CompanyContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { queryKeys } from "../lib/queryKeys";
 import { EmptyState } from "../components/EmptyState";
@@ -64,7 +65,7 @@ import type { MemorySnippet } from "@paperclipai/shared";
 const PAGE_SIZE = 20;
 const SEARCH_DEBOUNCE_MS = 300;
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Helpers (shared with MemoryBrowser) ─────────────────────────────────────
 
 function sourceKindIcon(kind?: string) {
   switch (kind) {
@@ -112,20 +113,89 @@ function formatDate(dateStr?: string): string {
   });
 }
 
-// ─── Operation Type Badge ────────────────────────────────────────────────────
+// ─── Memory Config Card ─────────────────────────────────────────────────────
 
-function OperationBadge({ type, success }: { type: string; success: boolean }) {
-  const color = success
-    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
-    : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
+function AgentMemoryConfigCard({
+  companyId,
+  agentId,
+}: {
+  companyId: string;
+  agentId: string;
+}) {
+  const configQuery = useQuery({
+    queryKey: queryKeys.memory.agentConfig(companyId, agentId),
+    queryFn: () => memoryApi.getAgentMemoryConfig(companyId, agentId),
+    enabled: !!companyId && !!agentId,
+  });
+
+  if (configQuery.isLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-16 w-full" />
+      </div>
+    );
+  }
+
+  if (configQuery.error) {
+    return (
+      <div className="flex items-center gap-2 rounded-lg border border-border p-4 text-sm text-destructive">
+        <AlertCircle className="h-4 w-4" />
+        {(configQuery.error as Error).message}
+      </div>
+    );
+  }
+
+  const config = configQuery.data;
+
+  if (!config) {
+    return (
+      <div className="rounded-lg border border-border p-4">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Info className="h-4 w-4" />
+          No memory binding configured for this agent. Configure one in Company Settings → Memory.
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium", color)}>
-      {type}
-    </span>
+    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+      <div className="text-xs font-semibold uppercase text-muted-foreground flex items-center gap-1.5">
+        <Settings2 className="h-3.5 w-3.5" />
+        Memory Configuration
+      </div>
+      <div className="space-y-2 text-sm">
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Binding</span>
+          <span className="font-medium">{config.binding.key}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Provider</span>
+          <span>{config.binding.providerType}</span>
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-muted-foreground">Status</span>
+          <Badge
+            variant={config.binding.enabled ? "default" : "secondary"}
+            className="text-[10px]"
+          >
+            {config.binding.enabled ? "Enabled" : "Disabled"}
+          </Badge>
+        </div>
+        {config.target && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Override</span>
+            <Badge variant="outline" className="text-[10px]">
+              {config.target.targetType === "agent" ? "Agent-specific" : "Company default"}
+            </Badge>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
-// ─── Memory Detail Sheet ─────────────────────────────────────────────────────
+// ─── Record Detail Sheet ────────────────────────────────────────────────────
 
 function MemoryDetailSheet({
   record,
@@ -266,9 +336,212 @@ function MemoryDetailSheet({
   );
 }
 
-// ─── Memory Record Card ──────────────────────────────────────────────────────
+// ─── Records Browser ────────────────────────────────────────────────────────
 
-function MemoryRecordCard({
+function AgentRecordsBrowser({
+  companyId,
+  agentId,
+  bindingKey,
+}: {
+  companyId: string;
+  agentId: string;
+  bindingKey: string;
+}) {
+  const queryClient = useQueryClient();
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [draftSearch, setDraftSearch] = useState("");
+
+  // Detail sheet
+  const [selectedRecord, setSelectedRecord] = useState<MemorySnippet | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+
+  const isSearching = searchQuery.trim().length > 0;
+
+  // Sync draft search → committed search on debounce
+  useEffect(() => {
+    const trimmed = draftSearch.trim();
+    if (trimmed === searchQuery) return;
+    const handle = window.setTimeout(() => {
+      setSearchQuery(trimmed);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(handle);
+  }, [draftSearch, searchQuery]);
+
+  // Build scope for agent
+  const scopeJson = useMemo(
+    () => JSON.stringify({ agentId }),
+    [agentId],
+  );
+
+  const listQuery = useInfiniteQuery({
+    queryKey: [
+      "memory",
+      companyId,
+      "list",
+      bindingKey,
+      searchQuery,
+      agentId,
+    ],
+    queryFn: ({ pageParam }) => {
+      if (isSearching) {
+        return memoryApi.query(companyId, {
+          bindingKey,
+          q: searchQuery,
+          topK: PAGE_SIZE,
+          intent: "browse",
+        }).then((bundle) => ({
+          items: bundle.snippets,
+          nextCursor: undefined as string | undefined,
+        }));
+      }
+
+      return memoryApi.list(companyId, {
+        bindingKey,
+        limit: PAGE_SIZE,
+        cursor: pageParam,
+        scope: scopeJson,
+      });
+    },
+    enabled: !!companyId && !!bindingKey,
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+  });
+
+  // Forget
+  const forgetMutation = useMutation({
+    mutationFn: (handle: { providerKey: string; providerRecordId: string }) =>
+      memoryApi.forget(companyId, [handle]),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["memory", companyId] });
+    },
+  });
+
+  // Infinite scroll
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || listQuery.hasNextPage === false || listQuery.isFetchingNextPage || isSearching) return;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        void listQuery.fetchNextPage();
+      }
+    }, { rootMargin: "320px 0px" });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [listQuery.fetchNextPage, listQuery.hasNextPage, listQuery.isFetchingNextPage, isSearching]);
+
+  const records = useMemo(
+    () => listQuery.data?.pages.flatMap((page) => page.items) ?? [],
+    [listQuery.data],
+  );
+
+  const showInfiniteScroll = !isSearching && listQuery.hasNextPage;
+
+  return (
+    <div className="space-y-3">
+      {/* Search */}
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={draftSearch}
+          onChange={(event) => setDraftSearch(event.currentTarget.value)}
+          placeholder="Search this agent's memory records..."
+          aria-label="Search agent memory"
+          className="h-9 pl-9 pr-9 text-sm"
+        />
+        {draftSearch.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => {
+              setDraftSearch("");
+              setSearchQuery("");
+            }}
+            aria-label="Clear search"
+            className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
+      </div>
+
+      {/* Results count */}
+      {isSearching && (
+        <p className="text-xs text-muted-foreground">
+          {listQuery.isFetching
+            ? "Searching..."
+            : `${records.length} result${records.length !== 1 ? "s" : ""} for "${searchQuery}"`
+          }
+        </p>
+      )}
+
+      {/* Error */}
+      {listQuery.error && (
+        <div className="flex items-center gap-2 rounded-lg border border-border p-4 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4" />
+          {(listQuery.error as Error).message}
+        </div>
+      )}
+
+      {/* Records */}
+      {listQuery.isPending ? (
+        <PageSkeleton variant="list" />
+      ) : records.length === 0 ? (
+        <EmptyState
+          icon={Brain}
+          message={isSearching ? "No memory records match your search." : "No memory records for this agent yet."}
+        />
+      ) : (
+        <>
+          <div className="space-y-2">
+            {records.map((record) => (
+              <AgentMemoryRecordCard
+                key={`${record.handle.providerKey}:${record.handle.providerRecordId}`}
+                record={record}
+                onSelect={() => {
+                  setSelectedRecord(record);
+                  setDetailOpen(true);
+                }}
+                onForget={(handle) => forgetMutation.mutate(handle)}
+              />
+            ))}
+          </div>
+
+          <div
+            ref={loadMoreRef}
+            className="flex min-h-10 items-center justify-center pb-2 text-xs text-muted-foreground"
+          >
+            {listQuery.isFetchingNextPage ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-3 w-3 animate-spin" />
+                Loading more records...
+              </span>
+            ) : showInfiniteScroll ? null : listQuery.isFetching ? (
+              "Updating records..."
+            ) : null}
+          </div>
+        </>
+      )}
+
+      <MemoryDetailSheet
+        record={selectedRecord}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        onForget={(handle) => forgetMutation.mutate(handle)}
+      />
+
+      {forgetMutation.isPending && (
+        <div className="fixed bottom-4 right-4 flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 shadow-lg text-sm">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Forgetting record...
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Agent Memory Record Card ────────────────────────────────────────────────
+
+function AgentMemoryRecordCard({
   record,
   onSelect,
   onForget,
@@ -281,7 +554,6 @@ function MemoryRecordCard({
     <div className="group relative rounded-lg border border-border bg-card p-3 transition-colors hover:border-border/80 hover:bg-accent/30">
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          {/* Top row: source badge + date */}
           <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
             {record.source && (
               <Tooltip>
@@ -314,12 +586,10 @@ function MemoryRecordCard({
             })()}
           </div>
 
-          {/* Text preview */}
           <p className="text-sm leading-relaxed text-foreground/90 line-clamp-3">
             {record.text}
           </p>
 
-          {/* Summary */}
           {record.summary && (
             <p className="mt-1 text-xs text-muted-foreground italic line-clamp-1">
               {record.summary}
@@ -327,7 +597,6 @@ function MemoryRecordCard({
           )}
         </div>
 
-        {/* Actions */}
         <div className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -355,9 +624,78 @@ function MemoryRecordCard({
   );
 }
 
-// ─── Operations Tab ──────────────────────────────────────────────────────────
+// ─── Main Component ──────────────────────────────────────────────────────────
 
-function OperationsTab({ companyId }: { companyId: string }) {
+export function AgentMemoryTab({
+  companyId,
+  agentId,
+}: {
+  companyId: string;
+  agentId: string;
+}) {
+  const [activeTab, setActiveTab] = useState("records");
+
+  // Get the agent's binding key from the config
+  const configQuery = useQuery({
+    queryKey: queryKeys.memory.agentConfig(companyId, agentId),
+    queryFn: () => memoryApi.getAgentMemoryConfig(companyId, agentId),
+    enabled: !!companyId && !!agentId,
+  });
+
+  const bindingKey = configQuery.data?.binding?.key;
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      {/* Config summary */}
+      <AgentMemoryConfigCard companyId={companyId} agentId={agentId} />
+
+      {/* Tabs: Records / Operations / Extractions */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="records" className="text-xs">
+            <Brain className="h-3.5 w-3.5 mr-1.5" />
+            Records
+          </TabsTrigger>
+          <TabsTrigger value="operations" className="text-xs">
+            <Activity className="h-3.5 w-3.5 mr-1.5" />
+            Operations
+          </TabsTrigger>
+          <TabsTrigger value="extractions" className="text-xs">
+            <Database className="h-3.5 w-3.5 mr-1.5" />
+            Extractions
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="records" className="mt-4">
+          {bindingKey ? (
+            <AgentRecordsBrowser
+              companyId={companyId}
+              agentId={agentId}
+              bindingKey={bindingKey}
+            />
+          ) : (
+            <EmptyState
+              icon={Database}
+              message="No memory binding configured for this agent."
+            />
+          )}
+        </TabsContent>
+
+        <TabsContent value="operations" className="mt-4">
+          <AgentOperationsTab companyId={companyId} />
+        </TabsContent>
+
+        <TabsContent value="extractions" className="mt-4">
+          <ExtractionJobsDashboard companyId={companyId} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// ─── Agent Operations Tab (copy of OperationsTab from MemoryBrowser) ─────────
+
+function AgentOperationsTab({ companyId }: { companyId: string }) {
   const { data, isLoading, error } = useQuery<import("../api/memory").MemoryOperation[]>({
     queryKey: queryKeys.memory.operations(companyId),
     queryFn: () => memoryApi.operations(companyId) as Promise<import("../api/memory").MemoryOperation[]>,
@@ -440,314 +778,13 @@ function OperationsTab({ companyId }: { companyId: string }) {
   );
 }
 
-// ─── Main Page ───────────────────────────────────────────────────────────────
-
-export function MemoryBrowser() {
-  const { selectedCompanyId } = useCompany();
-  const { setBreadcrumbs } = useBreadcrumbs();
-  const queryClient = useQueryClient();
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
-
-  // Search state
-  const [searchQuery, setSearchQuery] = useState("");
-  const [draftSearch, setDraftSearch] = useState("");
-  const [selectedBindingKey, setSelectedBindingKey] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("records");
-
-  // Detail sheet state
-  const [selectedRecord, setSelectedRecord] = useState<MemorySnippet | null>(null);
-  const [detailOpen, setDetailOpen] = useState(false);
-
-  const isSearching = searchQuery.trim().length > 0;
-
-  useEffect(() => {
-    setBreadcrumbs([{ label: "Memory" }]);
-  }, [setBreadcrumbs]);
-
-  // Sync draft search → committed search on debounce
-  useEffect(() => {
-    const trimmed = draftSearch.trim();
-    if (trimmed === searchQuery) return;
-    const handle = window.setTimeout(() => {
-      setSearchQuery(trimmed);
-    }, SEARCH_DEBOUNCE_MS);
-    return () => window.clearTimeout(handle);
-  }, [draftSearch, searchQuery]);
-
-  // ── Bindings Query ──────────────────────────────────────────────────────
-
-  const bindingsQuery = useQuery({
-    queryKey: queryKeys.memory.bindings(selectedCompanyId!),
-    queryFn: () => memoryApi.bindings(selectedCompanyId!),
-    enabled: !!selectedCompanyId,
-  });
-
-  // Auto-select first enabled binding
-  const bindings = bindingsQuery.data ?? [];
-  useEffect(() => {
-    if (!selectedBindingKey && bindings.length > 0) {
-      const firstEnabled = bindings.find((b) => b.enabled) ?? bindings[0];
-      setSelectedBindingKey(firstEnabled.key);
-    }
-  }, [bindings, selectedBindingKey]);
-
-  const bindingKey = selectedBindingKey ?? undefined;
-
-  // ── List Query (infinite scroll) ──────────────────────────────────────────
-
-  const listQuery = useInfiniteQuery({
-    queryKey: [
-      "memory",
-      selectedCompanyId,
-      "list",
-      bindingKey,
-      searchQuery,
-    ],
-    queryFn: ({ pageParam }) => {
-      if (!bindingKey) return { items: [], nextCursor: undefined };
-
-      if (isSearching) {
-        return memoryApi.query(selectedCompanyId!, {
-          bindingKey,
-          q: searchQuery,
-          topK: PAGE_SIZE,
-          intent: "browse",
-        }).then((bundle) => ({
-          items: bundle.snippets,
-          nextCursor: undefined,
-        }));
-      }
-
-      return memoryApi.list(selectedCompanyId!, {
-        bindingKey,
-        limit: PAGE_SIZE,
-        cursor: pageParam,
-      });
-    },
-    enabled: !!selectedCompanyId && !!bindingKey,
-    initialPageParam: undefined as string | undefined,
-    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
-  });
-
-  // ── Forget Mutation ──────────────────────────────────────────────────────
-
-  const forgetMutation = useMutation({
-    mutationFn: (handle: { providerKey: string; providerRecordId: string }) =>
-      memoryApi.forget(selectedCompanyId!, [handle]),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["memory", selectedCompanyId] });
-    },
-  });
-
-  // ── Infinite Scroll ──────────────────────────────────────────────────────
-
-  useEffect(() => {
-    const target = loadMoreRef.current;
-    if (!target || listQuery.hasNextPage === false || listQuery.isFetchingNextPage || isSearching) return;
-    const observer = new IntersectionObserver((entries) => {
-      if (entries.some((entry) => entry.isIntersecting)) {
-        void listQuery.fetchNextPage();
-      }
-    }, { rootMargin: "320px 0px" });
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [listQuery.fetchNextPage, listQuery.hasNextPage, listQuery.isFetchingNextPage, isSearching]);
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
-
-  const handleSelect = useCallback((record: MemorySnippet) => {
-    setSelectedRecord(record);
-    setDetailOpen(true);
-  }, []);
-
-  const handleForget = useCallback((handle: { providerKey: string; providerRecordId: string }) => {
-    forgetMutation.mutate(handle);
-  }, [forgetMutation]);
-
-  const handleClearSearch = useCallback(() => {
-    setDraftSearch("");
-    setSearchQuery("");
-  }, []);
-
-  // ── Derived Data ──────────────────────────────────────────────────────────
-
-  const records = useMemo(
-    () => listQuery.data?.pages.flatMap((page) => page.items) ?? [],
-    [listQuery.data],
-  );
-
-  const showInfiniteScroll = !isSearching && listQuery.hasNextPage;
-
-  // ── Render ────────────────────────────────────────────────────────────────
-
-  if (!selectedCompanyId) {
-    return <EmptyState icon={Brain} message="Select a company to view memory." />;
-  }
-
+function OperationBadge({ type, success }: { type: string; success: boolean }) {
+  const color = success
+    ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300"
+    : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300";
   return (
-    <div className="w-full max-w-5xl space-y-5">
-      {/* Header: Search + Binding selector */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="relative w-full sm:max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            value={draftSearch}
-            onChange={(event) => setDraftSearch(event.currentTarget.value)}
-            placeholder="Search memory records..."
-            aria-label="Search memory"
-            className="h-9 pl-9 pr-9 text-sm"
-          />
-          {draftSearch.length > 0 ? (
-            <button
-              type="button"
-              onClick={handleClearSearch}
-              aria-label="Clear search"
-              className="absolute right-2 top-1/2 inline-flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
-          ) : null}
-        </div>
-
-        {/* Binding selector */}
-        {bindings.length > 1 && (
-          <Select
-            value={selectedBindingKey ?? undefined}
-            onValueChange={(val) => setSelectedBindingKey(val)}
-          >
-            <SelectTrigger className="w-[200px] h-9 text-sm">
-              <SelectValue placeholder="Select binding..." />
-            </SelectTrigger>
-            <SelectContent>
-              {bindings.map((b) => (
-                <SelectItem key={b.key} value={b.key}>
-                  {b.key}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        )}
-      </div>
-
-      {/* Binding loading / empty */}
-      {bindingsQuery.isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Loading memory bindings...
-        </div>
-      )}
-
-      {bindingsQuery.isFetched && bindings.length === 0 && (
-        <EmptyState
-          icon={Database}
-          message="No memory bindings configured."
-        />
-      )}
-
-      {/* Search results count */}
-      {isSearching && bindingKey && (
-        <p className="text-xs text-muted-foreground">
-          {listQuery.isFetching
-            ? "Searching..."
-            : `${records.length} result${records.length !== 1 ? "s" : ""} for "${searchQuery}"`
-          }
-        </p>
-      )}
-
-      {/* Error */}
-      {listQuery.error && (
-        <div className="flex items-center gap-2 rounded-lg border border-border p-4 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4" />
-          {(listQuery.error as Error).message}
-        </div>
-      )}
-
-      {/* Tabs: Records / Operations / Extractions */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="records" className="text-xs">
-            <Brain className="h-3.5 w-3.5 mr-1.5" />
-            Records
-          </TabsTrigger>
-          <TabsTrigger value="operations" className="text-xs">
-            <Activity className="h-3.5 w-3.5 mr-1.5" />
-            Operations
-          </TabsTrigger>
-          <TabsTrigger value="extractions" className="text-xs">
-            <Database className="h-3.5 w-3.5 mr-1.5" />
-            Extractions
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="records" className="mt-4 space-y-3">
-          {/* No binding selected */}
-          {!bindingKey && bindings.length === 0 && bindingsQuery.isFetched ? (
-            <EmptyState
-              icon={Database}
-              message="No memory binding selected."
-            />
-          ) : listQuery.isPending ? (
-            <PageSkeleton variant="list" />
-          ) : records.length === 0 ? (
-            <EmptyState
-              icon={Brain}
-              message={isSearching ? "No memory records match your search." : "No memory records yet."}
-            />
-          ) : (
-            <>
-              <div className="space-y-2">
-                {records.map((record) => (
-                  <MemoryRecordCard
-                    key={`${record.handle.providerKey}:${record.handle.providerRecordId}`}
-                    record={record}
-                    onSelect={() => handleSelect(record)}
-                    onForget={handleForget}
-                  />
-                ))}
-              </div>
-
-              {/* Infinite scroll sentinel */}
-              <div
-                ref={loadMoreRef}
-                className="flex min-h-10 items-center justify-center pb-2 text-xs text-muted-foreground"
-              >
-                {listQuery.isFetchingNextPage ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="h-3 w-3 animate-spin" />
-                    Loading more records...
-                  </span>
-                ) : showInfiniteScroll ? null : listQuery.isFetching ? (
-                  "Updating records..."
-                ) : null}
-              </div>
-            </>
-          )}
-        </TabsContent>
-
-        <TabsContent value="operations" className="mt-4">
-          <OperationsTab companyId={selectedCompanyId} />
-        </TabsContent>
-
-        <TabsContent value="extractions" className="mt-4">
-          <ExtractionJobsDashboard companyId={selectedCompanyId} />
-        </TabsContent>
-      </Tabs>
-
-      {/* Detail Sheet */}
-      <MemoryDetailSheet
-        record={selectedRecord}
-        open={detailOpen}
-        onOpenChange={setDetailOpen}
-        onForget={handleForget}
-      />
-
-      {/* Forget progress indicator */}
-      {forgetMutation.isPending && (
-        <div className="fixed bottom-4 right-4 flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-2 shadow-lg text-sm">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Forgetting record...
-        </div>
-      )}
-    </div>
+    <span className={cn("inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium", color)}>
+      {type}
+    </span>
   );
 }

@@ -112,6 +112,9 @@ export interface IssueDocumentSummary {
 export interface IssueDocument extends IssueDocumentSummary {
   body: string;
   planMetadata?: Record<string, unknown> | null;
+  /** Count of active (non-superseded) review gates on the latest revision, if known.
+   *  Only populated on plan documents when gate counts are batch-fetched. */
+  gatesCount?: number;
 }
 
 export interface DocumentRevision {

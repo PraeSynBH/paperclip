@@ -32,6 +32,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { parsePlanMetadata } from "../lib/plan-metadata";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -99,39 +100,18 @@ export function Plans() {
     enabled: !!selectedCompanyId,
   });
 
-  // Fetch plan documents for each issue (bounded)
-  const planDocs = useQuery({
-    queryKey: ["plans-browser", "documents", planIssues?.map((i) => i.id).join(",") ?? ""],
-    queryFn: async () => {
-      const issues = planIssues ?? [];
-      const results = await Promise.all(
-        issues.map(async (issue) => {
-          try {
-            const doc = await issuesApi.getPlanDocument(issue.id);
-            return { issueId: issue.id, doc };
-          } catch {
-            return { issueId: issue.id, doc: null };
-          }
-        }),
-      );
-      const byIssueId = new Map(results.map((r) => [r.issueId, r.doc]));
-      return byIssueId;
-    },
-    enabled: !!selectedCompanyId && !!planIssues && planIssues.length > 0,
-  });
-
+  // Plan documents are returned inline on each issue when hasPlanDocument=true
   const items = useMemo<PlanListItem[]>(() => {
     const issues = planIssues ?? [];
-    const docs = planDocs.data;
     const list: PlanListItem[] = [];
     for (const issue of issues) {
-      const doc = docs?.get(issue.id) ?? null;
+      const doc = issue.planDocument ?? null;
       if (!doc) continue;
-      const planMetadata = doc.planMetadata as unknown as PlanMetadata | null;
+      const planMetadata = parsePlanMetadata(doc.planMetadata);
       list.push({ issue, planDocument: doc, planMetadata });
     }
     return list;
-  }, [planIssues, planDocs.data]);
+  }, [planIssues]);
 
   const filteredItems = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -280,7 +260,7 @@ export function Plans() {
             const sectionCount = metadata?.sections?.length ?? 0;
             const progress = milestoneProgress(metadata);
             const revisionNumber = item.planDocument.latestRevisionNumber ?? 0;
-            const gatesCount = 0;
+            const gatesCount = item.planDocument.gatesCount ?? 0;
 
             return (
               <Link

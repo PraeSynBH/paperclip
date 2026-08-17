@@ -79,6 +79,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
 import { AgentIcon, AgentIconPicker } from "../components/AgentIconPicker";
+import { AgentMemoryTab } from "./AgentMemoryTab";
 import { RunTranscriptView, type TranscriptMode } from "../components/transcript/RunTranscriptView";
 import {
   isUuidLike,
@@ -247,7 +248,7 @@ function scrollToContainerBottom(container: ScrollContainer, behavior: ScrollBeh
   container.scrollTo({ top: container.scrollHeight, behavior });
 }
 
-type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget";
+type AgentDetailView = "dashboard" | "instructions" | "configuration" | "skills" | "runs" | "budget" | "memory";
 
 function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "instructions" || value === "prompts") return "instructions";
@@ -255,6 +256,7 @@ function parseAgentDetailView(value: string | null): AgentDetailView {
   if (value === "skills") return "skills";
   if (value === "budget") return "budget";
   if (value === "runs") return value;
+  if (value === "memory") return "memory";
   return "dashboard";
 }
 
@@ -1043,6 +1045,7 @@ export function AgentDetail() {
               { value: "instructions", label: "Instructions" },
               { value: "skills", label: "Skills" },
               { value: "configuration", label: "Configuration" },
+              { value: "memory", label: "Memory" },
               { value: "runs", label: "Runs" },
               { value: "budget", label: "Budget" },
             ]}
@@ -1181,6 +1184,13 @@ export function AgentDetail() {
             variant="plain"
           />
         </div>
+      ) : null}
+
+      {activeView === "memory" && resolvedCompanyId ? (
+        <AgentMemoryTab
+          companyId={resolvedCompanyId}
+          agentId={agent.id}
+        />
       ) : null}
     </div>
   );

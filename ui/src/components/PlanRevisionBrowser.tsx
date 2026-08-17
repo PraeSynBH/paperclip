@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { PlanDocumentRevision, PlanRevisionDiff, PlanBodyDiffLine } from "@paperclipai/shared";
 import {
+  AlertCircle,
   FileDiff,
   ChevronDown,
   ChevronRight,
   Loader2,
   GitCompare,
   ArrowLeft,
+  RefreshCw,
   User,
   Bot,
 } from "lucide-react";
@@ -194,7 +196,13 @@ export function PlanRevisionBrowser({
   const selectedRevision = sortedRevisions.find((r) => r.id === effectiveRevisionId) ?? null;
 
   // Diff — fetch when a revision is selected and the panel is expanded
-  const { data: diffResult, isLoading: diffLoading } = useQuery({
+  const {
+    data: diffResult,
+    isLoading: diffLoading,
+    isError: diffError,
+    error: diffErrorObj,
+    refetch: refetchDiff,
+  } = useQuery({
     queryKey: queryKeys.issues.planRevisionDiff(
       issueId,
       effectiveRevisionId ?? "__none__",
@@ -287,6 +295,25 @@ export function PlanRevisionBrowser({
                 <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   Loading diff...
+                </div>
+              ) : diffError ? (
+                <div className="mt-2 flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">Failed to load diff</p>
+                    <p className="mt-0.5 text-destructive/80">
+                      {(diffErrorObj as Error)?.message ?? "An unexpected error occurred"}
+                    </p>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => refetchDiff()}
+                      className="mt-1.5 h-auto gap-1 px-2 py-0.5 text-[10px]"
+                    >
+                      <RefreshCw className="h-3 w-3" />
+                      Retry
+                    </Button>
+                  </div>
                 </div>
               ) : diffResult ? (
                 <div className="mt-2">

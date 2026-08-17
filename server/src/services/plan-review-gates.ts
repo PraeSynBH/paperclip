@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from "drizzle-orm";
+import { and, asc, eq, not, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { documents, issueDocuments, issues, planReviewGates } from "@paperclipai/db";
 import { notFound, conflict } from "../errors.js";
@@ -211,6 +211,39 @@ export function planReviewGateService(db: Db) {
           sql`${planReviewGates.revisionId} != ${currentRevisionId}`,
           eq(planReviewGates.status, "pending"),
         ));
+    },
+
+    /**
+     * Batch-count active (non-superseded) gates for (documentId, revisionId) pairs
+     * scoped to a single company.
+     * Used by the issues list route to avoid N+1 queries when showing gate counts
+     * on plan cards. Returns a Map keyed by documentId.
+     */
+    listGateCounts: async (companyId: string, pairs: { documentId: string; revisionId: string }[]) => {
+      if (pairs.length === 0) return new Map<string, number>();
+
+      // Build OR conditions for each (documentId, revisionId) tuple
+      const conditions = pairs.map((p) =>
+        and(
+          eq(planReviewGates.documentId, p.documentId),
+          eq(planReviewGates.revisionId, p.revisionId),
+        ),
+      );
+
+      const rows = await db
+        .select({
+          documentId: planReviewGates.documentId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(planReviewGates)
+        .where(and(
+          eq(planReviewGates.companyId, companyId),
+          or(...conditions),
+          not(eq(planReviewGates.status, "superseded")),
+        ))
+        .groupBy(planReviewGates.documentId);
+
+      return new Map(rows.map((r) => [r.documentId, r.count]));
     },
   };
 }

@@ -34,6 +34,59 @@ function buildQuery(params?: Record<string, string | number | undefined>): strin
   return qs ? `?${qs}` : "";
 }
 
+export interface MemoryBinding {
+  id: string;
+  key: string;
+  providerType: string;
+  enabled: boolean;
+  configJson: Record<string, unknown>;
+  capabilitiesJson: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MemoryTarget {
+  id: string;
+  targetType: "company" | "agent";
+  targetId: string;
+  bindingId: string;
+  priority: number;
+  createdAt: string;
+}
+
+export interface AgentMemoryConfig {
+  binding: MemoryBinding;
+  target: MemoryTarget | null;
+}
+
+export interface MemoryOperation {
+  id: string;
+  companyId: string;
+  bindingId: string | null;
+  providerKey: string | null;
+  operationType: string;
+  success: boolean;
+  errorMessage: string | null;
+  recordCount: number;
+  latencyMs: number;
+  usageJson: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface MemoryExtractionJob {
+  id: string;
+  companyId: string;
+  bindingId: string;
+  operationId: string | null;
+  providerJobId: string;
+  hookKind: string;
+  status: "queued" | "running" | "succeeded" | "failed" | "cancelled";
+  errorMessage: string | null;
+  submittedAt: string;
+  startedAt: string | null;
+  finishedAt: string | null;
+}
+
 export const memoryApi = {
   /**
    * List memory records with cursor-based pagination.
@@ -116,40 +169,134 @@ export const memoryApi = {
   operations: async (
     companyId: string,
     limit?: number,
-  ): Promise<Array<{
-    id: string;
-    companyId: string;
-    bindingId: string | null;
-    providerKey: string | null;
-    operationType: string;
-    success: boolean;
-    errorMessage: string | null;
-    recordCount: number;
-    createdAt: string;
-  }>> => {
+  ): Promise<MemoryOperation[]> => {
     const query = buildQuery({ limit: limit ?? 50 });
-    return api.get<Array<{
-    id: string;
-    companyId: string;
-    bindingId: string | null;
-    providerKey: string | null;
-    operationType: string;
-    success: boolean;
-    errorMessage: string | null;
-    recordCount: number;
-    createdAt: string;
-  }>>(`/companies/${companyId}/memory/operations${query}`);
+    return api.get<MemoryOperation[]>(`/companies/${companyId}/memory/operations${query}`);
   },
 
   /**
    * List memory bindings for the company.
    */
-  bindings: async (companyId: string): Promise<Array<{
-    id: string;
-    key: string;
-    providerType: string;
-    enabled: boolean;
-  }>> => {
+  bindings: async (companyId: string): Promise<MemoryBinding[]> => {
     return api.get(`/companies/${companyId}/memory/bindings`);
+  },
+
+  /**
+   * Create a memory binding.
+   */
+  createBinding: async (
+    companyId: string,
+    data: {
+      key: string;
+      providerType: string;
+      enabled?: boolean;
+      configJson?: Record<string, unknown>;
+      capabilitiesJson?: Record<string, unknown>;
+    },
+  ): Promise<{ id: string }> => {
+    return api.post(`/companies/${companyId}/memory/bindings`, data);
+  },
+
+  /**
+   * Update a memory binding.
+   */
+  updateBinding: async (
+    companyId: string,
+    bindingId: string,
+    data: {
+      key?: string;
+      enabled?: boolean;
+      configJson?: Record<string, unknown>;
+      capabilitiesJson?: Record<string, unknown>;
+    },
+  ): Promise<void> => {
+    return api.patch(`/companies/${companyId}/memory/bindings/${bindingId}`, data);
+  },
+
+  /**
+   * Delete a memory binding.
+   */
+  deleteBinding: async (
+    companyId: string,
+    bindingId: string,
+  ): Promise<void> => {
+    return api.delete(`/companies/${companyId}/memory/bindings/${bindingId}`);
+  },
+
+  /**
+   * List memory binding targets for the company.
+   */
+  listTargets: async (companyId: string): Promise<MemoryTarget[]> => {
+    return api.get(`/companies/${companyId}/memory/targets`);
+  },
+
+  /**
+   * Create a memory binding target.
+   */
+  createTarget: async (
+    companyId: string,
+    data: {
+      targetType: "company" | "agent";
+      targetId: string;
+      bindingId: string;
+    },
+  ): Promise<{ id: string }> => {
+    return api.post(`/companies/${companyId}/memory/targets`, data);
+  },
+
+  /**
+   * Delete a memory binding target.
+   */
+  deleteTarget: async (
+    companyId: string,
+    targetId: string,
+  ): Promise<void> => {
+    return api.delete(`/companies/${companyId}/memory/targets/${targetId}`);
+  },
+
+  /**
+   * Get the resolved memory configuration for an agent.
+   */
+  getAgentMemoryConfig: async (
+    companyId: string,
+    agentId: string,
+  ): Promise<AgentMemoryConfig | null> => {
+    try {
+      return await api.get<AgentMemoryConfig>(
+        `/companies/${companyId}/memory/agents/${agentId}/config`,
+      );
+    } catch (err) {
+      if ((err as { status?: number }).status === 404) return null;
+      throw err;
+    }
+  },
+
+  /**
+   * List memory extraction jobs for the company (newest first).
+   */
+  extractionJobs: async (
+    companyId: string,
+    params?: {
+      status?: string;
+      limit?: number;
+    },
+  ): Promise<MemoryExtractionJob[]> => {
+    const query = buildQuery({ ...params, limit: params?.limit ?? 50 });
+    return api.get<MemoryExtractionJob[]>(
+      `/companies/${companyId}/memory/extraction-jobs${query}`,
+    );
+  },
+
+  /**
+   * Retry a failed extraction job by resetting its status to "queued".
+   */
+  retryExtractionJob: async (
+    companyId: string,
+    jobId: string,
+  ): Promise<MemoryExtractionJob> => {
+    return api.post<MemoryExtractionJob>(
+      `/companies/${companyId}/memory/extraction-jobs/${jobId}/retry`,
+      {},
+    );
   },
 };

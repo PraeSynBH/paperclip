@@ -4,6 +4,7 @@ import type { PlanMetadata, PlanMilestone, IssueDocument } from "@paperclipai/sh
 import { CheckCircle2, Circle, Clock, FileText, XCircle, Milestone, ListChecks, Layers } from "lucide-react";
 import { issuesApi } from "../api/issues";
 import { queryKeys } from "../lib/queryKeys";
+import { parsePlanMetadata } from "../lib/plan-metadata";
 import { cn } from "../lib/utils";
 import { PlanStatusBadge } from "./PlanStatusBadge";
 import { MarkdownBody } from "./MarkdownBody";
@@ -63,8 +64,7 @@ export function PlanDetailSection({
   const planDocument = externalPlanDocument ?? fetchedPlanDoc ?? null;
 
   const planMetadata = useMemo<PlanMetadata | null>(() => {
-    if (!planDocument?.planMetadata) return null;
-    return planDocument.planMetadata as unknown as PlanMetadata;
+    return parsePlanMetadata(planDocument?.planMetadata ?? null);
   }, [planDocument]);
 
   if (isLoading && !planDocument) {

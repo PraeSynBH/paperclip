@@ -9,6 +9,7 @@ const items = [
   { value: "members", label: "Members", href: "/company/settings/members" },
   { value: "invites", label: "Invites", href: "/company/settings/invites" },
   { value: "secrets", label: "Secrets", href: "/company/settings/secrets" },
+  { value: "memory", label: "Memory", href: "/company/settings/memory" },
   { value: "instance-profile", label: "Instance profile", href: `${INSTANCE_SETTINGS_PATH_PREFIX}/profile` },
   { value: "instance-general", label: "Instance general", href: `${INSTANCE_SETTINGS_PATH_PREFIX}/general` },
   { value: "instance-environments", label: "Instance environments", href: `${INSTANCE_SETTINGS_PATH_PREFIX}/environments` },
@@ -72,6 +73,10 @@ export function getCompanySettingsTab(pathname: string): CompanySettingsTab {
 
   if (pathname.includes("/company/settings/secrets")) {
     return "secrets";
+  }
+
+  if (pathname.includes("/company/settings/memory")) {
+    return "memory";
   }
 
   return "general";
