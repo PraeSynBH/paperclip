@@ -5,6 +5,41 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-17 — Heartbeat: C-fixes resolved, Staff Engineer review in progress, docs current
+
+### What was done
+
+1. **Pipeline state change detected** — All three C-fixes (VOY-1297/1298/1299) are now marked **done**:
+   - C-1 (LLM Trust Boundary — Zod SSE validation)
+   - C-2 (TOCTOU Race — SLA dedup post-insert verification)
+   - C-3 (to_tsquery safety — plainto_tsquery replacement)
+   - These fixes were already in the working tree as pre-release changes; issues now reflect completion.
+
+2. **VOY-1263 (Staff Engineer review) now in_progress** — The code review blocking Phase 5 is actively being worked. VOY-1209 (CTO ship Phase 5) remains blocked pending review completion. VOY-1306 (COO reprioritization) still in todo.
+
+3. **Diff assessment** — No new Voyonder commits since `1cc37eb740` (RC-3 docs sync). Working tree contains the same pre-release C-fix changes already assessed. Paperclip platform commits on public master are unrelated to Voyonder.
+
+4. **Documentation status confirmed current** — All feature assessments, KB articles, release notes, and API docs are in sync through v0.4.0-alpha-rc.3. Three C-fix documentation impacts are logged and ready for when fixes ship (KB articles for C-1 validation, C-2 dedup hardening, C-3 search safety).
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + 3 C-fix updates (when shipped) |
+| Release notes currency | Up to date through v0.4.0-alpha-rc.3 (Voyonder) + v2026.722.0 (Paperclip) |
+| Pipeline critical path | VOY-1297/1298/1299 ✅ done → VOY-1263 🔄 in_progress → VOY-1209 ⏳ blocked → VOY-1186 ⏳ blocked |
+
+### Next triggers to watch for
+
+- **VOY-1263 review completion** → VOY-1264/1209 release proceeds; confirm release notes/KB coverage before staging ship
+- **C-fix commits landing** → create KB articles for C-1 (Zod validation), C-2 (dedup hardening), C-3 (search safety)
+- **VOY-1265 QA findings** → any UI behavior deltas worth a support note
+- **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
+- **PostHog error monitoring (VOY-999) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+
 ## 2026-08-17 — Heartbeat: Documentation health report + idle monitoring
 
 ### What was done
