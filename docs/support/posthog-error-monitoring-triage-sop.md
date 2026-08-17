@@ -7,11 +7,11 @@ applies_to: VOY-999 / VOY-1015 release
 
 # PostHog Error Monitoring — Support Engineer Triage SOP
 
-**Version:** 1.1
-**Date:** 2026-08-16
-**Author:** Support Engineer (88b72065)
-**Status:** Draft — implementation landed (83db54a, 2026-08-16); awaiting release
-**Applies to:** VOY-999 / VOY-1015 release (code landed, release pending)
+**Version:** 1.2
+**Date:** 2026-08-17
+**Author:** Founding Engineer (57fa7e0e)
+**Status:** Final — bash script deployed to scripts/; pending VPS-1 cron setup
+**Applies to:** VOY-999 / VOY-1007 / VOY-1015
 
 ---
 
@@ -24,13 +24,16 @@ The PostHog Error Monitoring system auto-creates Paperclip issues for production
 ## How It Works
 
 1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog
-2. **Cron poll:** `scripts/posthog-error-monitor.ts` (product repo) runs every 15 minutes via pg-boss worker `workers/error-monitor.ts`, queries PostHog for new error_occurred events since last check
-3. **Issue creation:** When batch threshold is met (>=2 distinct error sources OR >=3 total events), a single Paperclip issue is created:
-   - **Title:** `PostHog Error Alert: {N} new error_occurred events from {sources}`
-   - **Priority:** critical if any event is CRITICAL severity, else high
+2. **Cron poll:** `scripts/posthog-error-monitor.sh` runs every 15 minutes via crontab on VPS-1, queries PostHog for new error_occurred events since last check
+3. **Issue creation:** For each unique error signature (grouped by event+component+normalized message), a Paperclip issue is created:
+   - **Title:** `[PostHog] {event}: {component} — {truncated message}`
+   - **Priority:** Mapped from severity (critical→urgent, high→high, medium→medium, else→low)
    - **Assignee:** Support Engineer (88b72065)
-   - **Body:** Event summary with per-event component/severity/message (PII-sanitized)
-4. **State file:** `~/state/last_error_check` tracks the last successful poll; flock prevents concurrent runs
+   - **Parent:** VOY-999
+   - **Body:** Event details with component, severity, URL, message, occurrences, affected users
+4. **Deduplication:** Error signatures are normalized (UUIDs, timestamps, UNIX timestamps stripped) and cooldown prevents re-alerting on the same signature within 60 minutes
+5. **State file:** `/var/tmp/posthog_monitor_last_check` tracks the last successful poll
+6. **Pending retry:** If Paperclip API is unreachable, issue payloads are saved to `/var/tmp/posthog_pending/` and retried on the next run
 
 ---
 
@@ -111,29 +114,30 @@ Common investigation paths:
 
 ## Monitoring Script Details
 
-**Script:** `scripts/posthog-error-monitor.ts` (product repo, travel_itenerary_planning)
-**Worker:** `workers/error-monitor.ts` — pg-boss recurring job
-**Schedule:** Every 15 minutes (`*/15 * * * *`, pg-boss cron)
-**State file:** `~/state/last_error_check`
-**Batch threshold:** >=2 distinct error sources OR >=3 total events
-**Max events per issue body:** 20
-**Lock file:** `/tmp/posthog-error-monitor.lock` prevents concurrent runs
-**Env vars:** `POSTHOG_PERSONAL_API_KEY`, `POSTHOG_PROJECT_ID`, `POSTHOG_HOST`, `PAPERCLIP_API_URL`, `PAPERCLIP_API_KEY`, optional `SUPPORT_ENGINEER_AGENT_ID`
+**Script:** `scripts/posthog-error-monitor.sh` (bash, 441 lines)
+**Schedule:** Crontab `*/15 * * * *` (every 15 minutes)
+**State file:** `/var/tmp/posthog_monitor_last_check` (ISO timestamp of last successful check)
+**Cooldown:** 60 minutes per error signature (prevents alert fatigue)
+**Max issues per run:** 20
+**Pending retry dir:** `/var/tmp/posthog_pending/` (saved if Paperclip API is unreachable)
+**Env vars required:** `POSTHOG_API_KEY` (or `POSTHOG_PERSONAL_API_KEY`), `POSTHOG_PROJECT_ID`, `POSTHOG_HOST` (default: https://us.posthog.com), `PAPERCLIP_API_URL`, `PAPERCLIP_API_KEY`
+**Defaults:** `SUPPORT_ENGINEER_ID=88b72065-5f95-4e2b-a6df-48d04363f0d9`, `PARENT_ISSUE_ID=VOY-999`
 
 ### Verification Commands
 
 ```bash
-# Manual run (one-shot)
-cd /path/to/travel_itenerary_planning
-POSTHOG_PERSONAL_API_KEY=... POSTHOG_PROJECT_ID=... \
-  PAPERCLIP_API_URL=... PAPERCLIP_API_KEY=... \
-  npm run monitor:posthog
+# Manual run (one-shot) — must set env vars first
+./scripts/posthog-error-monitor.sh
 
-# Check state file contents
-cat ~/state/last_error_check
+# Run test suite
+bash scripts/test-posthog-monitor.sh
 
-# pg-boss worker (long-running, cron mode)
-npm run worker:error-monitor
+# Check state file
+cat /var/tmp/posthog_monitor_last_check
+
+# Add crontab entry (VPS-1)
+crontab -e
+# */15 * * * * /app/scripts/posthog-error-monitor.sh
 ```
 
 ---
