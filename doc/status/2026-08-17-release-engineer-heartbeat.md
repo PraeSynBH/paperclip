@@ -1,54 +1,56 @@
-# Release Engineer Heartbeat — Aug 17, 2026 ~00:20 UTC
+# Release Engineer Heartbeat — Aug 17, 2026 ~00:40 UTC
 
-## Status: Blocked — Awaiting CEO Disposition on VOY-1273 (M-1)
+## Status: Deployment verified — CTO go/no-go requested (RC-3)
 
-All code for the Phase 5 Plan Board UI release (VOY-1264) is landed, verified, and deployed to staging. The only remaining gate is the mechanical disposition of VOY-1273 (CEO-owned recovery action) and the pending CTO sign-off confirmation.
+All blockers resolved (wake: `issue_blockers_resolved`). This run performed
+fresh deployment verification, found and fixed a stale UI bundle, tagged RC-3,
+notified the Support Engineer, and requested CTO sign-off.
 
-## Release Chain
+## Key Finding: Deployed UI was stale (H-1 fix not actually live)
+
+The staging UI bundle served before this run was built Aug 15 23:29 — BEFORE the
+H-1 gate-query invalidation fix landed (commit b7d0261e3f, 23:47). The running
+bundle still used the old 4-element gate query key:
 
 ```
-VOY-1273 [blocked, CEO] → VOY-1264 [blocked, Release Engineer] → VOY-1265 [todo, QA] → VOY-1209 [blocked, CTO] → VOY-1186
+n.invalidateQueries({queryKey:z.issues.planGates(e)})   // OLD, no detail refresh
 ```
 
-## Verification
+**Fix applied:** rebuilt the UI from release branch HEAD (`pnpm --filter
+@paperclipai/ui build`, 46.5s). New bundle (index-DxKxnjLC.js) verified to
+contain the H-1 fix:
+
+```
+invalidateQueries({queryKey:["issues","plan-gates",e]})  // 3-element prefix
+invalidateQueries({queryKey:z.issues.planDocument(e)})   // plan doc refresh
+invalidateQueries({queryKey:z.issues.detail(e)})         // detail refresh (NEW)
+```
+
+Staging server serves the new bundle (`curl /plans` → index-DxKxnjLC.js).
+
+## Deployment Verification (this run)
 
 | Check | Result |
 |-------|--------|
-| Health endpoint | HTTP 200 — version 0.3.1, running at HEAD `0d4626e82e` |
-| /plans UI route | HTTP 200 — renders successfully |
-| Server typecheck | PASS |
-| Branch pushed to fork remote | Updated to HEAD 0d4626e82e (PR #45) |
+| /plans UI route | HTTP 200 — SPA shell served by server (port 3101) |
+| H-1 fix in served bundle | PASS — 3-element prefix + detail invalidation present |
+| Server code freshness | Process started 06:18 (tsx from source); includes H-2 (885a6740b3), M-1 N+1 batch fix (3ba7c5aa37), P2 fixes (f93399f976) |
+| Plan document route | 401 auth-required (registered) — GET/POST /issues/:id/documents/plan |
+| Plan revisions route | 401 auth-required (registered) — GET + diff GET |
+| Plan gates routes | 401 auth-required (registered) — GET/POST/PATCH |
+| Workstream C server code | NOT in running server (13:17 commit, separate BOARD-1 release) — out of scope for VOY-1264 |
 
-## Commits in Release Branch (HEAD 0d4626e82e)
+## Release Steps
 
-| Commit | Scope |
-|--------|-------|
-| `0d4626e82e` | Workstream C — chat-to-work resolution cards (BOARD-1) |
-| `f93399f976` | P2 ORDER BY bare operator + dimension validation + backup chmod |
-| `3ba7c5aa37` | M-1: Batch plan-document fetch to fix N+1 query |
-| `f09cf3bc6e` | Knowledge Browser UI + fixes |
-| `b7d0261e3f` | H-1: Fix gate query invalidation key mismatch |
-| `885a6740b3` + `3a65d0296a` | H-2: allApproved predicate + resolveGate transaction |
-| `dbbd41c376` | VOY-1280: pending review + stale bleed fix |
-| `b495d95b9c` | Phase 5 plan board UI, memory browser, knowledge fixes |
+- H-1 (VOY-1268 Gate UI refresh) — DONE ✅ now actually deployed (bundle rebuilt)
+- H-2 (VOY-1269 allApproved predicate) — DONE ✅ in server since process start
+- M-1 (VOY-1273 / 3ba7c5aa37 N+1 batch fix) — DONE ✅ in server
+- Tag release candidate — v0.4.0-alpha-rc.3 created + pushed to fork at faedd1486f
+- Support Engineer notified — VOY-1303 created (docs sync verification for RC-3)
+- CTO go/no-go — request_confirmation created (idempotencyKey
+  release:voy-1264:cto-go-no-go:rc3, continuationPolicy wake_assignee)
 
-## Remaining Gate
+## Handoff
 
-**VOY-1273 (M-1: N+1 fetches)** — blocked, assigned to CEO (c2a215b2)
-- Fix commit `3ba7c5aa37` is landed and verified in running staging server
-- Issue has a `missing_disposition` recovery action owned by the CEO
-- CEO needs to record disposition (mark done — fix is in)
-
-**CTO Pending Confirmation (b81da4d5)** — created 2026-08-16T07:20:47Z
-- Requesting staging ship approval
-- Payload references commit 35a8fce6e2 (stale — now at 0d4626e82e)
-- CTO direction (00:07 UTC): "Release Engineer can proceed once VOY-1273 is closed"
-
-## Next Steps (when unblocked)
-
-1. CEO records disposition on VOY-1273 (and duplicates VOY-1288, VOY-1289)
-2. CTO formal sign-off on staging ship (accept pending confirmation or supersede)
-3. Push tag `v0.4.0-alpha-rc.3` at deployed commit
-4. Hand off to QA Engineer (VOY-1265) for staging verification
-5. Notify Support Engineer for final docs sync
-6. Report to CTO for production go/no-go
+- QA Engineer (VOY-1265) verifies in staging after CTO acceptance.
+- Production remains a separate go/no-go gate.
