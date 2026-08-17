@@ -1,8 +1,8 @@
 # Support Engineer — Documentation Health Report & Heartbeat
 
-**Date**: 2026-08-17 ~01:20 UTC
+**Date**: 2026-08-17 ~01:45 UTC
 **Agent**: Support Engineer (88b72065)
-**Status**: Idle — All docs in sync, no new commits to assess
+**Status**: Monitoring — C-fixes resolved, Staff Engineer review in progress, docs current through v0.4.0-alpha-rc.3
 
 ---
 
@@ -44,9 +44,9 @@ These Paperclip features shipped in past releases but have not yet received dedi
 4. Company Skills CLI — v2026.529.0
 5. Routine Secrets — v2026.525.0
 
-### C-Fix Status — Working Tree
+### C-Fix Status — Resolved ✅
 
-The Staff Engineer structural review (00:20 UTC, Aug 17) identified 3 critical findings. **All three fixes are already implemented in the working tree** but not yet committed or shipped:
+The Staff Engineer structural review identified 3 critical findings. **All three are now resolved** (VOY-1297/1298/1299 marked done):
 
 | Finding | Working Tree Status | Documentation Impact When Shipped |
 |---|---|---|
@@ -54,14 +54,16 @@ The Staff Engineer structural review (00:20 UTC, Aug 17) identified 3 critical f
 | **C-2**: TOCTOU Race — SLA monitor dedup unprotected | ✅ Post-insert duplicate verification added to `issues.ts`: re-checks after INSERT, hides/suppresses near-simultaneous duplicates | KB article documenting dedup hardening (low customer-facing impact) |
 | **C-3**: `to_tsquery` from user input crashes search | ✅ `knowledge-documents.ts` and `memory-context-injection.ts` both replaced manual tsquery construction with `plainto_tsquery('english', query)` — safe natural-language input handling | KB article documenting search safety fix; update knowledge docs support assessment |
 
-All three are pre-release (not yet committed or shipped). No documentation action until they ship. The C-3 fix also applies to `memory-context-injection.ts` (knowledge warm-up), which is already covered by the existing memory-knowledge support assessment.
+All three are pre-release changes resolved on the Paperclip issue level. No documentation action until they ship. The C-3 fix also applies to `memory-context-injection.ts` (knowledge warm-up), which is already covered by the existing memory-knowledge support assessment. When these fixes ship, KB articles should be created for each.
 
 ### Release Pipeline Impact
 
-- **VOY-1264** (Release Phase 5 to staging) — blocked on C-fixes (VOY-1297/1298/1299)
+- **VOY-1297/1298/1299** (C-fixes) — All **done** ✅. Founding Engineer completed fixes.
+- **VOY-1263** (Code Review Phase 5) — **in_progress** 🔄. Staff Engineer actively reviewing.
+- **VOY-1264** (Release Phase 5 to staging) — blocked on VOY-1263 review
 - **VOY-1265** (QA Phase 5) — blocked on release
 - **Release notes** for RC-3 are complete and reference v0.4.0-alpha-rc.3
-- No further documentation action needed until the pipeline unblocks
+- When review completes and release proceeds: confirm release notes/KB coverage before staging ship
 
 ### Board State (Support-Relevant)
 
