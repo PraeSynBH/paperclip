@@ -266,6 +266,7 @@ function buildInput(ctx: AdapterExecutionContext, paperclipApiUrl: string | null
   const wakePayloadJson = stringifyPaperclipWakePayload(ctx.context.paperclipWake);
   const taskMarkdown = nonEmpty(ctx.context.paperclipTaskMarkdown);
   const sessionHandoff = nonEmpty(ctx.context.paperclipSessionHandoffMarkdown);
+  const memoryPreamble = nonEmpty(ctx.context.paperclipMemoryPreamble);
   const issueWorkMode = readPaperclipIssueWorkModeFromContext(ctx.context);
   const lines = [
     `You are ${ctx.agent.name}, an AI agent employee in a Paperclip-managed company.`,
@@ -285,6 +286,7 @@ function buildInput(ctx: AdapterExecutionContext, paperclipApiUrl: string | null
     "",
     wakePrompt,
     ...(sessionHandoff ? ["", sessionHandoff] : []),
+    ...(memoryPreamble ? ["", memoryPreamble] : []),
     ...(taskMarkdown ? ["", taskMarkdown] : []),
     ...(wakePayloadJson
       ? [

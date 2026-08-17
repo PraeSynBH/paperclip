@@ -3,7 +3,7 @@ import path from "node:path";
 import { execFile as execFileCallback } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash, randomUUID } from "node:crypto";
-import { and, asc, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, lte, notInArray, or, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, getTableColumns, gt, gte, inArray, isNull, lt, lte, notInArray, or, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   AGENT_DEFAULT_MAX_CONCURRENT_RUNS,
@@ -2537,16 +2537,22 @@ export function formatRuntimeWorkspaceWarningLog(warning: string) {
 
 /**
  * A run is a "zombie" if it's marked as running in the DB but has no live
- * execution tracked in memory. This happens when the server restarts and the
- * execution is lost, or when the DB row outlives the in-memory run state.
+ * execution. This happens when the server restarts and the in-memory process
+ * tracking is lost, or when the DB row outlives the actual OS process.
+ *
+ * The `tracked` check queries the `heartbeatRuns` table for active (non-terminal)
+ * runs, so it survives restarts — after a server restart the in-memory process
+ * map is empty, but the DB still records the run as running/queued/scheduled_retry.
  *
  * Queued runs are never zombies — they don't have processes yet.
  */
-export function isZombieRun(
+export async function isZombieRun(
   run: { status: string; id: string },
-  tracked: { has(id: string): boolean },
-): boolean {
-  return run.status === "running" && !tracked.has(run.id);
+  tracked: { has(id: string): boolean | Promise<boolean> },
+): Promise<boolean> {
+  if (run.status !== "running") return false;
+  const isTracked = await Promise.resolve(tracked.has(run.id));
+  return !isTracked;
 }
 
 /**
@@ -2557,13 +2563,15 @@ export function isZombieRun(
  * Queued runs pass through unchanged (they have no process yet).
  * Null targets pass through unchanged.
  */
-export function filterZombieCoalesceTarget<
+export async function filterZombieCoalesceTarget<
   T extends { status: string; id: string },
 >(
   target: T | null,
-  tracked: { has(id: string): boolean },
-): T | null {
-  return target && isZombieRun(target, tracked) ? null : target;
+  tracked: { has(id: string): boolean | Promise<boolean> },
+): Promise<T | null> {
+  if (!target) return null;
+  const zombie = await isZombieRun(target, tracked);
+  return zombie ? null : target;
 }
 
 export function describeSessionResetReason(
@@ -4463,9 +4471,23 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     environmentRuntime,
   });
   const workspaceOperationsSvc = workspaceOperationService(db);
+  // DB-backed live-run tracking that survives server restarts.
+  // Instead of relying on in-memory process maps (which are empty after restart),
+  // queries the heartbeatRuns table for any run with a non-terminal status.
+  // This enables correct zombie detection and coalescing even after a restart.
   const liveRunExecutions = {
-    has(id: string) {
-      return runningProcesses.has(id) || activeRunExecutions.has(id);
+    async has(id: string): Promise<boolean> {
+      const rows = await db
+        .select({ id: heartbeatRuns.id })
+        .from(heartbeatRuns)
+        .where(
+          and(
+            eq(heartbeatRuns.id, id),
+            inArray(heartbeatRuns.status, [...EXECUTION_PATH_HEARTBEAT_RUN_STATUSES]),
+          ),
+        )
+        .limit(1);
+      return rows.length > 0;
     },
   };
   const budgetHooks = {
@@ -9642,6 +9664,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     const taskKey = deriveTaskKeyWithHeartbeatFallback(context, null);
     const sessionCodec = getAdapterSessionCodec(agent.adapterType);
     const issueId = readNonEmptyString(context.issueId);
+    // Placeholder for the memory warm-up promise — set later when context is ready
+    let memoryWarmUpPromise: Promise<unknown> | null = null;
     let issueContext = issueId ? await getIssueExecutionContext(agent.companyId, issueId) : null;
     const issueDependencyReadiness = issueId
       ? await issuesSvc.listDependencyReadiness(agent.companyId, [issueId]).then((rows) => rows.get(issueId) ?? null)
@@ -9915,6 +9939,44 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     } else {
       delete context.paperclipTaskMarkdown;
     }
+
+    // ── Memory warm-up: pre-fetch relevant context from past work ──────
+    // Runs asynchronously with other startup I/O; failure is non-fatal.
+    // Result is injected into context.paperclipMemoryPreamble when ready.
+    // Knowledge warm-up runs in parallel for published company knowledge.
+    memoryWarmUpPromise = (async () => {
+      try {
+        const { warmUpAgentMemory, warmUpCompanyKnowledge } = await import("./memory-context-injection.js");
+        const [memoryResult, knowledgeResult] = await Promise.all([
+          warmUpAgentMemory(
+            db,
+            agent.companyId,
+            agent.id,
+            { companyId: agent.companyId, issueId: issueId ?? undefined },
+          ),
+          warmUpCompanyKnowledge(
+            db,
+            agent.companyId,
+            { issueId: issueId ?? undefined },
+            { limit: 3 },
+          ),
+        ]);
+        const preambleParts: string[] = [];
+        if (memoryResult.preamble) {
+          preambleParts.push(memoryResult.preamble);
+        }
+        if (knowledgeResult.preamble) {
+          preambleParts.push(knowledgeResult.preamble);
+        }
+        if (preambleParts.length > 0) {
+          context.paperclipMemoryPreamble = preambleParts.join("\n");
+        }
+      } catch (err) {
+        logger.warn({ err, companyId: agent.companyId, agentId: agent.id }, "Memory/knowledge warm-up failed, continuing without context");
+      }
+    })();
+    // ── End memory warm-up ─────────────────────────────────────────────
+
     const existingExecutionWorkspace =
       issueRef?.executionWorkspaceId ? await executionWorkspacesSvc.getById(issueRef.executionWorkspaceId) : null;
     const requestedShouldReuseExisting =
@@ -11147,6 +11209,14 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       };
 
       let adapterResult: Awaited<ReturnType<typeof adapter.execute>>;
+      // Await memory warm-up that was started in parallel with workspace setup
+      if (memoryWarmUpPromise) {
+        try {
+          await memoryWarmUpPromise;
+        } catch {
+          // Memory warm-up failures are non-fatal; already logged by the warm-up itself
+        }
+      }
       try {
         adapterResult = await adapter.execute({
           runId: run.id,
@@ -13089,7 +13159,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             activeExecutionRun.status === "running" &&
             isSameExecutionAgent;
           const availableActiveExecutionRun = isSameExecutionAgent
-            ? filterZombieCoalesceTarget(activeExecutionRun, liveRunExecutions)
+            ? await filterZombieCoalesceTarget(activeExecutionRun, liveRunExecutions)
             : activeExecutionRun;
 
           if (
@@ -13302,73 +13372,79 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       return newRun;
     }
 
-    const activeRuns = await db
-      .select()
-      .from(heartbeatRuns)
-      .where(and(eq(heartbeatRuns.agentId, agentId), inArray(heartbeatRuns.status, [...EXECUTION_PATH_HEARTBEAT_RUN_STATUSES])))
-      .orderBy(desc(heartbeatRuns.createdAt));
-
-    const sameScopeQueuedRun = activeRuns.find(
-      (candidate) => candidate.status === "queued" && isSameTaskScope(runTaskKey(candidate), taskKey),
-    );
-    const sameScopeScheduledRetryRun = activeRuns.find(
-      (candidate) => candidate.status === "scheduled_retry" && isSameTaskScope(runTaskKey(candidate), taskKey),
-    );
-    const sameScopeRunningRun = activeRuns.find(
-      (candidate) => candidate.status === "running" && isSameTaskScope(runTaskKey(candidate), taskKey),
-    );
-    const shouldQueueFollowupForRunningWake =
-      Boolean(sameScopeRunningRun) &&
-      !sameScopeQueuedRun &&
-      shouldQueueFollowupForRunningIssueWake({ contextSnapshot: enrichedContextSnapshot, wakeCommentId });
-
-    const rawCoalescedTarget =
-      sameScopeQueuedRun ??
-      sameScopeScheduledRetryRun ??
-      (shouldQueueFollowupForRunningWake ? null : sameScopeRunningRun ?? null);
-
-    const coalescedTargetRun = filterZombieCoalesceTarget(
-      rawCoalescedTarget,
-      liveRunExecutions,
-    );
-
-    if (coalescedTargetRun) {
-      const mergedContextSnapshot = mergeCoalescedContextSnapshot(
-        coalescedTargetRun.contextSnapshot,
-        enrichedContextSnapshot,
-      );
-      const mergedRun = await db
-        .update(heartbeatRuns)
-        .set({
-          contextSnapshot: mergedContextSnapshot,
-          updatedAt: new Date(),
-        })
-        .where(eq(heartbeatRuns.id, coalescedTargetRun.id))
-        .returning()
-        .then((rows) => rows[0] ?? coalescedTargetRun);
-
-      await db.insert(agentWakeupRequests).values({
-        companyId: agent.companyId,
-        agentId,
-        source,
-        triggerDetail,
-        reason,
-        payload,
-        status: "coalesced",
-        coalescedCount: 1,
-        requestedByActorType: opts.requestedByActorType ?? null,
-        requestedByActorId: opts.requestedByActorId ?? null,
-        idempotencyKey: opts.idempotencyKey ?? null,
-        runId: mergedRun.id,
-        finishedAt: new Date(),
-      });
-      return mergedRun;
-    }
-
+    // ── Atomic check-and-enqueue (PRA-674) ──────────────────────────────
+    // The agent row is locked FOR UPDATE before inspecting active runs,
+    // serializing concurrent wakeups for the same agent (timer ticks from
+    // multiple server instances, recovery promotes, user wakes). The
+    // active-run coalesce check and the enqueue INSERT happen inside the
+    // same transaction, closing the check-then-insert race.
     const queueOutcome = await db.transaction(async (tx) => {
       await tx.execute(
         sql`select id from agents where id = ${agentId} and company_id = ${agent.companyId} for update`,
       );
+
+      const activeRuns = await tx
+        .select()
+        .from(heartbeatRuns)
+        .where(and(eq(heartbeatRuns.agentId, agentId), inArray(heartbeatRuns.status, [...EXECUTION_PATH_HEARTBEAT_RUN_STATUSES])))
+        .orderBy(desc(heartbeatRuns.createdAt));
+
+      const sameScopeQueuedRun = activeRuns.find(
+        (candidate) => candidate.status === "queued" && isSameTaskScope(runTaskKey(candidate), taskKey),
+      );
+      const sameScopeScheduledRetryRun = activeRuns.find(
+        (candidate) => candidate.status === "scheduled_retry" && isSameTaskScope(runTaskKey(candidate), taskKey),
+      );
+      const sameScopeRunningRun = activeRuns.find(
+        (candidate) => candidate.status === "running" && isSameTaskScope(runTaskKey(candidate), taskKey),
+      );
+      const shouldQueueFollowupForRunningWake =
+        Boolean(sameScopeRunningRun) &&
+        !sameScopeQueuedRun &&
+        shouldQueueFollowupForRunningIssueWake({ contextSnapshot: enrichedContextSnapshot, wakeCommentId });
+
+      const rawCoalescedTarget =
+        sameScopeQueuedRun ??
+        sameScopeScheduledRetryRun ??
+        (shouldQueueFollowupForRunningWake ? null : sameScopeRunningRun ?? null);
+
+      const coalescedTargetRun = await filterZombieCoalesceTarget(
+        rawCoalescedTarget,
+        liveRunExecutions,
+      );
+
+      if (coalescedTargetRun) {
+        const mergedContextSnapshot = mergeCoalescedContextSnapshot(
+          coalescedTargetRun.contextSnapshot,
+          enrichedContextSnapshot,
+        );
+        const mergedRun = await tx
+          .update(heartbeatRuns)
+          .set({
+            contextSnapshot: mergedContextSnapshot,
+            updatedAt: new Date(),
+          })
+          .where(eq(heartbeatRuns.id, coalescedTargetRun.id))
+          .returning()
+          .then((rows) => rows[0] ?? coalescedTargetRun);
+
+        await tx.insert(agentWakeupRequests).values({
+          companyId: agent.companyId,
+          agentId,
+          source,
+          triggerDetail,
+          reason,
+          payload,
+          status: "coalesced",
+          coalescedCount: 1,
+          requestedByActorType: opts.requestedByActorType ?? null,
+          requestedByActorId: opts.requestedByActorId ?? null,
+          idempotencyKey: opts.idempotencyKey ?? null,
+          runId: mergedRun.id,
+          finishedAt: new Date(),
+        });
+        return { kind: "coalesced" as const, run: mergedRun };
+      }
 
       const dailyCapBlock = await getHeartbeatDailyCapBlock(agent, policy, {}, tx);
       if (dailyCapBlock) {
@@ -13449,6 +13525,10 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       return { kind: "queued" as const, run: newRun };
     });
 
+    if (queueOutcome.kind === "coalesced") {
+      await startNextQueuedRunForAgent(agent.id);
+      return queueOutcome.run;
+    }
     if (queueOutcome.kind === "skipped") return null;
     const newRun = queueOutcome.run;
 
@@ -14066,6 +14146,28 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         const baseline = new Date(agent.lastHeartbeatAt ?? agent.createdAt).getTime();
         const elapsedMs = now.getTime() - baseline;
         if (elapsedMs < policy.intervalSec * 1000) continue;
+
+        // ── Concurrency guard: prevent unbounded timer wakeup spawning ──
+        // If the agent already has any non-terminal run (queued, running, or
+        // scheduled_retry), skip enqueueing a new timer wake. This prevents
+        // the heartbeat timer from creating unlimited queued runs when the
+        // in-memory liveRunExecutions set is stale (e.g. after server restart),
+        // which previously caused the concurrent agent restart loop (PRA-535).
+        const existingActiveCountResult = await db
+          .select({ count: count() })
+          .from(heartbeatRuns)
+          .where(
+            and(
+              eq(heartbeatRuns.agentId, agent.id),
+              inArray(heartbeatRuns.status, [...EXECUTION_PATH_HEARTBEAT_RUN_STATUSES]),
+            ),
+          )
+          .then((rows) => Number(rows[0]?.count ?? 0));
+        if (existingActiveCountResult > 0) {
+          skipped += 1;
+          continue;
+        }
+        // ── End concurrency guard ──────────────────────────────────────
 
         const run = await enqueueWakeup(agent.id, {
           source: "timer",

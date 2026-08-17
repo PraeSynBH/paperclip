@@ -31,8 +31,8 @@ function formatRecoveryState(state: string) {
   return state.replace(/_/g, " ");
 }
 
-// PAP-11233: keep Conference Room code intact, but hide the user-facing opt-in for now.
-const SHOW_CONFERENCE_ROOM_EXPERIMENTAL_SETTING = false;
+// PRA-648: Conference Room Chat is now default-on for v0.4.0; show the opt-out toggle.
+const SHOW_CONFERENCE_ROOM_EXPERIMENTAL_SETTING = true;
 
 function RecoveryPreviewDialog({
   preview,

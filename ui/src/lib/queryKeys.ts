@@ -91,6 +91,12 @@ export const queryKeys = {
     liveRuns: (issueId: string) => ["issues", "live-runs", issueId] as const,
     activeRun: (issueId: string) => ["issues", "active-run", issueId] as const,
     workProducts: (issueId: string) => ["issues", "work-products", issueId] as const,
+    planDocument: (issueId: string) => ["issues", "plan-document", issueId] as const,
+    planRevisions: (issueId: string) => ["issues", "plan-revisions", issueId] as const,
+    planRevisionDiff: (issueId: string, revisionId: string, againstRevisionId?: string | null) =>
+      ["issues", "plan-revision-diff", issueId, revisionId, againstRevisionId ?? "__none__"] as const,
+    planGates: (issueId: string, revisionId?: string | null) =>
+      ["issues", "plan-gates", issueId, revisionId ?? "__all__"] as const,
     fileResources: (
       issueId: string,
       options: {
@@ -299,5 +305,34 @@ export const queryKeys = {
   },
   adapters: {
     all: ["adapters"] as const,
+  },
+  memory: {
+    list: (companyId: string, scope?: string, cursor?: string) =>
+      ["memory", companyId, "list", scope ?? "__all__", cursor ?? "__start__"] as const,
+    detail: (companyId: string, recordId: string) =>
+      ["memory", companyId, "detail", recordId] as const,
+    query: (companyId: string, q: string, scope?: string) =>
+      ["memory", companyId, "query", q, scope ?? "__all__"] as const,
+    operations: (companyId: string) => ["memory", companyId, "operations"] as const,
+    bindings: (companyId: string) => ["memory", companyId, "bindings"] as const,
+    targets: (companyId: string) => ["memory", companyId, "targets"] as const,
+    agentConfig: (companyId: string, agentId: string) =>
+      ["memory", companyId, "agent-config", agentId] as const,
+    extractionJobs: (companyId: string, status?: string) =>
+      ["memory", companyId, "extraction-jobs", status ?? "__all__"] as const,
+  },
+  knowledge: {
+    list: (companyId: string, status?: string, cursor?: string) =>
+      ["knowledge", companyId, "list", status ?? "__all__", cursor ?? "__start__"] as const,
+    detail: (companyId: string, documentId: string) =>
+      ["knowledge", companyId, "detail", documentId] as const,
+    revisions: (companyId: string, documentId: string) =>
+      ["knowledge", companyId, "revisions", documentId] as const,
+    revisionDiff: (companyId: string, documentId: string, revA: string, revB: string) =>
+      ["knowledge", companyId, "diff", documentId, revA, revB] as const,
+    backlinks: (companyId: string, documentId: string) =>
+      ["knowledge", companyId, "backlinks", documentId] as const,
+    search: (companyId: string, q: string) =>
+      ["knowledge", companyId, "search", q] as const,
   },
 };

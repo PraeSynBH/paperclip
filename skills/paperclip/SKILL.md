@@ -174,6 +174,8 @@ The array **replaces** the current set on each update — send `[]` to clear. Is
 
 - `PAPERCLIP_WAKE_REASON=issue_blockers_resolved` — all `blockedBy` issues reached `done`; dependent's assignee is woken.
 - `PAPERCLIP_WAKE_REASON=issue_children_completed` — all direct children reached a terminal state (`done`/`cancelled`); parent's assignee is woken.
+- `PAPERCLIP_WAKE_REASON=issue_plan_updated` — the `plan` document was created or updated; the assignee is woken so they can review the new revision, check gate status, and proceed.
+- `PAPERCLIP_WAKE_REASON=issue_plan_gate_resolved` — a review gate on the `plan` document was approved or rejected; the assignee is woken so they can act on the outcome (decompose on all-approved, revise on rejection).
 
 `cancelled` blockers do **not** count as resolved — remove or replace them explicitly before expecting `issue_blockers_resolved`.
 
@@ -374,27 +376,125 @@ When you mention a plan or another issue document in a comment, include a direct
 
 If the issue identifier is available, prefer the document deep link over a plain issue link so the reader lands directly on the updated document.
 
+### Structured Plan Metadata
+
+When creating or updating a plan, you MUST include a `planMetadata` JSON object in the request body alongside the markdown `body`. This structured metadata enables the board UI, milestone tracking, and review gates.
+
+**Plan metadata schema:**
+
+```json
+{
+  "planMetadata": {
+    "sections": [
+      {
+        "id": "<uuid>",
+        "title": "Section title",
+        "body": "Section content (markdown)",
+        "order": 0
+      }
+    ],
+    "milestones": [
+      {
+        "id": "<uuid>",
+        "title": "Milestone name",
+        "description": "Optional description",
+        "status": "pending",
+        "order": 0,
+        "acceptanceCriteria": ["AC1", "AC2"]
+      }
+    ],
+    "status": "draft",
+    "version": 1
+  }
+}
+```
+
+**Required fields:**
+- `sections`: Array of plan sections. Each section must have a UUID `id`, a non-empty `title`, a `body` (markdown, up to 512KB), and an `order` number.
+- `milestones`: Array of milestones. Each milestone must have a UUID `id`, a non-empty `title`, `status` (one of `pending`, `in_progress`, `completed`, `cancelled`), `order`, and optional `acceptanceCriteria`.
+- `status`: One of `draft`, `in_review`, `approved`, `superseded`. Start with `draft`.
+- `version`: Must be `1`.
+
+**Validation rules before writing:**
+1. Each section id and milestone id MUST be a valid UUID v4 (generate new ones with `randomUUID()` or your platform's UUID function)
+2. Section titles must be 1-200 characters, milestone titles 1-200 characters
+3. Maximum 100 sections, maximum 50 milestones
+4. Milestone `acceptanceCriteria` is an array of strings, max 50 items, each max 2000 characters
+5. The `body` field (markdown version of the plan) MUST remain the complete canonical plan body — do not omit sections from the body even if they are in `planMetadata.sections`
+6. Both `body` and `planMetadata` must be consistent: the `planMetadata.sections` represent the structured view of the same content in `body`
+
+**API call:**
+```bash
+PUT /api/issues/{issueId}/documents/plan
+{
+  "title": "Plan",
+  "body": "# Full plan markdown...",
+  "changeSummary": "Added milestone tracking",
+  "baseRevisionId": "<previous-revision-id-or-null>",
+  "planMetadata": { ... }
+}
+```
+
+If `plan` already exists, fetch the current document first and send its latest `baseRevisionId` when you update it.
+
 If you're asked to make a plan, _do not mark the issue as done_. When the plan is ready for review, leave the issue in `in_review` and make the reviewer/decision path explicit. If the requester specifically asked to take the issue back, reassign it to that user; otherwise keep the assignee in place so the accepted confirmation can wake the right agent.
 
 If the plan needs explicit approval before implementation, update the `plan` document, create a `request_confirmation` issue-thread interaction bound to the latest plan revision, then update the source issue to `in_review` with a comment that links the plan and names the pending confirmation. This is a deliberate waiting path, not an abandoned productive run. Wait for acceptance before creating implementation subtasks. See `references/api-reference.md` for the interaction payload.
 
 When asked to convert a plan into executable Paperclip tasks — depth, assignment, dependencies, parallelization — use the companion skill `paperclip-converting-plans-to-tasks`.
 
-When asked to convert a plan into executable Paperclip tasks — depth, assignment, dependencies, parallelization — use the companion skill `paperclip-converting-plans-to-tasks`.
+### Plan Decomposition with Milestones
 
-Recommended API flow:
+When decomposing an accepted plan into child issues, include the `milestoneId` field to link each child issue to a milestone from the plan:
 
-```bash
-PUT /api/issues/{issueId}/documents/plan
+```json
+POST /api/issues/{sourceIssueId}/accepted-plan-decompositions
 {
-  "title": "Plan",
-  "format": "markdown",
-  "body": "# Plan\n\n[your plan here]",
-  "baseRevisionId": null
+  "acceptedPlanRevisionId": "<accepted-revision-id>",
+  "milestoneId": "<milestone-uuid>",
+  "children": [
+    {
+      "title": "Implement feature X",
+      "description": "...",
+      "status": "todo",
+      "workMode": "standard",
+      "priority": "high",
+      "labelIds": ["<label-id>"]
+    }
+  ]
 }
 ```
 
-If `plan` already exists, fetch the current document first and send its latest `baseRevisionId` when you update it.
+The `milestoneId` must reference a valid milestone `id` from the plan's `planMetadata.milestones`. If the milestone was removed from the plan, the API will reject the request.
+
+### Review Gate Context in Heartbeats
+
+When you wake up for a heartbeat on an issue in `planning` work mode, the wake payload includes a `planReviewContext` object with the following fields:
+
+Wake reasons that carry this context: `issue_plan_updated` (plan document created/updated), `issue_plan_gate_resolved` (gate approved/rejected), and any comment-driven wake on a planning-mode issue.
+
+- `gates`: Array of review gates for the current plan revision, each with `id`, `milestoneId`, `status` (pending/approved/rejected/superseded), `acceptanceCriteria`, `assignedAgentId`, and resolution info
+- `milestoneProgress`: Array of milestone progress entries, each with `milestoneId`, `milestoneTitle`, `status`, `totalChildIssues`, `completedChildIssues`, `acceptanceCriteria`, and `gatesStatus`
+- `threads`: Annotation threads and comments on the plan document
+- `interaction`: Pending interaction context (e.g., `request_confirmation` bound to a plan revision)
+
+**How to use the review gate context:**
+
+1. If `gates` has pending entries with `assignedAgentId` matching you, review the acceptance criteria and resolve them (approve/reject) via `PATCH /issues/:id/plan/gates/:gateId`
+2. If `milestoneProgress` shows milestones with `totalChildIssues === completedChildIssues`, the milestone is ready for gate review
+3. If `gates` shows all gates approved for the current revision, the plan is ready for decomposition
+4. If a gate was rejected, update the plan document to address the rejection reason, then create fresh gates
+
+### Plan Validation Checklist
+
+Before writing a plan document, validate:
+1. ✅ `planMetadata` follows the schema above (sections, milestones, status, version)
+2. ✅ All section/milestone IDs are UUIDs
+3. ✅ Section titles and milestone titles are non-empty and within length limits
+4. ✅ `body` contains the complete plan text (not just a summary)
+5. ✅ `body` and `planMetadata.sections` are consistent
+6. ✅ `baseRevisionId` is set to the latest revision id when updating an existing plan
+7. ✅ Milestone `acceptanceCriteria` are specific and testable (not vague like "works well")
 
 ## Key Endpoints (Hot Routes)
 

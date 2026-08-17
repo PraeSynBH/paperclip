@@ -102,6 +102,7 @@ describe("CompanySettingsNav", () => {
           { value: "members", label: "Members" },
           { value: "invites", label: "Invites" },
           { value: "secrets", label: "Secrets" },
+          { value: "memory", label: "Memory" },
           { value: "instance-profile", label: "Instance profile" },
           { value: "instance-general", label: "Instance general" },
           { value: "instance-environments", label: "Instance environments" },

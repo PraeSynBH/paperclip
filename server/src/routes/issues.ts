@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, isNull, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   activityLog,
@@ -56,6 +56,11 @@ import {
   updateIssueWorkProductSchema,
   updateDocumentAnnotationThreadSchema,
   upsertIssueDocumentSchema,
+  upsertPlanDocumentSchema,
+  createPlanReviewGateSchema,
+  resolvePlanReviewGateSchema,
+  planDiffQuerySchema,
+  planGatesQuerySchema,
   updateIssueSchema,
   rejectUnsupportedIssuePatchMonitorSchedulingFields,
   getClosedIsolatedExecutionWorkspaceMessage,
@@ -65,10 +70,12 @@ import {
   type CompanySearchQuery,
   type CompanySearchResponse,
   type ExecutionWorkspace,
+  type IssueDocument,
   type IssueRelationIssueSummary,
   type IssueWatchdogDiscoveryKind,
   type SourceTrustMetadata,
   type SuccessfulRunHandoffState,
+  SLA_MONITOR_ORIGIN_KIND,
 } from "@paperclipai/shared";
 import { trackAgentTaskCompleted } from "@paperclipai/shared/telemetry";
 import { getTelemetryClient } from "../telemetry.js";
@@ -97,6 +104,9 @@ import {
   projectService,
   routineService,
   workProductService,
+  planDocumentService,
+  planReviewGateService,
+  publishLiveEvent,
 } from "../services/index.js";
 import { buildPlanReviewContext } from "../services/plan-review-context.js";
 import {
@@ -128,6 +138,7 @@ import { readAcceptedPlanConfirmationTarget } from "../services/issues.js";
 import { environmentService } from "../services/environments.js";
 import { environmentRuntimeService } from "../services/environment-runtime.js";
 import { redactSensitiveText } from "../redaction.js";
+import { checkPremiumSLABreachDuplicate } from "../services/premium-sla-dedup.js";
 import {
   createCompanySearchRateLimiter,
   type CompanySearchRateLimiter,
@@ -1194,6 +1205,8 @@ export function issueRoutes(
   const executionWorkspacesSvc = executionWorkspaceServiceDirect(db);
   const workProductsSvc = workProductService(db);
   const documentsSvc = documentService(db);
+  const planDocumentsSvc = planDocumentService(db);
+  const planReviewGatesSvc = planReviewGateService(db);
   const documentAnnotationsSvc = documentAnnotationService(db);
   const issueReferencesSvc = issueReferenceService(db);
   const issueThreadInteractionsSvc = issueThreadInteractionService(db);
@@ -3381,10 +3394,34 @@ export function issueRoutes(
       ? rawResult
       : await filterIssuesForActor(req, rawResult);
     const issueIds = result.map((issue) => issue.id);
-    const [handoffStates, recoveryActionByIssue] = await Promise.all([
+    const [handoffStates, recoveryActionByIssue, planDocsByIssueId] = await Promise.all([
       listSuccessfulRunHandoffStates(db, companyId, issueIds),
       recoveryActionsSvc.listActiveForIssues(companyId, issueIds),
+      hasPlanDocument === true
+        ? planDocumentsSvc.listPlanDocuments(issueIds)
+        : Promise.resolve(new Map<string, never>()),
     ]);
+
+    // Batch-fetch gate counts for plan documents (avoids N+1 on plan cards)
+    if (hasPlanDocument === true && planDocsByIssueId.size > 0) {
+      const pairs: { documentId: string; revisionId: string }[] = [];
+      for (const doc of planDocsByIssueId.values()) {
+        if (doc.latestRevisionId) {
+          pairs.push({ documentId: doc.id, revisionId: doc.latestRevisionId });
+        }
+      }
+      if (pairs.length > 0) {
+        const countsByDocId = await planReviewGatesSvc.listGateCounts(companyId, pairs);
+        for (const doc of planDocsByIssueId.values()) {
+          (doc as IssueDocument).gatesCount = countsByDocId.get(doc.id) ?? 0;
+        }
+      } else {
+        // No plan docs have a latest revision — all have zero gates
+        for (const doc of planDocsByIssueId.values()) {
+          (doc as IssueDocument).gatesCount = 0;
+        }
+      }
+    }
     const actor = getActorInfo(req);
     await Promise.all(result.map(async (issue) => {
       const activeRecoveryAction = recoveryActionByIssue.get(issue.id) ?? null;
@@ -3402,6 +3439,9 @@ export function issueRoutes(
       ...issue,
       successfulRunHandoff: handoffStates.get(issue.id) ?? null,
       activeRecoveryAction: recoveryActionByIssue.get(issue.id) ?? null,
+      ...(planDocsByIssueId.size > 0
+        ? { planDocument: planDocsByIssueId.get(issue.id) ?? null }
+        : {}),
     })));
   });
 
@@ -4426,6 +4466,7 @@ export function issueRoutes(
       createdByRunId: actor.runId ?? null,
       sourceTrust,
       lockedDocumentStrategy: req.actor.type === "agent" ? "create_new_document" : "conflict",
+      planMetadata: req.body.planMetadata ?? null,
     });
     const doc = result.document;
     const redirectedFromLockedDocument =
@@ -5342,6 +5383,49 @@ export function issueRoutes(
       watchdogDiscovery,
     );
     if (watchdogProductBugFollowUp === false) return;
+
+    const actor = getActorInfo(req);
+
+    // ---- PremiumSLABreach duplicate suppression ---------------------------
+    // When a PremiumSLABreach alert fires and a recent tracking issue for the
+    // same root cause already exists, suppress creation and link as a reference
+    // via comment rather than creating a standalone issue. Two matching
+    // strategies are tried, in order of precision:
+    //
+    // 1. Fingerprint match (originKind === 'sla_monitor' + originFingerprint) —
+    //    used when the external monitor sends structured metadata (Phase 2).
+    //    Handled inline below after createBody construction.
+    //
+    // 2. Title-pattern match — fallback for the legacy monitor (before Phase 2).
+    //    Matches on `[%]PremiumSLABreach: <client>` within the window.
+    if (!watchdogProductBugFollowUp && !rawCreateBody.parentId) {
+      // Title-pattern fallback — legacy SLA monitor (sends originKind="manual",
+      // originFingerprint="default", so fingerprint dedup would never match).
+      const slaMatch = await checkPremiumSLABreachDuplicate(db, companyId, rawCreateBody.title);
+      if (slaMatch) {
+        // Suppress creation entirely: add comment to tracking issue and return
+        // early instead of creating a new child issue. This closes the gap for
+        // legacy monitor payloads that send originKind="alert" (the inline
+        // fingerprint check below only activates for originKind="sla_monitor"
+        // with a non-default fingerprint).
+        await svc.addComment(
+          slaMatch.existingIssueId,
+          `## Duplicate SLA Alert Suppressed\n\nThis alert fired within the dedup window of existing incident ${slaMatch.existingIdentifier}. No new issue was created; the alert is linked as a reference to the tracking incident.\n\n*Triggered at: ${new Date().toISOString()}*`,
+          { agentId: actor.agentId ?? undefined, runId: actor.runId },
+          { authorType: "agent" },
+        );
+        const enriched = await svc.getById(slaMatch.existingIssueId);
+        res.status(200).json({
+          ...enriched,
+          deduplicated: true,
+          deduplicatedOfIssueId: slaMatch.existingIssueId,
+          deduplicatedOfIdentifier: slaMatch.existingIdentifier,
+        });
+        return;
+      }
+    }
+    // -----------------------------------------------------------------------
+
     const effectiveParentId = watchdogProductBugFollowUp ? null : rawCreateBody.parentId;
     let createParent: Awaited<ReturnType<typeof svc.getById>> | null = null;
     if (req.actor.type === "agent" && !effectiveParentId && !watchdogProductBugFollowUp && !isTaskBridgeKeyActor(req)) {
@@ -5371,7 +5455,6 @@ export function issueRoutes(
       companyId,
       rawCreateBody.assigneeAgentId as string | null | undefined,
     );
-    const actor = getActorInfo(req);
     const runWorkspaceInheritanceSourceIssueId = hasExplicitIssueWorkspaceCreateSelection(rawCreateBody)
       ? null
       : await resolveRunIssueWorkspaceInheritanceSource(companyId, actor);
@@ -5428,6 +5511,57 @@ export function issueRoutes(
       actor.actorType,
     );
     await assertCanManageIssueMonitor(access, req, companyId, createBody.assigneeAgentId ?? null, Boolean(executionPolicy?.monitor));
+
+    // SLA monitor duplicate suppression: within the trailing window, re-alerts
+    // for the same fingerprint are linked to the tracking incident rather than
+    // creating a standalone issue. Both active and recently-resolved issues
+    // suppress duplicates, since a resolved incident's outage still sits in the
+    // trailing availability window and keeps re-triggering the monitor.
+    const slaFingerprint = createBody.originKind === SLA_MONITOR_ORIGIN_KIND
+      && createBody.originFingerprint
+      && createBody.originFingerprint !== "default"
+      ? createBody.originFingerprint
+      : null;
+    if (slaFingerprint) {
+      const dedupWindowHours = parseInt(process.env.PAPERCLIP_SLA_DEDUP_WINDOW_HOURS ?? "24", 10);
+      const since = new Date(Date.now() - dedupWindowHours * 60 * 60 * 1000);
+      const existing = await db
+        .select({
+          id: issueRows.id,
+          identifier: issueRows.identifier,
+        })
+        .from(issueRows)
+        .where(
+          and(
+            eq(issueRows.companyId, companyId),
+            eq(issueRows.originKind, SLA_MONITOR_ORIGIN_KIND),
+            eq(issueRows.originFingerprint, slaFingerprint),
+            gte(issueRows.createdAt, since),
+            isNull(issueRows.hiddenAt),
+            notInArray(issueRows.status, ["cancelled"]),
+          ),
+        )
+        .orderBy(asc(issueRows.createdAt))
+        .limit(1)
+        .then((rows) => rows[0] ?? null);
+      if (existing) {
+        await svc.addComment(
+          existing.id,
+          `## Duplicate SLA Alert Suppressed\n\nThis alert fired within the dedup window of existing incident ${existing.identifier}. No new issue was created; this alert is linked as a reference to the tracking incident.\n\n*Triggered at: ${new Date().toISOString()}*`,
+          { agentId: actor.agentId ?? undefined, runId: actor.runId },
+          { authorType: "agent" },
+        );
+        const enriched = await svc.getById(existing.id);
+        res.status(200).json({
+          ...enriched,
+          deduplicated: true,
+          deduplicatedOfIssueId: existing.id,
+          deduplicatedOfIdentifier: existing.identifier,
+        });
+        return;
+      }
+    }
+
     const issueId = randomUUID();
     const sourceTrust = await sourceTrustForActorWrite({
       id: issueId,
@@ -5445,6 +5579,45 @@ export function issueRoutes(
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
       watchdogActorRunId: actor.runId,
     });
+
+    // ---- Post-insert duplicate verification (C-2 TOCTOU safety net) ---------
+    // The title-pattern SLA dedup check above runs BEFORE the issue is created.
+    // Between that check and this INSERT, another concurrent request could also
+    // pass the check and create a duplicate.  Re-check now that we have a
+    // committed row and suppress if a near-simultaneous duplicate exists.
+    if (!watchdogProductBugFollowUp && !rawCreateBody.parentId) {
+      const postInsertDedup = await checkPremiumSLABreachDuplicate(
+        db, companyId, rawCreateBody.title
+      );
+      if (postInsertDedup && postInsertDedup.existingIssueId !== issue.id) {
+        // Another request created a tracking issue between our SELECT and
+        // INSERT. Suppress this one: hide it and link it to the original.
+        await db
+          .update(issueRows)
+          .set({
+            hiddenAt: sql`now()`,
+            status: "cancelled",
+          })
+          .where(eq(issueRows.id, issue.id));
+
+        await svc.addComment(
+          postInsertDedup.existingIssueId,
+          `## Duplicate SLA Alert Suppressed\n\nThis alert fired within the dedup window of existing incident ${postInsertDedup.existingIdentifier}. A concurrent request also created issue ${issue.identifier ?? issue.id} at nearly the same time; it has been hidden and linked here as a reference.\n\n*Triggered at: ${new Date().toISOString()}*`,
+          { agentId: actor.agentId ?? undefined, runId: actor.runId },
+          { authorType: "agent" },
+        );
+
+        const enriched = await svc.getById(postInsertDedup.existingIssueId);
+        res.status(200).json({
+          ...enriched,
+          deduplicated: true,
+          deduplicatedOfIssueId: postInsertDedup.existingIssueId,
+          deduplicatedOfIdentifier: postInsertDedup.existingIdentifier,
+        });
+        return;
+      }
+    }
+    // -----------------------------------------------------------------------
     await issueReferencesSvc.syncIssue(issue.id);
     await externalObjectsSvc.syncIssueSafely(issue.id);
     const referenceSummary = await issueReferencesSvc.listIssueReferenceSummary(issue.id);
@@ -5708,6 +5881,299 @@ export function issueRoutes(
     res.status(201).json(issue);
   });
 
+  // ─── Plan Document Routes ──────────────────────────────────────────────
+
+  router.post("/issues/:id/documents/plan", validate(upsertPlanDocumentSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
+    if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
+
+    const actor = getActorInfo(req);
+    const sourceTrust = await sourceTrustForActorWrite(issue, actor);
+    const referenceSummaryBefore = await issueReferencesSvc.listIssueReferenceSummary(issue.id);
+    const result = await planDocumentsSvc.upsertPlanDocument({
+      issueId: issue.id,
+      title: req.body.title ?? null,
+      body: req.body.body,
+      changeSummary: req.body.changeSummary ?? null,
+      baseRevisionId: req.body.baseRevisionId ?? null,
+      createdByAgentId: actor.agentId ?? null,
+      createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+      createdByRunId: actor.runId ?? null,
+      planMetadata: req.body.planMetadata ?? null,
+    });
+
+    const doc = result.document;
+    await issueReferencesSvc.syncDocument(doc.id);
+    await externalObjectsSvc.syncDocumentSafely(doc.id);
+    const referenceSummaryAfter = await issueReferencesSvc.listIssueReferenceSummary(issue.id);
+    const referenceDiff = issueReferencesSvc.diffIssueReferenceSummary(referenceSummaryBefore, referenceSummaryAfter);
+
+    // Log activity
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: result.created ? "issue.plan_created" : "issue.plan_updated",
+      entityType: "issue",
+      entityId: issue.id,
+      details: {
+        documentId: doc.id,
+        title: doc.title,
+        revisionNumber: doc.latestRevisionNumber,
+        ...summarizeIssueReferenceActivityDetails({
+          addedReferencedIssues: referenceDiff.addedReferencedIssues.map(summarizeIssueRelationForActivity),
+          removedReferencedIssues: referenceDiff.removedReferencedIssues.map(summarizeIssueRelationForActivity),
+          currentReferencedIssues: referenceDiff.currentReferencedIssues.map(summarizeIssueRelationForActivity),
+        }),
+      },
+    });
+
+    // Auto-supersede any pending review gates from previous revisions
+    if (!result.created && doc.latestRevisionId) {
+      await planReviewGatesSvc.supersedeGatesForPreviousRevisions(doc.id, doc.latestRevisionId);
+    }
+
+    // Emit live event for real-time UI updates
+    publishLiveEvent({
+      companyId: issue.companyId,
+      type: "plan.updated",
+      payload: {
+        issueId: issue.id,
+        documentId: doc.id,
+        revisionNumber: doc.latestRevisionNumber,
+        planMetadata: req.body.planMetadata ?? null,
+      },
+    });
+
+    // Wake the issue assignee so the agent heartbeat picks up the new plan
+    // revision (gate status, milestone progress, and review context).
+    void queueIssueAssignmentWakeup({
+      heartbeat,
+      issue,
+      reason: "issue_plan_updated",
+      mutation: "plan_updated",
+      contextSource: "issue.plan_updated",
+      requestedByActorType: actor.actorType,
+      requestedByActorId: actor.actorId,
+    });
+
+    res.status(result.created ? 201 : 200).json(doc);
+  });
+
+  router.get("/issues/:id/documents/plan", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertIssueReadAllowed(req, res, issue))) return;
+
+    const planDoc = await planDocumentsSvc.getPlanDocument(issue.id);
+    if (!planDoc) {
+      res.status(404).json({ error: "Plan document not found for this issue" });
+      return;
+    }
+
+    res.json(planDoc);
+  });
+
+  router.get("/issues/:id/documents/plan/revisions", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertIssueReadAllowed(req, res, issue))) return;
+
+    const revisions = await planDocumentsSvc.listPlanRevisions(issue.id);
+    res.json(revisions);
+  });
+
+  router.get("/issues/:id/documents/plan/revisions/:revId/diff", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertIssueReadAllowed(req, res, issue))) return;
+
+    const revisionId = req.params.revId as string;
+    const againstRevisionId = req.query.againstRevisionId as string | undefined;
+
+    // Validate query params
+    if (againstRevisionId) {
+      const parsed = planDiffQuerySchema.safeParse({ againstRevisionId });
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid query parameters", details: parsed.error.issues });
+        return;
+      }
+    }
+
+    const diff = await planDocumentsSvc.computePlanDiff(issue.id, revisionId, againstRevisionId);
+    res.json(diff);
+  });
+
+  // ─── Plan Review Gate Routes ───────────────────────────────────────────
+
+  router.post("/issues/:id/plan/gates", validate(createPlanReviewGateSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
+    if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
+
+    const actor = getActorInfo(req);
+    const gate = await planReviewGatesSvc.createGate({
+      issueId: issue.id,
+      milestoneId: req.body.milestoneId ?? null,
+      acceptanceCriteria: req.body.acceptanceCriteria,
+      assignedAgentId: req.body.assignedAgentId ?? null,
+      createdByAgentId: actor.agentId ?? null,
+      createdByUserId: actor.actorType === "user" ? actor.actorId : null,
+    });
+
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "issue.plan_gate_created",
+      entityType: "issue",
+      entityId: issue.id,
+      details: {
+        gateId: gate.id,
+        revisionId: gate.revisionId,
+        milestoneId: gate.milestoneId,
+        acceptanceCriteria: gate.acceptanceCriteria,
+      },
+    });
+
+    // Emit live event for real-time UI updates
+    publishLiveEvent({
+      companyId: issue.companyId,
+      type: "plan.gate_created",
+      payload: {
+        issueId: issue.id,
+        gateId: gate.id,
+        revisionId: gate.revisionId,
+        status: gate.status,
+      },
+    });
+
+    res.status(201).json(gate);
+  });
+
+  router.get("/issues/:id/plan/gates", async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertIssueReadAllowed(req, res, issue))) return;
+
+    const revisionId = req.query.revisionId as string | undefined;
+    if (revisionId !== undefined) {
+      const parsed = planGatesQuerySchema.safeParse({ revisionId });
+      if (!parsed.success) {
+        res.status(400).json({ error: "Invalid query parameters", details: parsed.error.issues });
+        return;
+      }
+    }
+    const gates = await planReviewGatesSvc.listGates({
+      issueId: issue.id,
+      revisionId: revisionId ?? null,
+    });
+    res.json(gates);
+  });
+
+  router.patch("/issues/:id/plan/gates/:gateId", validate(resolvePlanReviewGateSchema), async (req, res) => {
+    const id = req.params.id as string;
+    const issue = await svc.getById(id);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    assertCompanyAccess(req, issue.companyId);
+    if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
+    if (!(await assertDeliverableMutationAllowedByRunContext(req, res, issue))) return;
+
+    const actor = getActorInfo(req);
+    const gateId = req.params.gateId as string;
+    const result = await planReviewGatesSvc.resolveGate(gateId, {
+      status: req.body.status,
+      resolutionComment: req.body.resolutionComment ?? null,
+      resolvedByAgentId: actor.agentId ?? null,
+      resolvedByUserId: actor.actorType === "user" ? actor.actorId : null,
+    });
+
+    await logActivity(db, {
+      companyId: issue.companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: `issue.plan_gate_${result.gate.status}`,
+      entityType: "issue",
+      entityId: issue.id,
+      details: {
+        gateId: result.gate.id,
+        revisionId: result.gate.revisionId,
+        status: result.gate.status,
+        allGatesApproved: result.allApproved,
+      },
+    });
+
+    // Emit live event for real-time UI updates
+    publishLiveEvent({
+      companyId: issue.companyId,
+      type: "plan.gate_resolved",
+      payload: {
+        issueId: issue.id,
+        gateId: result.gate.id,
+        revisionId: result.gate.revisionId,
+        status: result.gate.status,
+        allGatesApproved: result.allApproved,
+      },
+    });
+
+    // Wake the issue assignee so the agent heartbeat can react to the gate
+    // outcome (e.g. proceed once all gates pass, or revise the plan when a
+    // gate is rejected).
+    void queueIssueAssignmentWakeup({
+      heartbeat,
+      issue,
+      reason: "issue_plan_gate_resolved",
+      mutation: "plan_gate_resolved",
+      contextSource: "issue.plan_gate_resolved",
+      requestedByActorType: actor.actorType,
+      requestedByActorId: actor.actorId,
+    });
+
+    res.json(result);
+  });
+
   router.get("/issues/:id/accepted-plan-decompositions", async (req, res) => {
     const sourceIssueId = req.params.id as string;
     const sourceIssue = await svc.getById(sourceIssueId);
@@ -5802,6 +6268,7 @@ export function issueRoutes(
 
     const result = await svc.decomposeAcceptedPlan(sourceIssue.id, {
       acceptedPlanRevisionId: req.body.acceptedPlanRevisionId,
+      milestoneId: req.body.milestoneId ?? null,
       children: normalizedChildren,
       actorAgentId: actor.agentId,
       actorUserId: actor.actorType === "user" ? actor.actorId : null,

@@ -1,6 +1,8 @@
 ---
 title: API Overview
 summary: Authentication, base URL, error codes, and conventions
+version: v2026.626.0
+last_updated: 2026-06-26
 ---
 
 Paperclip exposes a RESTful JSON API for all control plane operations.

@@ -23,3 +23,5 @@ export { accessRoutes } from "./access.js";
 export { instanceSettingsRoutes } from "./instance-settings.js";
 export { instanceDatabaseBackupRoutes } from "./instance-database-backups.js";
 export { cloudUpstreamRoutes } from "./cloud-upstreams.js";
+export { memoryRoutes } from "./memory.js";
+export { knowledgeRoutes } from "./knowledge.js";

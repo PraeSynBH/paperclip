@@ -206,6 +206,39 @@ export interface PlanReviewInteractionContext {
   resolvedAt: string | null;
 }
 
+export interface ParentPlanReviewContext {
+  sourceIssueId: string;
+  sourceIssueIdentifier: string | null;
+  sourceIssueTitle: string | null;
+  acceptedRevisionId: string | null;
+  acceptedRevisionNumber: number | null;
+  acceptedRevisionBody: string | null;
+  acceptedRevisionBodyTruncated: boolean;
+}
+
+export interface PlanReviewGateContext {
+  id: string;
+  milestoneId: string | null;
+  status: string;
+  acceptanceCriteria: string[];
+  assignedAgentId: string | null;
+  createdByAgentId: string | null;
+  resolvedByAgentId: string | null;
+  resolvedAt: string | null;
+  resolutionComment: string | null;
+  createdAt: string;
+}
+
+export interface MilestoneProgress {
+  milestoneId: string;
+  milestoneTitle: string;
+  status: string;
+  totalChildIssues: number;
+  completedChildIssues: number;
+  acceptanceCriteria: string[];
+  gatesStatus: "pending" | "approved" | "rejected" | "superseded" | null;
+}
+
 export interface PlanReviewContext {
   documentKey: "plan";
   issueId: string;
@@ -213,6 +246,11 @@ export interface PlanReviewContext {
   latestRevisionNumber: number | null;
   threads: PlanReviewContextThread[];
   interaction: PlanReviewInteractionContext | null;
+  acceptedRevisionBody: string | null;
+  acceptedRevisionBodyTruncated: boolean;
+  parentPlanContext: ParentPlanReviewContext | null;
+  gates: PlanReviewGateContext[];
+  milestoneProgress: MilestoneProgress[];
   totals: {
     openThreadCount: number;
     includedThreadCount: number;
@@ -220,6 +258,12 @@ export interface PlanReviewContext {
     commentCount: number;
     includedCommentCount: number;
     omittedCommentCount: number;
+    gateCount: number;
+    approvedGateCount: number;
+    pendingGateCount: number;
+    rejectedGateCount: number;
+    milestoneCount: number;
+    completedMilestoneCount: number;
   };
   limits: {
     maxThreads: number;

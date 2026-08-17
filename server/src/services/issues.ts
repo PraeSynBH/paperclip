@@ -463,6 +463,7 @@ function serializeAcceptedPlanDecomposition(
     // and child ids, while the durable table keeps the full child draft payload.
     requestedChildCount: decomposition.requestedChildCount,
     childIssueIds: normalizeIssuePlanDecompositionChildIds(decomposition.childIssueIds),
+    milestoneId: decomposition.milestoneId ?? null,
     ownerAgentId: decomposition.ownerAgentId,
     ownerUserId: decomposition.ownerUserId,
     ownerRunId: decomposition.ownerRunId,
@@ -494,6 +495,7 @@ type IssueChildCreateInput = IssueCreateInput & {
 };
 type AcceptedPlanDecompositionInput = {
   acceptedPlanRevisionId: string;
+  milestoneId?: string | null;
   children: IssueChildCreateInput[];
   actorAgentId?: string | null;
   actorUserId?: string | null;
@@ -5135,6 +5137,7 @@ export function issueService(db: Db) {
               requestedChildCount: data.children.length,
               requestedChildren: data.children as unknown as Record<string, unknown>[],
               childIssueIds: [],
+              milestoneId: data.milestoneId ?? null,
               ownerAgentId: data.actorAgentId ?? null,
               ownerUserId: data.actorUserId ?? null,
               ownerRunId: data.actorRunId ?? null,

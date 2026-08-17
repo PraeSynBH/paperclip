@@ -897,6 +897,62 @@
       "when": 1782526500000,
       "tag": "0127_environment_custom_images_instance_scoped",
       "breakpoints": true
+    },
+    {
+      "idx": 128,
+      "version": "7",
+      "when": 1786826410992,
+      "tag": "0128_deep_planning_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 129,
+      "version": "7",
+      "when": 1786830000000,
+      "tag": "0129_memory_store_phase2",
+      "breakpoints": true
+    },
+    {
+      "idx": 130,
+      "version": "7",
+      "when": 1786840000000,
+      "tag": "0130_memory_store_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 131,
+      "version": "7",
+      "when": 1786850000000,
+      "tag": "0131_knowledge_base",
+      "breakpoints": true
+    },
+    {
+      "idx": 132,
+      "version": "7",
+      "when": 1723748800000,
+      "tag": "0132_memory_operations_binding_nullable",
+      "breakpoints": true
+    },
+    {
+      "idx": 133,
+      "version": "7",
+      "when": 1786884499000,
+      "tag": "0133_memory_records_company_binding_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 134,
+      "version": "7",
+      "when": 1786884500000,
+      "tag": "0134_sla_monitor_alert_dedup_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 135,
+      "version": "7",
+      "when": 1786884600000,
+      "tag": "0135_plan_review_gates_status_check",
+      "breakpoints": true
     }
   ]
 }

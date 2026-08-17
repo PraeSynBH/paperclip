@@ -19,7 +19,7 @@ describe("instance settings service", () => {
       enableEnvironments: true,
       enableIsolatedWorkspaces: true,
       enableStreamlinedLeftNavigation: true,
-      enableConferenceRoomChat: false,
+      enableConferenceRoomChat: true,
       enableExternalObjects: false,
       enablePipelines: false,
       enableIssuePlanDecompositions: true,
@@ -33,13 +33,13 @@ describe("instance settings service", () => {
     });
   });
 
-  it("defaults enableConferenceRoomChat to false for empty and legacy stored settings", () => {
-    expect(normalizeExperimentalSettings(undefined).enableConferenceRoomChat).toBe(false);
-    expect(normalizeExperimentalSettings({}).enableConferenceRoomChat).toBe(false);
-    // Rows persisted before the flag existed (PAP-137) must normalize to off.
+  it("defaults enableConferenceRoomChat to true for empty and legacy stored settings (PRA-648)", () => {
+    expect(normalizeExperimentalSettings(undefined).enableConferenceRoomChat).toBe(true);
+    expect(normalizeExperimentalSettings({}).enableConferenceRoomChat).toBe(true);
+    // Rows persisted before the flag existed (PAP-137) must normalize to on in v0.4.0.
     expect(
       normalizeExperimentalSettings({ enableStreamlinedLeftNavigation: true }).enableConferenceRoomChat,
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it("defaults enableTaskWatchdogs to false for empty and legacy stored settings", () => {
@@ -58,22 +58,28 @@ describe("instance settings service", () => {
     ).toBe(false);
   });
 
-  it("round-trips an enableConferenceRoomChat patch through the update merge", () => {
+  it("round-trips an enableConferenceRoomChat patch through the update merge (PRA-648)", () => {
     // updateExperimental merges `{ ...normalize(current), ...patch }` and
     // re-normalizes; emulate that to prove the flag survives the roundtrip
-    // without disturbing other settings.
+    // without disturbing other settings. With the v0.4.0 default of true,
+    // the initial state has the flag on.
     const current = normalizeExperimentalSettings({});
-    const enabled = normalizeExperimentalSettings({ ...current, enableConferenceRoomChat: true });
-    expect(enabled.enableConferenceRoomChat).toBe(true);
-    expect(enabled.enableStreamlinedLeftNavigation).toBe(true);
+    expect(current.enableConferenceRoomChat).toBe(true);
 
-    const disabled = normalizeExperimentalSettings({ ...enabled, enableConferenceRoomChat: false });
-    expect(disabled).toEqual(current);
+    // Explicitly disable — should survive the roundtrip.
+    const disabled = normalizeExperimentalSettings({ ...current, enableConferenceRoomChat: false });
+    expect(disabled.enableConferenceRoomChat).toBe(false);
+    expect(disabled.enableStreamlinedLeftNavigation).toBe(true);
+
+    // Re-enable — should go back to true.
+    const reEnabled = normalizeExperimentalSettings({ ...disabled, enableConferenceRoomChat: true });
+    expect(reEnabled.enableConferenceRoomChat).toBe(true);
+    expect(reEnabled.enableStreamlinedLeftNavigation).toBe(true);
   });
 
-  it("rejects non-boolean enableConferenceRoomChat values back to the default", () => {
+  it("rejects non-boolean enableConferenceRoomChat values back to the default of true (PRA-648)", () => {
     expect(
       normalizeExperimentalSettings({ enableConferenceRoomChat: "yes" }).enableConferenceRoomChat,
-    ).toBe(false);
+    ).toBe(true);
   });
 });

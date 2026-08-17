@@ -99,3 +99,17 @@ export { pluginDatabaseNamespaces, pluginMigrations } from "./plugin_database.js
 export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
+export { planReviewGates } from "./plan_review_gates.js";
+export {
+  memoryBindings,
+  memoryBindingTargets,
+  memoryRecords,
+  memoryOperations,
+  memoryExtractionJobs,
+} from "./memory.js";
+export {
+  knowledgeDocuments,
+  knowledgeDocumentRevisions,
+  knowledgeDocumentReviews,
+  knowledgeSourceBacklinks,
+} from "./knowledge.js";

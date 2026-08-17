@@ -30,7 +30,8 @@
               "start/what-is-paperclip",
               "start/quickstart",
               "start/core-concepts",
-              "start/architecture"
+              "start/architecture",
+              "releases"
             ]
           }
         ]
@@ -98,6 +99,8 @@
             "group": "Agent Adapters",
             "pages": [
               "adapters/overview",
+              "adapters/hermes-local",
+              "adapters/hermes-gateway",
               "adapters/claude-local",
               "adapters/codex-local",
               "adapters/process",
@@ -120,12 +123,15 @@
               "api/companies",
               "api/agents",
               "api/issues",
+              "api/plans",
               "api/approvals",
               "api/goals-and-projects",
               "api/costs",
               "api/secrets",
               "api/activity",
-              "api/dashboard"
+              "api/dashboard",
+              "api/memory",
+              "api/knowledge"
             ]
           }
         ]

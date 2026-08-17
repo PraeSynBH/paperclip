@@ -1,6 +1,8 @@
 ---
 title: Experimental Features
 summary: What Paperclip experimental features mean for board operators
+version: v2026.609.0
+last_updated: 2026-06-09
 ---
 
 Experimental features are opt-in and are provided without compatibility guarantees. They may break, change, or be removed at any time. Use them at your own risk.

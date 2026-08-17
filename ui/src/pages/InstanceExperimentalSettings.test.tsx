@@ -118,13 +118,24 @@ describe("InstanceExperimentalSettings — Conference Room Chat card (PAP-11233)
     expect(warning?.textContent).toContain("no compatibility guarantees");
   });
 
-  it("does not render the Conference Room Chat experimental setting for now", async () => {
+  it("renders the Conference Room Chat experimental setting and defaults to off in stored state", async () => {
     await renderPage();
 
     const headings = [...container.querySelectorAll("section h2")].map((h) => h.textContent);
-    expect(headings).toContain("Streamlined Left Navigation Bar");
-    expect(headings).not.toContain("Conference Room Chat");
-    expect(container.querySelector(CONFERENCE_TOGGLE_SELECTOR)).toBeNull();
+    expect(headings).toContain("Conference Room Chat");
+    const toggle = container.querySelector<HTMLButtonElement>(CONFERENCE_TOGGLE_SELECTOR);
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute("aria-checked")).toBe("false");
+
+    // Toggle it on
+    await act(async () => {
+      toggle?.click();
+    });
+    await flushReact();
+
+    expect(mockInstanceSettingsApi.updateExperimental).toHaveBeenCalledWith({
+      enableConferenceRoomChat: true,
+    });
   });
 
   it("does not render the Pipelines experimental setting for now", async () => {
@@ -135,16 +146,27 @@ describe("InstanceExperimentalSettings — Conference Room Chat card (PAP-11233)
     expect(container.querySelector('button[aria-label="Toggle pipelines experimental setting"]')).toBeNull();
   });
 
-  it("does not render the toggle even when the stored flag is currently enabled", async () => {
+  it("renders the toggle when the stored flag is currently enabled and allows toggling off", async () => {
     currentExperimentalSettings = {
       ...currentExperimentalSettings,
       enableConferenceRoomChat: true,
     };
     await renderPage();
 
-    const toggle = container.querySelector(CONFERENCE_TOGGLE_SELECTOR);
-    expect(toggle).toBeNull();
+    const toggle = container.querySelector<HTMLButtonElement>(CONFERENCE_TOGGLE_SELECTOR);
+    expect(toggle).not.toBeNull();
+    expect(toggle?.getAttribute("aria-checked")).toBe("true");
     expect(mockInstanceSettingsApi.updateExperimental).not.toHaveBeenCalled();
+
+    // Toggle it off
+    await act(async () => {
+      toggle?.click();
+    });
+    await flushReact();
+
+    expect(mockInstanceSettingsApi.updateExperimental).toHaveBeenCalledWith({
+      enableConferenceRoomChat: false,
+    });
   });
 
   it("renders the Streamlined Left Navigation toggle on by default and patches opt-out", async () => {

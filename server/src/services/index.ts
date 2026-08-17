@@ -7,6 +7,8 @@ export { agentService, deduplicateAgentName } from "./agents.js";
 export { agentInstructionsService, syncInstructionsBundleConfigFromFilePath } from "./agent-instructions.js";
 export { assetService } from "./assets.js";
 export { documentService, extractLegacyPlanBody } from "./documents.js";
+export { planDocumentService } from "./plan-documents.js";
+export { planReviewGateService } from "./plan-review-gates.js";
 export { documentAnnotationService } from "./document-annotations.js";
 export {
   ISSUE_CONTINUATION_SUMMARY_DOCUMENT_KEY,
@@ -111,3 +113,8 @@ export {
 } from "./codex-auth-reconciliation.js";
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
+export { memoryBindingService, type MemoryBindingService } from "./memory-bindings.js";
+export { embeddingService, type EmbeddingService, type EmbeddingResult, type EmbeddingConfig } from "./embedding.js";
+export { builtinPgvectorAdapter, type BuiltinPgvectorAdapter, type BuiltinPgvectorAdapterInstance } from "./memory-adapter.js";
+export { memoryExtractionJobService, type MemoryExtractionJobService, type ExtractionJobResponse, type ExtractionJobListOptions } from "./memory-extraction-jobs.js";
+export { knowledgeDocumentService, type KnowledgeDocumentService } from "./knowledge-documents.js";

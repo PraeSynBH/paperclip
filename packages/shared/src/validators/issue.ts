@@ -403,6 +403,8 @@ const createIssueBaseSchema = z.object({
     agentId: z.string().uuid(),
     instructions: multilineTextSchema.optional().nullable(),
   }).strict().optional().nullable(),
+  originKind: z.string().min(1).max(100).optional().nullable(),
+  originFingerprint: z.string().min(1).max(200).optional().nullable(),
 });
 
 export const createIssueInputSchema = createIssueBaseSchema.extend({
@@ -435,6 +437,7 @@ export type CreateChildIssue = z.infer<typeof createChildIssueSchema>;
 
 export const createAcceptedPlanDecompositionSchema = z.object({
   acceptedPlanRevisionId: z.string().uuid(),
+  milestoneId: z.string().nullable().optional(),
   children: z.array(createChildIssueSchema).min(1).max(25),
 });
 
@@ -1045,6 +1048,7 @@ export const upsertIssueDocumentSchema = z.object({
   body: multilineTextSchema.pipe(z.string().max(524288)),
   changeSummary: z.string().trim().max(500).nullable().optional(),
   baseRevisionId: z.string().uuid().nullable().optional(),
+  planMetadata: z.record(z.unknown()).nullable().optional(),
 });
 
 export const restoreIssueDocumentRevisionSchema = z.object({});

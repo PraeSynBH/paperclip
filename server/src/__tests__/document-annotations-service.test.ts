@@ -11,6 +11,7 @@ import {
   documents,
   issueComments,
   issueDocuments,
+  issuePlanDecompositions,
   issueThreadInteractions,
   issues,
 } from "@paperclipai/db";
@@ -60,6 +61,7 @@ describeEmbeddedPostgres("documentAnnotationService", () => {
     await db.delete(documentAnnotationComments);
     await db.delete(documentAnnotationThreads);
     await db.delete(issueThreadInteractions);
+    await db.delete(issuePlanDecompositions);
     await db.delete(documentRevisions);
     await db.delete(issueDocuments);
     await db.delete(documents);
@@ -799,5 +801,291 @@ describeEmbeddedPostgres("documentAnnotationService", () => {
         }),
       ],
     });
+  });
+
+  it("includes accepted revision body when interaction targets an accepted revision", async () => {
+    const { companyId, issueId, document } = await createIssueWithDocument();
+    const planBody = JSON.stringify({
+      milestones: [
+        { id: "m1", title: "Phase 1", tasks: ["task1", "task2"] },
+        { id: "m2", title: "Phase 2", tasks: ["task3"] },
+      ],
+    });
+
+    // Create a specific revision with structured plan content
+    const [revision] = await db
+      .insert(documentRevisions)
+      .values({
+        companyId,
+        documentId: document.id,
+        revisionNumber: document.latestRevisionNumber + 1,
+        title: "Plan v2",
+        format: "markdown",
+        body: planBody,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    const [interaction] = await db
+      .insert(issueThreadInteractions)
+      .values({
+        companyId,
+        issueId,
+        kind: "request_confirmation",
+        status: "accepted",
+        continuationPolicy: "wake_assignee_on_accept",
+        payload: {
+          version: 1,
+          prompt: "Approve this plan?",
+          target: {
+            type: "issue_document",
+            issueId,
+            documentId: document.id,
+            key: "plan",
+            revisionId: revision.id,
+            revisionNumber: revision.revisionNumber,
+          },
+        },
+        result: {
+          version: 1,
+          outcome: "accepted",
+        },
+        resolvedAt: new Date("2026-06-05T03:10:00.000Z"),
+      })
+      .returning();
+
+    const context = await buildPlanReviewContext({
+      db,
+      companyId,
+      issueId,
+      issueWorkMode: "standard",
+      interactionId: interaction.id,
+    });
+
+    expect(context?.acceptedRevisionBody).toBe(planBody);
+    expect(context?.acceptedRevisionBodyTruncated).toBe(false);
+    expect(context?.interaction?.acceptedTargetRevision?.revisionId).toBe(revision.id);
+  });
+
+  it("includes parent plan context for child issues with no plan document", async () => {
+    const companyId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    // Create parent issue with a plan document
+    const parentIssueId = randomUUID();
+    await db.insert(issues).values({
+      id: parentIssueId,
+      companyId,
+      identifier: `PAR-${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      title: "Parent planning issue",
+      status: "in_progress",
+      workMode: "planning",
+      priority: "high",
+    });
+
+    const docs = documentService(db);
+    const { document: parentDocument } = await docs.upsertIssueDocument({
+      issueId: parentIssueId,
+      key: "plan",
+      title: "Plan",
+      format: "markdown",
+      body: "Parent plan body with milestones",
+    });
+
+    const planBody = JSON.stringify({
+      milestones: [
+        { id: "m1", title: "Child task A", assignee: "agent-1" },
+        { id: "m2", title: "Child task B", assignee: "agent-2" },
+      ],
+    });
+
+    // Create an accepted revision on the parent's plan
+    const [revision] = await db
+      .insert(documentRevisions)
+      .values({
+        companyId,
+        documentId: parentDocument.id,
+        revisionNumber: parentDocument.latestRevisionNumber + 1,
+        title: "Accepted Plan",
+        format: "markdown",
+        body: planBody,
+        createdAt: new Date(),
+      })
+      .returning();
+
+    // Create a child issue
+    const childIssueId = randomUUID();
+    await db.insert(issues).values({
+      id: childIssueId,
+      companyId,
+      parentId: parentIssueId,
+      identifier: `CHI-${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      title: "Child implementation task",
+      description: "Implement the child task from the plan",
+      status: "todo",
+      workMode: "standard",
+      priority: "medium",
+    });
+
+    // Create an accepted plan decomposition
+    await db.insert(issuePlanDecompositions).values({
+      companyId,
+      sourceIssueId: parentIssueId,
+      acceptedPlanRevisionId: revision.id,
+      status: "completed",
+      requestFingerprint: `fp:${parentIssueId}:${revision.id}`,
+      requestedChildCount: 2,
+      requestedChildren: [{ title: "Child task A" }, { title: "Child task B" }],
+      childIssueIds: [childIssueId],
+      updatedAt: new Date(),
+      completedAt: new Date(),
+    });
+
+    // Build context for the child issue
+    const context = await buildPlanReviewContext({
+      db,
+      companyId,
+      issueId: childIssueId,
+      issueWorkMode: "standard",
+    });
+
+    expect(context).not.toBeNull();
+    expect(context?.parentPlanContext).toMatchObject({
+      sourceIssueId: parentIssueId,
+      acceptedRevisionId: revision.id,
+      acceptedRevisionBody: planBody,
+      acceptedRevisionBodyTruncated: false,
+    });
+    expect(context?.parentPlanContext?.sourceIssueTitle).toBe("Parent planning issue");
+    // Child issue has no plan document of its own
+    expect(context?.latestRevisionId).toBeNull();
+    expect(context?.latestRevisionNumber).toBeNull();
+  });
+
+  it("locks accepted plan revision for decomposed child issues (subsequent revisions do not affect context)", async () => {
+    const companyId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    // Create parent issue
+    const parentIssueId = randomUUID();
+    await db.insert(issues).values({
+      id: parentIssueId,
+      companyId,
+      identifier: `PAR-${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      title: "Parent planning issue",
+      status: "in_progress",
+      workMode: "planning",
+      priority: "high",
+    });
+
+    const docs = documentService(db);
+    const { document: parentDocument } = await docs.upsertIssueDocument({
+      issueId: parentIssueId,
+      key: "plan",
+      title: "Plan",
+      format: "markdown",
+      body: "Original plan body",
+    });
+
+    // Create the accepted revision (v1)
+    const [acceptedRevision] = await db
+      .insert(documentRevisions)
+      .values({
+        companyId,
+        documentId: parentDocument.id,
+        revisionNumber: parentDocument.latestRevisionNumber + 1,
+        title: "Accepted Plan v1",
+        format: "markdown",
+        body: "Accepted plan v1 body",
+        createdAt: new Date(),
+      })
+      .returning();
+
+    // Create a child issue
+    const childIssueId = randomUUID();
+    await db.insert(issues).values({
+      id: childIssueId,
+      companyId,
+      parentId: parentIssueId,
+      identifier: `CHI-${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      title: "Child implementation task",
+      status: "todo",
+      workMode: "standard",
+      priority: "medium",
+    });
+
+    // Create the decomposition pointing to the accepted revision
+    await db.insert(issuePlanDecompositions).values({
+      companyId,
+      sourceIssueId: parentIssueId,
+      acceptedPlanRevisionId: acceptedRevision.id,
+      status: "completed",
+      requestFingerprint: `fp:${parentIssueId}:${acceptedRevision.id}`,
+      requestedChildCount: 1,
+      requestedChildren: [{ title: "Child task" }],
+      childIssueIds: [childIssueId],
+      updatedAt: new Date(),
+      completedAt: new Date(),
+    });
+
+    // Now create a NEW revision (v2) on the parent's plan - this should NOT affect the child's context
+    await db
+      .insert(documentRevisions)
+      .values({
+        companyId,
+        documentId: parentDocument.id,
+        revisionNumber: acceptedRevision.revisionNumber + 1,
+        title: "Revised Plan v2",
+        format: "markdown",
+        body: "Revised plan v2 body - should not be seen by child",
+        createdAt: new Date(),
+      })
+      .returning();
+
+    // Update the document's latest to point to the new revision
+    const [latestRevision] = await db
+      .select()
+      .from(documentRevisions)
+      .where(eq(documentRevisions.documentId, parentDocument.id))
+      .orderBy(documentRevisions.revisionNumber)
+      .then((rows) => rows[rows.length - 1]!);
+
+    await db
+      .update(documents)
+      .set({
+        latestBody: "Revised plan v2 body - should not be seen by child",
+        latestRevisionId: latestRevision.id,
+        latestRevisionNumber: latestRevision.revisionNumber,
+        updatedAt: new Date(),
+      })
+      .where(eq(documents.id, parentDocument.id));
+
+    // Build context for the child issue - should still reference the original accepted revision
+    const context = await buildPlanReviewContext({
+      db,
+      companyId,
+      issueId: childIssueId,
+      issueWorkMode: "standard",
+    });
+
+    expect(context).not.toBeNull();
+    expect(context?.parentPlanContext).toMatchObject({
+      acceptedRevisionId: acceptedRevision.id,
+      acceptedRevisionBody: "Accepted plan v1 body",
+      acceptedRevisionBodyTruncated: false,
+    });
+    // Confirm the new revision is NOT in the context
+    expect(context?.parentPlanContext?.acceptedRevisionId).not.toBe(latestRevision.id);
+    expect(context?.parentPlanContext?.acceptedRevisionBody).not.toContain("Revised plan v2");
   });
 });

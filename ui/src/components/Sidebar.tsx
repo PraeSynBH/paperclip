@@ -19,6 +19,9 @@ import {
   Pin,
   MessagesSquare,
   GanttChartSquare,
+  Brain,
+  BookOpen,
+  FileText,
 } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { NavLink } from "@/lib/router";
@@ -183,6 +186,9 @@ export function Sidebar() {
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
           <SidebarNavItem to="/timeline" label="Timeline" icon={GanttChartSquare} />
           <SidebarNavItem to="/artifacts" label="Artifacts" icon={Package} />
+          <SidebarNavItem to="/memory" label="Memory" icon={Brain} />
+          <SidebarNavItem to="/knowledge" label="Knowledge Base" icon={BookOpen} />
+          <SidebarNavItem to="/plans" label="Plans" icon={FileText} />
           <SidebarNavItem to="/skills" label="Skills" icon={Boxes} />
           {showWorkspacesLink ? (
             <SidebarNavItem to="/workspaces" label="Workspaces" icon={GitBranch} />

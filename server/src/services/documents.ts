@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { documentRevisions, documents, issueDocuments, issues } from "@paperclipai/db";
 import { isSystemIssueDocumentKey, issueDocumentKeySchema } from "@paperclipai/shared";
@@ -58,6 +58,7 @@ function mapIssueDocumentRow(
     lockedByAgentId: string | null;
     lockedByUserId: string | null;
     sourceTrust: typeof documents.$inferSelect.sourceTrust;
+    planMetadata: Record<string, unknown> | null;
     createdAt: Date;
     updatedAt: Date;
   },
@@ -81,6 +82,7 @@ function mapIssueDocumentRow(
     lockedByAgentId: row.lockedByAgentId,
     lockedByUserId: row.lockedByUserId,
     sourceTrust: row.sourceTrust ?? null,
+    planMetadata: row.planMetadata ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -104,6 +106,7 @@ const issueDocumentSelect = {
   lockedByAgentId: documents.lockedByAgentId,
   lockedByUserId: documents.lockedByUserId,
   sourceTrust: documents.sourceTrust,
+  planMetadata: documents.planMetadata,
   createdAt: documents.createdAt,
   updatedAt: documents.updatedAt,
 };
@@ -169,6 +172,24 @@ export function documentService(db: Db) {
       return row ? mapIssueDocumentRow(row, true) : null;
     },
 
+    /**
+     * Batch-fetch issue documents for many issues at once (avoids N+1).
+     * Filters by document key when provided. Returns a Map keyed by issueId.
+     * Only the latest revision body is returned, matching getIssueDocumentByKey.
+     */
+    getIssueDocumentsByKeys: async (issueIds: string[], keys: string[] | undefined) => {
+      if (issueIds.length === 0) return new Map<string, ReturnType<typeof mapIssueDocumentRow>>();
+      const rows = await db
+        .select(issueDocumentSelect)
+        .from(issueDocuments)
+        .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
+        .where(and(
+          inArray(issueDocuments.issueId, issueIds),
+          keys && keys.length > 0 ? inArray(issueDocuments.key, keys) : undefined,
+        ));
+      return new Map(rows.map((row) => [row.issueId, mapIssueDocumentRow(row, true)]));
+    },
+
     listIssueDocumentRevisions: async (issueId: string, rawKey: string) => {
       const key = normalizeDocumentKey(rawKey);
       return db
@@ -207,6 +228,7 @@ export function documentService(db: Db) {
       createdByRunId?: string | null;
       sourceTrust?: typeof documents.$inferInsert.sourceTrust;
       lockedDocumentStrategy?: "conflict" | "create_new_document";
+      planMetadata?: Record<string, unknown> | null;
     }) => {
       const key = normalizeDocumentKey(input.key);
       const issue = await db
@@ -246,6 +268,7 @@ export function documentService(db: Db) {
             .from(issueDocuments)
             .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
             .where(and(eq(issueDocuments.issueId, issue.id), eq(issueDocuments.key, key)))
+            .for("update")
             .then((rows) => rows[0] ?? null);
 
           if (existing) {
@@ -274,6 +297,7 @@ export function documentService(db: Db) {
                     lockedByAgentId: null,
                     lockedByUserId: null,
                     sourceTrust: input.sourceTrust ?? null,
+                    planMetadata: input.planMetadata ?? null,
                     createdAt: now,
                     updatedAt: now,
                   })
@@ -288,6 +312,7 @@ export function documentService(db: Db) {
                     title: input.title ?? null,
                     format: input.format,
                     body: input.body,
+                    planMetadata: input.planMetadata ?? null,
                     changeSummary: input.changeSummary ?? null,
                     createdByAgentId: input.createdByAgentId ?? null,
                     createdByUserId: input.createdByUserId ?? null,
@@ -368,6 +393,7 @@ export function documentService(db: Db) {
                 title: input.title ?? null,
                 format: input.format,
                 body: input.body,
+                planMetadata: input.planMetadata ?? null,
                 changeSummary: input.changeSummary ?? null,
                 createdByAgentId: input.createdByAgentId ?? null,
                 createdByUserId: input.createdByUserId ?? null,
@@ -382,6 +408,7 @@ export function documentService(db: Db) {
                 title: input.title ?? null,
                 format: input.format,
                 latestBody: input.body,
+                planMetadata: input.planMetadata ?? null,
                 latestRevisionId: revision.id,
                 latestRevisionNumber: nextRevisionNumber,
                 updatedByAgentId: input.createdByAgentId ?? null,
@@ -437,6 +464,7 @@ export function documentService(db: Db) {
               lockedByAgentId: null,
               lockedByUserId: null,
               sourceTrust: input.sourceTrust ?? null,
+              planMetadata: input.planMetadata ?? null,
               createdAt: now,
               updatedAt: now,
             })
@@ -451,6 +479,7 @@ export function documentService(db: Db) {
               title: input.title ?? null,
               format: input.format,
               body: input.body,
+              planMetadata: input.planMetadata ?? null,
               changeSummary: input.changeSummary ?? null,
               createdByAgentId: input.createdByAgentId ?? null,
               createdByUserId: input.createdByUserId ?? null,
@@ -741,5 +770,55 @@ export function documentService(db: Db) {
         };
       });
     },
+
+    // ─── Document Methods ────────────────────────────────────────────────
+    //
+    // (Methods below this point are defined outside the service object:
+    //  listIssueDocumentRevisions, getIssueDocumentByKey)
   };
+}
+
+export async function listIssueDocumentRevisions(
+  db: Db,
+  issueId: string,
+  key: string,
+) {
+  const normalizedKey = normalizeDocumentKey(key);
+  return db
+    .select({
+      id: documentRevisions.id,
+      companyId: documentRevisions.companyId,
+      documentId: documentRevisions.documentId,
+      issueId: issueDocuments.issueId,
+      key: issueDocuments.key,
+      revisionNumber: documentRevisions.revisionNumber,
+      title: documentRevisions.title,
+      format: documentRevisions.format,
+      body: documentRevisions.body,
+      planMetadata: documentRevisions.planMetadata,
+      changeSummary: documentRevisions.changeSummary,
+      createdByAgentId: documentRevisions.createdByAgentId,
+      createdByUserId: documentRevisions.createdByUserId,
+      createdAt: documentRevisions.createdAt,
+    })
+    .from(issueDocuments)
+    .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
+    .innerJoin(documentRevisions, eq(documentRevisions.documentId, documents.id))
+    .where(and(eq(issueDocuments.issueId, issueId), eq(issueDocuments.key, normalizedKey)))
+    .orderBy(desc(documentRevisions.revisionNumber));
+}
+
+export async function getIssueDocumentByKey(
+  db: Db,
+  issueId: string,
+  key: string,
+) {
+  const normalizedKey = normalizeDocumentKey(key);
+  const row = await db
+    .select(issueDocumentSelect)
+    .from(issueDocuments)
+    .innerJoin(documents, eq(issueDocuments.documentId, documents.id))
+    .where(and(eq(issueDocuments.issueId, issueId), eq(issueDocuments.key, normalizedKey)))
+    .then((rows) => rows[0] ?? null);
+  return row ? mapIssueDocumentRow(row, true) : null;
 }

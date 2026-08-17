@@ -3,13 +3,20 @@ import type { Db } from "@paperclipai/db";
 import {
   documentAnnotationComments,
   documentAnnotationThreads,
+  documentRevisions,
   documents,
   issueDocuments,
+  issuePlanDecompositions,
+  issues,
   issueThreadInteractions,
+  planReviewGates,
 } from "@paperclipai/db";
 import type {
+  MilestoneProgress,
+  ParentPlanReviewContext,
   PlanReviewContext,
   PlanReviewContextAuthor,
+  PlanReviewGateContext,
   PlanReviewInteractionContext,
   PlanReviewInteractionResultContext,
   PlanReviewInteractionTargetContext,
@@ -22,6 +29,7 @@ export const PLAN_REVIEW_CONTEXT_LIMITS = {
   maxBodyChars: 1_200,
   maxTotalBodyChars: 12_000,
   maxAnchorTextChars: 500,
+  maxAcceptedRevisionBodyChars: 20_000,
 } as const;
 
 type BuildPlanReviewContextInput = {
@@ -130,6 +138,103 @@ async function getPlanInteractionContext(input: {
   };
 }
 
+async function fetchAcceptedRevisionBody(
+  db: Db,
+  companyId: string,
+  acceptedTargetRevision: PlanReviewInteractionTargetContext | null,
+): Promise<{ body: string | null; truncated: boolean }> {
+  if (!acceptedTargetRevision?.revisionId) return { body: null, truncated: false };
+  const revision = await db
+    .select({ body: documentRevisions.body })
+    .from(documentRevisions)
+    .where(and(
+      eq(documentRevisions.id, acceptedTargetRevision.revisionId),
+      eq(documentRevisions.companyId, companyId),
+    ))
+    .then((rows) => rows[0] ?? null);
+  if (!revision?.body) return { body: null, truncated: false };
+  const maxChars = PLAN_REVIEW_CONTEXT_LIMITS.maxAcceptedRevisionBodyChars;
+  if (revision.body.length <= maxChars) return { body: revision.body, truncated: false };
+  return { body: revision.body.slice(0, maxChars), truncated: true };
+}
+
+async function fetchParentPlanContext(
+  db: Db,
+  companyId: string,
+  issueId: string,
+): Promise<ParentPlanReviewContext | null> {
+  // Check if this issue has a parent with an accepted plan decomposition
+  const parentIssue = await db
+    .select({
+      parentId: issues.parentId,
+    })
+    .from(issues)
+    .where(and(
+      eq(issues.id, issueId),
+      eq(issues.companyId, companyId),
+    ))
+    .then((rows) => rows[0] ?? null);
+  if (!parentIssue?.parentId) return null;
+
+  // Look for the most recent completed or in_flight decomposition from the parent
+  const decomposition = await db
+    .select({
+      acceptedPlanRevisionId: issuePlanDecompositions.acceptedPlanRevisionId,
+      status: issuePlanDecompositions.status,
+      sourceIssueId: issuePlanDecompositions.sourceIssueId,
+    })
+    .from(issuePlanDecompositions)
+    .where(and(
+      eq(issuePlanDecompositions.companyId, companyId),
+      eq(issuePlanDecompositions.sourceIssueId, parentIssue.parentId),
+      sql`${issuePlanDecompositions.status} IN ('completed', 'in_flight')`,
+    ))
+    .orderBy(desc(issuePlanDecompositions.createdAt))
+    .limit(1)
+    .then((rows) => rows[0] ?? null);
+  if (!decomposition?.acceptedPlanRevisionId) return null;
+
+  // Fetch the accepted revision body
+  const revision = await db
+    .select({
+      body: documentRevisions.body,
+      revisionNumber: documentRevisions.revisionNumber,
+    })
+    .from(documentRevisions)
+    .where(and(
+      eq(documentRevisions.id, decomposition.acceptedPlanRevisionId),
+      eq(documentRevisions.companyId, companyId),
+    ))
+    .then((rows) => rows[0] ?? null);
+
+  // Fetch the source issue identifier and title
+  const sourceIssue = await db
+    .select({
+      identifier: issues.identifier,
+      title: issues.title,
+    })
+    .from(issues)
+    .where(and(
+      eq(issues.id, decomposition.sourceIssueId),
+      eq(issues.companyId, companyId),
+    ))
+    .then((rows) => rows[0] ?? null);
+
+  const maxChars = PLAN_REVIEW_CONTEXT_LIMITS.maxAcceptedRevisionBodyChars;
+  const body = revision?.body ?? null;
+  const truncated = body !== null && body.length > maxChars;
+
+  return {
+    sourceIssueId: decomposition.sourceIssueId,
+    sourceIssueIdentifier: sourceIssue?.identifier ?? null,
+    sourceIssueTitle: sourceIssue?.title ?? null,
+    acceptedRevisionId: decomposition.acceptedPlanRevisionId,
+    acceptedRevisionNumber: revision?.revisionNumber ?? null,
+    acceptedRevisionBody: body ? (body.length > maxChars ? body.slice(0, maxChars) : body) : null,
+    acceptedRevisionBodyTruncated: truncated,
+  };
+}
+
 export async function buildPlanReviewContext(input: BuildPlanReviewContextInput): Promise<PlanReviewContext | null> {
   const interaction = await getPlanInteractionContext({
     db: input.db,
@@ -159,7 +264,54 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
       eq(documents.companyId, input.companyId),
     ))
     .then((rows) => rows[0] ?? null);
-  if (!planDocument) return null;
+
+  // Fetch accepted revision body when interaction targets an accepted revision
+  const acceptedTargetRevision = interaction?.acceptedTargetRevision ?? null;
+  const { body: acceptedRevisionBody, truncated: acceptedRevisionBodyTruncated } =
+    await fetchAcceptedRevisionBody(input.db, input.companyId, acceptedTargetRevision);
+
+  // Fetch parent plan context when this issue has no plan document of its own
+  // but its parent has an accepted plan decomposition
+  const parentPlanContext = !planDocument
+    ? await fetchParentPlanContext(input.db, input.companyId, input.issueId)
+    : null;
+
+  // If there's no plan document and no parent plan context, return null
+  if (!planDocument && !parentPlanContext) return null;
+
+  // When we have no plan document but DO have parent plan context,
+  // return a minimal context with just the parent's accepted plan info
+  if (!planDocument) {
+    return {
+      documentKey: "plan",
+      issueId: input.issueId,
+      latestRevisionId: null,
+      latestRevisionNumber: null,
+      threads: [],
+      interaction: interaction ?? null,
+      acceptedRevisionBody: null,
+      acceptedRevisionBodyTruncated: false,
+      parentPlanContext,
+      gates: [],
+      milestoneProgress: [],
+      totals: {
+        openThreadCount: 0,
+        includedThreadCount: 0,
+        omittedThreadCount: 0,
+        commentCount: 0,
+        includedCommentCount: 0,
+        omittedCommentCount: 0,
+        gateCount: 0,
+        approvedGateCount: 0,
+        pendingGateCount: 0,
+        rejectedGateCount: 0,
+        milestoneCount: 0,
+        completedMilestoneCount: 0,
+      },
+      limits: { ...PLAN_REVIEW_CONTEXT_LIMITS },
+      truncated: false,
+    };
+  }
 
   const [{ count: openThreadCount }] = await input.db
     .select({ count: sql<number>`count(*)::int` })
@@ -171,6 +323,119 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
       eq(documentAnnotationThreads.documentKey, "plan"),
       eq(documentAnnotationThreads.status, "open"),
     ));
+
+  // ─── Fetch plan review gates for the current revision ─────────────────
+  const gateRows = planDocument.latestRevisionId
+    ? await input.db
+        .select()
+        .from(planReviewGates)
+        .where(and(
+          eq(planReviewGates.documentId, planDocument.documentId),
+          eq(planReviewGates.revisionId, planDocument.latestRevisionId),
+        ))
+        .orderBy(asc(planReviewGates.createdAt))
+    : [];
+
+  const gates: PlanReviewGateContext[] = gateRows.map((g) => ({
+    id: g.id,
+    milestoneId: g.milestoneId ?? null,
+    status: g.status,
+    acceptanceCriteria: g.acceptanceCriteria,
+    assignedAgentId: g.assignedAgentId ?? null,
+    createdByAgentId: g.createdByAgentId ?? null,
+    resolvedByAgentId: g.resolvedByAgentId ?? null,
+    resolvedAt: g.resolvedAt ? g.resolvedAt.toISOString() : null,
+    resolutionComment: g.resolutionComment ?? null,
+    createdAt: g.createdAt.toISOString(),
+  }));
+
+  const gateCount = gateRows.length;
+  const approvedGateCount = gateRows.filter((g) => g.status === "approved").length;
+  const pendingGateCount = gateRows.filter((g) => g.status === "pending").length;
+  const rejectedGateCount = gateRows.filter((g) => g.status === "rejected").length;
+
+  // ─── Compute milestone progress ──────────────────────────────────────
+  // Fetch the document's plan_metadata to extract milestone definitions
+  const docMetadata = await input.db
+    .select({ planMetadata: documents.planMetadata })
+    .from(documents)
+    .where(eq(documents.id, planDocument.documentId))
+    .then((rows) => rows[0] ?? null);
+
+  const planMetadata = parseObject(docMetadata?.planMetadata);
+  const milestones: Array<{ id: string; title: string; status: string; acceptanceCriteria: string[] }> =
+    Array.isArray(planMetadata?.milestones) ? planMetadata.milestones : [];
+
+  // Fetch child issues for this issue grouped by milestoneId
+  const childDecompositions = await input.db
+    .select({
+      milestoneId: issuePlanDecompositions.milestoneId,
+      childIssueIds: issuePlanDecompositions.childIssueIds,
+      status: issuePlanDecompositions.status,
+    })
+    .from(issuePlanDecompositions)
+    .where(and(
+      eq(issuePlanDecompositions.companyId, input.companyId),
+      eq(issuePlanDecompositions.sourceIssueId, input.issueId),
+      sql`${issuePlanDecompositions.status} IN ('in_flight', 'completed')`,
+    ));
+
+  // Collect all child issue IDs
+  const allChildIds = childDecompositions.reduce<string[]>((acc, d) => {
+    const ids = Array.isArray(d.childIssueIds) ? d.childIssueIds : [];
+    return acc.concat(ids);
+  }, []);
+
+  // Fetch child issue statuses for completed count
+  const childStatuses = allChildIds.length > 0
+    ? await input.db
+        .select({ id: issues.id, status: issues.status })
+        .from(issues)
+        .where(inArray(issues.id, allChildIds))
+    : [];
+  const childStatusMap = new Map(childStatuses.map((c) => [c.id, c.status]));
+
+  // Identify which milestoneIds have child decompositions
+  const decompositionMilestoneIds = new Set(
+    childDecompositions.filter((d) => d.milestoneId).map((d) => d.milestoneId!),
+  );
+
+  // Build milestone progress — only for milestones that have child issues
+  const milestoneProgress = milestones
+    .filter((m) => decompositionMilestoneIds.has(m.id))
+    .map((m): MilestoneProgress => {
+      const decomposition = childDecompositions.find(
+        (d) => d.milestoneId === m.id,
+      );
+      const childIds = Array.isArray(decomposition?.childIssueIds)
+        ? decomposition.childIssueIds
+        : [];
+      const totalChildIssues = childIds.length;
+      const completedChildIssues = childIds.filter(
+        (id) => childStatusMap.get(id) === "done",
+      ).length;
+
+      // Find the gate for this milestone
+      const milestoneGate = gateRows.find((g) => g.milestoneId === m.id);
+      const gatesStatus: MilestoneProgress["gatesStatus"] = milestoneGate
+        ? (milestoneGate.status as MilestoneProgress["gatesStatus"])
+        : null;
+
+      return {
+        milestoneId: m.id,
+        milestoneTitle: m.title,
+        status: m.status,
+        totalChildIssues,
+        completedChildIssues,
+        acceptanceCriteria: m.acceptanceCriteria ?? [],
+        gatesStatus,
+      };
+    });
+
+  const milestoneCount = milestoneProgress.length;
+  const completedMilestoneCount = milestoneProgress.filter(
+    (mp) => mp.status === "completed",
+  ).length;
 
   const threadRows = await input.db
     .select({
@@ -308,6 +573,7 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
 
   const omittedCommentCount = Math.max(0, commentCount - includedCommentCount);
   if (omittedCommentCount > 0) truncated = true;
+  if (acceptedRevisionBodyTruncated) truncated = true;
 
   return {
     documentKey: "plan",
@@ -315,7 +581,12 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
     latestRevisionId: planDocument.latestRevisionId,
     latestRevisionNumber: planDocument.latestRevisionNumber,
     threads,
+    gates,
+    milestoneProgress,
     interaction,
+    acceptedRevisionBody,
+    acceptedRevisionBodyTruncated,
+    parentPlanContext,
     totals: {
       openThreadCount,
       includedThreadCount: threads.length,
@@ -323,6 +594,12 @@ export async function buildPlanReviewContext(input: BuildPlanReviewContextInput)
       commentCount,
       includedCommentCount,
       omittedCommentCount,
+      gateCount,
+      approvedGateCount,
+      pendingGateCount,
+      rejectedGateCount,
+      milestoneCount,
+      completedMilestoneCount,
     },
     limits: { ...PLAN_REVIEW_CONTEXT_LIMITS },
     truncated,

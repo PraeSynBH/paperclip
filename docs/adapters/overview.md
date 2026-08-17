@@ -1,6 +1,8 @@
 ---
 title: Adapters Overview
 summary: What adapters are and how they connect agents to Paperclip
+version: v2026.626.0
+last_updated: 2026-06-26
 ---
 
 Adapters are the bridge between Paperclip's orchestration layer and agent runtimes. Each adapter knows how to invoke a specific type of AI agent and capture its results.
@@ -24,18 +26,19 @@ When a heartbeat fires, Paperclip:
 | OpenCode Local | `opencode_local` | Runs OpenCode CLI locally (multi-provider `provider/model`) |
 | Cursor | `cursor` | Runs Cursor in background mode |
 | Pi Local | `pi_local` | Runs an embedded Pi agent locally |
-| Hermes Local | `hermes_local` | Runs the local Hermes CLI through `@paperclipai/hermes-paperclip-adapter` |
-| Hermes Gateway | `hermes_gateway` | Calls an already-running Hermes API server through `@paperclipai/hermes-paperclip-adapter/gateway` |
+| [Hermes Local](/adapters/hermes-local) | `hermes_local` | Runs the local Hermes CLI through `@paperclipai/hermes-paperclip-adapter` |
+| [Hermes Gateway](/adapters/hermes-gateway) | `hermes_gateway` | Calls an already-running Hermes API server through `@paperclipai/hermes-paperclip-adapter/gateway` |
 | OpenClaw Gateway | `openclaw_gateway` | Connects to an OpenClaw gateway endpoint |
 | [Process](/adapters/process) | `process` | Executes arbitrary shell commands |
 | [HTTP](/adapters/http) | `http` | Sends webhooks to external agents |
 
 ### Hermes local vs gateway
 
-Use `hermes_local` when Paperclip should start the local `hermes` CLI on the
-same host for each heartbeat. Use `hermes_gateway` when Hermes is already
-running as an HTTP/SSE API server and Paperclip should call that server instead
-of spawning a process. Both type keys are stable built-ins.
+Use [Hermes Local](/adapters/hermes-local) when Paperclip should start the local
+`hermes` CLI on the same host for each heartbeat. Use
+[Hermes Gateway](/adapters/hermes-gateway) when Hermes is already running as an
+HTTP/SSE API server and Paperclip should call that server instead of spawning a
+process. Both type keys are stable built-ins.
 
 The unified Hermes package owns both built-in adapters. The older
 `@paperclipai/adapter-hermes-gateway` package remains only as a deprecated
@@ -57,11 +60,11 @@ You can build and distribute adapters as standalone packages — no changes to P
 
 ```sh
 # Install from npm via API
-curl -X POST http://localhost:3102/api/adapters \
+curl --fail-with-body -sS -X POST http://localhost:3102/api/adapters \
   -d '{"packageName": "my-paperclip-adapter"}'
 
 # Or link from a local directory
-curl -X POST http://localhost:3102/api/adapters \
+curl --fail-with-body -sS -X POST http://localhost:3102/api/adapters \
   -d '{"localPath": "/home/user/my-adapter"}'
 ```
 
@@ -92,8 +95,8 @@ my-adapter/
 
 ## Choosing an Adapter
 
-- **Need a coding agent?** Use `claude_local`, `codex_local`, `opencode_local`, `hermes_local`, or install `droid_local` as an external plugin
-- **Need Hermes on another host or already running as a service?** Use `hermes_gateway`
+- **Need a coding agent?** Use `claude_local`, `codex_local`, `opencode_local`, [Hermes Local](/adapters/hermes-local), or install `droid_local` as an external plugin
+- **Need Hermes on another host or already running as a service?** Use [Hermes Gateway](/adapters/hermes-gateway)
 - **Need to run a script or command?** Use `process`
 - **Need to call a custom external service?** Use `http`
 - **Need something custom?** [Create your own adapter](/adapters/creating-an-adapter) or [build an external adapter plugin](/adapters/external-adapters)
