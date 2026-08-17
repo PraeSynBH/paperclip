@@ -149,6 +149,7 @@ function registerModuleMocks() {
     projectService: () => ({}),
     routineService: () => ({ syncRunStatusForIssue: vi.fn(async () => undefined) }),
     workProductService: () => ({}),
+    planDocumentService: () => ({}),
   }));
 }
 
