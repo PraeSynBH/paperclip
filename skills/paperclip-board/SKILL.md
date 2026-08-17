@@ -67,7 +67,7 @@ Guide the user through these steps when they're setting up for the first time.
 curl -sS "$PAPERCLIP_API_URL/api/companies"
 
 # Create a new company
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/companies" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Company Name",
@@ -86,7 +86,7 @@ The response includes the company `id` and auto-generated `issuePrefix`. Tell th
 After creating, set `PAPERCLIP_COMPANY_ID` for subsequent calls. Also set `requireBoardApprovalForNewAgents: true` so all hires go through governance:
 
 ```bash
-curl -sS -X PATCH "$PAPERCLIP_API_URL/api/companies/{companyId}" \
+curl --fail-with-body -sS -X PATCH "$PAPERCLIP_API_URL/api/companies/{companyId}" \
   -H "Content-Type: application/json" \
   -d '{"requireBoardApprovalForNewAgents": true}'
 ```
@@ -106,7 +106,7 @@ curl -sS "$PAPERCLIP_API_URL/llms/agent-configuration/claude_local.txt"
 curl -sS "$PAPERCLIP_API_URL/llms/agent-icons.txt"
 
 # Submit hire request
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "CEO Name",
@@ -142,7 +142,7 @@ If the company has `requireBoardApprovalForNewAgents: true`, the hire will need 
 curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/approvals?status=pending"
 
 # Approve the CEO hire
-curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{approvalId}/approve" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{approvalId}/approve" \
   -H "Content-Type: application/json" \
   -d '{"decisionNote": "CEO hire approved by board during onboarding"}'
 ```
@@ -152,7 +152,7 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{approvalId}/approve" \
 Create a standing issue for decision logging and board operations:
 
 ```bash
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Board Operations",
@@ -165,7 +165,7 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues"
 Then create the decision log document:
 
 ```bash
-curl -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{boardIssueId}/documents/decision-log" \
+curl --fail-with-body -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{boardIssueId}/documents/decision-log" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Decision Log",
@@ -181,7 +181,7 @@ Also write this to a local file at `./artifacts/decision-log.md` so the user can
 Start the CEO's first heartbeat:
 
 ```bash
-curl -sS -X POST "$PAPERCLIP_API_URL/api/agents/{ceoId}/heartbeat/invoke" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/agents/{ceoId}/heartbeat/invoke" \
   -H "Content-Type: application/json"
 ```
 
@@ -195,7 +195,7 @@ When the user wants to build a hiring plan:
 
 ```bash
 # Create the hiring plan issue
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Hiring Plan",
@@ -205,7 +205,7 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues"
   }'
 
 # Attach the plan document
-curl -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/hiring-plan" \
+curl --fail-with-body -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/hiring-plan" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Hiring Plan",
@@ -263,7 +263,7 @@ For each agent to hire:
 curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-configurations"
 
 # Submit hire request
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/agent-hires" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "Agent Name",
@@ -319,7 +319,7 @@ Approve these updates? (approve all / review individually / edit)
 curl -sS "$PAPERCLIP_API_URL/api/agents/{agentId}"
 
 # Update the agent's config with new escalation paths
-curl -sS -X PATCH "$PAPERCLIP_API_URL/api/agents/{agentId}" \
+curl --fail-with-body -sS -X PATCH "$PAPERCLIP_API_URL/api/agents/{agentId}" \
   -H "Content-Type: application/json" \
   -d '{
     "adapterConfig": { ... updated config with new Collaboration section ... }
@@ -335,17 +335,17 @@ curl -sS -X PATCH "$PAPERCLIP_API_URL/api/agents/{agentId}" \
 curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/approvals?status=pending"
 
 # Approve
-curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{id}/approve" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{id}/approve" \
   -H "Content-Type: application/json" \
   -d '{"decisionNote": "Approved by board"}'
 
 # Reject
-curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{id}/reject" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{id}/reject" \
   -H "Content-Type: application/json" \
   -d '{"decisionNote": "Reason for rejection"}'
 
 # Request revision
-curl -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{id}/request-revision" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/approvals/{id}/request-revision" \
   -H "Content-Type: application/json" \
   -d '{"decisionNote": "Please adjust X, Y, Z"}'
 ```
@@ -377,7 +377,7 @@ curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}"
 curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/comments"
 
 # Create a task
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Task title",
@@ -390,12 +390,12 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/issues"
   }'
 
 # Update a task
-curl -sS -X PATCH "$PAPERCLIP_API_URL/api/issues/{issueId}" \
+curl --fail-with-body -sS -X PATCH "$PAPERCLIP_API_URL/api/issues/{issueId}" \
   -H "Content-Type: application/json" \
   -d '{"status": "done", "comment": "Completed"}'
 
 # Add a comment
-curl -sS -X POST "$PAPERCLIP_API_URL/api/issues/{issueId}/comments" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/issues/{issueId}/comments" \
   -H "Content-Type: application/json" \
   -d '{"body": "Comment text in markdown"}'
 
@@ -499,7 +499,7 @@ Three ways the user can edit system prompts:
 curl -sS "$PAPERCLIP_API_URL/api/agents/{id}"
 
 # Then update
-curl -sS -X PATCH "$PAPERCLIP_API_URL/api/agents/{id}" \
+curl --fail-with-body -sS -X PATCH "$PAPERCLIP_API_URL/api/agents/{id}" \
   -H "Content-Type: application/json" \
   -d '{"adapterConfig": { ... updated config ... }}'
 ```
@@ -532,7 +532,7 @@ Plans are structured documents attached to an issue under the `plan` document ke
 
 ```bash
 # Create/update a plan document (upserts; creates a new revision)
-curl -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/plan" \
+curl --fail-with-body -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/plan" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Launch Plan",
@@ -564,7 +564,7 @@ curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/documents/plan/revisions/{revI
 
 ```bash
 # Create a review gate on the current plan revision
-curl -sS -X POST "$PAPERCLIP_API_URL/api/issues/{issueId}/plan/gates" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/issues/{issueId}/plan/gates" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Approve launch plan",
@@ -575,7 +575,7 @@ curl -sS -X POST "$PAPERCLIP_API_URL/api/issues/{issueId}/plan/gates" \
 curl -sS "$PAPERCLIP_API_URL/api/issues/{issueId}/plan/gates"
 
 # Approve / reject a gate (approve auto-supersedes other open gates)
-curl -sS -X PATCH "$PAPERCLIP_API_URL/api/issues/{issueId}/plan/gates/{gateId}" \
+curl --fail-with-body -sS -X PATCH "$PAPERCLIP_API_URL/api/issues/{issueId}/plan/gates/{gateId}" \
   -H "Content-Type: application/json" \
   -d '{"status": "approved", "decisionNote": "Approved by board"}'
 ```
@@ -588,7 +588,7 @@ Paperclip has a company-scoped memory store (pgvector-backed). The board assista
 
 ```bash
 # Capture a fact into memory (auto-capture, 30d TTL)
-curl -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/capture" \
+curl --fail-with-body -sS -X POST "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/capture" \
   -H "Content-Type: application/json" \
   -d '{
     "text": "Company decided to focus on the European market in Q3.",
@@ -602,7 +602,7 @@ curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/query?q=
 curl -sS "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/records?limit=20"
 
 # Forget a record
-curl -sS -X DELETE "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/records" \
+curl --fail-with-body -sS -X DELETE "$PAPERCLIP_API_URL/api/companies/$PAPERCLIP_COMPANY_ID/memory/records" \
   -H "Content-Type: application/json" \
   -d '{"handles": [{"providerKey": "builtin_pgvector", "providerRecordId": "{recordId}"}]}'
 ```
@@ -631,7 +631,7 @@ Maintain a decision log for session continuity. Log major decisions — not ever
 curl -sS "$PAPERCLIP_API_URL/api/issues/{boardIssueId}/documents/decision-log"
 
 # Update with new entries appended
-curl -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{boardIssueId}/documents/decision-log" \
+curl --fail-with-body -sS -X PUT "$PAPERCLIP_API_URL/api/issues/{boardIssueId}/documents/decision-log" \
   -H "Content-Type: application/json" \
   -d '{
     "title": "Decision Log",
