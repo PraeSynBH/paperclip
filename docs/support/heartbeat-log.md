@@ -5,6 +5,47 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-17 — Heartbeat: Documentation health report + idle monitoring
+
+### What was done
+
+1. **Produced comprehensive documentation health report** — saved to `doc/status/2026-08-17-support-engineer-health-report.md`. Coverage audit confirms:
+   - 8 feature assessments all current (5 Voyonder v0.2.10–v0.4.0 + 3 pre-release)
+   - 7 KB articles all current
+   - 5 Voyonder release notes + 8 Paperclip release notes all current
+   - 3 API documentation pages up to date
+   - 5 planned backlog items still pending (no change)
+   - 3 C-fix documentation impacts identified and logged for when fixes ship
+
+2. **Diff assessment** — No new code commits since last support engineer heartbeat (`5333f76e0d`). Working tree contains all three C-fix implementations from the Staff Engineer structural review (VOY-1297/1298/1299):
+   - **C-1**: Zod schema validation for action signals (board-chat.ts) — trust boundary fix, pre-release
+   - **C-2**: Post-insert SLA dedup verification (issues.ts) — TOCTOU race fix, pre-release
+   - **C-3**: `plainto_tsquery` replaces manual tsquery construction (knowledge-documents.ts, memory-context-injection.ts) — search safety fix, pre-release
+   - These are pre-release changes already covered by existing support assessments; no documentation action needed until they ship.
+
+3. **Server health verified** — Product dev server (port 3100) is DOWN; PraeSyn server (port 3101) healthy. Cannot verify docs against live VOY API at this time.
+
+4. **Release pipeline monitored** — RC-3 release notes and support docs are complete. Pipeline blocked on C-fixes from Staff Engineer structural review (VOY-1297/1298/1299). No documentation action needed until fixes ship.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + 3 C-fix updates (when shipped) |
+| Release notes currency | Up to date through v0.4.0-alpha-rc.3 (Voyonder) + v2026.722.0 (Paperclip) |
+| Product dev server | DOWN (port 3100 unreachable) |
+
+### Next triggers to watch for
+
+- **C-fix commits landing** (VOY-1297/1298/1299) → assess diff for documentation impact
+- **VOY-1264 unblocks** → confirm release notes reference final version before staging ship
+- **VOY-1265 QA findings** → any UI behavior deltas worth a support note
+- **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
+- **PostHog error monitoring (VOY-999) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+
 ## 2026-08-16 — Heartbeat: v0.4.0-alpha documentation sync — plans, memory, knowledge API docs + support assessments (VOY-1254)
 
 ### What was done
