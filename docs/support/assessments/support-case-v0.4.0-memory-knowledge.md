@@ -3,7 +3,7 @@
 **Feature**: Agent memory (pgvector-based bindings, capture, query, records) and knowledge document management (CRUD, lifecycle, revisions, search)
 **Assessed by**: Support Engineer
 **Date**: 2026-08-16
-**Related**: VOY-1190, VOY-1191, VOY-1192, VOY-1203, VOY-1204, VOY-1255, VOY-1256, VOY-1299 (C-3), 466c30fde7 (extraction jobs)
+**Related**: VOY-1190, VOY-1191, VOY-1192, VOY-1203, VOY-1204, VOY-1255, VOY-1256, VOY-1299 (C-3), 466c30fde7 (extraction jobs), VOY-1322 (promoteFromMemory, search cache, REINDEX, capabilities)
 **Release**: v0.4.0-alpha
 
 ## Feature Overview (User Perspective)
@@ -76,6 +76,42 @@ Extraction jobs record background memory-extraction work (e.g., agent runs that 
 - **Retry failed job**: `POST /companies/{companyId}/memory/extraction-jobs/{jobId}/retry` — resets a `failed` job back to `queued`; only `failed` jobs can be retried (400 otherwise)
 
 **Support note**: if an operator reports an extraction job that is stuck in `failed`, the retry endpoint resets it to `queued` so the worker picks it up again. A retry attempt on a non-failed job (or a job whose status changed concurrently) returns `400` with a clear message — no silent double-transition.
+
+### Promote from Memory
+
+**Commit**: `809292a6e7` (VOY-1322)
+
+Memory records can now be promoted to draft knowledge documents via `POST /companies/:cid/knowledge/promote-from-memory`. This creates a new draft knowledge document, auto-generating an originating backlink to the source issue when the memory record carries a `sourceIssueId`. The resulting document enters the normal draft → review → publish lifecycle.
+
+**Request fields**: `memoryRecordId` (uuid, required), `title` (optional, max 500), `summary` (optional, max 2000), `body` (optional, defaults to memory record text).
+
+**Auth**: Board or Agent. Agents can promote their own memory records.
+
+**Support note**: if a user reports that promote-from-memory returns a `404`, the `memoryRecordId` may not exist, or may be scoped to a different company. Verify the memory record exists and belongs to the same company. The promotion is a one-way operation — the memory record is not deleted or modified; only a copy is promoted.
+
+### Knowledge Search Cache
+
+**Commit**: `809292a6e7` (VOY-1322)
+
+The knowledge document search endpoint (`GET /companies/:cid/knowledge/search`) now uses an in-memory LRU cache (200 entries, 5-minute TTL) keyed by `companyId:query:limit`. Repeated identical queries return cached results instead of hitting the database.
+
+**Support note**: if an operator reports that search results seem stale or do not reflect recent changes to a published document, the cache may be serving a result from up to 5 minutes ago. This is by design to reduce database load. The cache clears automatically after 5 minutes of inactivity per query. There is no manual cache-busting mechanism; operators should wait for the TTL or try a slightly different query to bypass the cache.
+
+### REINDEX Maintenance Endpoint
+
+**Commit**: `809292a6e7` (VOY-1322)
+
+A maintenance endpoint at `POST /companies/:cid/knowledge/maintenance/rebuild-index` rebuilds the pgvector HNSW embedding index for the memory records table.
+
+**Support note**: this endpoint should be run during low-traffic periods as it acquires a table-level write lock. The response includes a `latencyMs` field indicating how long the rebuild took. If an operator reports that the rebuild is slow or times out on large datasets, escalate to Staff Engineer — the REINDEX operation is synchronous and blocks on large tables. There is no progress indicator.
+
+### Memory Binding Capabilities
+
+**Commit**: `809292a6e7` (VOY-1322)
+
+The `GET /companies/:cid/memory/bindings/:bindingId/capabilities` endpoint returns resolved capabilities for a memory binding, merging built-in pgvector defaults (`false` for all capability flags) with any overrides stored in the binding's `capabilitiesJson` field.
+
+**Support note**: plugin adapters may expose capabilities beyond the default pgvector set. If a user reports that a capability flag is not reflected in the response, verify that the binding has a `capabilitiesJson` field configured, and that the capability key matches exactly (case-sensitive). The response only shows what the adapter declares — it does not validate whether the capability is actually supported.
 
 ## Search Safety (plainto_tsquery)
 
@@ -178,6 +214,9 @@ A: It shows the outcome of the most recent review — `pending`, `approved`, or 
 | Knowledge search returns 404 | 404 on `GET /knowledge/search` | Server older than `f09cf3bc6e` — `/:documentId` route shadowed the literal `search` path | Upgrade server to `f09cf3bc6e` or later |
 | Knowledge search returns 500 on special-char queries | 500 with a PostgreSQL error | Server older than `75c6c27a41` — hand-built `to_tsquery` rejects punctuation/operators | Upgrade server to `75c6c27a41` or later (plainto_tsquery) |
 | Extraction job retry rejected | 400 "Only failed jobs can be retried" | Job status is not `failed` (or changed concurrently) | Re-check job status; only retry `failed` jobs |
+| Promote from memory returns 404 | 404 Not Found | Memory record does not exist or belongs to different company | Verify memoryRecordId and company scope |
+| Rebuild-index slow or times out | REINDEX hangs or times out | Large memory_records table — synchronous REINDEX with table-level lock | Run during low-traffic periods; escalate to Staff Engineer if timeout persists |
+| Binding capabilities missing expected flags | Capability not in response | Plugin adapter capabilitiesJson not configured, or key mismatch (case-sensitive) | Verify binding has capabilitiesJson; match key casing exactly |
 
 ## Related Documentation
 

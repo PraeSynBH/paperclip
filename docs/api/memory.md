@@ -244,6 +244,46 @@ Lists recent memory operations for audit purposes.
 
 **Auth**: Board only.
 
+### Capabilities
+
+#### Get Binding Capabilities
+
+```text
+GET /companies/{companyId}/memory/bindings/{bindingId}/capabilities
+```
+
+Returns the resolved capabilities for a memory binding. Merges the built-in pgvector adapter's default capabilities with any overrides stored in the binding's `capabilitiesJson` field.
+
+**Default built-in pgvector capabilities:**
+
+| Capability | Default | Description |
+|---|---|---|
+| `profile` | `false` | Agent memory profiling support |
+| `correction` | `false` | Automatic memory correction |
+| `multimodal` | `false` | Multi-modal content support |
+| `providerManagedExtraction` | `false` | Provider-managed extraction jobs |
+| `asyncExtraction` | `false` | Asynchronous extraction support |
+| `providerNativeBrowse` | `false` | Provider-native browse capability |
+
+Plugin adapters override these defaults via the binding's `capabilitiesJson` configuration. The response shows the merged result.
+
+**Example response:**
+```json
+{
+  "bindingId": "b-uuid",
+  "capabilities": {
+    "profile": false,
+    "correction": false,
+    "multimodal": false,
+    "providerManagedExtraction": false,
+    "asyncExtraction": false,
+    "providerNativeBrowse": false
+  }
+}
+```
+
+**Auth**: Board only.
+
 ### Memory Extraction Jobs
 
 #### List Extraction Jobs

@@ -230,6 +230,54 @@ Creates a backlink from the knowledge document to an issue.
 
 ## Search
 
+### Promote from Memory
+
+```text
+POST /companies/{companyId}/knowledge/promote-from-memory
+{
+  "memoryRecordId": "mem-uuid",
+  "title": "Optional title override",
+  "summary": "Optional summary override",
+  "body": "Optional body override (defaults to memory record text)"
+}
+```
+
+Promotes a memory record into a draft knowledge document. If no `title`, `summary`, or `body` overrides are provided, the values are sourced from the memory record itself. An originating backlink to the source issue is created automatically when the memory record carries a `sourceIssueId`.
+
+The promoted document enters the normal draft → review → publish lifecycle, so company knowledge stays curated.
+
+| Field | Type | Description |
+|---|---|---|
+| `memoryRecordId` | string (uuid, required) | Memory record to promote |
+| `title` | string? | Title override (max 500 chars) |
+| `summary` | string? | Summary override (max 2000 chars) |
+| `body` | string? | Body override (defaults to memory record text) |
+
+**Response**: `201 Created` — returns the new draft knowledge document.
+
+**Auth**: Board or Agent.
+
+### Rebuild Embedding Index (Maintenance)
+
+```text
+POST /companies/{companyId}/knowledge/maintenance/rebuild-index
+```
+
+Rebuilds the pgvector HNSW embedding index (`memory_records_embedding_hnsw_idx`) for improved query performance. Runs a `REINDEX` operation which acquires a table-level lock for the duration of the operation.
+
+**Use during low-traffic periods** — the table is locked for writes while the index rebuilds. The rebuild time depends on the number of memory records and the server's resources.
+
+**Response:**
+```json
+{
+  "success": true,
+  "index": "memory_records_embedding_hnsw_idx",
+  "latencyMs": 1234
+}
+```
+
+**Auth**: Board only.
+
 ### Search Published Documents
 
 ```text
