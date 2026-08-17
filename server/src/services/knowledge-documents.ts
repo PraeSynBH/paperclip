@@ -43,6 +43,19 @@ function buildKnowledgeSearchCacheKey(companyId: string, query: string, limit: n
   return `${companyId}:${query.toLowerCase().trim()}:${limit}`;
 }
 
+/**
+ * Invalidate the knowledge search cache.
+ *
+ * Called on any knowledge document mutation (create/update/delete/publish/
+ * archive/review/promote) so search results never serve stale rows. Full
+ * invalidation is intentionally coarse — the cache is small (200 entries)
+ * and knowledge mutations are rare relative to searches, so a blanket clear
+ * is cheaper and simpler than per-document tagging.
+ */
+function invalidateKnowledgeSearchCache(): void {
+  knowledgeSearchCache.clear();
+}
+
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export interface KnowledgeDocumentService {
@@ -248,6 +261,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     req: KnowledgeDocumentCreateRequest,
     authorAgentId?: string,
   ): Promise<KnowledgeDocument> {
+    invalidateKnowledgeSearchCache();
     const rows = await db
       .insert(knowledgeDocuments)
       .values({
@@ -262,17 +276,11 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       })
       .returning();
 
-    // Create initial revision
-    await db.insert(knowledgeDocumentRevisions).values({
-      documentId: rows[0].id,
-      version: 1,
-      title: req.title,
-      summary: req.summary ?? null,
-      body: req.body ?? "",
-      changeDescription: "Initial version",
-      authorAgentId: authorAgentId ?? null,
-    });
-
+    // NOTE: No initial revision is created here — the first revision snapshot
+    // is created by submitForReview when the document enters the review
+    // lifecycle. Creating one here would cause a duplicate key violation on
+    // knowledge_document_revisions_doc_ver_unique_idx when submitForReview
+    // later tries to insert version=1.
     // If sourceIssueId is provided, create a backlink automatically
     if (req.sourceIssueId) {
       await db
@@ -301,6 +309,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     documentId: string,
     req: KnowledgeDocumentUpdateRequest,
   ): Promise<KnowledgeDocument> {
+    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "draft") {
@@ -334,6 +343,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     companyId: string,
     documentId: string,
   ): Promise<void> {
+    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "draft" && doc.status !== "archived") {
@@ -456,6 +466,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     req: KnowledgeDocumentSubmitReviewRequest,
     authorAgentId?: string,
   ): Promise<{ document: KnowledgeDocument; revision: KnowledgeDocumentRevision }> {
+    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "draft") {
@@ -521,6 +532,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     decision: KnowledgeDocumentReviewDecision,
     reviewerAgentId?: string,
   ): Promise<{ document: KnowledgeDocument; review: KnowledgeDocumentReview }> {
+    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "in_review") {
@@ -558,12 +570,16 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       })
       .returning();
 
-    // If changes requested, revert to draft
+    // If changes requested, revert to draft and bump the version so the
+    // next submitForReview inserts a fresh revision (version+1) instead of
+    // colliding with the existing revision on
+    // knowledge_document_revisions_doc_ver_unique_idx (VOY-1358).
     if (decision.status === "changes_requested") {
-      await db
+      const bumped = await db
         .update(knowledgeDocuments)
         .set({
           status: "draft",
+          version: doc.version + 1,
           updatedAt: new Date(),
         })
         .where(
@@ -571,7 +587,10 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
             eq(knowledgeDocuments.id, documentId),
             eq(knowledgeDocuments.companyId, companyId),
           ),
-        );
+        )
+        .returning();
+      // Keep doc in sync for the response below.
+      doc.version = bumped[0]?.version ?? doc.version + 1;
     }
 
     // If approved, document stays in_review until explicitly published
@@ -599,6 +618,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     documentId: string,
     req: KnowledgeDocumentPublishRequest,
   ): Promise<{ document: KnowledgeDocument; revision: KnowledgeDocumentRevision }> {
+    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "in_review") {
@@ -684,6 +704,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     companyId: string,
     documentId: string,
   ): Promise<KnowledgeDocument> {
+    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "published") {
@@ -854,6 +875,11 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     const cacheKey = buildKnowledgeSearchCacheKey(companyId, query ?? "", searchLimit);
     const cached = knowledgeSearchCache.get(cacheKey);
     if (cached && Date.now() - cached.cachedAt < KNOWLEDGE_SEARCH_CACHE_TTL_MS) {
+      // True LRU: re-insert to move this entry to the end of the Map's
+      // insertion-order iteration, so eviction always targets the
+      // least-recently-used entry.
+      knowledgeSearchCache.delete(cacheKey);
+      knowledgeSearchCache.set(cacheKey, cached);
       return cached.result;
     }
 
@@ -916,6 +942,8 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     req: KnowledgePromoteFromMemoryRequest,
     authorAgentId?: string,
   ): Promise<KnowledgeDocument> {
+    invalidateKnowledgeSearchCache();
+
     const memRows = await db
       .select()
       .from(memoryRecords)
@@ -941,43 +969,64 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
         ? req.summary
         : (mem.summary ?? undefined);
 
-    const rows = await db
-      .insert(knowledgeDocuments)
-      .values({
-        companyId,
-        title,
-        summary: summary ?? null,
-        body,
-        status: "draft",
-        version: 1,
-        authorAgentId: authorAgentId ?? null,
-        sourceIssueId: mem.sourceIssueId ?? null,
-      })
-      .returning();
+    // Use a transaction to prevent orphan documents (C-1) and enforce
+    // idempotency via the memory_record_id unique constraint (C-2).
+    const rows = await db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(knowledgeDocuments)
+        .values({
+          companyId,
+          title,
+          summary: summary ?? null,
+          body,
+          status: "draft",
+          version: 1,
+          authorAgentId: authorAgentId ?? null,
+          sourceIssueId: mem.sourceIssueId ?? null,
+          memoryRecordId: req.memoryRecordId,
+        })
+        .onConflictDoNothing()
+        .returning();
 
-    await db.insert(knowledgeDocumentRevisions).values({
-      documentId: rows[0].id,
-      version: 1,
-      title,
-      summary: summary ?? null,
-      body,
-      changeDescription: "Promoted from memory record",
-      authorAgentId: authorAgentId ?? null,
+      // onConflictDoNothing returns empty array when the insert is skipped
+      // due to a unique constraint violation on memory_record_id.
+      if (inserted.length === 0) {
+        // Fetch the existing document promoted from this memory record
+        const existing = await tx
+          .select()
+          .from(knowledgeDocuments)
+          .where(
+            and(
+              eq(knowledgeDocuments.companyId, companyId),
+              eq(knowledgeDocuments.memoryRecordId, req.memoryRecordId),
+            ),
+          )
+          .limit(1);
+        if (existing.length === 0) {
+          throw new Error("Memory record already promoted but document not found");
+        }
+        return { doc: existing[0], wasInserted: false };
+      }
+
+      // NOTE: No initial revision is created here — see create() for rationale.
+      // The first review-cycle revision is created by submitForReview.
+
+      // Auto-backlink to the source issue when the memory record has one
+      if (mem.sourceIssueId) {
+        await tx
+          .insert(knowledgeSourceBacklinks)
+          .values({
+            documentId: inserted[0].id,
+            sourceIssueId: mem.sourceIssueId,
+            sourceType: "originating_issue",
+          })
+          .onConflictDoNothing();
+      }
+
+      return { doc: inserted[0], wasInserted: true };
     });
 
-    // Auto-backlink to the source issue when the memory record has one
-    if (mem.sourceIssueId) {
-      await db
-        .insert(knowledgeSourceBacklinks)
-        .values({
-          documentId: rows[0].id,
-          sourceIssueId: mem.sourceIssueId,
-          sourceType: "originating_issue",
-        })
-        .onConflictDoNothing();
-    }
-
-    return toDocument(rows[0]);
+    return toDocument(rows.doc);
   }
 
   return {

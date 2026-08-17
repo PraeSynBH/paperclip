@@ -63,6 +63,7 @@ import {
   resolveGlobalRunCeiling,
 } from "./run-admission.js";
 import { publishLiveEvent } from "./live-events.js";
+import { notificationService } from "./notifications.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, listAdapterModelProfiles, runningProcesses } from "../adapters/index.js";
 import type {
@@ -4476,7 +4477,16 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
   // queries the heartbeatRuns table for any run with a non-terminal status.
   // This enables correct zombie detection and coalescing even after a restart.
   const liveRunExecutions = {
+    _cache: new Map<string, { result: boolean; cachedAt: number }>(),
+    _CACHE_TTL_MS: 30_000, // 30 seconds — staleness is tolerable for zombie checks
     async has(id: string): Promise<boolean> {
+      // Check in-memory cache first (H-3). The zombie check is read-only
+      // and can tolerate slight staleness, saving a DB round-trip on
+      // every agent wakeup.
+      const cached = this._cache.get(id);
+      if (cached && Date.now() - cached.cachedAt < this._CACHE_TTL_MS) {
+        return cached.result;
+      }
       const rows = await db
         .select({ id: heartbeatRuns.id })
         .from(heartbeatRuns)
@@ -4487,7 +4497,9 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           ),
         )
         .limit(1);
-      return rows.length > 0;
+      const result = rows.length > 0;
+      this._cache.set(id, { result, cachedAt: Date.now() });
+      return result;
     },
   };
   const budgetHooks = {
@@ -6046,6 +6058,41 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         },
       });
       publishRunLifecyclePluginEvent(updated);
+
+      // VOY-1342: notify humans when an agent run fails or times out
+      if (updated.status === "failed" || updated.status === "timed_out") {
+        const agentRow = await db
+          .select({ name: agents.name })
+          .from(agents)
+          .where(eq(agents.id, updated.agentId))
+          .then((rows) => rows[0] ?? null);
+        const rawContext = updated.contextSnapshot as Record<string, unknown> | null;
+        const issueId =
+          rawContext && typeof rawContext.issueId === "string" && rawContext.issueId.trim().length > 0
+            ? rawContext.issueId.trim()
+            : null;
+        const errorMessage = updated.error ?? updated.errorCode ?? "Unknown error";
+        notificationService(db)
+          .notifyCompanyMembers(updated.companyId, {
+            notificationType: "execution_error",
+            title: `Agent run ${updated.status.replace("_", " ")} — ${agentRow?.name ?? "Agent"}`,
+            body: errorMessage.length > 300 ? `${errorMessage.slice(0, 297)}...` : errorMessage,
+            linkUrl: issueId
+              ? `/companies/${updated.companyId}/issues/${issueId}`
+              : `/companies/${updated.companyId}/agents/${updated.agentId}`,
+            metadata: {
+              runId: updated.id,
+              agentId: updated.agentId,
+              agentName: agentRow?.name ?? null,
+              issueId: issueId ?? null,
+              errorCode: updated.errorCode ?? null,
+              status: updated.status,
+            },
+          })
+          .catch((err: unknown) => {
+            logger.error({ err, runId: updated.id }, "Failed to send execution error notification");
+          });
+      }
     }
 
     return updated;

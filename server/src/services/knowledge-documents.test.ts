@@ -195,11 +195,9 @@ describe("KnowledgeDocumentService", () => {
   });
 
   describe("create", () => {
-    it("inserts a document and creates initial revision", async () => {
+    it("inserts a document without creating an initial revision", async () => {
       const docRow = makeDocRow();
       db._returning.mockResolvedValueOnce([docRow]);
-      // Second insert (revision) doesn't need returning data
-      db._returning.mockResolvedValueOnce([]);
 
       const doc = await svc.create(companyId, {
         title: "Test Doc",
@@ -211,13 +209,13 @@ describe("KnowledgeDocumentService", () => {
       expect(doc.title).toBe("Test Doc");
       expect(doc.status).toBe("draft");
       expect(doc.version).toBe(1);
-      // Two inserts: document + revision
-      expect(db.insert).toHaveBeenCalledTimes(2);
+      // One insert: document only (revision is created on submitForReview)
+      expect(db.insert).toHaveBeenCalledTimes(1);
     });
 
     it("creates auto-backlink when sourceIssueId is provided", async () => {
       const docRow = makeDocRow();
-      db._returning.mockResolvedValue([docRow]); // all three inserts use this returning
+      db._returning.mockResolvedValue([docRow]); // both inserts use this returning
 
       await svc.create(companyId, {
         title: "Test Doc",
@@ -225,8 +223,8 @@ describe("KnowledgeDocumentService", () => {
         sourceIssueId: issueId,
       });
 
-      // 3 inserts: document + revision + backlink
-      expect(db.insert).toHaveBeenCalledTimes(3);
+      // 2 inserts: document + backlink (no initial revision anymore)
+      expect(db.insert).toHaveBeenCalledTimes(2);
     });
   });
 
