@@ -27,6 +27,8 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 - **Knowledge Documents** — A full knowledge base with lifecycle management (draft → review → published → archived), revision history, diff, backlinks to issues, and full-text search.
 
+- **Chat-to-Work Resolution Cards** — In the Conference Room chat, the board assistant's created/updated work objects (issues, plans, approvals, memory records, knowledge articles) now appear as clickable resolution cards with type badges and direct links, instead of only conversational mentions.
+
 [Full release notes →](/support/releases/v0.4.0-alpha-deep-planning)
 
 ---

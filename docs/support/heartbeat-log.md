@@ -697,3 +697,50 @@ New commit `885a6740b3` — `"fix(v0.4.0): wrap resolveGate in transaction, coun
 - **VOY-1264 unblocks** → confirm release notes and support docs are ready for staging ship
 - **VOY-1265 QA starts** → provide support assessment inputs for test scenarios
 - **v0.4.0 release to main** → final release notes refresh
+
+## 2026-08-16 — Heartbeat: Commit 0d4626e82e assessed — Workstream C chat-to-work resolution cards (BOARD-1)
+
+### Trigger
+
+New commit `0d4626e82e` — `"feat(v0.4.0): Workstream C — chat-to-work resolution cards with SSE action signals (BOARD-1)"` (4 files, +289/-0).
+
+### Diff assessment
+
+| Change area | Files | User-facing impact | Docs action |
+|---|---|---|---|
+| Server: `extractActionSignals()` parses `%%ACTIONS%%{...}%%/ACTIONS%%` JSON blocks from raw model output; emits parsed actions as typed SSE `action` events before persisting the cleaned response | `server/src/routes/board-chat.ts` | **New user-facing capability**: the board assistant's created/updated work objects (issues, plans, approvals, memory, knowledge) now surface to the UI as structured events instead of being silently stripped | Created new support case assessment for the feature |
+| UI: BoardChat handles `type: "action"` SSE events, collects into `actionEvents` state, renders `ResolutionCard` components below the streaming text bubble and below the last persisted assistant comment | `ui/src/pages/BoardChat.tsx` | **New UI**: clickable resolution cards (Issue/Plan/Approval/Knowledge/Memory/Decision badges) with View links appear in the Conference Room chat when the assistant creates/updates objects | Created new support case assessment for the feature |
+| Skill: "Structured Action Signals" section teaching the model to emit `%%ACTIONS%%` blocks after creating/updating work objects; 7 object type/action pairs; 5 critical rules | `skills/paperclip-board/SKILL.md` | Model behavior guidance — internal, but drives the user-facing cards | Covered in support assessment (card type/action table, troubleshooting) |
+| Workstream C audit plan document | `doc/plans/2026-08-16-workstream-c-audit.md` | Internal planning document | None |
+
+### Verdict
+
+Documentation updates **required**. Workstream C closes the chat-to-work resolution gap: users now see structured resolution cards when the board assistant creates work objects — a visible UI behavior change support staff must be able to explain and troubleshoot.
+
+### Updates applied
+
+1. `docs/support/assessments/support-case-v0.4.0-chat-to-work-resolution.md` — NEW support case assessment: feature overview, card type table, how it works, feature flag/gating (`enableConferenceRoomChat`, `local_trusted`), known limitations (one block per response, malformed JSON silently dropped, raw markup visible during streaming, cards reset per turn, View link only when `url` provided, update action only for issue/plan), troubleshooting, error states, escalation paths.
+2. `docs/support/releases/v0.4.0-alpha-deep-planning.md` — added highlight #10 (Chat-to-Work Resolution Cards), verification line for BOARD-1 tests, related-docs link.
+3. `docs/support/README.md` — added the new assessment to the Recently Shipped Features table and updated the release notes index title.
+4. `docs/support/heartbeat-log.md` — this entry.
+
+### Board state (support-relevant)
+
+- **VOY-1264** (Release: Phase 5 Plan Board UI) — `blocked` on VOY-1263 review (Staff Engineer). Release notes and KB coverage already prepared.
+- **VOY-1265** (QA: Phase 5 Plan Board UI) — `todo`, blocked on VOY-1263/1264.
+- **Workstream C (BOARD-1)** — implementation committed; the Conference Room resolution cards are ready for QA/release. Support assessment now in place.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 when released |
+| Release notes currency | Up to date through v0.4.0-alpha (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- **VOY-1263 review completion** → VOY-1264 release proceeds; confirm release notes/KB coverage before staging ship
+- **BOARD-1 QA/release** → verify Conference Room resolution cards behave as documented; add any QA findings to the support assessment
+- **v0.4.0 release to main** → final release notes refresh
