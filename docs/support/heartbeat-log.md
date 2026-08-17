@@ -5,6 +5,45 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-17 — Heartbeat: RC-4 docs sync — C-fixes + Phase 5 remaining assessed and documented
+
+### What was done
+
+1. **Diff assessment of post-RC-3 commits** — Two new code commits landed on `v0.4.0-polaris-deep-planning-memory` since the RC-3 docs sync:
+   - `75c6c27a41` — Phase 5 C-fixes (C-1 Zod action signal validation, C-2 TOCTOU SLA dedup safety net, C-3 plainto_tsquery search safety)
+   - `466c30fde7` — Phase 5 remaining (memory extraction jobs service + API, batch gate counts, `plan.gate_created` live events, UI refinements, board-chat regex fix)
+   - Both are tagged as **v0.4.0-alpha-rc.4**.
+
+2. **Support assessments updated**:
+   - **Chat-to-work resolution cards** — added the C-1 Zod validation trust boundary: allowed type/action enums, URL protocol restriction (http/https only), field length limits (title 500 / id 200 / rationale 5000), 10-block max per response, silent skip of invalid blocks. Updated Known Limitations, Error States, and commit references.
+   - **Memory & Knowledge** — added the C-3 search safety behavior (plainto_tsquery), the memory extraction jobs API and UI (extractions tab, retry failed jobs), and new error-state entries for both.
+
+3. **New KB articles created**:
+   - `kb/search-safety-plainto-tsquery.md` — C-3 search safety fix (special characters no longer crash knowledge search or memory warm-up).
+   - `kb/sla-monitor-dedup-safety-net.md` — C-2 TOCTOU post-insert dedup safety net for SLA alert issues.
+
+4. **API docs updated** — `docs/api/memory.md` gained the extraction jobs endpoints (list, get, retry) with auth notes and status semantics.
+
+5. **Release notes refreshed** — `docs/support/releases/v0.4.0-alpha-deep-planning.md` and `docs/releases.md` bumped to RC-4 with a "Post-RC-3 Committed Changes (RC-4)" section covering all 7 changes. `docs/support/README.md` index updated with both new KB articles and the RC-4 release entry.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) |
+| Release notes currency | Up to date through v0.4.0-alpha-rc.4 (Voyonder) + v2026.722.0 (Paperclip) |
+| Docs synced with live code | ✅ RC-4 (commits `75c6c27a41`, `466c30fde7`) |
+| Product dev server | UP (port 3100 healthy) |
+
+### Next triggers to watch for
+
+- **VOY-1265 QA findings on RC-4** → any UI behavior deltas worth a support note
+- **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
+- **PostHog error monitoring (VOY-999) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+
 ## 2026-08-17 — Heartbeat: C-fixes resolved, Staff Engineer review in progress, docs current
 
 ### What was done
@@ -871,3 +910,39 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **VOY-1264 unblocks** → confirm release notes reference final tag (v0.4.0-alpha-rc.3 or later RC) before staging ship
 - **VOY-1265 QA findings** → any UI behavior deltas worth a support note (add to assessments)
 - **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
+
+## 2026-08-17 — Heartbeat: Documentation sync confirmed — no new code, pipeline stalled on founder actions
+
+### What was done
+
+1. **Diff assessment** — No new Voyonder code commits since `466c30fde7` (Phase 5 remaining). The branch `v0.4.0-polaris-deep-planning-memory` HEAD has not advanced. Documentation is already in sync through RC-4.
+
+2. **Server health verified** — Product dev server (port 3100) is **UP** and returning HTTP 200. /documentation and /documentation/releases routes reachable.
+
+3. **Pipeline state** — Board stalled on founder action items:
+   - 2 FOUNDER ACTION blocked items assigned to Support Engineer (stale QA issues cleanup, consolidated board cleanup)
+   - CTO holds the only `in_progress` issue (close stale domain fix issues + PostHog release)
+   - PostHog SOP v1.2 (final) committed at `f654460019` — awaiting VPS-1 cron setup
+   - 2 todo items (QA Verification: Deep Planning Workstream A, Phase 5: Company Knowledge Base + Polish) not actionable — blocked upstream
+
+4. **PostHog SOP status** — The Founding Engineer's bash script implementation (`scripts/posthog-error-monitor.sh`, `scripts/test-posthog-monitor.sh`) is committed. The SOP is finalized as v1.2 with `status: Final`. Supporting docs from the Founding Engineer collaboration (posthog-monitoring-review-closure.md) are also committed. Remaining gap: VPS-1 cron deployment (minor ops task, being tracked by CTO in VOY-999 release).
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) |
+| Release notes currency | Up to date through v0.4.0-alpha-rc.4 (Voyonder) + v2026.722.0 (Paperclip) |
+| Docs synced with live code | ✅ RC-4 (commits `75c6c27a41`, `466c30fde7`) |
+| Product dev server | UP (port 3100 healthy) |
+| Branch | v0.4.0-polaris-deep-planning-memory (HEAD at `466c30fde7`, no movement) |
+
+### Next triggers to watch for
+
+- **Founder action on stale QA issues** → unblocks QA verification pipeline; may trigger RC-5 or stable v0.4.0 release
+- **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable) + any last KB articles
+- **VOY-1265 QA findings** → any UI behavior deltas worth a support note
+- **PostHog cron deployment to VPS-1** → SOP goes from final to operational; may generate first PostHog error issues for triage
+- **COO request for documentation health report** — available on demand
