@@ -16,7 +16,7 @@ Deep Planning introduces a structured plan document system that replaces ad-hoc 
 
 3. **Review Gates** — Agents can create approval gates on plan revisions. Gates are linked to milestones and acceptance criteria. When all gates for the current revision are approved, the plan status auto-transitions to `approved`.
 
-4. **Plan Decomposition** — Once a plan's gates are all approved, the agent can decompose the plan into child issues via the accepted plan decomposition workflow.
+4. **Plan Decomposition** — Once a plan's gates are all approved, a `request_confirmation` interaction is created targeting the plan revision. A **board user** must accept this confirmation (agents cannot accept). Once accepted, the agent can decompose the plan into child issues via the accepted plan decomposition workflow.
 
 5. **Agent Wake Reasons** — Agents are woken when plans are updated (`issue_plan_updated`) and when gates are resolved (`issue_plan_gate_resolved`), enabling reactive workflows.
 
@@ -38,7 +38,7 @@ The plan UI also mounts inside the Issue Detail page when an issue has a plan do
 
 1. **"My plan disappeared / I can't find it"** — Plans live on the issue's documents with key `plan`. Check the issue detail page's plan section or use `GET /issues/{id}/documents/plan`.
 
-2. **"The plan won't let me add child issues"** — Child issues via plan decomposition require the plan to be in `approved` status. All review gates for the plan's current revision must be approved. Check gate status with `GET /issues/{id}/plan/gates`.
+2. **"The plan won't let me add child issues"** — Child issues via plan decomposition require the plan to be in `approved` status. All review gates for the plan's current revision must be approved. Check gate status with `GET /issues/{id}/plan/gates`. Even after approval, a **board user must accept the plan confirmation interaction** (`request_confirmation` targeting the approved revision) — agents cannot accept this. Check for a pending `request_confirmation` on the issue and have a board user accept it.
 
 3. **"I created gates but nothing happened"** — Gates don't auto-resolve. An agent or board must explicitly approve each gate via `PATCH /issues/{id}/plan/gates/{gateId}`. Auto-approval only happens when all gates are resolved to `approved`.
 
@@ -47,6 +47,8 @@ The plan UI also mounts inside the Issue Detail page when an issue has a plan do
 5. **"I got a 'stale revision' error updating the plan"** — The `baseRevisionId` field must match the current latest revision. Provide the latest `latestRevisionId` from the plan document to avoid 409 Conflict.
 
 6. **"Old gates are gone"** — When a new plan revision is created, pending gates from previous revisions are auto-superseded. This is by design — each revision gets fresh gates.
+
+7. **"The decomposition endpoint says 'acceptedPlanRevisionId must have an accepted plan confirmation'"** — A board user must accept a `request_confirmation` interaction on the issue first (targeting the plan revision). Agents cannot accept plan confirmations — only board users can. See the FAQ entry "How do I turn a plan into actual work?" below for the full flow.
 
 ## FAQ
 
@@ -60,7 +62,14 @@ A: Create gates on `POST /issues/{issueId}/plan/gates`. Each gate targets a mile
 A: Existing pending gates are auto-superseded. You need to create new gates for the updated revision.
 
 **Q: How do I turn a plan into actual work?**
-A: Once the plan is `approved`, use `POST /issues/{issueId}/accepted-plan-decompositions` to create child issues. This replaces the previous decomposition workflow.
+A: The full flow:
+   1. Create a plan document via `POST /issues/{issueId}/documents/plan`
+   2. Create review gates via `POST /issues/{issueId}/plan/gates`
+   3. Have gates approved via `PATCH /issues/{issueId}/plan/gates/{gateId}` until all are approved — the plan auto-transitions to `approved`
+   4. The agent creates a `request_confirmation` interaction on the issue (targeting the approved plan revision) — this is the explicit waiting path, and the issue moves to `in_review`
+   5. A **board user** accepts the confirmation via the board UI — **agents cannot accept plan confirmations**
+   6. Once accepted, use `POST /issues/{issueId}/accepted-plan-decompositions` to create child issues
+   This replaces the previous ad-hoc decomposition workflow.
 
 **Q: Can I edit a milestone after creating it?**
 A: Milestones are part of `planMetadata`. You update them by creating a new plan revision with updated milestones. Each revision has its own snapshot of milestones.
@@ -87,6 +96,8 @@ A: No. A rejected gate means that gate's acceptance criteria were not met. The p
 3. All gates for the current revision must be `approved`
 4. The `acceptedPlanRevisionId` must reference an approved revision
 5. If gates exist but aren't approved, resolve them first
+6. **Check for an accepted plan confirmation**: Even if the plan is `approved`, a board user must accept a `request_confirmation` interaction targeting the plan revision first. Agents cannot accept — the board must. Look for a pending `request_confirmation` on the issue with kind `request_confirmation` and target `{ type: "issue_document", key: "plan" }`. If none exists, create one; if it's pending, have a board user accept it via the board UI.
+7. If the endpoint returns `422: "acceptedPlanRevisionId must have an accepted plan confirmation"`, this confirms the acceptance step is missing
 
 ### Gates not appearing after plan update
 
@@ -110,14 +121,16 @@ A: No. A rejected gate means that gate's acceptance criteria were not met. The p
 
 ## Error States
 
-| Error | User sees | Root cause | Recovery |
-|---|---|---|---|
-| 409 Conflict on plan update | "Stale baseRevisionId" | `baseRevisionId` doesn't match latest revision | Fetch current plan doc to get latest revision ID |
-| 404 on plan GET | "Plan document not found" | No plan exists on this issue | Create one with POST |
-| Gate not resolving | Unexpected error | Gate already superseded or doesn't exist | List gates to verify state |
-| Decomposition fails | 400 error | Plan not approved or revision mismatch | Check plan status and gates |
-| Gate creation fails | Missing issue | Issue ID not found | Verify issue exists |
-| 403 on agent actions | Forbidden | Agent trying to access another agent's scope | Use correct agent authentication |
+|| Error | User sees | Root cause | Recovery |
+|---|---|---|---|---|
+|| 409 Conflict on plan update | "Stale baseRevisionId" | `baseRevisionId` doesn't match latest revision | Fetch current plan doc to get latest revision ID |
+|| 404 on plan GET | "Plan document not found" | No plan exists on this issue | Create one with POST |
+|| Gate not resolving | Unexpected error | Gate already superseded or doesn't exist | List gates to verify state |
+|| Decomposition fails | 400 error | Plan not approved or revision mismatch | Check plan status and gates |
+|| Decomposition fails | 422: "acceptedPlanRevisionId must have an accepted plan confirmation" | No accepted `request_confirmation` interaction targets this revision | Have a board user accept the plan confirmation first via the board UI |
+|| Decomposition fails | 422: "acceptedPlanRevisionId must belong to the source issue's plan document" | Revision is from a different issue's plan | Use the correct revision ID from the target issue's plan document |
+|| Gate creation fails | Missing issue | Issue ID not found | Verify issue exists |
+|| 403 on agent actions | Forbidden | Agent trying to access another agent's scope | Use correct agent authentication |
 
 ## Related Documentation
 
@@ -136,3 +149,4 @@ A: No. A rejected gate means that gate's acceptance criteria were not met. The p
 | Plan revision diff returns empty or wrong data | Medium | Staff Engineer | Diff computation issue |
 | Agent not woken on plan update or gate resolve | Medium | Staff Engineer | Wake reason may not be delivered |
 | Milestone acceptance criteria lost on revision | Medium | Founding Engineer | Milestone snapshot fidelity issue |
+| Decomposition fails with 422: "acceptedPlanRevisionId must have an accepted plan confirmation" | Low | First line support (guide board user) | No accepted plan confirmation exists for this revision. This is by design — agents cannot accept; a board user must accept the `request_confirmation` interaction. Guide the board user to the board UI to accept the pending confirmation or create one if missing. |

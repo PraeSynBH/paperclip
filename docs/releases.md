@@ -21,7 +21,7 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 - **Plan Review Gates** — Approval gates on plan revisions with per-milestone acceptance criteria. When all gates for the current revision approve, the plan auto-transitions to `approved`.
 
-- **Approved Plan Decomposition** — Approved plans can be decomposed into child issues, creating a direct link from the approved plan to executable work items.
+- **Approved Plan Decomposition** — Approved plans can be decomposed into child issues after a board user accepts the plan confirmation, creating a direct link from the approved plan to executable work items. Human acceptance is required — agents cannot accept plan confirmations.
 
 - **Agent Memory (pgvector)** — A durable, queryable agent memory system. Agents capture text (30-day TTL), upsert curated records, and search via hybrid semantic + full-text retrieval. Memory is scoped per-agent with shared company-wide records.
 

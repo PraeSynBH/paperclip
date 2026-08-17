@@ -19,7 +19,7 @@ Plan documents are structured, revisioned issue artifacts that represent an impl
 | **Revision** | Each update creates or supersedes a revision. Plan revisions can be compared with diff endpoints. |
 | **Review Gate** | An approval checkpoint on a plan revision. Gates are created per-revision and must be approved before the plan can be considered fully accepted. |
 | **Plan Status** | Overall plan status: `draft` → `in_review` → `approved` → `superseded`. A plan auto-transitions to `approved` when all its gates for the current revision are approved. |
-| **Accepted Plan Decomposition** | When a plan is approved, the agent can create child issues from it via the accepted plan decomposition workflow. |
+| **Accepted Plan Decomposition** | When a plan is approved, agents can request board acceptance via a `request_confirmation` interaction. Once a board user accepts, the agent can create child issues from the approved plan via the accepted plan decomposition workflow. Agents cannot accept — human board interaction is required. |
 
 ## Create/Update Plan Document
 
@@ -132,6 +132,45 @@ GET /issues/{issueId}/documents/plan/revisions/{revisionId}/diff?againstRevision
 | `againstRevisionId` | UUID | (Optional) The revision to diff against. If omitted, diffs against the previous revision. |
 
 Returns a structured diff between two plan revisions.
+
+**Response**: Returns a `PlanRevisionDiff` object:
+
+```json
+{
+  "revision": {
+    "id": "uuid-of-target-revision",
+    "revisionNumber": 3
+  },
+  "previousRevision": {
+    "id": "uuid-of-compared-revision",
+    "revisionNumber": 2
+  },
+  "bodyDiff": [
+    {
+      "type": "unchanged",
+      "value": "Step 1: Set up Redis client",
+      "oldLineNumber": 1,
+      "newLineNumber": 1
+    },
+    {
+      "type": "added",
+      "value": "Step 2: Create cache service",
+      "newLineNumber": 2
+    },
+    {
+      "type": "removed",
+      "value": "Step 2: Evaluate Redis options",
+      "oldLineNumber": 2
+    }
+  ]
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `revision` | `{ id, revisionNumber }` | The target revision the diff was computed for |
+| `previousRevision` | `{ id, revisionNumber } | null` | The revision compared against. `null` when this is the first revision. |
+| `bodyDiff` | `PlanBodyDiffLine[]` | Line-level diff of the plan body. Each line has `type` (`added`, `removed`, or `unchanged`), `value` (the line text), and optional `oldLineNumber`/`newLineNumber` for position tracking. |
 
 ## Create Plan Review Gate
 
@@ -262,6 +301,19 @@ Creates child issues from an accepted (approved) plan. The `acceptedPlanRevision
 
 **Response**: `201 Created` — returns the created child issues.
 
+**Requirement — accepted plan confirmation**: Decomposition is only possible after a human (board user) has **accepted a plan confirmation interaction** for that exact plan revision. The flow is:
+
+1. An agent creates a `request_confirmation` interaction on the issue with a target of `{ "type": "issue_document", "key": "plan", "issueId": "...", "revisionId": "..." }` — the `revisionId` must be the latest plan revision. The interaction is the explicit waiting path; the issue is moved to `in_review`.
+2. A **board user** accepts the confirmation via the board UI (`POST /issues/{id}/interactions/{interactionId}/accept`). **Agents cannot accept plan confirmations** — `assertBoard` requires a human user. (Task watchdogs may only accept when the plan is eligible under their contract; otherwise the board decides.)
+3. Once accepted, agents can call this decomposition endpoint with the accepted `acceptedPlanRevisionId`.
+
+If the plan revision is superseded by a newer revision before acceptance, the pending interaction expires with `outcome: "stale_target"` — create a fresh confirmation against the new revision. If a board/user comment lands while the confirmation is pending, it is superseded (`superseded_by_comment`) and must be re-created.
+
+**Errors**:
+- `422 Unprocessable Entity` — `"acceptedPlanRevisionId must have an accepted plan confirmation"` — no accepted `request_confirmation` interaction targets this revision. Have a board user accept the plan confirmation first.
+- `422 Unprocessable Entity` — `"acceptedPlanRevisionId must belong to the source issue's plan document"` — the revision is not from this issue's plan document.
+- `409 Conflict` — `"Accepted-plan decomposition already exists for this revision with a different child set"` — decomposition is idempotent per revision; a retry with a different child set is rejected.
+
 ## Plan Lifecycle
 
 ```text
@@ -273,13 +325,16 @@ draft ──> in_review ──> approved ──> superseded
                      │
                 plan status → approved
                      │
+                board accepts plan confirmation
+                     │
                 decomposition allowed
 ```
 
 - Plans start as `draft`
 - Review gates keep the plan in `in_review` until all are approved
 - Once all gates for the current revision approve, plan auto-transitions to `approved`
-- Approved plans can be decomposed into child issues
+- `approved` alone is not enough to decompose — a board user must accept the plan confirmation (`request_confirmation` targeting the approved revision) first. Agents cannot accept; this requires human board interaction.
+- Once accepted, approved plans can be decomposed into child issues
 - Newer revisions supersede older ones (gates on previous revisions are auto-superseded)
 
 ## Agent Events

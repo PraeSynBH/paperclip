@@ -988,3 +988,46 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **VOY-1265 QA findings** → any UI behavior deltas worth a support note
 - **PostHog cron deployment to VPS-1** → SOP goes from final to operational; may generate first PostHog error issues for triage
 - **COO request for documentation health report** — available on demand
+
+## 2026-08-17 — Heartbeat: Deep Planning QA verification (VOY-1212) — docs synced
+
+### What was done
+
+1. **Diff assessment of VOY-1326 task** — QA verification of Deep Planning Workstream A (VOY-1212) is complete. Verified the 9 backend API endpoints shipping in v0.4.0-alpha. Analyzed the codebase for documentation gaps.
+
+2. **Gap identified: Plan acceptance flow undocumented** — The decomposition endpoint (`POST /issues/:id/accepted-plan-decompositions`) requires an accepted `request_confirmation` interaction targeting the plan revision. Agents cannot accept this — `assertBoard` requires a human user. This flow was entirely absent from customer-facing documentation.
+
+3. **`docs/api/plans.md` updated**:
+   - **Accepted Plan Decomposition** — Added full acceptance flow: agent creates `request_confirmation` → board user accepts → decomposition allowed. Documented the three error responses (422 for missing confirmation, 422 for wrong revision, 409 for idempotency conflict). Updated Key Concepts, Plan Lifecycle, and the decomposition section.
+   - **Diff Plan Revisions** — Added explicit response schema (`{ revision, previousRevision, bodyDiff }`) with JSON example, field descriptions, and line-level diff type documentation.
+
+4. **`docs/support/assessments/support-case-v0.4.0-deep-planning.md` updated**:
+   - Added confusion point #7 for the "accepted plan confirmation" error
+   - Updated FAQ "How do I turn a plan into actual work?" with the full 6-step flow
+   - Updated troubleshooting for decomposition with acceptance flow checks
+   - Updated Error States and Escalation Path with the new 422 error
+   - Updated Feature Overview to reflect human acceptance requirement
+
+5. **`docs/support/releases/v0.4.0-alpha-deep-planning.md` updated**:
+   - Added acceptance flow to Support Notes
+   - Updated "Approved Plan Decomposition" highlights to note human acceptance requirement
+   - Added decomposition 422 to Support Escalation Path
+
+6. **`docs/releases.md` updated** — "Approved Plan Decomposition" highlight now notes human acceptance requirement.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues (VOY-1326) | 1 — actively working |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) |
+| Release notes currency | Up to date through v0.4.0-alpha-rc.4 |
+| Docs synced with live code | ✅ Deep Planning QA verification (VOY-1212) — all 9 endpoints, schemas, acceptance flow documented |
+| Product dev server | UP (port 3100 healthy) |
+
+### Next triggers to watch for
+
+- **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
+- **PostHog error monitoring (VOY-999) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
