@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request, type Response } from "express";
 import multer from "multer";
 import { z } from "zod";
-import { and, asc, desc, eq, gte, inArray, isNull, notInArray } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull, notInArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   activityLog,
@@ -70,6 +70,7 @@ import {
   type CompanySearchQuery,
   type CompanySearchResponse,
   type ExecutionWorkspace,
+  type IssueDocument,
   type IssueRelationIssueSummary,
   type IssueWatchdogDiscoveryKind,
   type SourceTrustMetadata,
@@ -3400,6 +3401,27 @@ export function issueRoutes(
         ? planDocumentsSvc.listPlanDocuments(issueIds)
         : Promise.resolve(new Map<string, never>()),
     ]);
+
+    // Batch-fetch gate counts for plan documents (avoids N+1 on plan cards)
+    if (hasPlanDocument === true && planDocsByIssueId.size > 0) {
+      const pairs: { documentId: string; revisionId: string }[] = [];
+      for (const doc of planDocsByIssueId.values()) {
+        if (doc.latestRevisionId) {
+          pairs.push({ documentId: doc.id, revisionId: doc.latestRevisionId });
+        }
+      }
+      if (pairs.length > 0) {
+        const countsByDocId = await planReviewGatesSvc.listGateCounts(companyId, pairs);
+        for (const doc of planDocsByIssueId.values()) {
+          (doc as IssueDocument).gatesCount = countsByDocId.get(doc.id) ?? 0;
+        }
+      } else {
+        // No plan docs have a latest revision — all have zero gates
+        for (const doc of planDocsByIssueId.values()) {
+          (doc as IssueDocument).gatesCount = 0;
+        }
+      }
+    }
     const actor = getActorInfo(req);
     await Promise.all(result.map(async (issue) => {
       const activeRecoveryAction = recoveryActionByIssue.get(issue.id) ?? null;
@@ -5557,6 +5579,45 @@ export function issueRoutes(
       createdByUserId: actor.actorType === "user" ? actor.actorId : null,
       watchdogActorRunId: actor.runId,
     });
+
+    // ---- Post-insert duplicate verification (C-2 TOCTOU safety net) ---------
+    // The title-pattern SLA dedup check above runs BEFORE the issue is created.
+    // Between that check and this INSERT, another concurrent request could also
+    // pass the check and create a duplicate.  Re-check now that we have a
+    // committed row and suppress if a near-simultaneous duplicate exists.
+    if (!watchdogProductBugFollowUp && !rawCreateBody.parentId) {
+      const postInsertDedup = await checkPremiumSLABreachDuplicate(
+        db, companyId, rawCreateBody.title
+      );
+      if (postInsertDedup && postInsertDedup.existingIssueId !== issue.id) {
+        // Another request created a tracking issue between our SELECT and
+        // INSERT. Suppress this one: hide it and link it to the original.
+        await db
+          .update(issueRows)
+          .set({
+            hiddenAt: sql`now()`,
+            status: "cancelled",
+          })
+          .where(eq(issueRows.id, issue.id));
+
+        await svc.addComment(
+          postInsertDedup.existingIssueId,
+          `## Duplicate SLA Alert Suppressed\n\nThis alert fired within the dedup window of existing incident ${postInsertDedup.existingIdentifier}. A concurrent request also created issue ${issue.identifier ?? issue.id} at nearly the same time; it has been hidden and linked here as a reference.\n\n*Triggered at: ${new Date().toISOString()}*`,
+          { agentId: actor.agentId ?? undefined, runId: actor.runId },
+          { authorType: "agent" },
+        );
+
+        const enriched = await svc.getById(postInsertDedup.existingIssueId);
+        res.status(200).json({
+          ...enriched,
+          deduplicated: true,
+          deduplicatedOfIssueId: postInsertDedup.existingIssueId,
+          deduplicatedOfIdentifier: postInsertDedup.existingIdentifier,
+        });
+        return;
+      }
+    }
+    // -----------------------------------------------------------------------
     await issueReferencesSvc.syncIssue(issue.id);
     await externalObjectsSvc.syncIssueSafely(issue.id);
     const referenceSummary = await issueReferencesSvc.listIssueReferenceSummary(issue.id);
@@ -6004,6 +6065,18 @@ export function issueRoutes(
         revisionId: gate.revisionId,
         milestoneId: gate.milestoneId,
         acceptanceCriteria: gate.acceptanceCriteria,
+      },
+    });
+
+    // Emit live event for real-time UI updates
+    publishLiveEvent({
+      companyId: issue.companyId,
+      type: "plan.gate_created",
+      payload: {
+        issueId: issue.id,
+        gateId: gate.id,
+        revisionId: gate.revisionId,
+        status: gate.status,
       },
     });
 

@@ -456,17 +456,10 @@ async function doKnowledgeWarmUp(
     }));
   }
 
-  // Use full-text search
-  const tsQuery = searchQuery
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((w) => w.replace(/[^\w\-\']/g, '').replace(/'{2,}/g, "'"))
-    .filter((w) => w.length > 0)
-    .map((w) => `${w}:*`)
-    .join(" & ");
-
-  if (!tsQuery) {
-    // All words stripped — no results
+  // Use full-text search with plainto_tsquery which handles natural language
+  // input safely — punctuation, operators, and special characters are stripped
+  // rather than causing 400 errors as to_tsquery would with malformed lexemes.
+  if (!searchQuery.trim()) {
     return [];
   }
 
@@ -478,7 +471,7 @@ async function doKnowledgeWarmUp(
       body: knowledgeDocuments.body,
       score: sql<number>`ts_rank(
         to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')),
-        to_tsquery('english', ${tsQuery})
+        plainto_tsquery('english', ${searchQuery})
       )`,
     })
     .from(knowledgeDocuments)
@@ -486,7 +479,7 @@ async function doKnowledgeWarmUp(
       and(
         eq(knowledgeDocuments.companyId, companyId),
         eq(knowledgeDocuments.status, "published"),
-        sql`to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')) @@ to_tsquery('english', ${tsQuery})`,
+        sql`to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')) @@ plainto_tsquery('english', ${searchQuery})`,
       ),
     )
     .orderBy(sql`score DESC`)

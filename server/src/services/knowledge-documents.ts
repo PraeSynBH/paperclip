@@ -824,13 +824,10 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
   ): Promise<Array<{ id: string; title: string; summary?: string; score: number }>> {
     const searchLimit = Math.min(limit ?? 10, 50);
 
-    // Use full-text search on published documents
-    const tsQuery = query
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((w) => `${w}:*`)
-      .join(" & ");
-
+    // Use full-text search on published documents.
+    // plainto_tsquery handles natural language input safely — punctuation,
+    // operators, and special characters are stripped rather than causing
+    // 400 errors as to_tsquery would with malformed lexemes.
     const rows = await db
       .select({
         id: knowledgeDocuments.id,
@@ -838,7 +835,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
         summary: knowledgeDocuments.summary,
         score: sql<number>`ts_rank(
           to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')),
-          to_tsquery('english', ${tsQuery})
+          plainto_tsquery('english', ${query})
         )`,
       })
       .from(knowledgeDocuments)
@@ -846,7 +843,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
         and(
           eq(knowledgeDocuments.companyId, companyId),
           eq(knowledgeDocuments.status, "published"),
-          sql`to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')) @@ to_tsquery('english', ${tsQuery})`,
+          sql`to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')) @@ plainto_tsquery('english', ${query})`,
         ),
       )
       .orderBy(sql`score DESC`)

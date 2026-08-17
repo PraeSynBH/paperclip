@@ -3,6 +3,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { z } from "zod";
 import type { Db } from "@paperclipai/db";
 import type { DeploymentMode } from "@paperclipai/shared";
 import { instanceSettingsService, issueService } from "../services/index.js";
@@ -17,46 +18,101 @@ function stripActionSignals(response: string): string {
   return response.replace(/%%ACTIONS%%[\s\S]*?%%\/ACTIONS%%/g, "").trim();
 }
 
+// ---------------------------------------------------------------------------
+// Action signal schema — strict validation of LLM-produced action blocks
+// before they reach the SSE stream (C-1 trust boundary fix).
+// ---------------------------------------------------------------------------
+
+/**
+ * Zod schema for individual action objects emitted by the board skill.
+ * Only known resolution types and actions with safe URL protocols are
+ * accepted. Unknown keys are stripped.
+ */
+const resolutionActionSchema = z.object({
+  resolution: z
+    .object({
+      type: z.enum(["issue", "plan", "approval", "knowledge", "memory"]),
+      action: z.enum(["create", "update"]),
+      data: z
+        .object({
+          title: z.string().max(500).optional(),
+          id: z.string().max(200).optional(),
+          url: z
+            .string()
+            .url()
+            .refine((v) => /^https?:\/\//i.test(v), {
+              message: "url must use http or https protocol",
+            })
+            .optional(),
+        })
+        .passthrough()
+        .optional(),
+    })
+    .optional(),
+  decision: z
+    .object({
+      summary: z.string().max(2000).optional(),
+      rationale: z.string().max(5000).optional(),
+    })
+    .optional(),
+});
+
+/** Maximum action blocks to process per response (safety limit). */
+const MAX_ACTION_BLOCKS = 10;
+
+/** Type that matches the validated shape — maps the zod schema to a usable TS type. */
+type ValidatedAction = z.infer<typeof resolutionActionSchema>;
+
 /**
  * Parse structured action signals from a raw model response.
- * Returns an array of parsed action objects, one per `%%ACTIONS%%{...}%%/ACTIONS%%`
+ * Returns an array of validated action objects, one per `%%ACTIONS%%{...}%%/ACTIONS%%`
  * block found. The board skill wraps created/updated work objects in these
  * blocks so the UI can render clickable resolution cards.
+ *
+ * Trust boundary: Model output is untrusted. Each extracted block is validated
+ * against a strict Zod schema before being emitted to the SSE stream.
+ * Malformed, oversized, or unrecognized actions are silently skipped (the
+ * cleaned response still strips the raw markup from persisted comments).
  */
-function extractActionSignals(response: string): Record<string, unknown>[] {
-  const actions: Record<string, unknown>[] = [];
+function extractActionSignals(response: string): ValidatedAction[] {
+  const actions: ValidatedAction[] = [];
   const regex = /%%ACTIONS%%\s*(\{[\s\S]*?\})\s*%%\/ACTIONS%%/g;
   let match: RegExpExecArray | null;
-  while ((match = regex.exec(response)) !== null) {
+  let count = 0;
+
+  while ((match = regex.exec(response)) !== null && count < MAX_ACTION_BLOCKS) {
+    count++;
+    let parsed: unknown;
     try {
-      const parsed = JSON.parse(match[1]);
-      if (parsed && typeof parsed === "object") {
-        actions.push(parsed);
-      }
+      parsed = JSON.parse(match[1]);
     } catch {
       // Malformed JSON — skip silently; the cleaned response already
       // strips the block so the user never sees raw markup.
+      continue;
     }
+
+    const result = resolutionActionSchema.safeParse(parsed);
+    if (!result.success) {
+      console.warn(
+        "[board-chat] extractActionSignals: skipping malformed action block —",
+        result.error.issues,
+      );
+      continue;
+    }
+
+    actions.push(result.data);
   }
+
+  if (count >= MAX_ACTION_BLOCKS && regex.exec(response) !== null) {
+    console.warn(
+      "[board-chat] extractActionSignals: response exceeds max blocks (%d) — truncated",
+      MAX_ACTION_BLOCKS,
+    );
+  }
+
   return actions;
 }
 
-/**
- * Board Concierge Chat routes.
- *
- * Implements `POST /board/chat/stream` (mounted under `/api`): a lightweight
- * chat relay that spawns the `claude` CLI with the paperclip-board skill as
- * its system prompt and streams the response back to the web UI via
- * Server-Sent Events. The conversation is persisted to a standing
- * "Board Operations" issue so it survives reloads.
- *
- * The SSE event protocol matches what `ui/src/pages/BoardChat.tsx` consumes:
- *   { type: "start",  issueId }   — emitted once the issue is resolved
- *   { type: "status", text }      — tool-use / progress indicator
- *   { type: "chunk",  text }      — a streamed token slice
- *   { type: "done",   issueId }   — terminal event; UI refetches comments
- *   { type: "error",  message }   — terminal error event
- */
 /**
  * Serialize a comment body as a tagged conversation turn. Bodies are
  * untrusted user content: without structure, a message containing a literal
@@ -65,7 +121,7 @@ function extractActionSignals(response: string): Record<string, unknown>[] {
  * inside exactly one turn no matter what it contains.
  */
 function serializeTurn(role: "user" | "assistant", body: string): string {
-  const safeBody = body.replace(/<(\/?turn\b)/gi, "&lt;$1");
+  const safeBody = body.replace(/(<\/?turn\b)/gi, "&lt;$1");
   return `<turn role="${role}">\n${safeBody}\n</turn>`;
 }
 
@@ -375,9 +431,11 @@ export function boardChatRoutes(
       clearTimeout(timeout);
       releaseSlot();
 
-      // Emit parsed action signals as typed SSE events BEFORE persisting
+      // Emit validated action signals as typed SSE events BEFORE persisting
       // the cleaned response (which strips the raw markup). The UI uses
       // these to render clickable resolution cards.
+      // Trust boundary: extractActionSignals validates against a strict Zod
+      // schema and rejects malformed/oversized action blocks.
       const actions = extractActionSignals(fullResponse);
       if (actions.length > 0 && res.writable) {
         for (const action of actions) {
