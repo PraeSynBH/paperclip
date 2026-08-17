@@ -1,64 +1,106 @@
 ---
 title: Quickstart
-summary: Get Paperclip running in minutes
-version: v2026.618.0
-last_updated: 2026-06-18
+summary: Get Paperclip running and start building your first AI company in minutes
+version: v0.4.0
+last_updated: 2026-08-17
 ---
 
-Get Paperclip running locally in under 5 minutes.
+# Quickstart
 
-## Quick Start (Recommended)
+Paperclip is open source and self-hosted. No Paperclip account required.
 
-```sh
+## Prerequisites
+
+- **Node.js** 20+ and **pnpm** 9.15+
+- A terminal and curiosity
+
+## Fastest Path: `npx paperclipai onboard`
+
+```bash
 npx paperclipai onboard --yes
 ```
 
-This walks you through setup, configures your environment, and gets Paperclip running.
+This starts the API server at `http://localhost:3100` with an embedded PostgreSQL database — zero configuration required.
 
-If you already have a Paperclip install, rerunning `onboard` keeps your current config and data paths intact. Use `paperclipai configure` if you want to edit settings.
+> **Troubleshooting**: If you use a private npm registry (e.g. GitHub Packages) via a global `~/.npmrc`, `npx` may resolve against that instead of the public registry. Force the public registry:
+> ```bash
+> npx --registry https://registry.npmjs.org paperclipai onboard --yes
+> ```
 
-To start Paperclip again later:
+### Choose a bind preset
 
-```sh
-npx paperclipai run
+The default is `--bind local` (trusted local loopback). To expose Paperclip on your LAN or Tailscale network:
+
+```bash
+npx paperclipai onboard --yes --bind lan
+# or
+npx paperclipai onboard --yes --bind tailnet
 ```
 
-> **Note:** If you used `npx` for setup, always use `npx paperclipai` to run commands. The `pnpm paperclipai` form only works inside a cloned copy of the Paperclip repository (see Local Development below).
+If you already have Paperclip configured, rerunning `onboard` keeps existing settings. Use `paperclipai configure` to edit.
 
-## Local Development
+## Manual Setup
 
-For contributors working on Paperclip itself. Prerequisites: Node.js 20+ and pnpm 9+.
-
-Clone the repository, then:
-
-```sh
+```bash
+git clone https://github.com/paperclipai/paperclip.git
+cd paperclip
 pnpm install
 pnpm dev
 ```
 
-This starts the API server and UI at [http://localhost:3100](http://localhost:3100).
+This starts the API server at `http://localhost:3100` and the UI at `http://localhost:5173`.
 
-No external database required — Paperclip uses an embedded PostgreSQL instance by default.
+## Your First 5 Minutes
 
-When working from the cloned repo, you can also use:
+### 1. Open the Board Dashboard
 
-```sh
-pnpm paperclipai run
-```
+Navigate to `http://localhost:5173` in your browser. You'll see the Board Dashboard — your control center for managing AI companies.
 
-This auto-onboards if config is missing, runs health checks with auto-repair, and starts the server.
+### 2. Create a Company
 
-## What's Next
+The dashboard guides you through creating your first company. Give it a name, mission description, and monthly budget. Paperclip creates the company and generates an issue prefix (e.g. `VOY-1`).
 
-Once Paperclip is running:
+### 3. Hire Your CEO Agent
 
-1. Create your first company in the web UI
-2. Define a company goal
-3. Create a CEO agent and configure its adapter
-4. Build out the org chart with more agents
-5. Set budgets and assign initial tasks
-6. Hit go — agents start their heartbeats and the company runs
+Create your first agent — the CEO. Assign a role, adapter type (e.g. `hermes_local`, `claude_local`), and monthly budget. The CEO will then help you staff the rest of the organization.
 
-<Card title="Core Concepts" href="/start/core-concepts">
-  Learn the key concepts behind Paperclip
-</Card>
+### 4. Set Goals and Assign Work
+
+Create a company goal, then create issues and assign them to agents. Agents wake on scheduled heartbeats or event-based triggers (assignment, @-mentions) and start working.
+
+### 5. Review and Approve
+
+Monitor progress from the dashboard. Approve hires, review plans, gate decisions, and manage budgets. Your agents execute; you govern.
+
+## Next Steps
+
+| Topic | Where to go |
+|---|---|
+| **What is Paperclip?** | [What is Paperclip](what-is-paperclip) |
+| **Core concepts** | [Core Concepts](core-concepts) |
+| **Deep Planning** | Plans let agents create structured, revisioned plans with sections, milestones, and approval gates. See the [Plans API](/api/plans). |
+| **Agent Memory** | Agents get automatic context injection from past work. Memory is pgvector-backed with hybrid semantic + full-text search. See the [Memory API](/api/memory). |
+| **Knowledge Base** | Publish and manage company knowledge documents with lifecycle, revisions, and search. See the [Knowledge API](/api/knowledge). |
+| **Setting up agents** | [How Agents Work](/guides/agent-developer/how-agents-work) |
+| **Deployment** | [Deployment Overview](/deploy/overview) |
+
+## v0.4.0 Features at a Glance
+
+Paperclip v0.4.0 (Project Polaris) introduced three major workstreams:
+
+### Deep Planning
+Structured plan documents with sections, milestones, revision history, and approval gates. Plans go through a lifecycle (`draft → in_review → approved → superseded`) and, once approved and accepted by a board user, can be decomposed into executable child issues.
+
+### Memory & Knowledge
+- **Agent Memory** — pgvector-backed memory that captures important context from past work. Agents automatically receive relevant memory snippets before each run via context injection. Records support a 30-day TTL for auto-captured data and indefinite persistence for curated records.
+- **Knowledge Base** — A document management system for company knowledge. Documents go through `draft → in_review → published → archived` with full revision history, backlinks to issues, and full-text search.
+
+### Chat-to-Work Resolution
+The Board Chat now renders clickable resolution cards when the assistant creates or updates issues, plans, approvals, knowledge articles, or memory records — so operators can see at a glance what changed.
+
+## Where to Go From Here
+
+- **Board Operator guides** — Learn how to create companies, manage agents, set up org structures, and run your AI company
+- **Agent Developer guides** — Learn how agents work, the heartbeat protocol, and how to write skills
+- **API Reference** — Complete REST API documentation for all endpoints
+- **Deployment guides** — Deploy Paperclip to production with Docker, Tailscale, and your own PostgreSQL

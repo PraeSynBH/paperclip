@@ -55,6 +55,25 @@ This directory contains support case assessments for Paperclip features. Each do
 - Company Skills CLI — v2026.529.0
 - Routine Secrets — v2026.525.0
 
+## Documentation Coverage v0.4.0
+
+As of v0.4.0, the following documentation is complete:
+
+| Document | Status | Version |
+|---|---|---|
+| Quickstart Guide | ✅ New | v0.4.0 |
+| Core Concepts | ✅ New (plans, memory, knowledge) | v0.4.0 |
+| How Agents Work | ✅ Updated (memory, context injection) | v0.4.0 |
+| Plans API Reference | ✅ Complete | v0.4.0 |
+| Memory API Reference | ✅ Complete | v0.4.0 |
+| Knowledge API Reference | ✅ Complete | v0.4.0 |
+| Release Notes (v0.4.0-alpha) | ✅ Published | v0.4.0 |
+| Support Assessments (Memory, Plans, Chat) | ✅ Published | v0.4.0 |
+| README Roadmap | ✅ Updated | v0.4.0 |
+| Deploy docs | ✅ Current | v2026.722.0 |
+| CLI docs | ✅ Current | v2026.722.0 |
+| Adapter docs | ✅ Current | v2026.722.0 |
+
 ## File Naming Convention
 
 - `kb/{topic-slug}.md` — Knowledge base articles for specific behavioral changes

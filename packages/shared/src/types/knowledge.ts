@@ -154,3 +154,51 @@ export interface KnowledgePromoteFromMemoryRequest {
   /** Optional body override (defaults to memory record text) */
   body?: string;
 }
+
+// ─── Starter Packs ─────────────────────────────────────────────────────────────
+
+/**
+ * A single knowledge document template within a starter pack.
+ */
+export interface KnowledgeStarterPackDocument {
+  /** Document title */
+  title: string;
+  /** Optional short summary */
+  summary?: string;
+  /** Document body in markdown */
+  body: string;
+  /** Optional tags for categorization */
+  tags?: string[];
+}
+
+/**
+ * A curated knowledge base starter pack for a specific industry.
+ */
+export interface KnowledgeStarterPack {
+  /** Unique pack key (e.g. "travel-industry") */
+  key: string;
+  /** Human-readable name */
+  name: string;
+  /** Detailed description */
+  description: string;
+  /** The industry this pack targets */
+  industry: string;
+  /** Icon identifier */
+  icon: string;
+  /** Document count */
+  documentCount: number;
+  /** The knowledge documents included in this pack */
+  documents: KnowledgeStarterPackDocument[];
+}
+
+/**
+ * Result of installing a starter pack into a company's knowledge base.
+ */
+export interface KnowledgeStarterPackInstallResult {
+  /** The pack key that was installed */
+  packKey: string;
+  /** Number of documents created */
+  documentsCreated: number;
+  /** The created knowledge document IDs */
+  documentIds: string[];
+}

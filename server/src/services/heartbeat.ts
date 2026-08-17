@@ -4476,7 +4476,16 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
   // queries the heartbeatRuns table for any run with a non-terminal status.
   // This enables correct zombie detection and coalescing even after a restart.
   const liveRunExecutions = {
+    _cache: new Map<string, { result: boolean; cachedAt: number }>(),
+    _CACHE_TTL_MS: 30_000, // 30 seconds — staleness is tolerable for zombie checks
     async has(id: string): Promise<boolean> {
+      // Check in-memory cache first (H-3). The zombie check is read-only
+      // and can tolerate slight staleness, saving a DB round-trip on
+      // every agent wakeup.
+      const cached = this._cache.get(id);
+      if (cached && Date.now() - cached.cachedAt < this._CACHE_TTL_MS) {
+        return cached.result;
+      }
       const rows = await db
         .select({ id: heartbeatRuns.id })
         .from(heartbeatRuns)
@@ -4487,7 +4496,9 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           ),
         )
         .limit(1);
-      return rows.length > 0;
+      const result = rows.length > 0;
+      this._cache.set(id, { result, cachedAt: Date.now() });
+      return result;
     },
   };
   const budgetHooks = {

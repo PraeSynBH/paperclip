@@ -152,6 +152,7 @@ export function planReviewGateService(db: Db) {
 
         // If all gates for this revision are now approved, flip plan status
         // inside the same transaction to close the concurrent-resolution race.
+        // Only flip if this gate's revision is still the current one (H-2).
         if (allApproved) {
           await tx
             .update(documents)
@@ -159,7 +160,10 @@ export function planReviewGateService(db: Db) {
               planMetadata: sql`jsonb_set(COALESCE(plan_metadata, '{}'::jsonb), '{status}', '"approved"')`,
               updatedAt: now,
             })
-            .where(eq(documents.id, gate.documentId));
+            .where(and(
+              eq(documents.id, gate.documentId),
+              eq(documents.latestRevisionId, gate.revisionId),
+            ));
         }
 
         return { gate, allApproved };

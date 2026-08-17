@@ -1627,6 +1627,9 @@ export type {
   KnowledgeCreateBacklinkRequest,
   KnowledgeCreateBacklinkResponse,
   KnowledgePromoteFromMemoryRequest,
+  KnowledgeStarterPack,
+  KnowledgeStarterPackDocument,
+  KnowledgeStarterPackInstallResult,
 } from "./types/knowledge.js";
 
 export { API_PREFIX, API } from "./api.js";

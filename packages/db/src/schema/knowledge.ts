@@ -33,6 +33,7 @@ export const knowledgeDocuments = pgTable(
     sourceIssueId: uuid("source_issue_id").references(() => issues.id, {
       onDelete: "set null",
     }),
+    memoryRecordId: uuid("memory_record_id"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -52,6 +53,9 @@ export const knowledgeDocuments = pgTable(
     companyUpdatedIdx: index(
       "knowledge_documents_company_updated_idx",
     ).on(table.companyId, table.updatedAt),
+    memoryRecordUniqueIdx: uniqueIndex(
+      "knowledge_documents_memory_record_unique_idx",
+    ).on(table.memoryRecordId),
   }),
 );
 
