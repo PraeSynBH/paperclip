@@ -11,7 +11,7 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
-## v0.4.0-alpha — August 16, 2026
+## v0.4.0-alpha (RC-3) — August 16, 2026
 
 [Full release notes →](/support/releases/v0.4.0-alpha-deep-planning)
 
@@ -27,7 +27,11 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 - **Knowledge Documents** — A full knowledge base with lifecycle management (draft → review → published → archived), revision history, diff, backlinks to issues, and full-text search.
 
+- **Knowledge Browser UI** — A new Knowledge Base page at `/knowledge` for searching, browsing, reviewing, diffing revisions, and creating knowledge documents — no API needed. Also fixes a critical bug where the knowledge search endpoint was unreachable.
+
 - **Chat-to-Work Resolution Cards** — In the Conference Room chat, the board assistant's created/updated work objects (issues, plans, approvals, memory records, knowledge articles) now appear as clickable resolution cards with type badges and direct links, instead of only conversational mentions.
+
+- **Manager-Chain Issue Permissions** — Managers can now comment on and mutate issues assigned to agents in their reporting subtree, so leadership can close, reassign, and unblock their team's work.
 
 [Full release notes →](/support/releases/v0.4.0-alpha-deep-planning)
 

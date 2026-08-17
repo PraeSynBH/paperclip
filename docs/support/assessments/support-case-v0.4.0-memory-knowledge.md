@@ -42,6 +42,19 @@ The Knowledge Documents system provides a full knowledge base within Paperclip:
 
 7. **Latest Review Status Accuracy (VOY-1256)** — The `latestReviewStatus` field in document listings accurately reflects the most recent review (`pending`, `approved`, `changes_requested`) regardless of outcome, not just approved reviews.
 
+### Knowledge Browser UI
+
+A dedicated **Knowledge Base** page is available at `/knowledge` in the sidebar (visible under the Work section). Operators can:
+
+- Search published documents with full-text search and status filters (All statuses / draft / in_review / published / archived)
+- Browse all knowledge documents with their lifecycle status
+- Open a detail sheet to view document content, metadata, and summary
+- Compare any two revisions side-by-side with an inline diff (old version → new version)
+- View backlinks — the issues that reference the document
+- Create new documents (title, summary, markdown body) and edit drafts with review comments
+
+**Support note (search route fix)**: the `GET /knowledge/search` endpoint previously 404'd because the `/:documentId` route shadowed the literal `search` path. It now registers before the document-ID routes (`f09cf3bc6e`). If an operator reports "knowledge search doesn't work", first confirm the server is running at least this commit — a 404 on `/knowledge/search` is the symptom of the old route ordering.
+
 ### Memory Browser UI
 
 A dedicated **Memory Browser** page is available at `/memory` in the sidebar (visible under the Work section). Operators can:
@@ -138,13 +151,15 @@ A: It shows the outcome of the most recent review — `pending`, `approved`, or 
 | Knowledge document delete fails | 403 Forbidden | Agent trying to delete (board-only) | Use board authentication |
 | Knowledge publish fails despite approved review | Publish rejected | Stale approval from prior review cycle (VOY-1255) | Re-run review cycle on the latest revision |
 | Search returns empty | "q parameter is required" | Missing search query | Provide query string |
+| Knowledge search returns 404 | 404 on `GET /knowledge/search` | Server older than `f09cf3bc6e` — `/:documentId` route shadowed the literal `search` path | Upgrade server to `f09cf3bc6e` or later |
 
 ## Related Documentation
 
 - [Memory API Reference](/docs/api/memory) (Paperclip)
 - [Knowledge Documents API Reference](/docs/api/knowledge) (Paperclip)
 - [Deep Planning Support Case Assessment](support-case-v0.4.0-deep-planning.md)
-- `/documentation/releases` — v0.4.0-alpha release notes
+- [Manager-Chain Issue Permissions KB](../kb/authorization-manager-chain-grant.md)
+- `/documentation/releases` — v0.4.0-alpha release notes (RC-3)
 
 ## Escalation Path
 
@@ -153,6 +168,7 @@ A: It shows the outcome of the most recent review — `pending`, `approved`, or 
 | Memory binding causes database errors | Critical | Staff Engineer | pgvector or schema issue |
 | Agent sees another agent's memory records | Critical | CTO | Security violation in scope enforcement |
 | Knowledge document data loss (deletion not recoverable) | High | Staff Engineer | Permanent deletion — check backups |
+| Knowledge search 404s on /knowledge/search | High | Staff Engineer | Server below `f09cf3bc6e` — route ordering bug; upgrade required |
 | Memory capture silently failing | High | Founding Engineer | No error returned but no record created |
 | Knowledge search not returning published documents | Medium | Staff Engineer | Search index or query issue |
 | Memory query returning no results despite stored data | Medium | Staff Engineer | Embedding or query pipeline issue |

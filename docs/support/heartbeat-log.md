@@ -744,3 +744,54 @@ Documentation updates **required**. Workstream C closes the chat-to-work resolut
 - **VOY-1263 review completion** → VOY-1264 release proceeds; confirm release notes/KB coverage before staging ship
 - **BOARD-1 QA/release** → verify Conference Room resolution cards behave as documented; add any QA findings to the support assessment
 - **v0.4.0 release to main** → final release notes refresh
+
+## 2026-08-17 — Heartbeat: RC-3 docs sync — Knowledge Browser UI, search route fix, manager-chain permissions (VOY-1303)
+
+### Trigger
+
+VOY-1303 assigned by Release Engineer: verify documentation in sync for the Phase 5 Plan Board UI staging release (VOY-1264, release candidate **v0.4.0-alpha-rc.3**) and confirm version references match RC-3.
+
+### Diff assessment (release branch 8074df8e09 → 0d4626e82e)
+
+| Change area | Files | User-facing impact | Docs action |
+|---|---|---|---|
+| Knowledge Browser UI — new `/knowledge` page (search, list, detail sheet, revisions/diff, backlinks, create dialog) | `ui/src/pages/KnowledgeBrowser.tsx`, `ui/src/api/knowledge.ts`, `ui/src/components/Sidebar.tsx`, `ui/src/App.tsx` | **New user-facing capability**: operators can search/review/manage knowledge documents from the UI | Added release note highlight #8 + support assessment section |
+| Knowledge search route fix — `/knowledge/search` moved BEFORE `/:documentId` (was unreachable, matched as document ID) | `server/src/routes/knowledge.ts` | **Bug fix**: knowledge search endpoint previously 404'd; now reachable from API and UI | Added release note highlight #11 + support note + error state + escalation path |
+| Authorization manager-chain grant — managers may comment on/mutate issues assigned to agents in their reporting subtree | `server/src/services/authorization.ts` | **New permission**: CTO/COO can now close/reassign/unblock issues owned by their team | New KB article + release note highlight #12 + escalation row |
+| H-1 gate-query invalidation (VOY-1268) | `ui/src/...` (gate queries) | Internal fix — gate UI behavior unchanged | None — already covered by Plan Board UI docs |
+| M-1 batch plan-document fetch (3ba7c5aa37) | `server/src/routes/issues.ts` | Internal perf fix (N+1) — no user-facing behavior change | None |
+| H-2 resolveGate transaction + allApproved predicate (VOY-1269) | `server/src/routes/plan-review-gates.ts` | Already documented in prior heartbeat (35a8fce6e2) | None — covered |
+| Workstream C chat-to-work resolution cards (0d4626e82e) | — | Already documented in prior heartbeat (5333f76e0d) | None — covered |
+
+### Verdict
+
+Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface was already covered by prior syncs (8074df8e09, ee5693fca6, 35a8fce6e2, 5333f76e0d), but three items in the release branch had **zero documentation coverage**: the Knowledge Browser UI, the knowledge search route fix (critical bug), and the manager-chain authorization grant.
+
+### Updates applied
+
+1. `docs/support/releases/v0.4.0-alpha-deep-planning.md` — version header now references **v0.4.0-alpha-rc.3**; added highlights #8 (Knowledge Browser UI), #11 (search route fix), #12 (manager-chain permissions); renumbered #9/#10 (stale-approval guard, latestReviewStatus); added support notes, verification line (VOY-1266 26/26 UI tests), escalation rows, VOY-1266 to related issues.
+2. `docs/support/kb/authorization-manager-chain-grant.md` — NEW KB article: old/new behavior, `allow_manager_chain` reason, support implications, verification steps.
+3. `docs/support/assessments/support-case-v0.4.0-memory-knowledge.md` — added Knowledge Browser UI section with search-route-fix support note; added 404 error state; added escalation row; related-docs link to new KB.
+4. `docs/support/README.md` — added RC-3 row to Recently Shipped Features; added KB article to KB table; release notes index now references v0.4.0-alpha (RC-3).
+5. `docs/releases.md` — /documentation/releases entry retitled **v0.4.0-alpha (RC-3)**; added Knowledge Browser UI + Manager-Chain highlights.
+
+### Board state (support-relevant)
+
+- **VOY-1303** (this task) — docs verified in sync for RC-3; version references updated to match RC-3.
+- **VOY-1264** (Release: Phase 5 Plan Board UI) — blocked on CEO disposition of VOY-1273 (M-1). Release notes and KB coverage now complete for RC-3.
+- **VOY-1265** (QA: Phase 5 Plan Board UI) — todo, blocked on VOY-1264.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 5 (planned backlog) + v0.4.0 stable when released |
+| Release notes currency | Up to date through v0.4.0-alpha-rc.3 (Voyonder) + v2026.722.0 (Paperclip) |
+
+### Next triggers to watch for
+
+- **VOY-1264 unblocks** → confirm release notes reference final tag (v0.4.0-alpha-rc.3 or later RC) before staging ship
+- **VOY-1265 QA findings** → any UI behavior deltas worth a support note (add to assessments)
+- **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
