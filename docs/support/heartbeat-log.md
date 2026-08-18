@@ -1280,11 +1280,15 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 
 ### What was done
 
-1. **Pending release docs committed** — The v0.5.0 Phase 1 release note (`docs/support/releases/v0.5.0-phase-1.md`), `docs/releases.md` entry, and `docs/support/README.md` status update from the previous heartbeat were left uncommitted in the working tree. These are now committed as a single docs snapshot.
+1. **Diff assessment** — Latest commit on `master` is `69789666e5` (COO heartbeat — status doc only, no code changes). No new Voyonder code changes to assess for documentation impact.
 
-2. **Diff assessment** — Latest commit on `master` is `69789666e5` (COO heartbeat — status doc only, no code changes). No new Voyonder code changes to assess for documentation impact.
+2. **Pending v0.5.0 release docs committed** — The v0.5.0 Phase 1 release note (`docs/support/releases/v0.5.0-phase-1.md`), `docs/releases.md` v0.5.0 entry, `docs/support/README.md` shipped-date refresh, and heartbeat log from the ~21:10 UTC heartbeat were left uncommitted. Committed as `e10dccea48`.
 
-3. **Case Studies (VOY-1344)** — COO published case studies to `docs/case-studies/` (CEO-approved, 3 articles + index). The `docs/docs.json` nav has a Case Studies tab pointing to these files, but both the tab and case-study files are untracked. Flagged — the COO should commit these when ready.
+3. **Case Studies (VOY-1344) committed** — `docs/case-studies/` (4 files, CEO-approved) and `docs/docs.json` Case Studies nav tab were sitting untracked after the COO heartbeat declared them published at ~21:30. Committed as `6a72f197d6` for docs-site durability — the nav would point to missing pages otherwise.
+
+4. **Quickstart guide (VOY-1334) committed** — `docs/start/your-first-company.md` was untracked despite being referenced in the committed `docs.json` nav since the v0.4.0 refresh. Broken page on the docs site. Committed as `66ee960fa9`.
+
+5. **Remaining untracked** — `docs/blogs/` (5 files, CTO-authored technical blog posts) remain untracked, not referenced in docs.json nav. Not my content; their owner can commit when ready.
 
 ### Current state
 
@@ -1293,7 +1297,7 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 | Open support issues | 0 |
 | Pending KB articles | 0 |
 | Release notes currency | Up to date through v0.5.0 Phase 1 (Aug 18, 2026) |
-| Docs synced with live code | ✅ Full sync — v0.5.0 release note committed at `fbe8264f0e` |
+| Docs synced with live code | ✅ Full sync — v0.5.0 release note at `e10dccea48`, case studies at `6a72f197d6`, quickstart at `66ee960fa9` |
 | Product dev server | UP (port 3100, HTTP 200) |
 
 ### Next triggers to watch for
@@ -1302,4 +1306,4 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **PostHog error monitoring (VOY-999/1015) reaching production** — finalize SOP from draft
 - **COO request for documentation health report** — available on demand
 - **New commits on fork/master** — assess diff for documentation impact
-- **Case Studies (VOY-1344) commit** — COO owns docs.json nav + case-studies files
+- **docs/blogs/ commit** — CTO-authored technical blog posts (5 files) untracked, not referenced in nav — owner action needed
