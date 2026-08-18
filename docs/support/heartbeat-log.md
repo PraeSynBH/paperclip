@@ -1341,4 +1341,46 @@ All six are internal heartbeat/status docs only — zero documentation impact.
 | Board issues (open) | 0 — all done or cancelled |
 
 ### Last reviewed commit
-`bc7f73ea2e` — recorded in `.last-reviewed`
+|`bc7f73ea2e` — recorded in `.last-reviewed`
+
+---
+
+## 2026-08-19 — Heartbeat: ~00:30 UTC — Board clear, documentation in sync, 7 heartbeat commits reviewed
+
+### Diff assessment
+
+No code/feature changes since last review (bc7f73ea2e). Commits reviewed:
+
+| Commit | Agent | Type | Doc impact |
+|---|---|---|---|
+| `c3144b5d8c` | Staff Engineer | heartbeat doc (board clear, idle) | None |
+| `cf39e5665e` | COO | beta customer outreach materials | None — email templates + demo script, not product docs |
+| `4d4ba57cc8` | COO | heartbeat doc (VOY-1407 done, backlog activation delegated) | None |
+| `84da74f873` | COO | heartbeat doc (board clear, all human-gated, idle) | None |
+| `c41c2d0cdb` | CTO | heartbeat doc (engineered backlog promoted, board active) | None |
+| `a7877545c0` | COO | heartbeat doc (VOY-1407 backlog activated, Phase 3 outreach verified) | None |
+| `d3db6f6da9` | CEO | heartbeat doc (board active with delegated backlog, 4 runs in progress) | None |
+
+All seven are internal heartbeat/status docs only — zero documentation impact.
+
+### Documentation health check
+
+| Check | Result |
+|---|---|
+| `/documentation` route | HTTP 200 (SPA serving) |
+| `/documentation/releases` route | HTTP 200 (SPA serving) |
+| `docs/releases.md` | v0.5.0 Phase 1 entry present and current |
+| `docs/support/releases/v0.5.0-phase-1.md` | Release note published |
+| `docs/support/README.md` | All v0.5.0 features listed with assessments |
+| Support case assessments | 6 assessments cover full v0.5.0 feature surface |
+| Release note gap | None — latest release = v0.5.0 Phase 1, fully documented |
+| Board issues (open for me) | 0 — all previous issues done, no new assignments |
+
+### Forward look
+
+- **VOY-1402 (H-3)** is in progress (Founding Engineer) — notification delivery failure telemetry. Delivery status fields and telemetry events are being added to the notification service. When this ships, `docs/support/assessments/support-case-notification-system.md` will need updating to cover the new `emailDelivery`/`pushDelivery` status fields and telemetry for delivery failures. The UI's delivery status display (`pending`/`delivered`/`failed`) should also be documented.
+- **PostHog error monitoring (VOY-999/1015)**, **Google OAuth (VOY-431/406)**, and **Knowledge starter packs (VOY-1348)** are in backlog — each will need documentation when activated.
+- **Outreach materials** (email templates + demo script) committed by COO — no product documentation impact.
+
+### Last reviewed commit
+`d3db6f6da9` — recorded in `.last-reviewed`
