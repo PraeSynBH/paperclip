@@ -21,3 +21,4 @@ export { resourceMembershipsApi } from "./resourceMemberships";
 export { inboxDismissalsApi } from "./inboxDismissals";
 export { companySkillsApi } from "./companySkills";
 export { memoryApi } from "./memory";
+export { companyTemplatesApi } from "./companyTemplates";
