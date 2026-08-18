@@ -4,7 +4,7 @@
 **Assessed by**: Support Engineer
 **Date**: 2026-08-17
 **Related**: VOY-1340
-**Commits**: `e5276f9037`, `62d532d119`
+**Commits**: `e5276f9037`, `62d532d119`, `c067b8c494`
 **Release**: v0.4.0-alpha (post-hotfix)
 
 ## Feature Overview (User Perspective)
