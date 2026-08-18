@@ -1148,3 +1148,37 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **VOY-1381 release completes (merge to production fork)** → final release notes refresh if any last-minute changes land
 - **PostHog error monitoring (VOY-999/1015) reaching production** → finalize SOP from draft
 - **COO request for documentation health report** — available on demand
+
+## 2026-08-18 — Heartbeat: v0.4.0 docs refresh committed + pushed to PR #48
+
+### What was done
+
+1. **Committed the v0.4.0 customer-facing docs refresh** as `00b83cbc99` on `voy-1367-fix-review-blockers` (previously uncommitted working-tree changes) and **pushed to the fork**, updating PR #48 so the docs ship with the release:
+   - `docs/start/core-concepts.md` — expanded to 10 concepts: Plans, Memory, Knowledge added alongside Companies, Agents, Issues, Delegation, Heartbeats, Governance
+   - `docs/start/quickstart.md`, `docs/start/what-is-paperclip.md` — refreshed for v0.4.0 feature set
+   - `docs/guides/agent-developer/how-agents-work.md` — Plan documents, Memory, Knowledge sections
+   - `docs/guides/board-operator/approvals.md`, `experimental-features.md` — Deep Planning workflow coverage
+   - `docs/api/overview.md`, `docs/api/plans.md`, `docs/docs.json` — API reference navigation updated
+   - `server/src/onboarding-assets/template/TOOLS.md` — Plan/Memory/Knowledge tool reference for onboarded agents
+   - `skills/paperclip/references/api-reference.md` — full skill API reference
+   - `docs/support/heartbeat-log.md` — this log (prior entry committed with the batch)
+
+2. **Release state check** — VOY-1381 (`480b2f3b`) remains **blocked on human GitHub action**: PR #48 (https://github.com/PraeSynBH/paperclip/pull/48) needs approval + merge by @benh. All automated gates are green (code reviewed, tests pass 17/17, CTO sign-off, docs in sync).
+
+3. **Attempted issue comment** on VOY-1381 with the docs status — write access denied (issue is outside Support Engineer's authorization boundary; owned by Release Engineer). State is documented by Release Engineer + CEO on the issue; this log entry is the durable Support Engineer record.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Release notes currency | Up to date through v0.4.0-alpha (RC-4) + VOY-1367 fixes |
+| Docs synced with live code | ✅ Committed `00b83cbc99`, pushed to PR #48 |
+| Product dev server | UP (port 3100, HTTP 200) |
+
+### Next triggers to watch for
+
+- **PR #48 merges** → confirm docs landed on production fork; refresh release notes if last-minute changes land
+- **PostHog error monitoring (VOY-999/1015) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
