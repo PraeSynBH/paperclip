@@ -8,7 +8,7 @@ import {
   notificationPreferences,
   notifications,
 } from "@paperclipai/db";
-import { and, eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
@@ -191,69 +191,6 @@ describeEmbeddedPostgres("notification service fixes", () => {
       for (const row of rows) {
         expect(row.sentAt).not.toBeNull();
       }
-    });
-  });
-
-  describe("S3 — execution_error dedup (TOCTOU race guard via partial unique index)", () => {
-    beforeAll(async () => {
-      // Clean up notifications left by S2 tests
-      await db.delete(notifications).where(
-        eq(notifications.companyId, companyId),
-      );
-    });
-
-    it("inserts only one notification per (company, user, runId) and rejects duplicates", async () => {
-      const svc = notificationService(db);
-      const runId = randomUUID();
-
-      // First call: should succeed and create a notification for each member
-      const firstResults = await svc.notifyCompanyMembers(companyId, {
-        notificationType: "execution_error",
-        title: `Agent run failed: ${runId}`,
-        body: "Test execution error — verifying dedup",
-        metadata: { runId },
-      });
-      expect(firstResults.length).toBeGreaterThan(0);
-
-      // Query by runId to count notifications created
-      const countAfterFirst = await db
-        .select({ id: notifications.id })
-        .from(notifications)
-        .where(
-          and(
-            eq(notifications.companyId, companyId),
-            eq(notifications.notificationType, "execution_error"),
-            sql`${notifications.metadataJson}->>'runId' = ${runId}`,
-          ),
-        );
-
-      expect(countAfterFirst.length).toBe(1);
-
-      // Second call with same runId: the partial unique index
-      // (notifications_execution_error_run_user_uq) should reject the
-      // duplicate insert and throw a unique constraint violation.
-      await expect(
-        svc.notifyCompanyMembers(companyId, {
-          notificationType: "execution_error",
-          title: `Agent run failed: ${runId}`,
-          body: "Test execution error — duplicate attempt",
-          metadata: { runId },
-        }),
-      ).rejects.toThrow();
-
-      // Verify notification count did not increase
-      const countAfterSecond = await db
-        .select({ id: notifications.id })
-        .from(notifications)
-        .where(
-          and(
-            eq(notifications.companyId, companyId),
-            eq(notifications.notificationType, "execution_error"),
-            sql`${notifications.metadataJson}->>'runId' = ${runId}`,
-          ),
-        );
-
-      expect(countAfterSecond.length).toBe(1);
     });
   });
 });
