@@ -147,8 +147,9 @@ Automated prompts (via Discord bot or pinned posts):
 
 When the server is created, the following items are ready to post:
 
-1. **Welcome message** (draft in doc/outreach/discord-welcome-message.md)
-2. **Rules embed** (derived from moderation guidelines above)
+1. **Welcome message** (draft in doc/outreach/discord-welcome-message.md) ✅
+2. **Rules embed** (derived from moderation guidelines — standalone draft in doc/outreach/discord-moderation-guidelines.md) ✅
 3. **Getting started guide** (link to docs quickstart)
-4. **Case study posts** (from PRA-920 deliverables) to seed #showcase
+4. **Case study posts** (from PRA-920 deliverables) to seed #showcase ✅
 5. **Beta program info** (from CEO's beta outreach plan)
+6. **Community launch posts** (drafts in doc/outreach/community-launch-posts.md) ✅
