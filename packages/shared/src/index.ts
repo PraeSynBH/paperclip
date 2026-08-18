@@ -189,6 +189,7 @@ export {
   SECRET_PROVIDER_CONFIG_HEALTH_STATUSES,
   STORAGE_PROVIDERS,
   BILLING_TYPES,
+  BILLING_PERIODS,
   FINANCE_EVENT_KINDS,
   FINANCE_DIRECTIONS,
   FINANCE_UNITS,
@@ -1752,3 +1753,51 @@ export {
   type FinishEnvironmentCustomImageSetupSession,
   type CancelEnvironmentCustomImageSetupSession,
 } from "./validators/environment-custom-images.js";
+
+// ── v0.5.0 feature types ────────────────────────────────────────────────────
+export {
+  NOTIFICATION_TYPES,
+  NOTIFICATION_CHANNELS,
+  DIGEST_FREQUENCIES,
+  DEFAULT_NOTIFICATION_PREFERENCES,
+  type NotificationType,
+  type NotificationChannel,
+  type DigestFrequency,
+  type NotificationPreference,
+  type NotificationPreferenceUpsertInput,
+  type NotificationRecord,
+  type PushSubscription,
+  type PushSubscriptionRegisterInput,
+  type NotificationDigestInput,
+  type NotifyInput,
+} from "./types/notifications.js";
+
+export {
+  createSubscriptionSchema,
+  updateSubscriptionSchema,
+  reportUsageSchema,
+  type CreateSubscription,
+  type UpdateSubscription,
+  type ReportUsage,
+} from "./validators/billing.js";
+
+export type {
+  MarketplaceAgentResponse,
+  MarketplaceAgentInstallResponse,
+  MarketplaceAgentSkillRequirement,
+} from "./types/marketplace.js";
+
+export type {
+  CompanyTemplate,
+  CompanyTemplateAgent,
+  CompanyTemplateCompany,
+  CompanyTemplateGoal,
+  CompanyTemplateProject,
+  CompanyTemplateStarterIssue,
+} from "./types/company-template.js";
+
+export type {
+  KnowledgeStarterPack,
+  KnowledgeStarterPackDocument,
+  KnowledgeStarterPackInstallResult,
+} from "./types/knowledge-starter-pack.js";

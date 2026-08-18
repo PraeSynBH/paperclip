@@ -30,6 +30,12 @@ pnpm paperclipai instance settings:experimental:update --payload-json '{...}'
 
 Those commands change the same opt-in settings that the UI manages.
 
+### Current experimental settings
+
+| Setting | Key | Default | Description |
+|---------|-----|---------|-------------|
+| Conference Room Chat | `enableConferenceRoomChat` | `true` | Enables the Board Chat streaming conversational interface (`/board-chat`). When disabled, the API returns `403 FEATURE_DISABLED`. Only available in `local_trusted` deployment mode. |
+
 ## When to use them
 
 Experimental features are best used when you are:

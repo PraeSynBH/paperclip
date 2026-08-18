@@ -29,6 +29,7 @@
             "pages": [
               "start/what-is-paperclip",
               "start/quickstart",
+              "start/your-first-company",
               "start/core-concepts",
               "start/architecture",
               "releases"
@@ -131,7 +132,13 @@
               "api/activity",
               "api/dashboard",
               "api/memory",
-              "api/knowledge"
+              "api/knowledge",
+              "api/chat",
+              "api/company-templates",
+              "api/billing",
+              "api/notifications",
+              "api/marketplace",
+              "api/onboarding"
             ]
           }
         ]

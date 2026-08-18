@@ -52,6 +52,11 @@ import { readBrandedStaticIndexHtml } from "./static-index-html.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
+import { companyTemplateRoutes } from "./routes/company-templates.js";
+import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
+import { notificationRoutes } from "./routes/notifications.js";
+import { marketplaceRoutes } from "./routes/marketplace.js";
+import { onboardingRoutes } from "./routes/onboarding.js";
 import { logger } from "./middleware/logger.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager, type PluginWorkerManager } from "./services/plugin-worker-manager.js";
@@ -193,6 +198,10 @@ export async function createApp(
       bindHost: opts.bindHost,
     }),
   );
+  // Stripe webhook must run BEFORE auth/actor middleware — it relies on
+  // Stripe signature verification instead of bearer/auth. rawBody is
+  // captured by the express.json middleware above.
+  app.use("/api/billing", billingWebhookRoute(db));
   app.use(
     actorMiddleware(db, {
       deploymentMode: opts.deploymentMode,
@@ -253,6 +262,11 @@ export async function createApp(
   api.use(instanceSettingsRoutes(db));
   api.use(memoryRoutes(db));
   api.use(knowledgeRoutes(db));
+  api.use("/company-templates", companyTemplateRoutes(db));
+  api.use(billingRoutes(db));
+  api.use(notificationRoutes(db));
+  api.use(marketplaceRoutes(db));
+  api.use("/onboarding", onboardingRoutes(db));
   if (opts.databaseBackupService) {
     api.use(instanceDatabaseBackupRoutes(opts.databaseBackupService));
   }

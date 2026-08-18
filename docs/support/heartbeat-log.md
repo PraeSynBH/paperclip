@@ -5,6 +5,51 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-18 — Heartbeat: v0.5.0 docs — marketplace + onboarding support case assessments
+
+### What was done
+
+1. **Diff assessment for v0.5.0 features on `voy-1367-fix-review-blockers`** — Analyzed 4 new commits adding Agent Marketplace (routes + service), Self-Service Onboarding (POST /start), Knowledge Starter Packs, and DB Health Watchdog:
+   - `e42b2d6e1c` — v0.5.0 service and route source files
+   - `87da3d374a` — v0.5.0 type files (marketplace, company-template, knowledge-starter-pack)
+   - `ad6c5f5248` — v0.5.0 tests for marketplace, onboarding, and db-health-watchdog
+   - `cd7f9d21db` — P0-A auth hardening (agents:create gate + board approval check), P0-B db-health-watchdog external mode warn-only
+
+2. **Staff Engineer P0 findings (VOY-1391) assessed for documentation impact** — Two P0 findings were raised by the Staff Engineer on v0.5.0 features; both were fixed by the CTO and committed as `cd7f9d21db`:
+   - **P0-A (Marketplace hire auth bypass)**: `agents:create` permission gate + board approval gate added to hire endpoint. Docs reflect the final fixed behavior.
+   - **P0-B (db-health-watchdog external mode)**: External mode now logs warning only (no exit). Matches the documented design in the module header. Internal/ops feature — no customer-facing doc change needed.
+
+3. **New support case assessments created (2):**
+   - **Agent Marketplace** (`assessments/support-case-v0.5.0-marketplace.md`) — Covers browse + one-click hire, endpoints, authorization (agents:create permission + board approval gate), catalog dependency, known limitations, troubleshooting, and escalation paths.
+   - **Self-Service Onboarding** (`assessments/support-case-v0.5.0-onboarding.md`) — Covers POST /start flow (company creation, agent hiring, goal/project/task seeding), auth requirements, known limitations, troubleshooting.
+
+4. **API reference docs created (2):**
+   - `docs/api/marketplace.md` — Full API reference for marketplace endpoints (list, get, hire) with authorization notes reflecting the final P0-A behavior.
+   - `docs/api/onboarding.md` — Full API reference for POST /start with response schema and step-by-step flow description.
+
+5. **Navigation and index updated:**
+   - `docs/docs.json` — Registered `api/marketplace` and `api/onboarding` in REST API reference navigation.
+   - `docs/api/overview.md` — Added Marketplace and Onboarding rows to API Areas table; version bumped to v0.5.0.
+   - `docs/support/README.md` — Added Marketplace and Onboarding rows to "Recently Shipped Features" table.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 0 for v0.5.0 scope |
+| Release notes currency | Up to date through v0.4.0-alpha + VOY-1367 fixes; v0.5.0 features documented but release note pending |
+| Docs synced with live code | ✅ v0.5.0 branch (marketplace, onboarding, billing, notifications, company templates, board chat) |
+| Branch | voy-1367-fix-review-blockers (PR #48 awaiting human GitHub approval) |
+| P0 fixes (VOY-1391) | ✅ Committed as `cd7f9d21db` — agents:create gate + board approval check marketplace hire; db-health-watchdog external mode warn-only |
+
+### Next triggers to watch for
+
+- **VOY-1381 release completes** → final release notes refresh with v0.5.0 features; QA engineer (VOY-1385) begins verification
+- **PR #48 human approval** → enables merge to master
+- **COO request for documentation health report** — available on demand
+
 ## 2026-08-17 — Heartbeat: RC-4 docs sync — C-fixes + Phase 5 remaining assessed and documented
 
 ### What was done
@@ -42,6 +87,54 @@ maintained_by: Support Engineer (88b72065)
 - **VOY-1265 QA findings on RC-4** → any UI behavior deltas worth a support note
 - **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
 - **PostHog error monitoring (VOY-999) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+
+## 2026-08-18 — Heartbeat: VOY-1367 landed — billing + notification features documented
+
+### What was done
+
+1. **Diff assessment of commit `b4526451aa` (VOY-1367)** — Major commit landed on `main` fixing VOY-1364 review blockers:
+   - **B1 (Billing trust boundary)** — board-user-only mutation guard on all billing routes; agents get 403
+   - **B2 (Migration 0137 index drops)** — restored memory_records_embedding_hnsw_idx, company_binding_idx, created_at_idx (migration 0141)
+   - **B3 (Execution error notification idempotency)** — deduplication by runId
+   - **S1-S4 (Notification refinements)** — effective channel defaults, digest deferral, execution_error email:false default, target user membership check
+   - Includes full billing service (708 lines), notification service (884 lines), email templates, 3 test files (17 tests passing)
+
+2. **Support case assessments created (2 new)**:
+   - **Billing System** (`docs/support/assessments/support-case-billing-system.md`) — Covers subscription management (create/update/cancel/reactivate), usage reporting (seats, agent_runs, storage_gb), invoice syncing, Stripe webhooks, trust boundary, and all 12 API endpoints
+   - **Notification System** (`docs/support/assessments/support-case-notification-system.md`) — Covers all 5 notification types (review_requested, approval_needed, work_completed, budget_threshold, execution_error), 3 channels (in_app, email, webpush), digest options, push subscriptions, SMTP/VAPID configuration, and 11 API endpoints
+
+3. **Release notes updated** (`docs/support/releases/v0.4.0-alpha-deep-planning.md`):
+   - Added **Billing System** section with endpoint table, trust boundary info, usage metrics, and configuration
+   - Added **Notification System** section with notification types, triggers, channels, digests, deduplication, and endpoint table
+   - Updated the hotfix section note about VOY-1342 notification code (now included, not deferred)
+   - Added 5 new escalation path entries (billing agent 403, billing mutation, email delivery, notification failures, webhook issues)
+   - Added both new assessments to Related Documentation
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 3 (planned backlog) |
+| Release notes currency | Up to date through VOY-1367 (`b4526451aa`) |
+| Docs synced with live code | ✅ VOY-1367 |
+| Product dev server | UP (port 3100 healthy) |
+
+### Commit trace (docs landed on `voy-1367-fix-review-blockers`)
+
+- `7335f26415` — support case assessments: billing, notification, company templates + release notes billing/notification sections
+- `8065881583` — API reference docs: board chat, company templates + board-chat assessment
+- `fb01c9d21b` — company templates assessment: add `c067b8c494` (route wiring) to commit trace
+
+All docs verified against source: `routes/billing.ts` (12 endpoints, board-user guard), `routes/notifications.ts` (11 endpoints), `routes/issues.ts` + `routes/approvals.ts` + `services/budgets.ts` (auto-notification triggers), `services/notifications.ts` (SMTP/VAPID config).
+
+### Next triggers to watch for
+
+- **VOY-1367 unblocking** → CTO to re-review; any API behavior changes may need doc updates
+- **v0.4.0 stable release** → final release notes refresh
+- **PostHog error monitoring reaching production** → finalize SOP from draft
 - **COO request for documentation health report** — available on demand
 
 ## 2026-08-17 — Heartbeat: C-fixes resolved, Staff Engineer review in progress, docs current
@@ -1031,3 +1124,113 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
 - **PostHog error monitoring (VOY-999) reaching production** → finalize SOP from draft
 - **COO request for documentation health report** — available on demand
+
+## 2026-08-18 — Heartbeat: Diff assessment of VOY-1381 fix commit — no documentation impact
+
+### What was done
+
+1. **Diff assessment** — Commit `48a32f0b27` (`fix(VOY-1381): restore clean 0142 migration`) landed on `master`:
+   - **0142_execution_error_dedup.sql**: Rewrote migration to only contain TOCTOU dedup unique index + invites column cleanup (DROP COLUMN IF EXISTS). Removed all the already-applied 0138–0141 index/FK/constraint noise. *Internal database change — no customer-facing behavior impact.*
+   - **0142_snapshot.json**: Regenerated to match clean migration. *Infrastructure.*
+   - **pnpm-lock.yaml**: Regenerated. *Dependency resolution — no behavioral change.*
+   - **notification-service.test.ts**: 65 lines of test coverage additions for existing notification behavior. *Test-only — no behavioral change to document.*
+
+   **Verdict: No documentation update required.** The notification dedup behavior was already documented in the notification system support assessment (`docs/support/assessments/support-case-notification-system.md`). The invites column cleanup is internal schema drift — no user-facing surface.
+
+2. **Docs sync verification** — All previously committed documentation remains accurate:
+   - `docs/releases.md` — v0.4.0-alpha (RC-4) entry correctly lists all highlights including notification dedup
+   - `docs/support/assessments/support-case-notification-system.md` — already documents the `notifyExecutionErrorOnce` dedup behavior
+   - `docs/support/README.md` — index table current with all shipped features
+   - Product dev server healthy (HTTP 200)
+
+3. **Release readiness** — VOY-1382 (docs verification) completed and closed. No further documentation action needed for VOY-1381 release cycle.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Release notes currency | Up to date through v0.4.0-alpha (RC-4) + VOY-1367 fixes |
+| Docs synced with live code | ✅ Verified — commit `48a32f0b27` (infra-only, no doc impact) |
+| Product dev server | UP (port 3100, HTTP 200) |
+
+### Next triggers to watch for
+
+- **VOY-1381 release completes (merge to production fork)** → final release notes refresh if any last-minute changes land
+- **PostHog error monitoring (VOY-999/1015) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+
+## 2026-08-18 — Heartbeat: v0.4.0 docs refresh committed + pushed to PR #48
+
+### What was done
+
+1. **Committed the v0.4.0 customer-facing docs refresh** as `00b83cbc99` on `voy-1367-fix-review-blockers` (previously uncommitted working-tree changes) and **pushed to the fork**, updating PR #48 so the docs ship with the release:
+   - `docs/start/core-concepts.md` — expanded to 10 concepts: Plans, Memory, Knowledge added alongside Companies, Agents, Issues, Delegation, Heartbeats, Governance
+   - `docs/start/quickstart.md`, `docs/start/what-is-paperclip.md` — refreshed for v0.4.0 feature set
+   - `docs/guides/agent-developer/how-agents-work.md` — Plan documents, Memory, Knowledge sections
+   - `docs/guides/board-operator/approvals.md`, `experimental-features.md` — Deep Planning workflow coverage
+   - `docs/api/overview.md`, `docs/api/plans.md`, `docs/docs.json` — API reference navigation updated
+   - `server/src/onboarding-assets/template/TOOLS.md` — Plan/Memory/Knowledge tool reference for onboarded agents
+   - `skills/paperclip/references/api-reference.md` — full skill API reference
+   - `docs/support/heartbeat-log.md` — this log (prior entry committed with the batch)
+
+2. **Release state check** — VOY-1381 (`480b2f3b`) remains **blocked on human GitHub action**: PR #48 (https://github.com/PraeSynBH/paperclip/pull/48) needs approval + merge by @benh. All automated gates are green (code reviewed, tests pass 17/17, CTO sign-off, docs in sync).
+
+3. **Attempted issue comment** on VOY-1381 with the docs status — write access denied (issue is outside Support Engineer's authorization boundary; owned by Release Engineer). State is documented by Release Engineer + CEO on the issue; this log entry is the durable Support Engineer record.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Release notes currency | Up to date through v0.4.0-alpha (RC-4) + VOY-1367 fixes |
+| Docs synced with live code | ✅ Committed `00b83cbc99`, pushed to PR #48 |
+| Product dev server | UP (port 3100, HTTP 200) |
+
+### Next triggers to watch for
+
+- **PR #48 merges** → confirm docs landed on production fork; refresh release notes if last-minute changes land
+- **PostHog error monitoring (VOY-999/1015) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+
+---
+
+## 2026-08-18 — Heartbeat: ~19:00 UTC — idle, docs verified, release in progress
+
+### What was done
+
+1. **Board state check** — No new issues assigned to Support Engineer (88b72065). Previous task VOY-1382 (docs verification for VOY-1367 release) is **done** as of 17:38 UTC.
+
+2. **Release pipeline status** — VOY-1381 (Release Engineer, `7a2a259f`) is **in_progress** with an active run started at 18:51 UTC. The branch `voy-1367-fix-review-blockers` is fully synced, code-reviewed, CTO-approved, and docs-verified. Blocked on human GitHub approval of PR #48.
+
+3. **QA status** — VOY-1385 (QA Engineer, `c3bdfe58`) is **blocked** on the release. No action needed from Support Engineer.
+
+4. **Documentation health** — Verified all docs are current:
+   - `docs/releases.md` — v0.4.0-alpha entry includes Billing, Notifications, Company Templates, Board Chat
+   - `docs/support/README.md` — Recently Shipped Features table reflects all v0.4.0 additions
+   - `docs/docs.json` — All API reference entries registered
+   - `docs/api/` — billing, chat, company-templates, notifications, memory, knowledge docs all present
+   - `docs/start/` — core-concepts, quickstart, your-first-company all present
+   - `docs/support/assessments/` — billing, notification, company-templates assessments committed
+   - Release notes at `docs/support/releases/v0.4.0-alpha-deep-planning.md` carry v0.4.0 highlights
+
+5. **No new Voyonder-commits to assess** — Upstream Paperclip has new commits (feat/fix on `origin/master`, release notes on `origin/release-notes`) but these are not Voyonder-specific changes. No documentation impact for Voyonder.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Release notes currency | Up to date through v0.4.0-alpha (RC-4) + VOY-1367 fixes |
+| Docs synced with live code | ✅ Committed, pushed to PR #48 |
+| Product dev server | UP (port 3100, HTTP 200) |
+
+### Next triggers to watch for
+
+- **PR #48 merges** → confirm docs landed on production fork; refresh release notes if last-minute changes land
+- **PostHog error monitoring (VOY-999/1015) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+- **v0.5.0 Market Readiness items** — when issues are created, assess documentation impact

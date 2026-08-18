@@ -56,6 +56,13 @@ const HTTP_METHODS = new Set(["get", "put", "post", "delete", "options", "head",
 const explicitOpenApiCoverageExclusions = new Set([
   // Pipeline routes are experimental and not yet represented in the public OpenAPI document.
   "pipelines.ts",
+  // v0.5.0 self-service/marketplace routes are mounted but not yet represented
+  // in the public OpenAPI document (tracked by VOY-1340/VOY-1342/VOY-1343).
+  "billing.ts",
+  "company-templates.ts",
+  "marketplace.ts",
+  "notifications.ts",
+  "onboarding.ts",
 ]);
 
 function createApp() {

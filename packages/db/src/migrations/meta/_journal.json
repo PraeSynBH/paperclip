@@ -960,6 +960,48 @@
       "when": 1786946600000,
       "tag": "0136_knowledge_documents_memory_record_id",
       "breakpoints": true
+    },
+    {
+      "idx": 137,
+      "version": "7",
+      "when": 1786947000000,
+      "tag": "0137_billing_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 138,
+      "version": "7",
+      "when": 1786947100000,
+      "tag": "0138_last_betty_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 139,
+      "version": "7",
+      "when": 1786947200000,
+      "tag": "0139_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 140,
+      "version": "7",
+      "when": 1786950000000,
+      "tag": "0140_invited_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 141,
+      "version": "7",
+      "when": 1786951000000,
+      "tag": "0141_restore_memory_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 142,
+      "version": "7",
+      "when": 1787075097908,
+      "tag": "0142_execution_error_dedup",
+      "breakpoints": true
     }
   ]
 }

@@ -4835,6 +4835,8 @@ for (const route of [
   ["get", "/api/companies/{companyId}/memory/records/{recordId}", "Get a single memory record"],
   ["delete", "/api/companies/{companyId}/memory/records", "Forget memory records by handle"],
   ["get", "/api/companies/{companyId}/memory/operations", "List recent memory operations"],
+  ["get", "/api/companies/{companyId}/memory/extraction-jobs", "List memory extraction jobs"],
+  ["post", "/api/companies/{companyId}/memory/extraction-jobs/{jobId}/retry", "Retry a failed memory extraction job"],
 ] as const) {
   registerCurrentRoute({
     method: route[0],

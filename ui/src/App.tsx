@@ -1,6 +1,7 @@
-import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "@/lib/router";
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "@/lib/router";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/i18n";
+import { Rocket } from "lucide-react";
 import { Layout } from "./components/Layout";
 import { ConferenceRoomChatGate } from "./components/ConferenceRoomChatGate";
 import { PipelinesExperimentalGate } from "./components/PipelinesExperimentalGate";
@@ -47,6 +48,7 @@ import { CompanySkills } from "./pages/CompanySkills";
 import { Secrets } from "./pages/Secrets";
 import { CompanyExport } from "./pages/CompanyExport";
 import { CompanyImport } from "./pages/CompanyImport";
+import { CompanyTemplates } from "./pages/CompanyTemplates";
 import { DesignGuide } from "./pages/DesignGuide";
 import { InstanceGeneralSettings } from "./pages/InstanceGeneralSettings";
 import { InstanceAccess } from "./pages/InstanceAccess";
@@ -63,12 +65,14 @@ import { AuthPage } from "./pages/Auth";
 import { BoardClaimPage } from "./pages/BoardClaim";
 import { CliAuthPage } from "./pages/CliAuth";
 import { InviteLandingPage } from "./pages/InviteLanding";
+import { DemoTravelConcierge } from "./pages/DemoTravelConcierge";
 import { JoinRequestQueue } from "./pages/JoinRequestQueue";
 import { NotFoundPage } from "./pages/NotFound";
 import { MemoryBrowser } from "./pages/MemoryBrowser";
 import { CompanyMemoryTab } from "./pages/CompanyMemoryTab";
 import { KnowledgeBrowser } from "./pages/KnowledgeBrowser";
 import { Plans } from "./pages/Plans";
+import { NotificationPreferences } from "./pages/NotificationPreferences";
 import { useCompany } from "./context/CompanyContext";
 import { useDialogActions, useDialogState } from "./context/DialogContext";
 import { loadLastInboxTab } from "./lib/inbox";
@@ -96,8 +100,10 @@ function boardRoutes() {
       <Route path="company/settings/invites" element={<CompanyInvites />} />
       <Route path="company/export/*" element={<CompanyExport />} />
       <Route path="company/import" element={<CompanyImport />} />
+      <Route path="company/templates" element={<CompanyTemplates />} />
       <Route path="company/settings/secrets" element={<Secrets />} />
       <Route path="company/settings/memory" element={<CompanyMemoryTab />} />
+      <Route path="company/settings/notifications" element={<NotificationPreferences />} />
       <Route path="company/settings/instance" element={<Navigate to="general" replace />} />
       <Route path="company/settings/instance/profile" element={<ProfileSettings />} />
       <Route path="company/settings/instance/general" element={<InstanceGeneralSettings />} />
@@ -374,6 +380,7 @@ function UnprefixedBoardRedirect() {
 function NoCompaniesStartPage() {
   const { openOnboarding } = useDialogActions();
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   return (
     <div className="mx-auto max-w-xl py-10">
@@ -384,9 +391,13 @@ function NoCompaniesStartPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           {t("app.noCompanies.description", { defaultValue: "Get started by creating a company." })}
         </p>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
           <Button onClick={() => openOnboarding()}>
             {t("app.noCompanies.newCompany", { defaultValue: "New Company" })}
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/demo/travel-concierge")}>
+            <Rocket className="mr-1.5 h-3.5 w-3.5" />
+            Try the Demo
           </Button>
         </div>
       </div>
@@ -402,6 +413,7 @@ export function App() {
         <Route path="board-claim/:token" element={<BoardClaimPage />} />
         <Route path="cli-auth/:id" element={<CliAuthPage />} />
         <Route path="invite/:token" element={<InviteLandingPage />} />
+        <Route path="demo/travel-concierge" element={<DemoTravelConcierge />} />
         <Route path="tests/perf/long-thread" element={<IssueChatLongThreadPerf />} />
         <Route path="ux-lab/cloud-upstream" element={<CloudUpstreamUxLab />} />
         <Route path="ux-lab/bootstrap-setup" element={<BootstrapSetupUxLab />} />

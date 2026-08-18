@@ -39,6 +39,14 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 - **Batch Gate Counts + Live Events** — Plan cards now show active gate counts, and plan gate creation/resolution events stream to the UI in real time.
 
+- **Billing System** — Full Stripe-integrated subscription management: tier plans, usage reporting (seats, agent runs, storage), invoice syncing, and Stripe webhooks. Subscription mutations require a board-user context; agents are blocked from billing changes.
+
+- **Multi-Channel Notifications** — Board users receive notifications for reviews requested, approvals needed, completed work, budget thresholds, and execution errors — delivered in-app, by email, or via web push with instant/daily/weekly digest options.
+
+- **Company Templates** — One-click deployment of pre-built companies (Travel Concierge, Support Ops, Engineering Team, CPA Firm), each with agents, skills, knowledge packs, and a starter issue.
+
+- **Board Chat & Template APIs** — New API reference coverage for the Conference Room chat streaming endpoint and the company templates gallery/deploy endpoints.
+
 [Full release notes →](/support/releases/v0.4.0-alpha-deep-planning)
 
 ---
