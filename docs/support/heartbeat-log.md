@@ -77,6 +77,14 @@ maintained_by: Support Engineer (88b72065)
 | Docs synced with live code | ✅ VOY-1367 |
 | Product dev server | UP (port 3100 healthy) |
 
+### Commit trace (docs landed on `voy-1367-fix-review-blockers`)
+
+- `7335f26415` — support case assessments: billing, notification, company templates + release notes billing/notification sections
+- `8065881583` — API reference docs: board chat, company templates + board-chat assessment
+- `fb01c9d21b` — company templates assessment: add `c067b8c494` (route wiring) to commit trace
+
+All docs verified against source: `routes/billing.ts` (12 endpoints, board-user guard), `routes/notifications.ts` (11 endpoints), `routes/issues.ts` + `routes/approvals.ts` + `services/budgets.ts` (auto-notification triggers), `services/notifications.ts` (SMTP/VAPID config).
+
 ### Next triggers to watch for
 
 - **VOY-1367 unblocking** → CTO to re-review; any API behavior changes may need doc updates
