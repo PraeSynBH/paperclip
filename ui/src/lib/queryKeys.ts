@@ -281,6 +281,12 @@ export const queryKeys = {
     ["usage-window-spend", companyId] as const,
   usageQuotaWindows: (companyId: string) =>
     ["usage-quota-windows", companyId] as const,
+  notifications: {
+    preferences: (companyId: string) => ["notifications", "preferences", companyId] as const,
+    list: (companyId: string, opts?: { unreadOnly?: boolean }) =>
+      ["notifications", "list", companyId, opts?.unreadOnly ?? false] as const,
+    unreadCount: (companyId: string) => ["notifications", "unread", companyId] as const,
+  },
   heartbeats: (companyId: string, agentId?: string) =>
     ["heartbeats", companyId, agentId] as const,
   runDetail: (runId: string) => ["heartbeat-run", runId] as const,
@@ -320,6 +326,10 @@ export const queryKeys = {
       ["memory", companyId, "agent-config", agentId] as const,
     extractionJobs: (companyId: string, status?: string) =>
       ["memory", companyId, "extraction-jobs", status ?? "__all__"] as const,
+  },
+  companyTemplates: {
+    list: ["company-templates"] as const,
+    detail: (key: string) => ["company-templates", key] as const,
   },
   knowledge: {
     list: (companyId: string, status?: string, cursor?: string) =>

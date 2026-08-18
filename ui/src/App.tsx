@@ -47,6 +47,7 @@ import { CompanySkills } from "./pages/CompanySkills";
 import { Secrets } from "./pages/Secrets";
 import { CompanyExport } from "./pages/CompanyExport";
 import { CompanyImport } from "./pages/CompanyImport";
+import { CompanyTemplates } from "./pages/CompanyTemplates";
 import { DesignGuide } from "./pages/DesignGuide";
 import { InstanceGeneralSettings } from "./pages/InstanceGeneralSettings";
 import { InstanceAccess } from "./pages/InstanceAccess";
@@ -69,6 +70,7 @@ import { MemoryBrowser } from "./pages/MemoryBrowser";
 import { CompanyMemoryTab } from "./pages/CompanyMemoryTab";
 import { KnowledgeBrowser } from "./pages/KnowledgeBrowser";
 import { Plans } from "./pages/Plans";
+import { NotificationPreferences } from "./pages/NotificationPreferences";
 import { useCompany } from "./context/CompanyContext";
 import { useDialogActions, useDialogState } from "./context/DialogContext";
 import { loadLastInboxTab } from "./lib/inbox";
@@ -96,8 +98,10 @@ function boardRoutes() {
       <Route path="company/settings/invites" element={<CompanyInvites />} />
       <Route path="company/export/*" element={<CompanyExport />} />
       <Route path="company/import" element={<CompanyImport />} />
+      <Route path="company/templates" element={<CompanyTemplates />} />
       <Route path="company/settings/secrets" element={<Secrets />} />
       <Route path="company/settings/memory" element={<CompanyMemoryTab />} />
+      <Route path="company/settings/notifications" element={<NotificationPreferences />} />
       <Route path="company/settings/instance" element={<Navigate to="general" replace />} />
       <Route path="company/settings/instance/profile" element={<ProfileSettings />} />
       <Route path="company/settings/instance/general" element={<InstanceGeneralSettings />} />
