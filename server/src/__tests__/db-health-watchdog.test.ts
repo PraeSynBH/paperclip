@@ -233,7 +233,7 @@ describe("installDbHealthWatchdog — with fake probes and timers", () => {
     stop();
   });
 
-  it("exits in external mode after max failures (no restart attempt)", async () => {
+  it("logs a warning in external mode after max failures (no exit, no restart attempt)", async () => {
     const db = fakeDb(alwaysSucceeds);
     const epg = fakeEpg();
     const { exitFn, stop } = installWithFakeTimers({
@@ -244,9 +244,9 @@ describe("installDbHealthWatchdog — with fake probes and timers", () => {
       _testProbe: async () => "failed" as const,
     });
 
-    await vi.advanceTimersByTimeAsync(30_000 * 2); // 2 failures → exit
+    await vi.advanceTimersByTimeAsync(30_000 * 2); // 2 failures → warn, no exit
 
-    expect(exitFn).toHaveBeenCalledWith(1);
+    expect(exitFn).not.toHaveBeenCalled(); // no exit in external mode
     expect(epg.stop).not.toHaveBeenCalled(); // no restart attempt in external mode
     stop();
   });

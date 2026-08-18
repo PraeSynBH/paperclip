@@ -195,13 +195,21 @@ export function installDbHealthWatchdog(opts: DbHealthWatchdogOptions): () => vo
               logger.error({ err: String(restartErr) }, "Embedded PostgreSQL restart failed; exiting server");
               exitFn(1);
             }
-          } else {
-            // External mode, or already tried restart and it didn't stick
+          } else if (opts.mode === "embedded-postgres") {
+            // Embedded mode, already tried restart and it didn't stick
             logger.error(
               { mode: opts.mode, restartAttempted, consecutiveFailures },
               "DB unreachable after sustained failures; exiting server to force recovery",
             );
             exitFn(1);
+          } else {
+            // External mode — log warnings only. The server cannot fix an
+            // external DB outage, and exiting would cause unnecessary restart
+            // loops. The health endpoint already reports 503.
+            logger.warn(
+              { mode: opts.mode, consecutiveFailures, failuresBeforeAction },
+              "DB unreachable in external mode; the health endpoint will report 503 until the database is restored",
+            );
           }
         }
         break;

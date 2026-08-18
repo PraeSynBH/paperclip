@@ -10,9 +10,25 @@ const mockMarketplaceService = vi.hoisted(() => ({
   hire: vi.fn(),
 }));
 
+const mockAccessService = vi.hoisted(() => ({
+  decide: vi.fn(),
+}));
+
+// Build a mock DB that returns a company row when queried by ID
+function mockDbWithCompany(overrides: Record<string, unknown> = {}): any {
+  const mockThen = vi.fn(
+    async (resolve: (rows: Record<string, unknown>[]) => Record<string, unknown>) =>
+      resolve([{ id: companyId, requireBoardApprovalForNewAgents: false, ...overrides }]),
+  );
+  const mockWhere = vi.fn(() => ({ then: mockThen }));
+  const mockFrom = vi.fn(() => ({ where: mockWhere }));
+  const mockSelect = vi.fn(() => ({ from: mockFrom }));
+  return { select: mockSelect };
+}
+
 let appImportCounter = 0;
 
-async function createApp(actor: Record<string, unknown>) {
+async function createApp(actor: Record<string, unknown>, db?: any) {
   appImportCounter += 1;
   const routeModulePath = `../routes/marketplace.js?marketplace-${appImportCounter}`;
   const middlewareModulePath = `../middleware/index.js?marketplace-${appImportCounter}`;
@@ -26,7 +42,7 @@ async function createApp(actor: Record<string, unknown>) {
     (req as any).actor = actor;
     next();
   });
-  app.use("/api", marketplaceRoutes({} as any));
+  app.use("/api", marketplaceRoutes(db ?? ({} as any)));
   app.use(errorHandler);
   return app;
 }
@@ -45,12 +61,17 @@ function setupMocks() {
   vi.doMock("../services/agents-marketplace.js", () => ({
     agentMarketplaceService: () => mockMarketplaceService,
   }));
+  vi.doMock("../services/access.js", () => ({
+    accessService: () => mockAccessService,
+  }));
 }
 
 describe("marketplace routes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupMocks();
+    // Default: allow agents:create — individual tests override for denial cases
+    mockAccessService.decide.mockResolvedValue({ allowed: true, explanation: "OK" });
   });
 
   describe("GET /marketplace/agents", () => {
@@ -103,7 +124,8 @@ describe("marketplace routes", () => {
         skillsInstalled: 2,
         warnings: [],
       });
-      const app = await createApp(boardActor());
+      const db = mockDbWithCompany();
+      const app = await createApp(boardActor(), db);
       const res = await request(app)
         .post(`/api/companies/${companyId}/marketplace/agents/senior-engineer/hire`)
         .send({});
@@ -125,7 +147,8 @@ describe("marketplace routes", () => {
         skillsInstalled: 1,
         warnings: [],
       });
-      const app = await createApp(boardActor());
+      const db = mockDbWithCompany();
+      const app = await createApp(boardActor(), db);
       const res = await request(app)
         .post(`/api/companies/${companyId}/marketplace/agents/senior-engineer/hire`)
         .send({ name: "Principal Engineer" });
@@ -155,6 +178,48 @@ describe("marketplace routes", () => {
         .post(`/api/companies/${companyId}/marketplace/agents/senior-engineer/hire`)
         .send({});
       expect(res.status).toBe(401);
+      expect(mockMarketplaceService.hire).not.toHaveBeenCalled();
+    });
+
+    it("rejects hire when agents:create permission is denied", async () => {
+      mockAccessService.decide.mockResolvedValue({
+        allowed: false,
+        explanation: "Missing permission: agents:create",
+      });
+      const app = await createApp(boardActor());
+      const res = await request(app)
+        .post(`/api/companies/${companyId}/marketplace/agents/senior-engineer/hire`)
+        .send({});
+      expect(res.status).toBe(403);
+      expect(res.body.error).toContain("agents:create");
+      expect(mockMarketplaceService.hire).not.toHaveBeenCalled();
+    });
+
+    it("rejects hire when company requires board approval for new agents", async () => {
+      mockAccessService.decide.mockResolvedValue({ allowed: true, explanation: "OK" });
+      const db = mockDbWithCompany({ requireBoardApprovalForNewAgents: true });
+      const app = await createApp(boardActor(), db);
+      const res = await request(app)
+        .post(`/api/companies/${companyId}/marketplace/agents/senior-engineer/hire`)
+        .send({});
+      expect(res.status).toBe(409);
+      expect(res.body.error).toContain("board approval");
+      expect(mockMarketplaceService.hire).not.toHaveBeenCalled();
+    });
+
+    it("returns 404 when company is not found", async () => {
+      mockAccessService.decide.mockResolvedValue({ allowed: true, explanation: "OK" });
+      // Mock db to return empty result (company not found)
+      const mockEmptyThen = vi.fn(async (resolve: (rows: unknown[]) => unknown) => resolve([]));
+      const mockEmptyWhere = vi.fn(() => ({ then: mockEmptyThen }));
+      const mockEmptyFrom = vi.fn(() => ({ where: mockEmptyWhere }));
+      const mockEmptySelect = vi.fn(() => ({ from: mockEmptyFrom }));
+      const db = { select: mockEmptySelect };
+      const app = await createApp(boardActor(), db);
+      const res = await request(app)
+        .post(`/api/companies/${companyId}/marketplace/agents/senior-engineer/hire`)
+        .send({});
+      expect(res.status).toBe(404);
       expect(mockMarketplaceService.hire).not.toHaveBeenCalled();
     });
   });

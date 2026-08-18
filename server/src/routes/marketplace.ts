@@ -14,9 +14,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import type { Db } from "@paperclipai/db";
+import { companies } from "@paperclipai/db";
+import { eq } from "drizzle-orm";
 import { agentMarketplaceService } from "../services/agents-marketplace.js";
+import { accessService } from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
-import { notFound } from "../errors.js";
+import { conflict, forbidden, notFound } from "../errors.js";
 
 // ── Schemas ───────────────────────────────────────────────────────────────────
 
@@ -37,6 +40,7 @@ const marketplaceHireSchema = z.object({
 export function marketplaceRoutes(db: Db) {
   const router = Router();
   const svc = agentMarketplaceService(db);
+  const access = accessService(db);
 
   // ── Browse (app-level, no company context) ───────────────────────────────
 
@@ -86,6 +90,38 @@ export function marketplaceRoutes(db: Db) {
 
       // Require board/agent access to the company
       assertCompanyAccess(req, companyId);
+
+      // Standard agent-creation permission gate — mirrors the agents:create
+      // check on POST /companies/:companyId/agents. Any member (including
+      // operator-role users) can otherwise create a process-adapter agent
+      // with arbitrary command → server-side command execution.
+      const decision = await access.decide({
+        actor: req.actor,
+        action: "agents:create",
+        resource: { type: "company", companyId },
+      });
+      if (!decision.allowed) {
+        throw forbidden(decision.explanation);
+      }
+      if (req.actor.type === "agent" && req.actor.companyId !== companyId) {
+        throw forbidden("Agent key cannot access another company");
+      }
+
+      // Board approval gate — mirrors POST /companies/:companyId/agents
+      const company = await db
+        .select()
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .then((rows) => rows[0] ?? null);
+      if (!company) {
+        res.status(404).json({ error: "Company not found" });
+        return;
+      }
+      if (company.requireBoardApprovalForNewAgents) {
+        throw conflict(
+          "Company requires board approval for new agents. Use POST /api/companies/:companyId/agent-hires to create a pending hire approval.",
+        );
+      }
 
       const body = marketplaceHireSchema.parse(req.body ?? {});
       const actor = getActorInfo(req);
