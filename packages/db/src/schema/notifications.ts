@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, boolean, jsonb, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { companies } from "./companies.js";
 import { authUsers } from "./auth.js";
 
@@ -152,6 +153,16 @@ export const notifications = pgTable(
       table.readAt,
       table.createdAt,
     ),
+    // Dedup guard for execution_error notifications: at most one notification
+    // row per (company, user, runId). Closes the TOCTOU race in
+    // notifyExecutionErrorOnce (heartbeat.ts) where a SELECT-then-INSERT dedup
+    // could double-fire from parallel heartbeat paths. The partial predicate
+    // keeps the constraint scoped to execution_error rows that carry a runId.
+    executionErrorRunUserUq: uniqueIndex("notifications_execution_error_run_user_uq")
+      .on(table.companyId, table.userId, sql`(metadata_json->>'runId')`)
+      .where(
+        sql`${table.notificationType} = 'execution_error' AND metadata_json ? 'runId'`,
+      ),
   }),
 );
 
