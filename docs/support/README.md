@@ -11,16 +11,17 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
-| Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Pre-release (committed `e42b2d6e1c`) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
-| Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Pre-release (committed `e42b2d6e1c`) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
-| Billing System — Stripe subscriptions, usage, invoices | v0.4.0 | Pre-release (committed `b4526451aa`) | [Billing](assessments/support-case-billing-system.md) + [API](/api/billing) |
-| Notification System — 5 types, 3 channels, digests, dedup | v0.4.0 | Pre-release (committed `b4526451aa`) | [Notification](assessments/support-case-notification-system.md) + [API](/docs/api/notifications) |
-| Company Templates — one-click company deploy | v0.4.0 | Pre-release (committed `e5276f9037`+`c067b8c494`) | [Templates](assessments/support-case-company-templates.md) + [API](/docs/api/company-templates) |
-| Board Chat — Conference Room streaming chat | v0.4.0 | Pre-release | [Board Chat](assessments/support-case-v0.4.0-board-chat.md) + [API](/docs/api/chat) |
-| C-Fixes: Zod action validation (C-1), SLA dedup safety net (C-2), search safety (C-3) | v0.4.0 | Pre-release (committed `75c6c27a41`) | [Chat-to-work](assessments/support-case-v0.4.0-chat-to-work-resolution.md) + [KB search](kb/search-safety-plainto-tsquery.md) + [KB dedup](kb/sla-monitor-dedup-safety-net.md) |
-| Memory Extraction Jobs + Gate Counts + Live Events | v0.4.0 | Pre-release (committed `466c30fde7`) | [Memory & Knowledge](assessments/support-case-v0.4.0-memory-knowledge.md) + [Memory API](/docs/api/memory) |
-| Knowledge Browser UI + Manager-Chain Permissions (RC-3) | v0.4.0-alpha-rc.3 | Pre-release (committed `f09cf3bc6e`) | [View](assessments/support-case-v0.4.0-memory-knowledge.md) + [KB](kb/authorization-manager-chain-grant.md) |
-| Chat-to-Work Resolution Cards (Workstream C) | v0.4.0 | Pre-release (committed `0d4626e82e`) | [View](assessments/support-case-v0.4.0-chat-to-work-resolution.md) |
+| Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
+| Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Aug 18, 2026 (PR #48) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
+| Billing System — Stripe subscriptions, usage, invoices (trust boundary hardened) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Billing](assessments/support-case-billing-system.md) + [API](/api/billing) |
+| Notification System — 5 types, 3 channels, digests, dedup (idempotency hardened) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Notification](assessments/support-case-notification-system.md) + [API](/docs/api/notifications) |
+| Company Templates — one-click company deploy (production-stable) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Templates](assessments/support-case-company-templates.md) + [API](/docs/api/company-templates) |
+| VOY-1367 Security Hardening — billing trust boundary, memory indexes, notification dedup, marketplace auth, watchdog fix | v0.5.0 | Aug 18, 2026 (PR #48) | [Release note](releases/v0.5.0-phase-1.md) |
+| Board Chat — Conference Room streaming chat | v0.4.0 | Aug 18, 2026 (PR #48) | [Board Chat](assessments/support-case-v0.4.0-board-chat.md) + [API](/docs/api/chat) |
+| C-Fixes: Zod action validation (C-1), SLA dedup safety net (C-2), search safety (C-3) | v0.4.0 | Aug 18, 2026 (PR #48) | [Chat-to-work](assessments/support-case-v0.4.0-chat-to-work-resolution.md) + [KB search](kb/search-safety-plainto-tsquery.md) + [KB dedup](kb/sla-monitor-dedup-safety-net.md) |
+| Memory Extraction Jobs + Gate Counts + Live Events | v0.4.0 | Aug 18, 2026 (PR #48) | [Memory & Knowledge](assessments/support-case-v0.4.0-memory-knowledge.md) + [Memory API](/docs/api/memory) |
+| Knowledge Browser UI + Manager-Chain Permissions (RC-3) | v0.4.0-alpha-rc.3 | Aug 18, 2026 (PR #48) | [View](assessments/support-case-v0.4.0-memory-knowledge.md) + [KB](kb/authorization-manager-chain-grant.md) |
+| Chat-to-Work Resolution Cards (Workstream C) | v0.4.0 | Aug 18, 2026 (PR #48) | [View](assessments/support-case-v0.4.0-chat-to-work-resolution.md) |
 | Deep Planning — Plan Documents, Review Gates, Decomposition | v0.4.0-alpha | Aug 16, 2026 | [View](assessments/support-case-v0.4.0-deep-planning.md) |
 | Memory & Knowledge — pgvector Memory, Knowledge Documents | v0.4.0-alpha | Aug 16, 2026 | [View](assessments/support-case-v0.4.0-memory-knowledge.md) |
 | Stripe Billing Robustness Fixes | v0.2.13 | Aug 15, 2026 | [View](assessments/support-case-stripe-billing-fixes.md) |
@@ -86,6 +87,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
+| v0.5.0 Phase 1 — Security Hardening + Marketplace + Onboarding + Company Templates stable | [View](releases/v0.5.0-phase-1.md) |
 | v0.4.0-alpha (RC-4) — Deep Planning + Memory & Knowledge + Chat-to-Work + C-Fixes + Extraction Jobs + Billing + Notifications + Company Templates | [View](releases/v0.4.0-alpha-deep-planning.md) |
 | v0.2.13 — Stripe billing fixes | [View](releases/v0.2.13-stripe-fixes.md) |
 | v0.2.12 — Legal pages | [View](releases/v0.2.12-legal-pages.md) |
@@ -93,5 +95,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-17*
+*Last updated: 2026-08-18*
 *Maintained by: Support Engineer (88b72065)*
