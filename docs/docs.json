@@ -131,7 +131,9 @@
               "api/activity",
               "api/dashboard",
               "api/memory",
-              "api/knowledge"
+              "api/knowledge",
+              "api/chat",
+              "api/company-templates"
             ]
           }
         ]

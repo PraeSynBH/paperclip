@@ -11,6 +11,10 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|
+| Billing System — Stripe subscriptions, usage, invoices | v0.4.0 | Pre-release (committed `b4526451aa`) | [Billing](assessments/support-case-billing-system.md) + [API](/docs/api/billing) |
+| Notification System — 5 types, 3 channels, digests, dedup | v0.4.0 | Pre-release (committed `b4526451aa`) | [Notification](assessments/support-case-notification-system.md) + [API](/docs/api/notifications) |
+| Company Templates — one-click company deploy | v0.4.0 | Pre-release (committed `e5276f9037`+`c067b8c494`) | [Templates](assessments/support-case-company-templates.md) + [API](/docs/api/company-templates) |
+| Board Chat — Conference Room streaming chat | v0.4.0 | Pre-release | [Board Chat](assessments/support-case-v0.4.0-board-chat.md) + [API](/docs/api/chat) |
 | C-Fixes: Zod action validation (C-1), SLA dedup safety net (C-2), search safety (C-3) | v0.4.0 | Pre-release (committed `75c6c27a41`) | [Chat-to-work](assessments/support-case-v0.4.0-chat-to-work-resolution.md) + [KB search](kb/search-safety-plainto-tsquery.md) + [KB dedup](kb/sla-monitor-dedup-safety-net.md) |
 | Memory Extraction Jobs + Gate Counts + Live Events | v0.4.0 | Pre-release (committed `466c30fde7`) | [Memory & Knowledge](assessments/support-case-v0.4.0-memory-knowledge.md) + [Memory API](/docs/api/memory) |
 | Knowledge Browser UI + Manager-Chain Permissions (RC-3) | v0.4.0-alpha-rc.3 | Pre-release (committed `f09cf3bc6e`) | [View](assessments/support-case-v0.4.0-memory-knowledge.md) + [KB](kb/authorization-manager-chain-grant.md) |
@@ -80,7 +84,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
-| v0.4.0-alpha (RC-4) — Deep Planning + Memory & Knowledge + Chat-to-Work Resolution + C-Fixes + Extraction Jobs | [View](releases/v0.4.0-alpha-deep-planning.md) |
+| v0.4.0-alpha (RC-4) — Deep Planning + Memory & Knowledge + Chat-to-Work + C-Fixes + Extraction Jobs + Billing + Notifications + Company Templates | [View](releases/v0.4.0-alpha-deep-planning.md) |
 | v0.2.13 — Stripe billing fixes | [View](releases/v0.2.13-stripe-fixes.md) |
 | v0.2.12 — Legal pages | [View](releases/v0.2.12-legal-pages.md) |
 | v0.2.10 — Domain revert | [View](releases/v0.2.10-domain-revert.md) |

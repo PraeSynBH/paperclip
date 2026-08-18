@@ -5,6 +5,39 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-18 — Heartbeat: VOY-1381 docs verification — release readiness confirmed
+
+### What was done
+
+1. **Diff assessment for VOY-1367 release (VOY-1381)** — Verified docs in sync for branch `voy-1367-fix-review-blockers` (7 commits vs master). Documentation deliverables were already committed on the branch in prior heartbeats:
+   - `7335f26415` — support case assessments: billing, notification, company templates
+   - `8065881583` — API reference docs: board chat + company templates
+   - `fb01c9d21b`, `f884438c15` — company templates commit trace + heartbeat log
+   - Release notes `v0.4.0-alpha-deep-planning.md` already carry Billing, Notification, and Company Templates sections (commits `b4526451aa`, `e5276f9037`, `c067b8c494`)
+
+2. **Gaps closed this heartbeat** (customer-facing surface):
+   - `docs/releases.md` — added Billing System, Multi-Channel Notifications, Company Templates, and Board Chat API highlights to the v0.4.0-alpha release entry
+   - `docs/support/README.md` — added Billing, Notification, Company Templates, and Board Chat rows to "Recently Shipped Features" with assessment + API doc links; updated the release notes table entry
+   - `docs/docs.json` — registered `api/chat` and `api/company-templates` in the REST API reference navigation
+
+3. **Verification** — All 4 new docs files exist and are linked: `docs/api/chat.md`, `docs/api/company-templates.md`, 3 support assessments (billing, notification, company templates), 1 board-chat assessment. Release notes reference correct commits and issues.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 1 — VOY-1381 (this heartbeat, docs verification) |
+| Pending KB articles | 0 |
+| Pending feature assessments | 0 for VOY-1367 scope |
+| Release notes currency | Up to date through v0.4.0-alpha + VOY-1367 fixes |
+| Docs synced with live code | ✅ VOY-1367 branch (billing, notifications, company templates, board chat) |
+| Branch | voy-1367-fix-review-blockers (awaiting CTO sign-off + release) |
+
+### Next triggers to watch for
+
+- **VOY-1367 release completes** → final release notes refresh if any last-minute changes land
+- **COO request for documentation health report** — available on demand
+
 ## 2026-08-17 — Heartbeat: RC-4 docs sync — C-fixes + Phase 5 remaining assessed and documented
 
 ### What was done
