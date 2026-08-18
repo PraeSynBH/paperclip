@@ -1234,3 +1234,72 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **PostHog error monitoring (VOY-999/1015) reaching production** → finalize SOP from draft
 - **COO request for documentation health report** — available on demand
 - **v0.5.0 Market Readiness items** — when issues are created, assess documentation impact
+
+---
+
+## 2026-08-18 — Heartbeat: ~21:10 UTC — v0.5.0 Phase 1 release notes produced, docs synced
+
+### What was done
+
+1. **Release verification** — PR #48 merged (`fc416b1486`) to both `master` and `fork/master`. The v0.5.0 Phase 1 release (VOY-1367 fixes + marketplace + onboarding + company templates) is live on production. Docs at commit `c5e6a588fd` landed with the merge.
+
+2. **v0.5.0 Phase 1 release note created** — `docs/support/releases/v0.5.0-phase-1.md` covers the full scope:
+   - Marketplace agent hiring with auth gates
+   - Onboarding role pack improvements
+   - Company Templates graduating to production-stable
+   - VOY-1367 security hardening (billing trust boundary B1, memory index restoration B2, notification idempotency B3, marketplace hire auth P0-A, watchdog fix P0-B, S1-S4 should-fix items)
+   - All API reference docs and support case assessments
+   - Known issues and upgrade notes
+
+3. **`docs/releases.md` updated** — v0.5.0 Phase 1 entry added above v0.4.0-alpha with highlights linking to the full release note. Frontmatter version bumped to `v0.5.0` with today's date.
+
+4. **`docs/support/README.md` refreshed** — Recently Shipped Features table updated: all "Pre-release" entries now show "Aug 18, 2026 (PR #48)" as shipped date. VOY-1367 hardening entry added. v0.5.0 added to Voyonder Release Notes table. Last-updated date set to 2026-08-18.
+
+5. **No new Voyonder-commits to assess** — `master` and `fork/master` are in sync at `fc416b1486`. No new upstream changes with Voyonder impact detected.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Release notes currency | Up to date through v0.5.0 Phase 1 (Aug 18, 2026) |
+| Docs synced with live code | ✅ Full sync — all docs committed and pushed in PR #48 |
+| Product dev server | UP (port 3100, HTTP 200) |
+
+### Next triggers to watch for
+
+- **v0.5.0 Phase 2 / Market Readiness** — when issues are created, assess documentation impact for any new features
+- **PostHog error monitoring (VOY-999/1015) reaching production** — finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+- **New commits on fork/master** — assess diff for documentation impact
+
+---
+
+## 2026-08-18 — Heartbeat: ~21:45 UTC — Pending v0.5.0 release docs committed
+
+### What was done
+
+1. **Pending release docs committed** — The v0.5.0 Phase 1 release note (`docs/support/releases/v0.5.0-phase-1.md`), `docs/releases.md` entry, and `docs/support/README.md` status update from the previous heartbeat were left uncommitted in the working tree. These are now committed as a single docs snapshot.
+
+2. **Diff assessment** — Latest commit on `master` is `69789666e5` (COO heartbeat — status doc only, no code changes). No new Voyonder code changes to assess for documentation impact.
+
+3. **Case Studies (VOY-1344)** — COO published case studies to `docs/case-studies/` (CEO-approved, 3 articles + index). The `docs/docs.json` nav has a Case Studies tab pointing to these files, but both the tab and case-study files are untracked. Flagged — the COO should commit these when ready.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Release notes currency | Up to date through v0.5.0 Phase 1 (Aug 18, 2026) |
+| Docs synced with live code | ✅ Full sync — v0.5.0 release note committed at `fbe8264f0e` |
+| Product dev server | UP (port 3100, HTTP 200) |
+
+### Next triggers to watch for
+
+- **v0.5.0 Phase 2 / Market Readiness** — when issues are created, assess documentation impact for any new features
+- **PostHog error monitoring (VOY-999/1015) reaching production** — finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+- **New commits on fork/master** — assess diff for documentation impact
+- **Case Studies (VOY-1344) commit** — COO owns docs.json nav + case-studies files

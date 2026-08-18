@@ -1,13 +1,33 @@
 ---
 title: Release Notes
 summary: Curated release notes for each Paperclip release
-version: v2026.722.0
-last_updated: 2026-07-22
+version: v0.5.0
+last_updated: 2026-08-18
 ---
 
 # Release Notes
 
 Paperclip ships continuously. This page documents each release to the main branch with curated, customer-facing notes.
+
+---
+
+## v0.5.0 Phase 1 — August 18, 2026
+
+[Full release notes →](/support/releases/v0.5.0-phase-1)
+
+### Highlights
+
+- **Security Hardening (VOY-1367)** — Three review-blocker fixes landed: billing routes now require board-user context (agents blocked), memory HNSW vector indexes restored after migration 0137 dropped them, and execution-error notifications are now idempotent via database-backed dedup. Marketplace hire routes gained the `agents:create` permission gate and board-approval check.
+
+- **Marketplace Agent Hiring** — Hire pre-built agents from the Paperclip Marketplace with one API call. Gated behind standard `agents:create` permissions and company board-approval policy. No more manual agent configuration for common roles.
+
+- **Onboarding Role Packs** — New onboarding asset packs for eleven organizational roles (Troop Master, Trail Master, Treasurer, Chaplain, Ranger, and more), each with tailored skills, knowledge packs, and a starter issue.
+
+- **Company Templates (Production-Stable)** — One-click company deployment graduated from alpha. Travel Concierge, Support Ops, Engineering Team, and CPA Firm templates are ready for production use.
+
+- **Documentation Expansion** — Full API reference docs for billing, chat, company templates, marketplace, notifications, and onboarding. Six new support case assessments cover the entire feature surface.
+
+[Full release notes →](/support/releases/v0.5.0-phase-1)
 
 ---
 
