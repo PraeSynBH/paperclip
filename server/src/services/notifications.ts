@@ -18,11 +18,18 @@ import type {
   PushSubscription,
   PushSubscriptionRegisterInput,
   NotifyInput,
+  DeliveryStatus,
+  DeliveryChannelStatus,
 } from "@paperclipai/shared";
-import { DEFAULT_NOTIFICATION_PREFERENCES } from "@paperclipai/shared";
+import { DEFAULT_NOTIFICATION_PREFERENCES, computeDeliveryStatus } from "@paperclipai/shared";
 import { logger } from "../middleware/logger.js";
 import { publishLiveEvent } from "./live-events.js";
 import { renderNotificationEmail, renderDigestEmail } from "./email-templates.js";
+import { getTelemetryClient } from "../telemetry.js";
+import {
+  trackNotificationDeliverySent,
+  trackNotificationDeliveryFailed,
+} from "@paperclipai/shared/telemetry";
 
 // ---------------------------------------------------------------------------
 // SMTP mailer — lightweight, no external dependency (Node built-ins only)
@@ -454,6 +461,24 @@ export function notificationService(db: Db) {
       sentAt: row.sentAt?.toISOString() ?? null,
       emailSentAt: row.emailSentAt?.toISOString() ?? null,
       pushSentAt: row.pushSentAt?.toISOString() ?? null,
+      emailDelivery: {
+        status: (row.emailDeliveryStatus ?? null) as DeliveryStatus | null,
+        error: row.emailDeliveryError ?? null,
+      },
+      pushDelivery: {
+        status: (row.pushDeliveryStatus ?? null) as DeliveryStatus | null,
+        error: row.pushDeliveryError ?? null,
+      },
+      deliveryStatus: computeDeliveryStatus(
+        {
+          status: (row.emailDeliveryStatus ?? null) as DeliveryStatus | null,
+          error: row.emailDeliveryError ?? null,
+        },
+        {
+          status: (row.pushDeliveryStatus ?? null) as DeliveryStatus | null,
+          error: row.pushDeliveryError ?? null,
+        },
+      ),
       createdAt: row.createdAt.toISOString(),
     };
 
@@ -482,6 +507,21 @@ export function notificationService(db: Db) {
       input.userId,
       input.notificationType,
     );
+
+    // Initialize delivery statuses to pending before dispatch attempts
+    const initUpdates: Record<string, any> = {};
+    if (channels.includes("email") && !emailDeferredToDigest) {
+      initUpdates.emailDeliveryStatus = "pending";
+    }
+    if (channels.includes("webpush")) {
+      initUpdates.pushDeliveryStatus = "pending";
+    }
+    if (Object.keys(initUpdates).length > 0) {
+      await db
+        .update(notifications)
+        .set(initUpdates)
+        .where(eq(notifications.id, record.id));
+    }
 
     // Dispatch to channels in parallel
     const dispatchPromises: Promise<void>[] = [];
@@ -531,11 +571,30 @@ export function notificationService(db: Db) {
               text: email.text,
               html: email.html,
             });
+            const telemetry = getTelemetryClient();
             if (sent) {
               await db
                 .update(notifications)
-                .set({ emailSentAt: new Date() })
+                .set({ emailSentAt: new Date(), emailDeliveryStatus: "sent" })
                 .where(eq(notifications.id, record.id));
+              if (telemetry) {
+                trackNotificationDeliverySent(telemetry, {
+                  channel: "email",
+                  notificationType: input.notificationType,
+                });
+              }
+            } else {
+              await db
+                .update(notifications)
+                .set({ emailDeliveryStatus: "failed", emailDeliveryError: "SMTP delivery failed" })
+                .where(eq(notifications.id, record.id));
+              if (telemetry) {
+                trackNotificationDeliveryFailed(telemetry, {
+                  channel: "email",
+                  notificationType: input.notificationType,
+                  errorCode: "smtp_failed",
+                });
+              }
             }
           }
         })(),
@@ -562,11 +621,32 @@ export function notificationService(db: Db) {
               linkUrl: input.linkUrl,
               notificationId: record.id,
             });
+            const telemetry = getTelemetryClient();
             if (sent) {
               await db
                 .update(notifications)
-                .set({ pushSentAt: new Date() })
+                .set({ pushSentAt: new Date(), pushDeliveryStatus: "sent" })
                 .where(eq(notifications.id, record.id));
+              if (telemetry) {
+                trackNotificationDeliverySent(telemetry, {
+                  channel: "webpush",
+                  notificationType: input.notificationType,
+                });
+              }
+            } else {
+              // Check if it was an expired subscription (410 Gone / 404 Not Found)
+              // sendWebPush logs the specific error internally
+              await db
+                .update(notifications)
+                .set({ pushDeliveryStatus: "failed", pushDeliveryError: "Web push delivery failed" })
+                .where(eq(notifications.id, record.id));
+              if (telemetry) {
+                trackNotificationDeliveryFailed(telemetry, {
+                  channel: "webpush",
+                  notificationType: input.notificationType,
+                  errorCode: "push_failed",
+                });
+              }
             }
           }
         })(),
@@ -625,6 +705,24 @@ export function notificationService(db: Db) {
       sentAt: row.sentAt?.toISOString() ?? null,
       emailSentAt: row.emailSentAt?.toISOString() ?? null,
       pushSentAt: row.pushSentAt?.toISOString() ?? null,
+      emailDelivery: {
+        status: (row.emailDeliveryStatus ?? null) as DeliveryStatus | null,
+        error: row.emailDeliveryError ?? null,
+      },
+      pushDelivery: {
+        status: (row.pushDeliveryStatus ?? null) as DeliveryStatus | null,
+        error: row.pushDeliveryError ?? null,
+      },
+      deliveryStatus: computeDeliveryStatus(
+        {
+          status: (row.emailDeliveryStatus ?? null) as DeliveryStatus | null,
+          error: row.emailDeliveryError ?? null,
+        },
+        {
+          status: (row.pushDeliveryStatus ?? null) as DeliveryStatus | null,
+          error: row.pushDeliveryError ?? null,
+        },
+      ),
       createdAt: row.createdAt.toISOString(),
     }));
   }
@@ -814,7 +912,7 @@ export function notificationService(db: Db) {
         // Mark all pending as sent
         await db
           .update(notifications)
-          .set({ sentAt: new Date() })
+          .set({ sentAt: new Date(), emailDeliveryStatus: "sent" })
           .where(
             and(
               eq(notifications.companyId, companyId),
@@ -823,6 +921,18 @@ export function notificationService(db: Db) {
             ),
           );
         sent += pending.length;
+      } else {
+        // Mark pending as failed for email
+        await db
+          .update(notifications)
+          .set({ emailDeliveryStatus: "failed", emailDeliveryError: "SMTP digest delivery failed" })
+          .where(
+            and(
+              eq(notifications.companyId, companyId),
+              eq(notifications.userId, userId),
+              isNull(notifications.sentAt),
+            ),
+          );
       }
     }
 
@@ -883,3 +993,6 @@ export function notificationService(db: Db) {
 }
 
 export type NotificationService = ReturnType<typeof notificationService>;
+
+// Exported for testing of graceful degradation
+export { isSmtpConfigured, sendEmailViaSmtp, isVapidConfigured, sendWebPush };

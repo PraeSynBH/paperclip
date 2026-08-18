@@ -1041,7 +1041,7 @@ export async function startServer(): Promise<StartedServer> {
         const red = "\x1b[41m\x1b[30m";
         const yellow = "\x1b[33m";
         const reset = "\x1b[0m";
-        console.log(
+        logger.warn(
           [
             `${red}  BOARD CLAIM REQUIRED  ${reset}`,
             `${yellow}This instance was previously local_trusted and still has local-board as the only admin.${reset}`,

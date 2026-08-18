@@ -14,6 +14,13 @@ export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
 export const DIGEST_FREQUENCIES = ["never", "instant", "daily", "weekly"] as const;
 export type DigestFrequency = (typeof DIGEST_FREQUENCIES)[number];
 
+export type DeliveryStatus = "pending" | "sent" | "failed";
+
+export interface DeliveryChannelStatus {
+  status: DeliveryStatus | null;
+  error: string | null;
+}
+
 export interface NotificationPreference {
   id: string;
   companyId: string;
@@ -46,6 +53,18 @@ export interface NotificationRecord {
   sentAt: string | null;
   emailSentAt: string | null;
   pushSentAt: string | null;
+  /** Delivery status for the email channel (null = not applicable / not attempted) */
+  emailDelivery: DeliveryChannelStatus;
+  /** Delivery status for the push channel (null = not applicable / not attempted) */
+  pushDelivery: DeliveryChannelStatus;
+  /**
+   * Overall delivery status derived from per-channel statuses:
+   * - "sent" if all attempted channels succeeded
+   * - "failed" if any channel failed
+   * - "pending" if any channel is still pending and none have failed
+   * - null if no channels were attempted (in-app only)
+   */
+  deliveryStatus: DeliveryStatus | null;
   createdAt: string;
 }
 
@@ -98,3 +117,15 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: Record<
   budget_threshold: { in_app: true, email: true, webpush: false },
   execution_error: { in_app: true, email: false, webpush: false },
 };
+
+/** Helper to derive overall delivery status from per-channel statuses */
+export function computeDeliveryStatus(
+  email: DeliveryChannelStatus | null,
+  push: DeliveryChannelStatus | null,
+): DeliveryStatus | null {
+  const channels = [email, push].filter((c): c is DeliveryChannelStatus => c !== null);
+  if (channels.length === 0) return null; // in-app only
+  if (channels.some((c) => c.status === "failed")) return "failed";
+  if (channels.every((c) => c.status === "sent")) return "sent";
+  return "pending";
+}

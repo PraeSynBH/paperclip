@@ -12,16 +12,16 @@ import {
 import { badRequest, notFound, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 
-const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY ?? "";
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
-function getStripeClient(): Stripe {
-  if (!STRIPE_SECRET_KEY) {
+export function getStripeClient(): Stripe {
+  const secretKey = process.env.STRIPE_SECRET_KEY ?? "";
+  if (!secretKey) {
     throw new Error(
       "STRIPE_SECRET_KEY environment variable is not set. Billing operations are unavailable.",
     );
   }
-  return new Stripe(STRIPE_SECRET_KEY, {
+  return new Stripe(secretKey, {
     apiVersion: "2025-02-24.acacia",
     typescript: true,
   });

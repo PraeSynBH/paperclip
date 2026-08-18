@@ -43,6 +43,7 @@ import {
 import { conflict, notFound, unprocessable } from "../errors.js";
 import { getTelemetryClient } from "../telemetry.js";
 import { issueService, runWorkspaceIsFinalized } from "./issues.js";
+import { logger } from "../middleware/logger.js";
 
 type InteractionActor = {
   agentId?: string | null;
@@ -354,7 +355,7 @@ async function emitInteractionResolvedTelemetry(
       try {
         roleByAgentId = await fetchCreatorAgentRoleById(db, [interaction]);
       } catch (error) {
-        console.error("[paperclip] Failed to load interaction.resolved creator role", error);
+        logger.error({ error }, "[paperclip] Failed to load interaction.resolved creator role");
       }
     }
     const creatorAgentRole = interaction.createdByAgentId
@@ -375,7 +376,7 @@ async function emitInteractionResolvedTelemetry(
       }),
     });
   } catch (error) {
-    console.error("[paperclip] Failed to emit interaction.resolved telemetry", error);
+    logger.error({ error }, "[paperclip] Failed to emit interaction.resolved telemetry");
   }
 }
 
@@ -388,7 +389,7 @@ async function emitResolvedInteractionsTelemetry(
   try {
     roleByAgentId = await fetchCreatorAgentRoleById(db, interactions);
   } catch (error) {
-    console.error("[paperclip] Failed to load interaction.resolved creator roles", error);
+    logger.error({ error }, "[paperclip] Failed to load interaction.resolved creator roles");
   }
   await Promise.all(interactions.map((interaction) =>
     emitInteractionResolvedTelemetry(db, interaction, { creatorRoleByAgentId: roleByAgentId })

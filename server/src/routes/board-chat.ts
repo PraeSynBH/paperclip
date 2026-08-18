@@ -8,6 +8,7 @@ import type { Db } from "@paperclipai/db";
 import type { DeploymentMode } from "@paperclipai/shared";
 import { instanceSettingsService, issueService } from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
+import { logger } from "../middleware/logger.js";
 
 /**
  * Strip structured action signals (`%%ACTIONS%%{...}%%/ACTIONS%%`) from a
@@ -93,9 +94,9 @@ function extractActionSignals(response: string): ValidatedAction[] {
 
     const result = resolutionActionSchema.safeParse(parsed);
     if (!result.success) {
-      console.warn(
-        "[board-chat] extractActionSignals: skipping malformed action block —",
-        result.error.issues,
+      logger.warn(
+        { issues: result.error.issues },
+        "[board-chat] extractActionSignals: skipping malformed action block",
       );
       continue;
     }
@@ -104,9 +105,9 @@ function extractActionSignals(response: string): ValidatedAction[] {
   }
 
   if (count >= MAX_ACTION_BLOCKS && regex.exec(response) !== null) {
-    console.warn(
-      "[board-chat] extractActionSignals: response exceeds max blocks (%d) — truncated",
-      MAX_ACTION_BLOCKS,
+    logger.warn(
+      { maxBlocks: MAX_ACTION_BLOCKS },
+      "[board-chat] extractActionSignals: response exceeds max blocks — truncated",
     );
   }
 
@@ -424,7 +425,7 @@ export function boardChatRoutes(
     });
 
     proc.stderr.on("data", (data: Buffer) => {
-      console.error("[board/chat/stream stderr]", data.toString());
+      logger.error(data.toString(), "[board/chat/stream stderr]");
     });
 
     proc.on("close", async (exitCode) => {
@@ -474,7 +475,7 @@ export function boardChatRoutes(
     proc.on("error", (err) => {
       clearTimeout(timeout);
       releaseSlot();
-      console.error("[board/chat/stream spawn error]", err);
+      logger.error({ err }, "[board/chat/stream spawn error]");
       if (res.writable) {
         res.write(
           `data: ${JSON.stringify({

@@ -15,6 +15,8 @@ export {
   trackAgentTaskCompleted,
   trackErrorHandlerCrash,
   trackInteractionResolved,
+  trackNotificationDeliverySent,
+  trackNotificationDeliveryFailed,
 } from "./events.js";
 export type {
   TelemetryConfig,
