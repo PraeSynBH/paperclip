@@ -113,3 +113,11 @@ export {
   knowledgeDocumentReviews,
   knowledgeSourceBacklinks,
 } from "./knowledge.js";
+
+// v0.5.0 feature tables
+export { notificationPreferences, notifications, pushSubscriptions } from "./notifications.js";
+export { subscriptionTiers } from "./subscription_tiers.js";
+export { stripeCustomers } from "./stripe_customers.js";
+export { companySubscriptions } from "./company_subscriptions.js";
+export { subscriptionUsage } from "./subscription_usage.js";
+export { subscriptionInvoices } from "./subscription_invoices.js";

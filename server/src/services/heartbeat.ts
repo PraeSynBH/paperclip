@@ -48,6 +48,7 @@ import {
   issueThreadInteractions,
   issues,
   issueWorkProducts,
+  notifications,
   projects,
   projectWorkspaces,
   routineRevisions,
@@ -75,6 +76,7 @@ import type {
 import { createLocalAgentJwt } from "../agent-auth-jwt.js";
 import { parseObject, asBoolean, asNumber, appendWithByteCap, MAX_EXCERPT_BYTES } from "../adapters/utils.js";
 import { costService } from "./costs.js";
+import { notificationService } from "./notifications.js";
 import { trackAgentFirstHeartbeat } from "@paperclipai/shared/telemetry";
 import { getTelemetryClient } from "../telemetry.js";
 import { companySkillService } from "./company-skills.js";
@@ -4475,15 +4477,29 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
   // Instead of relying on in-memory process maps (which are empty after restart),
   // queries the heartbeatRuns table for any run with a non-terminal status.
   // This enables correct zombie detection and coalescing even after a restart.
-  const liveRunExecutions = {
+  //
+  // The has() cache stores ONLY false results. A `false` result means the run
+  // ID was not found in the active-runs query — because UUIDs are never reused,
+  // this answer is stable for the lifetime of the run ID. A `true` result
+  // (run IS alive) is NEVER cached, because the run could transition to a
+  // terminal status at any moment. Caching `true` re-introduces the
+  // immortal-zombie race: a run that went terminal between wakeup and the DB
+  // query would still look alive to the cache, causing the reaper to skip it
+  // (VOY-1365, H-3 fix).
+  interface LiveRunCache {
+    _cache: Map<string, { result: boolean; cachedAt: number }>;
+    _CACHE_TTL_MS: number;
+    _MAX_ENTRIES: number;
+    has(id: string): Promise<boolean>;
+  }
+  const liveRunExecutions: LiveRunCache = {
     _cache: new Map<string, { result: boolean; cachedAt: number }>(),
-    _CACHE_TTL_MS: 30_000, // 30 seconds — staleness is tolerable for zombie checks
+    _CACHE_TTL_MS: 30_000,
+    _MAX_ENTRIES: 1000,
     async has(id: string): Promise<boolean> {
-      // Check in-memory cache first (H-3). The zombie check is read-only
-      // and can tolerate slight staleness, saving a DB round-trip on
-      // every agent wakeup.
+      // Cache hit for a false result (stable — UUID never reused)
       const cached = this._cache.get(id);
-      if (cached && Date.now() - cached.cachedAt < this._CACHE_TTL_MS) {
+      if (cached && !cached.result && Date.now() - cached.cachedAt < this._CACHE_TTL_MS) {
         return cached.result;
       }
       const rows = await db
@@ -4497,7 +4513,16 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         )
         .limit(1);
       const result = rows.length > 0;
-      this._cache.set(id, { result, cachedAt: Date.now() });
+      // Only cache false results (safe — UUIDs are never reused).
+      // True results are NEVER cached to avoid the immortal-zombie race.
+      if (!result) {
+        // Evict oldest entry if at capacity
+        if (this._cache.size >= this._MAX_ENTRIES) {
+          const firstKey = this._cache.keys().next().value;
+          if (firstKey) this._cache.delete(firstKey);
+        }
+        this._cache.set(id, { result: false, cachedAt: Date.now() });
+      }
       return result;
     },
   };
@@ -6025,6 +6050,71 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     return ensured;
   }
 
+  /**
+   * Notify company members when an agent run fails or times out (VOY-1342).
+   * Only fires for failure statuses with an error message, and deduplicates
+   * on runId so that multiple callers (setRunStatus, setRunStatusIfRunning)
+   * cannot send duplicate notifications for the same run.
+   */
+  async function notifyExecutionErrorOnce(run: typeof heartbeatRuns.$inferSelect) {
+    if (run.status !== "failed" && run.status !== "timed_out") return;
+    if (!run.error) return;
+
+    // Idempotency check: skip if a notification with this runId already exists
+    const existing = await db
+      .select({ id: notifications.id })
+      .from(notifications)
+      .where(
+        and(
+          eq(notifications.companyId, run.companyId),
+          sql`${notifications.metadataJson}->>'runId' = ${run.id}`,
+        ),
+      )
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
+    if (existing) return;
+
+    const agent = await db
+      .select({ name: agents.name })
+      .from(agents)
+      .where(eq(agents.id, run.agentId))
+      .then((rows) => rows[0] ?? null);
+    const company = await db
+      .select({ name: companies.name })
+      .from(companies)
+      .where(eq(companies.id, run.companyId))
+      .then((rows) => rows[0] ?? null);
+
+    const context = run.contextSnapshot as Record<string, unknown> | null;
+    const issueId = typeof context?.issueId === "string" ? context.issueId : null;
+    const issue = issueId
+      ? await db
+        .select({ identifier: issues.identifier, title: issues.title })
+        .from(issues)
+        .where(and(eq(issues.id, issueId), eq(issues.companyId, run.companyId)))
+        .then((rows) => rows[0] ?? null)
+      : null;
+
+    const label = issue ? `${issue.identifier ?? issueId} ${issue.title ?? ""}`.trim() : run.id;
+    const errorText = typeof run.error === "string" ? run.error : "An agent run failed during execution.";
+
+    await notificationService(db).notifyCompanyMembers(run.companyId, {
+      notificationType: "execution_error",
+      title: `Agent run failed: ${label}`,
+      body: `${agent?.name ?? "Agent"} hit an error: ${errorText.slice(0, 300)}`,
+      linkUrl: issueId ? `/issues/${issue?.identifier ?? issueId}` : undefined,
+      metadata: {
+        runId: run.id,
+        agentId: run.agentId,
+        issueId,
+        status: run.status,
+        errorCode: run.errorCode ?? null,
+        error: errorText.slice(0, 1000),
+      },
+      companyName: company?.name ?? undefined,
+    });
+  }
+
   async function setRunStatus(
     runId: string,
     status: string,
@@ -6057,6 +6147,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         },
       });
       publishRunLifecyclePluginEvent(updated);
+      notifyExecutionErrorOnce(updated).catch((err) =>
+        logger.warn({ err, runId: updated.id }, "failed to send execution-error notification"));
     }
 
     return updated;
@@ -6094,6 +6186,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         },
       });
       publishRunLifecyclePluginEvent(updated);
+      notifyExecutionErrorOnce(updated).catch((err) =>
+        logger.warn({ err, runId: updated.id }, "failed to send execution-error notification"));
       return { run: updated, updated: true as const };
     }
 

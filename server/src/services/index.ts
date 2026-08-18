@@ -119,3 +119,8 @@ export { builtinPgvectorAdapter, type BuiltinPgvectorAdapter, type BuiltinPgvect
 export { memoryExtractionJobService, type MemoryExtractionJobService, type ExtractionJobResponse, type ExtractionJobListOptions } from "./memory-extraction-jobs.js";
 export { knowledgeDocumentService, type KnowledgeDocumentService } from "./knowledge-documents.js";
 export { companyTemplateService, type CompanyTemplateService } from "./company-templates.js";
+export { knowledgeStarterPackService, type KnowledgeStarterPackService } from "./knowledge-starter-packs.js";
+export { agentMarketplaceService, type AgentMarketplaceService } from "./agents-marketplace.js";
+export { installDbHealthWatchdog } from "./db-health-watchdog.js";
+export { notificationService } from "./notifications.js";
+export { billingService } from "./billing.js";

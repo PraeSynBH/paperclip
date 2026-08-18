@@ -40,6 +40,7 @@ import {
   bootstrapExecutionPolicyFromEnv,
   environmentCustomImageService,
   heartbeatService,
+  installDbHealthWatchdog,
   instanceSettingsService,
   reconcileCloudUpstreamRunsOnStartup,
   reconcileCodexLocalManagedHomesOnStartup,
@@ -1087,6 +1088,25 @@ export async function startServer(): Promise<StartedServer> {
     });
     process.once("SIGTERM", () => {
       void shutdown("SIGTERM");
+    });
+  }
+
+  // Install DB health watchdog for embedded PostgreSQL. If the embedded PG
+  // child process dies (crash, OOM, sleep/wake edge case), the watchdog
+  // attempts one restart and exits the server on sustained failure so that
+  // launchd's KeepAlive bounces the whole stack. Without this, the server
+  // would keep running with a dead DB for hours, returning 503 on health
+  // checks — exactly what caused PRA-808 and PRA-902. Only applies to
+  // embedded mode; external PG deployments log warnings only.
+  if (startupDbInfo.mode === "embedded-postgres") {
+    logger.info(
+      { mode: "embedded-postgres", intervalMs: undefined, maxFailures: undefined },
+      "Installing DB health watchdog",
+    );
+    installDbHealthWatchdog({
+      db,
+      mode: "embedded-postgres",
+      embeddedPostgres,
     });
   }
 

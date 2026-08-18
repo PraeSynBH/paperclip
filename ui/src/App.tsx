@@ -1,6 +1,7 @@
-import { Navigate, Outlet, Route, Routes, useLocation, useParams } from "@/lib/router";
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate, useParams } from "@/lib/router";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/i18n";
+import { Rocket } from "lucide-react";
 import { Layout } from "./components/Layout";
 import { ConferenceRoomChatGate } from "./components/ConferenceRoomChatGate";
 import { PipelinesExperimentalGate } from "./components/PipelinesExperimentalGate";
@@ -64,6 +65,7 @@ import { AuthPage } from "./pages/Auth";
 import { BoardClaimPage } from "./pages/BoardClaim";
 import { CliAuthPage } from "./pages/CliAuth";
 import { InviteLandingPage } from "./pages/InviteLanding";
+import { DemoTravelConcierge } from "./pages/DemoTravelConcierge";
 import { JoinRequestQueue } from "./pages/JoinRequestQueue";
 import { NotFoundPage } from "./pages/NotFound";
 import { MemoryBrowser } from "./pages/MemoryBrowser";
@@ -378,6 +380,7 @@ function UnprefixedBoardRedirect() {
 function NoCompaniesStartPage() {
   const { openOnboarding } = useDialogActions();
   const { t } = useTranslation();
+  const navigate = useNavigate();
 
   return (
     <div className="mx-auto max-w-xl py-10">
@@ -388,9 +391,13 @@ function NoCompaniesStartPage() {
         <p className="mt-2 text-sm text-muted-foreground">
           {t("app.noCompanies.description", { defaultValue: "Get started by creating a company." })}
         </p>
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
           <Button onClick={() => openOnboarding()}>
             {t("app.noCompanies.newCompany", { defaultValue: "New Company" })}
+          </Button>
+          <Button variant="outline" onClick={() => navigate("/demo/travel-concierge")}>
+            <Rocket className="mr-1.5 h-3.5 w-3.5" />
+            Try the Demo
           </Button>
         </div>
       </div>
@@ -406,6 +413,7 @@ export function App() {
         <Route path="board-claim/:token" element={<BoardClaimPage />} />
         <Route path="cli-auth/:id" element={<CliAuthPage />} />
         <Route path="invite/:token" element={<InviteLandingPage />} />
+        <Route path="demo/travel-concierge" element={<DemoTravelConcierge />} />
         <Route path="tests/perf/long-thread" element={<IssueChatLongThreadPerf />} />
         <Route path="ux-lab/cloud-upstream" element={<CloudUpstreamUxLab />} />
         <Route path="ux-lab/bootstrap-setup" element={<BootstrapSetupUxLab />} />
