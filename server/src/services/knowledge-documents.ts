@@ -261,7 +261,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     req: KnowledgeDocumentCreateRequest,
     authorAgentId?: string,
   ): Promise<KnowledgeDocument> {
-    invalidateKnowledgeSearchCache();
     const rows = await db
       .insert(knowledgeDocuments)
       .values({
@@ -293,6 +292,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
         .onConflictDoNothing();
     }
 
+    invalidateKnowledgeSearchCache();
     return toDocument(rows[0]);
   }
 
@@ -309,7 +309,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     documentId: string,
     req: KnowledgeDocumentUpdateRequest,
   ): Promise<KnowledgeDocument> {
-    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "draft") {
@@ -336,6 +335,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       )
       .returning();
 
+    invalidateKnowledgeSearchCache();
     return toDocument(rows[0]);
   }
 
@@ -343,7 +343,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     companyId: string,
     documentId: string,
   ): Promise<void> {
-    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "draft" && doc.status !== "archived") {
@@ -360,6 +359,8 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
           eq(knowledgeDocuments.companyId, companyId),
         ),
       );
+
+    invalidateKnowledgeSearchCache();
   }
 
   async function list(
@@ -466,7 +467,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     req: KnowledgeDocumentSubmitReviewRequest,
     authorAgentId?: string,
   ): Promise<{ document: KnowledgeDocument; revision: KnowledgeDocumentRevision }> {
-    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "draft") {
@@ -480,7 +480,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       .insert(knowledgeDocumentRevisions)
       .values({
         documentId,
-        version: doc.version, // Use current version for review
+        version: doc.version,
         title: doc.title,
         summary: doc.summary,
         body: doc.body,
@@ -489,11 +489,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       })
       .returning();
 
-    // Create a pending review linked to the new revision.
-    // decidedAt is left NULL, which signals "pending".
-    // This ensures list() shows latestReviewStatus: "pending" after submission,
-    // and overrides stale changes_requested from a prior cycle because the
-    // new pending review has a later createdAt.
     await db
       .insert(knowledgeDocumentReviews)
       .values({
@@ -505,7 +500,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       })
       .returning();
 
-    // Transition status
     const docRows = await db
       .update(knowledgeDocuments)
       .set({
@@ -520,6 +514,8 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       )
       .returning();
 
+    invalidateKnowledgeSearchCache();
+
     return {
       document: toDocument(docRows[0]),
       revision: toRevision(revisionRows[0]),
@@ -532,7 +528,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     decision: KnowledgeDocumentReviewDecision,
     reviewerAgentId?: string,
   ): Promise<{ document: KnowledgeDocument; review: KnowledgeDocumentReview }> {
-    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "in_review") {
@@ -541,7 +536,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       );
     }
 
-    // Find the latest revision for this document version
     const revisions = await db
       .select()
       .from(knowledgeDocumentRevisions)
@@ -598,6 +592,8 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
 
     const updatedDoc = await assertDocumentExists(companyId, documentId);
 
+    invalidateKnowledgeSearchCache();
+
     return {
       document: toDocument(updatedDoc),
       review: {
@@ -618,7 +614,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     documentId: string,
     req: KnowledgeDocumentPublishRequest,
   ): Promise<{ document: KnowledgeDocument; revision: KnowledgeDocumentRevision }> {
-    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "in_review") {
@@ -694,6 +689,8 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
       )
       .returning();
 
+    invalidateKnowledgeSearchCache();
+
     return {
       document: toDocument(docRows[0]),
       revision: toRevision(revisionRows[0]),
@@ -704,7 +701,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     companyId: string,
     documentId: string,
   ): Promise<KnowledgeDocument> {
-    invalidateKnowledgeSearchCache();
     const doc = await assertDocumentExists(companyId, documentId);
 
     if (doc.status !== "published") {
@@ -726,6 +722,8 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
         ),
       )
       .returning();
+
+    invalidateKnowledgeSearchCache();
 
     return toDocument(rows[0]);
   }
@@ -942,8 +940,6 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
     req: KnowledgePromoteFromMemoryRequest,
     authorAgentId?: string,
   ): Promise<KnowledgeDocument> {
-    invalidateKnowledgeSearchCache();
-
     const memRows = await db
       .select()
       .from(memoryRecords)
@@ -1025,6 +1021,10 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
 
       return { doc: inserted[0], wasInserted: true };
     });
+
+    // Invalidate AFTER the transaction commits so a concurrent search cannot
+    // repopulate the cache with pre-promotion rows (P1-1).
+    invalidateKnowledgeSearchCache();
 
     return toDocument(rows.doc);
   }
