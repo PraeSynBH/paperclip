@@ -344,4 +344,5 @@ draft ──> in_review ──> approved ──> superseded
 | `issue_plan_updated` | Plan document created or updated — wakes the issue assignee |
 | `issue_plan_gate_resolved` | A review gate is approved or rejected — wakes the issue assignee |
 | `plan.updated` | Live event (WebSocket) — real-time UI update |
+| `plan.gate_created` | Live event (WebSocket) — emitted when a review gate is created |
 | `plan.gate_resolved` | Live event (WebSocket) — real-time UI gate status update |

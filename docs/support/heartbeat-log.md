@@ -1112,3 +1112,39 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **v0.4.0 release to main** → final release notes refresh for v0.4.0 (stable)
 - **PostHog error monitoring (VOY-999) reaching production** → finalize SOP from draft
 - **COO request for documentation health report** — available on demand
+
+## 2026-08-18 — Heartbeat: Diff assessment of VOY-1381 fix commit — no documentation impact
+
+### What was done
+
+1. **Diff assessment** — Commit `48a32f0b27` (`fix(VOY-1381): restore clean 0142 migration`) landed on `master`:
+   - **0142_execution_error_dedup.sql**: Rewrote migration to only contain TOCTOU dedup unique index + invites column cleanup (DROP COLUMN IF EXISTS). Removed all the already-applied 0138–0141 index/FK/constraint noise. *Internal database change — no customer-facing behavior impact.*
+   - **0142_snapshot.json**: Regenerated to match clean migration. *Infrastructure.*
+   - **pnpm-lock.yaml**: Regenerated. *Dependency resolution — no behavioral change.*
+   - **notification-service.test.ts**: 65 lines of test coverage additions for existing notification behavior. *Test-only — no behavioral change to document.*
+
+   **Verdict: No documentation update required.** The notification dedup behavior was already documented in the notification system support assessment (`docs/support/assessments/support-case-notification-system.md`). The invites column cleanup is internal schema drift — no user-facing surface.
+
+2. **Docs sync verification** — All previously committed documentation remains accurate:
+   - `docs/releases.md` — v0.4.0-alpha (RC-4) entry correctly lists all highlights including notification dedup
+   - `docs/support/assessments/support-case-notification-system.md` — already documents the `notifyExecutionErrorOnce` dedup behavior
+   - `docs/support/README.md` — index table current with all shipped features
+   - Product dev server healthy (HTTP 200)
+
+3. **Release readiness** — VOY-1382 (docs verification) completed and closed. No further documentation action needed for VOY-1381 release cycle.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Release notes currency | Up to date through v0.4.0-alpha (RC-4) + VOY-1367 fixes |
+| Docs synced with live code | ✅ Verified — commit `48a32f0b27` (infra-only, no doc impact) |
+| Product dev server | UP (port 3100, HTTP 200) |
+
+### Next triggers to watch for
+
+- **VOY-1381 release completes (merge to production fork)** → final release notes refresh if any last-minute changes land
+- **PostHog error monitoring (VOY-999/1015) reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
