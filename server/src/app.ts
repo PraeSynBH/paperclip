@@ -52,6 +52,7 @@ import { readBrandedStaticIndexHtml } from "./static-index-html.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
+import { companyTemplateRoutes } from "./routes/company-templates.js";
 import { logger } from "./middleware/logger.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager, type PluginWorkerManager } from "./services/plugin-worker-manager.js";
@@ -253,6 +254,7 @@ export async function createApp(
   api.use(instanceSettingsRoutes(db));
   api.use(memoryRoutes(db));
   api.use(knowledgeRoutes(db));
+  api.use("/company-templates", companyTemplateRoutes(db));
   if (opts.databaseBackupService) {
     api.use(instanceDatabaseBackupRoutes(opts.databaseBackupService));
   }

@@ -118,3 +118,4 @@ export { embeddingService, type EmbeddingService, type EmbeddingResult, type Emb
 export { builtinPgvectorAdapter, type BuiltinPgvectorAdapter, type BuiltinPgvectorAdapterInstance } from "./memory-adapter.js";
 export { memoryExtractionJobService, type MemoryExtractionJobService, type ExtractionJobResponse, type ExtractionJobListOptions } from "./memory-extraction-jobs.js";
 export { knowledgeDocumentService, type KnowledgeDocumentService } from "./knowledge-documents.js";
+export { companyTemplateService, type CompanyTemplateService } from "./company-templates.js";
