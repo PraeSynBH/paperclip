@@ -44,6 +44,46 @@ maintained_by: Support Engineer (88b72065)
 - **PostHog error monitoring (VOY-999) reaching production** → finalize SOP from draft
 - **COO request for documentation health report** — available on demand
 
+## 2026-08-18 — Heartbeat: VOY-1367 landed — billing + notification features documented
+
+### What was done
+
+1. **Diff assessment of commit `b4526451aa` (VOY-1367)** — Major commit landed on `main` fixing VOY-1364 review blockers:
+   - **B1 (Billing trust boundary)** — board-user-only mutation guard on all billing routes; agents get 403
+   - **B2 (Migration 0137 index drops)** — restored memory_records_embedding_hnsw_idx, company_binding_idx, created_at_idx (migration 0141)
+   - **B3 (Execution error notification idempotency)** — deduplication by runId
+   - **S1-S4 (Notification refinements)** — effective channel defaults, digest deferral, execution_error email:false default, target user membership check
+   - Includes full billing service (708 lines), notification service (884 lines), email templates, 3 test files (17 tests passing)
+
+2. **Support case assessments created (2 new)**:
+   - **Billing System** (`docs/support/assessments/support-case-billing-system.md`) — Covers subscription management (create/update/cancel/reactivate), usage reporting (seats, agent_runs, storage_gb), invoice syncing, Stripe webhooks, trust boundary, and all 12 API endpoints
+   - **Notification System** (`docs/support/assessments/support-case-notification-system.md`) — Covers all 5 notification types (review_requested, approval_needed, work_completed, budget_threshold, execution_error), 3 channels (in_app, email, webpush), digest options, push subscriptions, SMTP/VAPID configuration, and 11 API endpoints
+
+3. **Release notes updated** (`docs/support/releases/v0.4.0-alpha-deep-planning.md`):
+   - Added **Billing System** section with endpoint table, trust boundary info, usage metrics, and configuration
+   - Added **Notification System** section with notification types, triggers, channels, digests, deduplication, and endpoint table
+   - Updated the hotfix section note about VOY-1342 notification code (now included, not deferred)
+   - Added 5 new escalation path entries (billing agent 403, billing mutation, email delivery, notification failures, webhook issues)
+   - Added both new assessments to Related Documentation
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 3 (planned backlog) |
+| Release notes currency | Up to date through VOY-1367 (`b4526451aa`) |
+| Docs synced with live code | ✅ VOY-1367 |
+| Product dev server | UP (port 3100 healthy) |
+
+### Next triggers to watch for
+
+- **VOY-1367 unblocking** → CTO to re-review; any API behavior changes may need doc updates
+- **v0.4.0 stable release** → final release notes refresh
+- **PostHog error monitoring reaching production** → finalize SOP from draft
+- **COO request for documentation health report** — available on demand
+
 ## 2026-08-17 — Heartbeat: C-fixes resolved, Staff Engineer review in progress, docs current
 
 ### What was done
