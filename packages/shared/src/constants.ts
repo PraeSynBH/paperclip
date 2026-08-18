@@ -660,6 +660,9 @@ export const BILLING_TYPES = [
 ] as const;
 export type BillingType = (typeof BILLING_TYPES)[number];
 
+export const BILLING_PERIODS = ["monthly", "yearly"] as const;
+export type BillingPeriod = (typeof BILLING_PERIODS)[number];
+
 export const FINANCE_EVENT_KINDS = [
   "inference_charge",
   "platform_fee",
@@ -777,6 +780,7 @@ export const LIVE_EVENT_TYPES = [
   "plan.updated",
   "plan.gate_created",
   "plan.gate_resolved",
+  "notification.created",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
 

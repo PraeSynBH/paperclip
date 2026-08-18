@@ -101,6 +101,7 @@ import {
   documentService,
   documentAnnotationService,
   logActivity,
+  notificationService,
   projectService,
   routineService,
   workProductService,
@@ -6994,6 +6995,44 @@ export function issueRoutes(
         ),
       },
     });
+
+    // Notify humans about review-requested / work-completed transitions (VOY-1342).
+    // Fire-and-forget: notification dispatch must never fail the request.
+    if (issue.status !== existing.status) {
+      if (issue.status === "in_review") {
+        notificationService(db)
+          .notifyCompanyMembers(issue.companyId, {
+            notificationType: "review_requested",
+            title: `Review requested: ${issue.identifier ?? issue.id}`,
+            body: `${issue.title ?? "Issue"} is waiting for your review.`,
+            linkUrl: `/issues/${issue.identifier ?? issue.id}`,
+            metadata: {
+              issueId: issue.id,
+              identifier: issue.identifier,
+              fromStatus: existing.status,
+              toStatus: issue.status,
+            },
+          })
+          .catch((err) =>
+            logger.warn({ err, issueId: issue.id }, "failed to send review-requested notification"));
+      } else if (issue.status === "done") {
+        notificationService(db)
+          .notifyCompanyMembers(issue.companyId, {
+            notificationType: "work_completed",
+            title: `Work completed: ${issue.identifier ?? issue.id}`,
+            body: `${issue.title ?? "Issue"} has been marked done.`,
+            linkUrl: `/issues/${issue.identifier ?? issue.id}`,
+            metadata: {
+              issueId: issue.id,
+              identifier: issue.identifier,
+              fromStatus: existing.status,
+              toStatus: issue.status,
+            },
+          })
+          .catch((err) =>
+            logger.warn({ err, issueId: issue.id }, "failed to send work-completed notification"));
+      }
+    }
 
     if (existing.status === "in_progress" && issue.status !== existing.status && issue.status !== "in_progress") {
       await listSuccessfulRunHandoffStates(db, issue.companyId, [issue.id])

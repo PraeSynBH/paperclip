@@ -118,6 +118,23 @@ export const memoryRecords = pgTable(
       table.sourceKind,
       table.sourceIssueId,
     ),
+    // B-tree index on (company_id, binding_id) for common memory query patterns
+    companyBindingIdx: index("memory_records_company_binding_idx").on(
+      table.companyId,
+      table.bindingId,
+    ),
+    // B-tree index on (company_id, created_at) for time-range queries
+    companyCreatedAtIdx: index("memory_records_created_at_idx").on(
+      table.companyId,
+      table.createdAt,
+    ),
+    // HNSW vector index on embedding for cosine similarity search (pgvector >= 0.5.0).
+    // Required by memory-adapter.ts:545 which uses embedding <=> CAST(...) ORDER BY.
+    // WITH (m=16, ef_construction=200) is set in the hand-crafted migration SQL.
+    embeddingHnswIdx: index("memory_records_embedding_hnsw_idx").using(
+      "hnsw",
+      table.embedding.op("vector_cosine_ops"),
+    ),
   }),
 );
 
