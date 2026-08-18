@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useNavigate } from "@/lib/router";
 import { companyTemplatesApi } from "../api/companyTemplates";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useToastActions } from "../context/ToastContext";
@@ -20,7 +19,6 @@ import { Loader2, Rocket, Building2, AlertCircle, CheckCircle2 } from "lucide-re
 export function CompanyTemplates() {
   const { setBreadcrumbs } = useBreadcrumbs();
   const { pushToast } = useToastActions();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
 
   const [deployKey, setDeployKey] = useState<string | null>(null);
@@ -40,7 +38,8 @@ export function CompanyTemplates() {
       queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
       setShowDeployDialog(false);
       setDeployKey(null);
-      navigate(`/${result.company.issuePrefix}/board`);
+      // Full page load so the company context refreshes to include the new company.
+      window.location.assign(`/${result.company.issuePrefix}/dashboard`);
     },
     onError: (err: Error) => {
       pushToast({ title: `Failed to deploy template: ${err.message}`, tone: "error" });

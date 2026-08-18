@@ -1752,3 +1752,13 @@ export {
   type FinishEnvironmentCustomImageSetupSession,
   type CancelEnvironmentCustomImageSetupSession,
 } from "./validators/environment-custom-images.js";
+
+// ── v0.5.0 feature types ────────────────────────────────────────────────────
+export type {
+  CompanyTemplate,
+  CompanyTemplateAgent,
+  CompanyTemplateCompany,
+  CompanyTemplateGoal,
+  CompanyTemplateProject,
+  CompanyTemplateStarterIssue,
+} from "./types/company-template.js";

@@ -25,3 +25,4 @@ export { instanceDatabaseBackupRoutes } from "./instance-database-backups.js";
 export { cloudUpstreamRoutes } from "./cloud-upstreams.js";
 export { memoryRoutes } from "./memory.js";
 export { knowledgeRoutes } from "./knowledge.js";
+export { companyTemplateRoutes } from "./company-templates.js";
