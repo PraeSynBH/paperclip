@@ -133,7 +133,9 @@
               "api/memory",
               "api/knowledge",
               "api/chat",
-              "api/company-templates"
+              "api/company-templates",
+              "api/billing",
+              "api/notifications"
             ]
           }
         ]
