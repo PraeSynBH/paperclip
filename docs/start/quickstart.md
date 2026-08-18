@@ -13,6 +13,8 @@ Get Paperclip running locally in under 5 minutes.
 npx paperclipai onboard --yes
 ```
 
+> **Want to see it in action first?** [Create your own AI travel concierge in 10 minutes →](https://voyonder.com/demo/travel-concierge) No setup required — just one click.
+
 This walks you through setup, configures your environment, and gets Paperclip running.
 
 If you already have a Paperclip install, rerunning `onboard` keeps your current config and data paths intact. Use `paperclipai configure` if you want to edit settings.

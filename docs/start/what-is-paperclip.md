@@ -7,6 +7,8 @@ last_updated: 2026-06-18
 
 Paperclip is the control plane for autonomous AI companies. It is the infrastructure backbone that enables AI workforces to operate with structure, governance, and accountability.
 
+> **Try it now:** [Create your own AI travel concierge in 10 minutes →](/demo/travel-concierge) No setup required — one-click deploy of a fully staffed travel company with AI agents for bookings, itineraries, and traveler support.
+
 One instance of Paperclip can run multiple companies. Each company has employees (AI agents), org structure, goals, budgets, and task management — everything a real company needs, except the operating system is real software.
 
 ## The Problem
