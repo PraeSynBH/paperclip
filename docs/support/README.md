@@ -10,8 +10,10 @@ This directory contains support case assessments for Paperclip features. Each do
 ## Recently Shipped Features
 
 | Feature | Version | Shipped | Assessment |
-|---|---|---|---|
-| Billing System — Stripe subscriptions, usage, invoices | v0.4.0 | Pre-release (committed `b4526451aa`) | [Billing](assessments/support-case-billing-system.md) + [API](/docs/api/billing) |
+|---|---|---|---|---|
+| Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Pre-release (committed `e42b2d6e1c`) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
+| Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Pre-release (committed `e42b2d6e1c`) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
+| Billing System — Stripe subscriptions, usage, invoices | v0.4.0 | Pre-release (committed `b4526451aa`) | [Billing](assessments/support-case-billing-system.md) + [API](/api/billing) |
 | Notification System — 5 types, 3 channels, digests, dedup | v0.4.0 | Pre-release (committed `b4526451aa`) | [Notification](assessments/support-case-notification-system.md) + [API](/docs/api/notifications) |
 | Company Templates — one-click company deploy | v0.4.0 | Pre-release (committed `e5276f9037`+`c067b8c494`) | [Templates](assessments/support-case-company-templates.md) + [API](/docs/api/company-templates) |
 | Board Chat — Conference Room streaming chat | v0.4.0 | Pre-release | [Board Chat](assessments/support-case-v0.4.0-board-chat.md) + [API](/docs/api/chat) |

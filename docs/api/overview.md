@@ -1,7 +1,7 @@
 ---
 title: API Overview
 summary: Authentication, base URL, error codes, and conventions
-version: v0.4.0
+version: v0.5.0
 last_updated: 2026-08-18
 ---
 
@@ -29,6 +29,8 @@ All endpoints are prefixed with `/api`.
 | Notifications | [Notifications](/api/notifications) | Multi-channel notification preferences & delivery |
 | Billing | [Billing](/api/billing) | Subscriptions, usage, invoices |
 | Company Templates | [Company Templates](/api/company-templates) | One-click company deployment |
+| Marketplace | [Marketplace](/api/marketplace) | Browse and hire marketplace agents |
+| Onboarding | [Onboarding](/api/onboarding) | Self-service company creation with default agents |
 | Costs & budgets | [Costs](/api/costs) | Spend tracking and budgets |
 | Secrets | [Secrets](/api/secrets) | Secret storage and agent grants |
 | Activity | [Activity](/api/activity) | Append-only audit trail |
