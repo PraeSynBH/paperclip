@@ -30,6 +30,7 @@ vi.mock("@paperclipai/db", () => ({
   knowledgeDocumentRevisions: { _tableName: "knowledge_document_revisions" },
   knowledgeDocumentReviews: { _tableName: "knowledge_document_reviews" },
   knowledgeSourceBacklinks: { _tableName: "knowledge_source_backlinks" },
+  memoryRecords: { _tableName: "memory_records" },
 }));
 
 // Mock the errors module
@@ -50,6 +51,7 @@ function makeDb() {
   const returning = vi.fn().mockResolvedValue([]);
   const updateReturning = vi.fn().mockResolvedValue([]);
   const deleteWhere = vi.fn().mockResolvedValue([]);
+  const txReturning = vi.fn().mockResolvedValue([]);
 
   // Select query chain: all methods return the chain itself
   // `then` is what actually resolves the query result
@@ -64,6 +66,9 @@ function makeDb() {
     offset: vi.fn(() => chain),
     then: vi.fn((resolve: (v: unknown) => unknown) => Promise.resolve(resolve([]))),
   };
+
+  // Last transaction handle — exposed so tests can assert on tx insert values
+  let lastTx: unknown = undefined;
 
   return {
     insert: vi.fn(() => ({
@@ -86,11 +91,31 @@ function makeDb() {
       where: deleteWhere,
     })),
     execute: vi.fn(() => Promise.resolve({ rows: [] })),
+    // Transaction: passes a tx handle whose insert/select share the same
+    // mock handles so tests can configure promoteFromMemory dedup behavior.
+    transaction: vi.fn(async (cb: (tx: unknown) => Promise<unknown>) => {
+      const tx = {
+        insert: vi.fn(() => ({
+          values: vi.fn(() => ({
+            returning: txReturning,
+            onConflictDoNothing: vi.fn(() => ({
+              returning: txReturning,
+            })),
+          })),
+        })),
+        select: vi.fn(() => chain),
+      };
+      // Expose the tx handle so tests can assert on insert values
+      lastTx = tx;
+      return cb(tx);
+    }),
     // Exposed for test setup
     _chain: chain,
     _returning: returning,
     _updateReturning: updateReturning,
     _deleteWhere: deleteWhere,
+    _txReturning: txReturning,
+    _lastTx: () => lastTx,
   };
 }
 
@@ -109,6 +134,7 @@ function makeDocRow(overrides: Partial<Record<string, unknown>> = {}) {
     version: 1,
     authorAgentId: null,
     sourceIssueId: null,
+    memoryRecordId: null,
     createdAt: new Date("2026-08-16T00:00:00Z"),
     updatedAt: new Date("2026-08-16T00:00:00Z"),
     publishedAt: null,
@@ -145,6 +171,18 @@ function makeReviewRow(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function makeMemoryRow(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    id: "00000000-0000-0000-0000-000000000040",
+    companyId: "00000000-0000-0000-0000-000000000001",
+    recordType: "analysis",
+    text: "Memory content",
+    summary: "Memory summary",
+    sourceIssueId: null,
+    ...overrides,
+  };
+}
+
 /** Configure the select chain to resolve with given rows. */
 function hookSelect(db: TestDb, rows: unknown[]) {
   db._chain.then.mockImplementation(
@@ -172,6 +210,7 @@ function resetDb(db: TestDb) {
   db._returning.mockResolvedValue([]);
   db._updateReturning.mockResolvedValue([]);
   db._deleteWhere.mockResolvedValue([]);
+  db._txReturning.mockResolvedValue([]);
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
@@ -326,19 +365,86 @@ describe("KnowledgeDocumentService", () => {
       hookSelectSequence(db, [
         [makeDocRow({ status: "in_review" })],
         [makeRevisionRow()],
-        [makeDocRow({ status: "draft" })],
+        // third select: after UPDATE RETURNING, assertDocumentExists
+        [makeDocRow({ status: "draft", version: 2 })],
       ]);
 
       db._returning.mockResolvedValue([
         makeReviewRow({ status: "changes_requested" }),
+      ]);
+      db._updateReturning.mockResolvedValue([
+        { ...makeDocRow({ status: "draft", version: 2 }) },
       ]);
 
       const result = await svc.review(companyId, docId, {
         status: "changes_requested",
       });
       expect(result.review.status).toBe("changes_requested");
-      // Document reverts to draft
+      // Document reverts to draft with bumped version
       expect(result.document.status).toBe("draft");
+      expect(result.document.version).toBe(2);
+    });
+
+    it("submits for review again after changes_requested without unique key violation", async () => {
+      // ── Step 1: First submission ──
+      hookSelectSequence(db, [
+        [makeDocRow({ status: "draft", version: 1 })],
+      ]);
+      db._returning
+        .mockResolvedValueOnce([makeRevisionRow()])
+        .mockResolvedValueOnce([
+          makeReviewRow({ status: "pending", decidedAt: null }),
+        ]);
+      db._updateReturning.mockResolvedValueOnce([
+        { ...makeDocRow({ status: "in_review", version: 1 }) },
+      ]);
+
+      const submit1 = await svc.submitForReview(companyId, docId, {});
+      expect(submit1.document.status).toBe("in_review");
+      expect(submit1.revision.version).toBe(1);
+
+      // ── Step 2: Changes requested ──
+      // Reset select sequence for review
+      resetDb(db);
+
+      hookSelectSequence(db, [
+        [makeDocRow({ status: "in_review", version: 1 })],
+        [makeRevisionRow()],
+        [makeDocRow({ status: "draft", version: 2 })],
+      ]);
+      db._returning.mockResolvedValue([
+        makeReviewRow({ status: "changes_requested" }),
+      ]);
+      db._updateReturning.mockResolvedValue([
+        { ...makeDocRow({ status: "draft", version: 2 }) },
+      ]);
+
+      const reviewResult = await svc.review(companyId, docId, {
+        status: "changes_requested",
+      });
+      expect(reviewResult.document.status).toBe("draft");
+      expect(reviewResult.document.version).toBe(2);
+
+      // ── Step 3: Re-submit after changes_requested ──
+      // Reset select sequence for re-submit
+      resetDb(db);
+
+      hookSelectSequence(db, [
+        [makeDocRow({ status: "draft", version: 2 })],
+      ]);
+      db._returning
+        .mockResolvedValueOnce([makeRevisionRow({ version: 2 })])
+        .mockResolvedValueOnce([
+          makeReviewRow({ status: "pending", decidedAt: null }),
+        ]);
+      db._updateReturning.mockResolvedValueOnce([
+        { ...makeDocRow({ status: "in_review", version: 2 }) },
+      ]);
+
+      // Re-submit — this should NOT throw a unique key violation
+      const submit2 = await svc.submitForReview(companyId, docId, {});
+      expect(submit2.document.status).toBe("in_review");
+      expect(submit2.revision.version).toBe(2);
     });
 
     it("publishes an approved document", async () => {
@@ -593,6 +699,124 @@ describe("KnowledgeDocumentService", () => {
       const results = await svc.searchPublished(companyId, "test query");
       expect(results.length).toBe(1);
       expect(results[0].score).toBeGreaterThan(0);
+    });
+  });
+
+  describe("promoteFromMemory (VOY-1365 P1-3)", () => {
+    const memId = "00000000-0000-0000-0000-000000000040";
+
+    it("promotes a memory record into a new draft document", async () => {
+      // Memory record select (before transaction)
+      hookSelect(db, [makeMemoryRow()]);
+      db._txReturning.mockResolvedValueOnce([makeDocRow({ memoryRecordId: memId })]);
+
+      const result = await svc.promoteFromMemory(companyId, {
+        memoryRecordId: memId,
+      });
+      expect(result.status).toBe("draft");
+      // Verify the derived title from recordType was passed to the insert
+      const tx = db._lastTx() as { insert: ReturnType<typeof vi.fn> };
+      expect(tx).toBeDefined();
+      const valuesFn = tx.insert.mock.results[0]?.value?.values;
+      expect(valuesFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "Memory: analysis", // derived from recordType "analysis"
+          memoryRecordId: memId,
+        }),
+      );
+    });
+
+    it("returns existing document when memory_record_id conflict is detected (dedup)", async () => {
+      const existingDocRow = makeDocRow({
+        id: "dedup-existing-doc",
+        memoryRecordId: memId,
+      });
+      // Two selects: 1) memory record lookup 2) existing doc lookup inside tx
+      hookSelectSequence(db, [
+        [makeMemoryRow()],
+        [existingDocRow],
+      ]);
+      // tx.insert().onConflictDoNothing().returning() returns empty (conflict)
+      db._txReturning.mockResolvedValueOnce([]);
+
+      const result = await svc.promoteFromMemory(companyId, {
+        memoryRecordId: memId,
+      });
+      expect(result.id).toBe("dedup-existing-doc");
+      expect(result.status).toBe("draft");
+    });
+
+    it("creates auto-backlink when memory record has sourceIssueId", async () => {
+      const memWithIssue = makeMemoryRow({
+        sourceIssueId: issueId,
+      });
+      hookSelect(db, [memWithIssue]);
+      const newDoc = makeDocRow({ memoryRecordId: memId, sourceIssueId: issueId });
+      db._txReturning.mockResolvedValueOnce([newDoc]);
+
+      const result = await svc.promoteFromMemory(companyId, {
+        memoryRecordId: memId,
+      });
+      expect(result.status).toBe("draft");
+      // The tx was used for both the doc insert and the backlink insert
+      // (verify promoteFromMemory reaches the backlink path)
+      expect(db.transaction).toHaveBeenCalled();
+    });
+
+    it("throws notFound when memory record does not exist", async () => {
+      hookSelect(db, []); // empty memory record select
+
+      await expect(
+        svc.promoteFromMemory(companyId, { memoryRecordId: memId }),
+      ).rejects.toThrow("Memory record not found");
+    });
+  });
+
+  describe("knowledge search cache invalidation (VOY-1365 P1-1)", () => {
+    it("serves repeated searches from cache (control — no mutation)", async () => {
+      const q = "cache-control-1365";
+      hookSelect(db, [{ id: docId, title: "Doc", summary: null, score: 0.9 }]);
+      db._returning.mockResolvedValue([makeDocRow()]);
+
+      const r1 = await svc.searchPublished(companyId, q);
+      const r2 = await svc.searchPublished(companyId, q);
+
+      expect(r1).toHaveLength(1);
+      expect(r2).toHaveLength(1);
+      // Second hit should come from cache — only 1 DB query
+      expect(db._chain.then).toHaveBeenCalledTimes(1);
+    });
+
+    it("invalidates the cache after create commits", async () => {
+      const q = "cache-inv-create-1365";
+      hookSelect(db, [{ id: docId, title: "Doc", summary: null, score: 0.9 }]);
+      db._returning.mockResolvedValue([makeDocRow()]);
+
+      // First search: cold cache → 1 DB query
+      await svc.searchPublished(companyId, q);
+      // Create: no select chain calls, but invalidates the cache
+      await svc.create(companyId, { title: "New", body: "Body" });
+      // Second search: cache was cleared → re-query DB
+      await svc.searchPublished(companyId, q);
+
+      // 2 DB queries total — the second re-queried because cache was invalidated
+      expect(db._chain.then).toHaveBeenCalledTimes(2);
+    });
+
+    it("invalidates the cache after update commits", async () => {
+      const q = "cache-inv-update-1365";
+      hookSelectSequence(db, [
+        [{ id: docId, title: "Doc", summary: null, score: 0.9 }], // searchPublished
+        [makeDocRow()],  // assertDocumentExists inside update
+      ]);
+      db._updateReturning.mockResolvedValue([makeDocRow({ title: "Updated" })]);
+
+      await svc.searchPublished(companyId, q);
+      await svc.update(companyId, docId, { title: "Updated" });
+      await svc.searchPublished(companyId, q);
+
+      // 3 DB queries: search(1) + assertExists(1) + search(1)
+      expect(db._chain.then).toHaveBeenCalledTimes(3);
     });
   });
 });
