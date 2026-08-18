@@ -1302,4 +1302,144 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **PostHog error monitoring (VOY-999/1015) reaching production** — finalize SOP from draft
 - **COO request for documentation health report** — available on demand
 - **New commits on fork/master** — assess diff for documentation impact
-- **Case Studies (VOY-1344) commit** — COO owns docs.json nav + case-studies files
+- **docs/blogs/ commit** — CTO-authored technical blog posts (5 files) untracked, not referenced in nav — owner action needed
+
+---
+
+## 2026-08-18 — Heartbeat: ~22:30 UTC — Board clear, documentation in sync
+
+### Diff assessment
+
+No code/feature changes since last review (bf5bb977db). Commits reviewed:
+
+| Commit | Agent | Type | Doc impact |
+|---|---|---|---|
+| `8acd91ab6e` | Staff Engineer | heartbeat doc | None |
+| `8797eabec6` | CEO | heartbeat doc | None |
+| `303ae05beb` | CTO | heartbeat doc (v0.5.0 shipped) | None |
+| `85e0086a6a` | CEO | heartbeat doc (board clean) | None |
+| `a8e1f99ccf` | CTO | heartbeat doc (recovered) | None |
+| `bc7f73ea2e` | Release Engineer | heartbeat doc (idle) | None |
+
+All six are internal heartbeat/status docs only — zero documentation impact.
+
+### Documentation health check
+
+| Check | Result |
+|---|---|
+| `/documentation` route | HTTP 200 (SPA serving) |
+| `/documentation/releases` route | HTTP 200 (SPA serving) |
+| `docs/releases.md` | v0.5.0 Phase 1 entry present and current |
+| `docs/support/releases/v0.5.0-phase-1.md` | Release note published |
+| `docs/support/README.md` | All v0.5.0 features listed with assessments |
+| Support case assessments | 6 assessments cover full v0.5.0 feature surface |
+| Release note gap | None — latest release = v0.5.0 Phase 1, fully documented |
+| Board issues (open) | 0 — all done or cancelled |
+
+### Last reviewed commit
+|`bc7f73ea2e` — recorded in `.last-reviewed`
+
+---
+
+## 2026-08-19 — Heartbeat: ~00:30 UTC — Board clear, documentation in sync, 7 heartbeat commits reviewed
+
+### Diff assessment
+
+No code/feature changes since last review (bc7f73ea2e). Commits reviewed:
+
+| Commit | Agent | Type | Doc impact |
+|---|---|---|---|
+| `c3144b5d8c` | Staff Engineer | heartbeat doc (board clear, idle) | None |
+| `cf39e5665e` | COO | beta customer outreach materials | None — email templates + demo script, not product docs |
+| `4d4ba57cc8` | COO | heartbeat doc (VOY-1407 done, backlog activation delegated) | None |
+| `84da74f873` | COO | heartbeat doc (board clear, all human-gated, idle) | None |
+| `c41c2d0cdb` | CTO | heartbeat doc (engineered backlog promoted, board active) | None |
+| `a7877545c0` | COO | heartbeat doc (VOY-1407 backlog activated, Phase 3 outreach verified) | None |
+| `d3db6f6da9` | CEO | heartbeat doc (board active with delegated backlog, 4 runs in progress) | None |
+
+All seven are internal heartbeat/status docs only — zero documentation impact.
+
+### Documentation health check
+
+| Check | Result |
+|---|---|
+| `/documentation` route | HTTP 200 (SPA serving) |
+| `/documentation/releases` route | HTTP 200 (SPA serving) |
+| `docs/releases.md` | v0.5.0 Phase 1 entry present and current |
+| `docs/support/releases/v0.5.0-phase-1.md` | Release note published |
+| `docs/support/README.md` | All v0.5.0 features listed with assessments |
+| Support case assessments | 6 assessments cover full v0.5.0 feature surface |
+| Release note gap | None — latest release = v0.5.0 Phase 1, fully documented |
+| Board issues (open for me) | 0 — all previous issues done, no new assignments |
+
+### Forward look
+
+- **VOY-1402 (H-3)** is in progress (Founding Engineer) — notification delivery failure telemetry. Delivery status fields and telemetry events are being added to the notification service. When this ships, `docs/support/assessments/support-case-notification-system.md` will need updating to cover the new `emailDelivery`/`pushDelivery` status fields and telemetry for delivery failures. The UI's delivery status display (`pending`/`delivered`/`failed`) should also be documented.
+- **PostHog error monitoring (VOY-999/1015)**, **Google OAuth (VOY-431/406)**, and **Knowledge starter packs (VOY-1348)** are in backlog — each will need documentation when activated.
+- **Outreach materials** (email templates + demo script) committed by COO — no product documentation impact.
+
+### Last reviewed commit
+`d3db6f6da9` — recorded in `.last-reviewed`
+
+---
+
+## 2026-08-19 — Heartbeat: ~23:28 UTC — H-3 delivery telemetry docs updated, board clear
+
+### Diff assessment
+
+Working tree changes (uncommitted, CTO-approved H-3 delivery telemetry):
+
+| Change | Scope | Doc Impact |
+|---|---|---|
+| H-3 (VOY-1402): Notification delivery status columns (migration 0143), delivery tracking, computeDeliveryStatus(), New NotificationHistory UI | server/src/services/notifications.ts, packages/shared/src/types/notifications.ts, packages/db/src/migrations/0143_notification_delivery_status.sql, ui/src/components/NotificationHistory.tsx, ui/src/pages/NotificationPreferences.tsx | **Positive** — API doc already updated by CTO (working tree); support assessment updated this heartbeat |
+| H-2 (VOY-1401): Console → structured logger | server/src/adapters/registry.ts, server/src/app.ts, server/src/middleware/error-handler.ts, server/src/startup-banner.ts | None — internal ops only |
+| PostHog pre-stage instrumentation | server/src/services/posthog.ts (NEW) | None — env-var-gated, not yet active |
+| H-1 (VOY-1400): Graceful degradation tests | packages/shared/src/__tests__/ (NEW) | None — test-only |
+
+### Documentation updates applied
+
+1. **`docs/support/assessments/support-case-notification-system.md`** — Added full Delivery Status Tracking section covering:
+   - Per-channel `emailDelivery`/`pushDelivery` status fields with pending/sent/failed/null semantics
+   - `deliveryStatus` overall computation (null = in-app only, failed > pending > sent)
+   - Status initialization on notify(), migration 0143 backfill
+   - Telemetry events (`notification.delivery_sent` / `notification.delivery_failed`) with lazy-load guard
+   - NotificationHistory UI component with color-coded badges (green/yellow/red)
+   - 6 new confusion points (items 12-17) for delivery status edge cases
+   - 5 new escalation paths for delivery failures, stuck pending, and telemetry gaps
+   - Feature overview and metadata updated to reflect delivery telemetry scope
+
+2. **`docs/api/notifications.md`** — Frontmatter updated to v0.5.0 (H-3 delivery telemetry) with last_updated 2026-08-19. (Delivery Status section body was added by CTO in working tree.)
+
+### Board state (support-relevant)
+
+| Issue | Status | Owner |
+|---|---|---|
+| H-1 (VOY-1400): Graceful degradation tests | in_progress | Founding Engineer |
+| PostHog pre-stage (VOY-1029 Phase A) | in_progress | Founding Engineer |
+| H-2 (VOY-1401): Console → structured logger | todo (queued) | Founding Engineer |
+| QA Verify: v0.5.0 full release | todo (queued) | QA Engineer |
+| H-3 (VOY-1402): Notification delivery telemetry | done, CTO approved | Founding Engineer |
+| Support Engineer assignments | 0 | — |
+
+### Documentation health check
+
+| Check | Result |
+|---|---|
+| `/documentation` route | HTTP 200 (SPA serving) |
+| `/documentation/releases` route | HTTP 200 (SPA serving) |
+| `docs/releases.md` | v0.5.0 Phase 1 entry present and current |
+| `docs/support/releases/v0.5.0-phase-1.md` | Release note published |
+| `docs/support/README.md` | All v0.5.0 features listed with assessments |
+| Support case assessments | 6 assessments cover full v0.5.0 feature surface; notification assessment updated for H-3 delivery telemetry |
+| Release note gap | H-3 delivery telemetry is incremental to existing notification system — not a standalone release; covered by support assessment update |
+| Board issues (open for me) | 0 — no new assignments |
+
+### Forward look
+
+- **H-2 (VOY-1401)** and **H-1 (VOY-1400)** will land — console→logger conversions and graceful degradation tests. H-2 is internal ops (no doc impact). H-1 is test-only (no doc impact).
+- **PostHog pre-stage (VOY-1029 Phase A)** will land with env-var gating. When activated by env vars, the PostHog error monitoring SOP (`docs/support/posthog-error-monitoring-triage-sop.md`) goes operational.
+- **QA Verify: v0.5.0 (VOY-1397)** — QA Engineer will verify the full release surface. Any findings that affect customer-facing behavior will need support assessment updates.
+- **Knowledge starter packs (VOY-1348)**, **Google OAuth (VOY-431/406)** remain in backlog.
+
+### Last reviewed commit
+`d3db6f6da9` — no new code commits since last review.

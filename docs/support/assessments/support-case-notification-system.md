@@ -1,10 +1,10 @@
 # Support Case Assessment: Notification System — Email, Push, and In-App Notifications
 
-**Feature**: Multi-channel notification system with user-configurable preferences, email digests, push subscriptions, and automatic notifications for key events
+**Feature**: Multi-channel notification system with user-configurable preferences, email digests, push subscriptions, delivery status tracking, and automatic notifications for key events
 **Assessed by**: Support Engineer
-**Date**: 2026-08-18
-**Related**: VOY-1342, VOY-1364, VOY-1367, VOY-1365
-**Release**: v0.4.0-alpha (hotfix VOY-1367)
+**Date**: 2026-08-18 (updated 2026-08-19 — H-3 delivery telemetry)
+**Related**: VOY-1342, VOY-1364, VOY-1367, VOY-1365, VOY-1402
+**Release**: v0.4.0-alpha (hotfix VOY-1367) + H-3 delivery telemetry (VOY-1402)
 
 ## Feature Overview (User Perspective)
 
@@ -17,6 +17,7 @@ The Notification System provides a multi-channel notification infrastructure for
 - **Push notifications** — Web push notifications delivered via configured push subscriptions
 - **Daily/weekly digests** — A summary email of all notifications from the past day or week, instead of instant individual emails
 - **Per-type preferences** — Users can control which channels (email, webpush, in_app) are active for each notification type, and choose between instant delivery or digest bundling
+- **Delivery status tracking** — Each notification records per-channel delivery status (pending/sent/failed) with error messages. A Notification History view in the notification preferences page shows color-coded status badges (green = delivered, yellow = pending, red = failed).
 
 ### Notification Types
 
@@ -130,6 +131,35 @@ Digest emails bundle multiple notifications into a single summary with:
 - List of notification items with title, body, and links
 - Footer note explaining the digest preference
 
+### Delivery status tracking (VOY-1402 H-3)
+
+Each notification now records per-channel delivery status:
+
+| Field | Values | Description |
+|-------|--------|-------------|
+| `emailDelivery.status` | `pending` / `sent` / `failed` / `null` | Email delivery outcome. `null` when email was not attempted (channel disabled, SMTP unconfigured, or deferred to digest). |
+| `emailDelivery.error` | string or `null` | SMTP error message when email delivery failed |
+| `pushDelivery.status` | `pending` / `sent` / `failed` / `null` | Push delivery outcome. `null` when push was not attempted. |
+| `pushDelivery.error` | string or `null` | Push delivery error message when push delivery failed |
+| `deliveryStatus` | `pending` / `sent` / `failed` / `null` | Computed overall status: `failed` if any channel failed, `sent` if all attempted channels succeeded, `pending` otherwise. `null` when no external channels were attempted (in-app only — no delivery tracking). |
+
+**Status initialization**: When `notify()` dispatches a notification, per-channel statuses are initialized to `pending` for each attempted channel before the SMTP/VAPID calls start. If a channel fails later, its status transitions to `failed` with an error message. If it succeeds, status transitions to `sent`.
+
+**Backfill on existing data**: Notifications created before this feature (`email_sent_at`/`push_sent_at` without delivery status columns) are backfilled during migration 0143: notifications with a non-null `email_sent_at` get `emailDelivery.status = 'sent'`, and similarly for `push_sent_at`.
+
+**Telemetry**: Two PostHog events fire on delivery outcomes (lazy-loaded to ensure telemetry failures never block delivery):
+- `notification.delivery_sent` — emitted when an SMTP or push delivery succeeds
+- `notification.delivery_failed` — emitted when an SMTP or push delivery fails
+
+Telemetry failures are silently caught — delivery is never blocked by a telemetry error.
+
+**Notification History UI**: The notification preferences page now includes a "Notification history" section that lists recent notifications with color-coded delivery status badges:
+- **Green** ("Delivered") — all attempted channels succeeded
+- **Yellow** ("Pending") — at least one channel is still pending
+- **Red** ("Failed") — at least one channel failed
+
+The table shows Email, Push, and Overall delivery status in separate columns for quick diagnostics.
+
 ### Default preference resolution (VOY-1364 S1 fix)
 
 The `getEffectiveChannels` function applies default preferences **only when no preference row exists** for the user. If a user has explicitly disabled a channel for a notification type, that preference is respected — defaults do not override explicit user choices.
@@ -179,6 +209,18 @@ If SMTP is not configured, email notifications are silently skipped (logged as w
 
 11. **"I tried to send a notification to a user but got 'Target user is not an active member'"** — The `/notifications/send` endpoint verifies that the target `userId` is an active member of the company. Check that the user has an active membership (`status = 'active'`) in the company. Users who have been removed or whose membership is inactive cannot receive notifications via this endpoint.
 
+12. **"My notification shows 'Pending' for email delivery and it's been hours"** — Delivery status is updated asynchronously. If SMTP is not configured, the status stays `pending` because email was never attempted. Check SMTP configuration. If SMTP is configured, check the server logs for SMTP connection errors — the status may be stuck at `pending` if the SMTP send threw an unhandled error.
+
+13. **"My notification shows 'Failed' for email delivery — what does the error mean?"** — The `emailDelivery.error` field contains the SMTP error message. Common causes: SMTP connection refused (wrong host/port), authentication failed (wrong credentials), or TLS negotiation failure. Check the server logs for the full SMTP conversation.
+
+14. **"I see 'Failed' in the Notification History but I did receive the email"** — Per-channel status is independent. If email shows `failed` but you received the email, the SMTP send succeeded on the server side but the status update to `sent` may have been skipped due to a database error. Check the server logs for the notification ID. Escalate if it's repeatable.
+
+15. **"The Notification History shows a notification I don't remember"** — Notifications are created by the system (auto-triggered events) or by other agents/users via `POST /notifications/send`. Check the `notificationType` and `metadataJson` for context about who created it and why.
+
+16. **"Some notifications have no delivery status at all (null)"** — This is correct for in-app-only notifications where no external channel (email or push) was attempted. `deliveryStatus: null` means the notification was delivered in-app only and no external delivery tracking applies.
+
+17. **"I see 'Pending' for push delivery even though I'm not using push"** — If push channel is enabled by default for a notification type, the system initializes `pushDelivery.status = 'pending'` before attempting delivery. If VAPID is not configured, push delivery is skipped but the initial status may still show as `pending` if the notification was created before the skip check. This is harmless — the in-app notification was delivered successfully.
+
 ## Support Escalation Path
 
 | Issue | Severity | Action |
@@ -191,6 +233,11 @@ If SMTP is not configured, email notifications are silently skipped (logged as w
 | Notification preference save fails | Medium | Verify the request body matches the expected schema (notificationType, channel, enabled). The batch endpoint accepts 1-50 preferences per request. |
 | In-app notification count is wrong | Low | The `unread-count` endpoint counts notifications with `readAt IS NULL`. Verify no other user is marking notifications as read. |
 | Web push notification delivery failure | Medium | Push subscriptions are stored per browser. If a subscription endpoint is stale (browser unsubscribed), push delivery will fail silently. Re-register the push subscription. |
+| Notifications stuck at "Pending" for email delivery | Medium | SMTP may be unconfigured or misconfigured. Check SMTP_HOST/SMTP_USER/SMTP_PASS. Test SMTP connectivity manually. If SMTP is configured but notifications remain pending, escalate — the delivery update may not be persisting to the database. |
+| Notification delivery shows "Failed" with specific SMTP error | Medium | Interpret the error: connection refused (wrong host/port), authentication failed (wrong credentials), or TLS error. Verify SMTP credentials and test manually. |
+| Delivery status shows "Failed" for email but user received the email | Low | The SMTP send succeeded but the status update query may have failed. Check server logs for the notification ID. Escalate if repeatable — possible database write issue. |
+| Notification History UI fails to load | Low | Check browser console for errors. The component queries `GET /notifications` endpoint. If the endpoint fails, check server-side notification route health. |
+| Delivery telemetry events not appearing in PostHog | Low | Telemetry is lazy-loaded and fire-and-forget — failures are silently caught. If PostHog events are missing, check PostHog API key/host configuration and the telemetry import path. |
 
 ## Related Documentation
 

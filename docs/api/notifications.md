@@ -1,8 +1,8 @@
 ---
 title: Notifications
-summary: Multi-channel notifications — preferences, in-app inbox, email, web push, and digests
-version: v0.4.0
-last_updated: 2026-08-18
+summary: Multi-channel notifications — preferences, in-app inbox, email, web push, digests, and delivery status
+version: v0.5.0 (H-3 delivery telemetry)
+last_updated: 2026-08-19
 ---
 
 The Notifications API delivers multi-channel notifications to board users. Five notification types can be configured per channel (in-app, email, web push) with independent digest preferences.
@@ -74,11 +74,42 @@ GET /api/companies/{companyId}/notifications?limit=50&offset=0&unreadOnly=false
 
 ```json
 {
-  "items": [],
+  "items": [
+    {
+      "id": "uuid",
+      "companyId": "uuid",
+      "userId": "user-id",
+      "notificationType": "review_requested",
+      "title": "Review requested",
+      "body": "...",
+      "linkUrl": null,
+      "metadataJson": {},
+      "readAt": null,
+      "sentAt": "2026-08-18T12:00:00.000Z",
+      "emailSentAt": "2026-08-18T12:00:00.000Z",
+      "pushSentAt": null,
+      "emailDelivery": { "status": "sent", "error": null },
+      "pushDelivery": { "status": "failed", "error": "Web push delivery failed" },
+      "deliveryStatus": "failed",
+      "createdAt": "2026-08-18T12:00:00.000Z"
+    }
+  ],
   "unread": 0,
   "total": 0
 }
 ```
+
+### Delivery Status
+
+Each notification carries per-channel delivery status plus an overall status:
+
+| Field | Type | Description |
+|---|---|---|
+| `emailDelivery.status` | `pending` \| `sent` \| `failed` \| `null` | Email channel status (`null` = not applicable) |
+| `emailDelivery.error` | `string \| null` | Error message when email delivery failed |
+| `pushDelivery.status` | `pending` \| `sent` \| `failed` \| `null` | Push channel status (`null` = not applicable) |
+| `pushDelivery.error` | `string \| null` | Error message when push delivery failed |
+| `deliveryStatus` | `pending` \| `sent` \| `failed` \| `null` | Overall status: `failed` if any channel failed, `sent` if all attempted channels succeeded, `pending` otherwise. `null` when no external channels were attempted (in-app only). |
 
 ## Update Preferences
 
