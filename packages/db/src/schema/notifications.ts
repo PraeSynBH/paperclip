@@ -87,18 +87,6 @@ export interface NotifyInput {
   metadata?: Record<string, unknown>;
 }
 
-/** Default preferences when none are explicitly set */
-export const DEFAULT_NOTIFICATION_PREFERENCES: Record<
-  NotificationType,
-  Partial<Record<NotificationChannel, boolean>>
-> = {
-  review_requested: { in_app: true, email: false, webpush: false },
-  approval_needed: { in_app: true, email: false, webpush: false },
-  work_completed: { in_app: true, email: false, webpush: false },
-  budget_threshold: { in_app: true, email: true, webpush: false },
-  execution_error: { in_app: true, email: true, webpush: false },
-};
-
 // ---------------------------------------------------------------------------
 // Drizzle table definitions (migration 0139_notifications.sql)
 // ---------------------------------------------------------------------------
