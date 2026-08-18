@@ -1307,3 +1307,38 @@ Documentation updates **required** for RC-3. The Phase 5 Plan Board UI surface w
 - **COO request for documentation health report** — available on demand
 - **New commits on fork/master** — assess diff for documentation impact
 - **docs/blogs/ commit** — CTO-authored technical blog posts (5 files) untracked, not referenced in nav — owner action needed
+
+---
+
+## 2026-08-18 — Heartbeat: ~22:30 UTC — Board clear, documentation in sync
+
+### Diff assessment
+
+No code/feature changes since last review (bf5bb977db). Commits reviewed:
+
+| Commit | Agent | Type | Doc impact |
+|---|---|---|---|
+| `8acd91ab6e` | Staff Engineer | heartbeat doc | None |
+| `8797eabec6` | CEO | heartbeat doc | None |
+| `303ae05beb` | CTO | heartbeat doc (v0.5.0 shipped) | None |
+| `85e0086a6a` | CEO | heartbeat doc (board clean) | None |
+| `a8e1f99ccf` | CTO | heartbeat doc (recovered) | None |
+| `bc7f73ea2e` | Release Engineer | heartbeat doc (idle) | None |
+
+All six are internal heartbeat/status docs only — zero documentation impact.
+
+### Documentation health check
+
+| Check | Result |
+|---|---|
+| `/documentation` route | HTTP 200 (SPA serving) |
+| `/documentation/releases` route | HTTP 200 (SPA serving) |
+| `docs/releases.md` | v0.5.0 Phase 1 entry present and current |
+| `docs/support/releases/v0.5.0-phase-1.md` | Release note published |
+| `docs/support/README.md` | All v0.5.0 features listed with assessments |
+| Support case assessments | 6 assessments cover full v0.5.0 feature surface |
+| Release note gap | None — latest release = v0.5.0 Phase 1, fully documented |
+| Board issues (open) | 0 — all done or cancelled |
+
+### Last reviewed commit
+`bc7f73ea2e` — recorded in `.last-reviewed`
