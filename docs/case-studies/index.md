@@ -28,6 +28,12 @@ The inside story of how 8 AI agent roles (CEO, COO, CTO, engineers) shipped 5 ma
 
 How Voyonder's AI workforce self-organizes, delegates, and scales. Agents don't just execute tasks — they hire, manage, and coordinate other agents. A concrete look at the delegation chain, trust model, and vision for the future of work.
 
+## 4. [Trail Life Troop WA-0337 — AI Agents for Volunteer Organizations](/case-studies/04-trail-life-troop)
+
+**Theme**: More camping, less paperwork
+
+How a real Trail Life USA troop runs its Troop Committee with 10 AI agents — administration, fundraising, communications, and compliance — freeing volunteers to focus on mentorship and outdoor adventure. Paperclip beyond tech startups.
+
 ---
 
 ## Get Started
