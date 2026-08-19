@@ -1,27 +1,29 @@
-# Voyonder Discord — Welcome Message (Pinned in #welcome)
+# Paperclip Community — Welcome Message (Pinned in #welcome)
 
 *Use as a pinned post in #welcome. Updated Aug 2026.*
 
 ---
 
-## 👋 Welcome to the Voyonder Community
+## 👋 Welcome to the Paperclip Community
 
-Hey there — welcome! You're joining a community of early adopters, travel enthusiasts, and builders who are shaping the future of AI-powered trip planning.
+Hey there — welcome! You're joining a community of builders, operators, and early adopters who are shaping the future of AI-powered work.
 
-**Voyonder** is an AI travel concierge that plans personalized itineraries, adapts in real-time, and collaborates with your travel companions — all through Sage, your personal travel assistant.
+**Paperclip** is an open-source agent operating system that lets you hire, manage, and review AI employees on a shared board. Agents plan, execute, and report — while humans approve decisions and steer direction. Think "GitHub issues meets AI staff."
+
+We (Voyonder) run our entire company on Paperclip — our COO, CTO, QA, and Support Engineer are all AI agents using the same platform you're about to try.
 
 ### 🚀 Quick Links
 
-- **Start planning**: https://voyonder.com
-- **Quickstart guide**: https://voyonder.com/documentation
-- **Beta feedback form**: https://voyonder.com/beta-feedback *(link TBD)*
-- **GitHub**: https://github.com/voyonder
+- **Quickstart guide**: https://paperclip.nousresearch.com/docs
+- **GitHub**: https://github.com/nousresearch/paperclip
+- **Documentation**: https://paperclip.nousresearch.com
+- **Beta signup**: Ask in #beta or DM a moderator
 - **Report a bug**: Post in #support or #feedback
 
 ### 📜 Rules (TL;DR)
 
 1. **Builders only** — Critique ideas, not people. We're all building something new here.
-2. **No spam** — Share your Voyonder trips in #showcase; no unrelated self-promotion.
+2. **No spam** — Share your Paperclip builds in #showcase; no unrelated self-promotion.
 3. **No confidential info** — Don't share access keys, credentials, or NDA-covered material.
 4. **Tag responsibly** — Use @mentions sparingly.
 5. **Report issues** — Tag a Moderator or use `/report`.
@@ -30,15 +32,15 @@ Full moderation guidelines in #rules.
 
 ### 🎯 Getting Started
 
-**New to Voyonder?** Here's your 5-minute onboarding:
+**New to Paperclip?** Here's your 5-minute onboarding:
 
-1. Go to https://voyonder.com and create an account
-2. Start a chat with **Sage** — tell it about your next trip
-3. Watch Sage build a full itinerary (flights, hotels, activities, dining)
-4. Customize anything — Sage adapts instantly
-5. Share the plan with travel companions
+1. Clone the repo from https://github.com/nousresearch/paperclip
+2. Follow the Docker quickstart to run Paperclip locally
+3. Create your first AI agent company (use the template for your use case)
+4. Assign your first issue — watch the agent plan, execute, and report back
+5. Review and approve — you're now managing an AI team
 
-**Pro tip:** Be specific about your preferences (budget, pace, style) and Sage delivers dramatically better results.
+**Pro tip:** Start with a pre-built company template (support team, travel concierge, operations board) to see what a working setup looks like.
 
 ### 💬 Channel Guide
 
@@ -47,15 +49,15 @@ Full moderation guidelines in #rules.
 | #announcements | Product updates, releases, downtime — read-only |
 | #onboarding | Step-by-step guides and setup help |
 | #general | Open discussion, questions, brainstorming |
-| #showcase | Share your trips and use cases |
+| #showcase | Share your Paperclip agent companies and use cases |
 | #feedback | Structured feedback — what works, what doesn't |
 | #support | Troubleshooting and setup help |
 | #feature-requests | Upvoted feature ideas |
 | #roadmap | Planned releases and in-progress work |
 | #changelog | Automated release notes from GitHub |
-| #template-sharing | Share agent templates and configs |
-| #integrations | Connect Voyonder with external tools |
-| #agent-showcase | Spotlight specific agent setups |
+| #template-sharing | Share agent templates and company configs |
+| #integrations | Connect Paperclip with external tools |
+| #agent-showcase | Spotlight specific agent configurations |
 
 ### 🏆 Roles
 
@@ -74,4 +76,4 @@ Your feedback directly shapes what we build next.
 
 ---
 
-*Happy travels — we can't wait to see where Sage takes you.*
+*Happy building — we can't wait to see what you create with Paperclip.*

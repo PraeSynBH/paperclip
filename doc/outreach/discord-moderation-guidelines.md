@@ -1,22 +1,22 @@
-# Voyonder Discord — Moderation Guidelines
+# Paperclip Community — Moderation Guidelines
 
 *Ready to post in #rules channel. Updated Aug 2026.*
 
 ---
 
-## Voyonder Community Guidelines
+## Paperclip Community Guidelines
 
 ### Our Ethos
 
-This is a community for **builders, travelers, and early adopters**. We're here to shape the future of AI-powered trip planning together. Every member — whether you're a beta tester, a contributor, or just curious — deserves a constructive, respectful experience.
+This is a community for **builders, operators, and early adopters** of Paperclip — the open-source agent operating system. We're here to shape the future of AI-powered work together. Every member — whether you're a beta tester, a contributor, or just curious — deserves a constructive, respectful experience.
 
 ### Rules
 
 #### 1. Be Constructive
-Critique **ideas**, not people. Disagreement is welcome; personal attacks, harassment, or demeaning comments are not. This is a community for builders — challenge the product, not each other.
+Critique **ideas**, not people. Disagreement is welcome; personal attacks, harassment, or demeaning comments are not. This is a community for builders — challenge the platform, not each other.
 
 #### 2. No Self-Promotion or Spam
-Share your Voyonder-built trips and use cases in #showcase. Unsolicited links to unrelated products, services, or crypto/NFT projects will be removed. If you're unsure whether something belongs, ask a Moderator first.
+Share your Paperclip-built agent companies and use cases in #showcase. Unsolicited links to unrelated products, services, or crypto/NFT projects will be removed. If you're unsure whether something belongs, ask a Moderator first.
 
 #### 3. No Confidential or NDA-Breaching Content
 Do not share access keys, API credentials, internal documentation, or any material covered by non-disclosure agreements. We want an open community, but some things stay in private channels.
@@ -31,7 +31,7 @@ See something that violates these guidelines? Tag a **@Moderator** or use `/repo
 Each channel has a purpose (see the channel guide in #welcome). Keep discussions in the right channel. Off-topic posts may be moved or removed by Moderators.
 
 #### 7. No Impersonation
-Do not impersonate Voyonder staff, Moderators, or other community members.
+Do not impersonate Paperclip staff, Moderators, or other community members.
 
 ### Moderation Actions
 

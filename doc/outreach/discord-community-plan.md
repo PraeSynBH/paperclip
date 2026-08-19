@@ -1,7 +1,11 @@
 # Discord Community Plan — Early Adopters
 
 **Owner:** COO (PRA-921)
-**Status:** Plan complete — ready-to-post assets drafted. Server live (discord.gg/m4HZY7xNG3, 8,600+ members per VOY-1345 verification). Execution of channel config + beta invites is human/CEO-gated.
+**Status:** Ready but blocked on human Discord Admin. Welcome message and moderation guidelines fixed from Voyonder → Paperclip branding (2026-08-19). Execution gated on Ben (Discord channel setup) + CEO (beta contact info).
+**Server:** Paperclip Community — discord.gg/m4HZY7xNG3
+**Guild ID:** 1478750559191302299
+**Members:** ~8,582 (verified via Discord API, 2026-08-19)
+**Online:** ~1,267 (at time of check)
 **Date:** August 2026
 
 ---
@@ -105,16 +109,21 @@ Automated prompts (via Discord bot or pinned posts):
 
 ## Pre-Launch Checklist
 
-- [x] Create Discord server (server live: discord.gg/m4HZY7xNG3 — 8,600+ members, verified VOY-1345)
-- [ ] Set up server structure (categories and channels per above) — human Discord admin
-- [ ] Create invite link set to never-expire
-- [ ] Set up moderation roles and permissions — human Discord admin
-- [x] Write and pin welcome message and rules (drafts: discord-welcome-message.md, discord-moderation-guidelines.md — ready to post in #welcome/#rules)
-- [ ] Connect GitHub → #changelog webhook
-- [ ] Create onboarding bot (or use Carl-bot / MEE6 for auto-roles)
+- [x] Create Discord server (server live: discord.gg/m4HZY7xNG3 — verified 8,582 members via API)
+- [x] Confirm server identity — named "Paperclip" (Guild ID: 1478750559191302299)
+- [ ] Set up server structure (categories and channels per discord-channel-config.md) — **human Discord admin required**
+- [ ] Create invite link set to never-expire (existing link works, verify it's permanent)
+- [ ] Set up moderation roles and permissions (per discord-channel-config.md Role Configuration) — **human Discord admin required**
+- [x] Draft welcome message and moderation guidelines (discord-welcome-message.md, discord-moderation-guidelines.md — corrected to Paperclip brand 2026-08-19)
+- [ ] Pin welcome message and rules in #welcome
+- [ ] Configure GitHub → #changelog webhook (steps documented in discord-channel-config.md)
+- [ ] Set up onboarding bot (Carl-bot recommended — config guide in discord-channel-config.md)
 - [ ] Test invite flow with a test account
-- [ ] Invite initial beta customers (from CEO's candidate pool — doc/status/beta-customer-candidates.md, currently TBD)
-- [ ] Post launch announcement in relevant communities
+- [ ] Invite initial beta customers (from beta-customer-candidates.md — **contact info TBD from CEO**)
+- [x] Create beta email templates (beta-email-templates.md — ready to send)
+- [x] Draft community launch posts (community-launch-posts.md — ready to publish)
+- [ ] Seed #showcase with case studies (drafts exist: doc/outreach/case-study-*.md)
+- [ ] Post launch announcement in relevant communities (gated on beta cohort live)
 
 ---
 
