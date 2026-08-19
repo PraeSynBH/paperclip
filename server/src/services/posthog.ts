@@ -1,6 +1,7 @@
 import { PostHog } from "posthog-node";
 import type { FeatureFlagEvaluations } from "posthog-node";
 import { logger } from "../middleware/logger.js";
+import { redactSensitiveText } from "../redaction.js";
 
 let client: PostHog | null = null;
 let _initialized = false;
@@ -65,6 +66,12 @@ export function isPostHogEnabled(): boolean {
  * `$exception_*` properties in PostHog. Any additional properties in `extra`
  * are merged into the event properties.
  *
+ * **Security:** Error messages and stack traces are scrubbed through
+ * `redactSensitiveText()` before being sent to PostHog to prevent PII
+ * (file paths, SQL constraint values, connection strings) from egressing
+ * to a third-party telemetry service. Only the error name/code is passed
+ * through unchanged.
+ *
  * No-op when PostHog is not configured.
  */
 export function captureErrorEvent(
@@ -74,14 +81,53 @@ export function captureErrorEvent(
 ): void {
   const c = getClient();
   if (!c) return;
-  c.captureException(error, distinctId ?? "paperclip-server", extra);
+
+  // Strip PII before egress to third-party telemetry.
+  // Keep the error name/code (low-risk identifiers) but redact message/stack.
+  const sanitized = sanitizeErrorForTelemetry(error);
+  c.captureException(sanitized, distinctId ?? "paperclip-server", extra);
+}
+
+/**
+ * Strip PII from an error before sending to a third-party telemetry service.
+ *
+ * - Error name / constructor name: passed through (low-risk identifiers).
+ * - Error message: redacted via `redactSensitiveText()` to catch secrets,
+ *   file paths, emails, and connection strings that may appear in messages
+ *   (e.g. SQL constraint violation messages containing user email).
+ * - Stack trace: redacted in place. PostHog's `captureException` auto-extracts
+ *   `$exception_stack_trace` from the error object; preserving the trace
+ *   (with redacted file paths and tokens) enables triage by throw site.
+ * - Non-standard Error objects: returned as-is (the caller is responsible).
+ */
+function sanitizeErrorForTelemetry(error: unknown): Error | unknown {
+  if (!(error instanceof Error)) return error;
+
+  error.message = redactSensitiveText(error.message);
+
+  if (typeof error.stack === "string") {
+    error.stack = redactSensitiveText(error.stack);
+  }
+
+  // Recursively redact the cause chain (mutating in place preserves identity).
+  if (error.cause instanceof Error) {
+    sanitizeErrorForTelemetry(error.cause);
+  }
+
+  return error;
 }
 
 /**
  * Capture a custom metric / business event in PostHog.
  *
+ * **IMPORTANT:** Always pass a meaningful `distinctId` (typically `companyId`)
+ * for business events. The default `"paperclip-server"` collapses all companies
+ * and actors into a single anonymous user, making per-company analytics
+ * impossible. Pass the actor identity in `properties` as well.
+ *
  * @param eventName  The PostHog event name (e.g. `"agent.run.completed"`).
- * @param distinctId  Optional user or actor identifier; defaults to `"paperclip-server"`.
+ * @param distinctId  User or actor identifier. **Do not rely on the default.**
+ *   Pass `companyId` for business events.
  * @param properties  Arbitrary properties to attach (metric name, value, tags, …).
  *
  * No-op when PostHog is not configured.

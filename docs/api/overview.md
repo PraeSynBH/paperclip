@@ -30,6 +30,7 @@ All endpoints are prefixed with `/api`.
 | Billing | [Billing](/api/billing) | Subscriptions, usage, invoices |
 | Company Templates | [Company Templates](/api/company-templates) | One-click company deployment |
 | Marketplace | [Marketplace](/api/marketplace) | Browse and hire marketplace agents |
+| Knowledge Starter Packs | [Knowledge Starter Packs](/api/knowledge-starter-packs) | Browse, inspect, and install pre-curated knowledge document bundles |
 | Onboarding | [Onboarding](/api/onboarding) | Self-service company creation with default agents |
 | Costs & budgets | [Costs](/api/costs) | Spend tracking and budgets |
 | Secrets | [Secrets](/api/secrets) | Secret storage and agent grants |

@@ -44,6 +44,10 @@ export function errorHandler(
     const details = err.details && typeof err.details === "object" && !Array.isArray(err.details)
       ? err.details as Record<string, unknown>
       : null;
+    // Snapshot the client-visible message before captureErrorEvent: the PostHog
+    // pipeline redacts err.message in place (sanitizeErrorForTelemetry), and
+    // the response body must not depend on whether telemetry is configured.
+    const responseMessage = err.message;
     if (err.status >= 500) {
       attachErrorContext(
         req,
@@ -53,14 +57,14 @@ export function errorHandler(
       );
       const tc = getTelemetryClient();
       if (tc) trackErrorHandlerCrash(tc, { errorCode: err.name });
-      captureErrorEvent(err, undefined, {
+      captureErrorEvent(err, req.actor?.companyId ?? "paperclip-server", {
         url: req.originalUrl,
         method: req.method,
         errorCode: err.name,
       });
     }
     res.status(err.status).json({
-      error: err.message,
+      error: responseMessage,
       ...(typeof details?.code === "string" ? { code: details.code } : {}),
       ...(err.details ? { details: err.details } : {}),
     });
@@ -84,7 +88,10 @@ export function errorHandler(
 
   const tc = getTelemetryClient();
   if (tc) trackErrorHandlerCrash(tc, { errorCode: rootError.name });
-  captureErrorEvent(rootError, undefined, {
+  // Snapshot before captureErrorEvent: in-place PII redaction must not change
+  // the client-visible trusted-import message.
+  const responseMessage = rootError.message;
+  captureErrorEvent(rootError, req.actor?.companyId ?? "paperclip-server", {
     url: req.originalUrl,
     method: req.method,
     errorCode: rootError.name,
@@ -92,7 +99,7 @@ export function errorHandler(
 
   res.status(500).json({
     error: "Internal server error",
-    ...(shouldExposeTrustedCloudTenantImportError(req) ? { message: rootError.message } : {}),
+    ...(shouldExposeTrustedCloudTenantImportError(req) ? { message: responseMessage } : {}),
   });
 }
 

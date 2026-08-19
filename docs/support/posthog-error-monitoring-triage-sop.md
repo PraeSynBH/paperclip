@@ -1,29 +1,34 @@
 ---
-title: PostHog Error Monitoring — Support Engineer Triage SOP
-summary: SOP for triaging auto-created PostHog error issues (VOY-999)
+title: PostHog Monitoring — Support Engineer Triage SOP
+summary: SOP for triaging PostHog error issues and business events (VOY-999 / VOY-1420)
 status: draft
-applies_to: VOY-999 / VOY-1015 release
+applies_to: VOY-999 / VOY-1015 / VOY-1420
 ---
 
-# PostHog Error Monitoring — Support Engineer Triage SOP
+# PostHog Monitoring — Support Engineer Triage SOP
 
-**Version:** 1.2
-**Date:** 2026-08-17
-**Author:** Founding Engineer (57fa7e0e)
-**Status:** Final — bash script deployed to scripts/; pending VPS-1 cron setup
-**Applies to:** VOY-999 / VOY-1007 / VOY-1015
+**Version:** 1.4.2
+**Date:** 2026-08-19
+**Author:** Support Engineer (88b72065)
+**Status:** Final — Business events instrumentation landed (VOY-1420); P1 stack-trace fix applied (VOY-1430 / e63b2a1f67); SOP updated to reflect in-place redaction
+**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / e63b2a1f67
 
 ---
 
 ## Overview
 
-The PostHog Error Monitoring system auto-creates Paperclip issues for production errors captured by PostHog and assigns them to the Support Engineer (agent 88b72065). This SOP defines how to triage, classify, and resolve those issues.
+PostHog serves two roles in the Voyonder platform:
+
+1. **Error monitoring** — Auto-creates Paperclip issues for production errors captured by PostHog and assigns them to the Support Engineer (agent 88b72065).
+2. **Business event telemetry** — Tracks key product events (approvals, notification digests) using `captureMetric()` with company-level distinct IDs.
+
+This SOP defines how to triage, classify, and resolve issues in both categories.
 
 ---
 
 ## How It Works
 
-1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog
+1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — error messages and stack traces are scrubbed in-place via `sanitizeErrorForTelemetry()` (redactSensitiveText on message + stack), preserving the original throw site for triage.
 2. **Cron poll:** `scripts/posthog-error-monitor.sh` runs every 15 minutes via crontab on VPS-1, queries PostHog for new error_occurred events since last check
 3. **Issue creation:** For each unique error signature (grouped by event+component+normalized message), a Paperclip issue is created:
    - **Title:** `[PostHog] {event}: {component} — {truncated message}`
@@ -34,6 +39,60 @@ The PostHog Error Monitoring system auto-creates Paperclip issues for production
 4. **Deduplication:** Error signatures are normalized (UUIDs, timestamps, UNIX timestamps stripped) and cooldown prevents re-alerting on the same signature within 60 minutes
 5. **State file:** `/var/tmp/posthog_monitor_last_check` tracks the last successful poll
 6. **Pending retry:** If Paperclip API is unreachable, issue payloads are saved to `/var/tmp/posthog_pending/` and retried on the next run
+
+---
+
+## Business Events
+
+Business events are sent to PostHog via `captureMetric()` to track key product operations. Unlike error events, these are **not** auto-created as Paperclip issues — they are telemetry data used for dashboards, analytics, and debugging.
+
+### Instrumented Events
+
+| Event Name | Source | Trigger | distinctId | Properties |
+|---|---|---|---|---|
+| `approval.approved` | `services/approvals.ts` | An approval (hire, strategy, plan gate) is approved | `companyId` | `approvalId`, `approvalType`, `decidedByUserId`, `applied`, `decisionNote` |
+| `approval.rejected` | `services/approvals.ts` | An approval is rejected | `companyId` | `approvalId`, `approvalType`, `decidedByUserId`, `applied`, `decisionNote` |
+| `notification.digest.sent` | `services/notifications.ts` | A batch of notification digests is delivered | `companyId` | `frequency` (daily/hourly), `notificationCount` |
+
+### distinctId Rule
+
+All business events use `companyId` as the `distinctId` (never the default `"paperclip-server"`). This ensures per-company analytics are possible. The actor identity is included in the `properties` object when applicable.
+
+### Error Events distinctId
+
+Starting with VOY-1420, error events (`captureErrorEvent`) also use `companyId` as `distinctId` (resolved from `req.actor?.companyId`), falling back to `"paperclip-server"` when no actor is available. Previously all error events used `undefined` as the default. This enables per-company error tracking.
+
+### Stack Trace Preservation (resolved)
+
+**VOY-1430 / `e63b2a1f67` — Applied.** The `sanitizeErrorForTelemetry()` function now mutates the original error's `message` and `stack` properties in-place via `redactSensitiveText()` instead of creating a new `Error` object. This preserves the original throw site in `$exception_stack_trace` for PostHog's `captureException`, with file paths and tokens redacted.
+
+**What changed:**
+- **Before (v1.4.1):** `sanitizeErrorForTelemetry` created `new Error(redactedMessage)` — every captured exception appeared to originate from `posthog.ts`, making stack-based triage useless.
+- **After (v1.4.2+):** The original error is redacted in-place. Stack traces point at the original throw site (e.g., a route handler or service file). Tests verify that the sanitized stack contains the original caller's filename (`posthog.test.ts`).
+
+**Triage guidance:** Stack traces can now be relied on for triage, but note that file paths and tokens in stack frames are redacted (replaced with `***REDACTED***`). The error `name` and `code` are preserved unchanged as low-risk identifiers.
+
+### Debugging Business Events
+
+```bash
+# Query PostHog for approval events (via PostHog API)
+curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=approval.approved" \
+  -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY"
+
+# Query PostHog for notification digest events
+curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=notification.digest.sent" \
+  -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY"
+
+# Check if a specific company's events are flowing
+curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=approval.approved&distinct_id={companyId}" \
+  -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY"
+```
+
+### What to Watch For
+
+- **Missing business events** — If `approval.approved` or `notification.digest.sent` events stop appearing, check that PostHog is configured (env vars) and `captureMetric()` is not being filtered by a feature gate.
+- **Zero counts in dashboards** — Business events rely on `companyId` as distinctId. If a company's events are not grouped correctly, verify the `captureMetric` call passes the correct `companyId`.
+- **PII in event properties** — Unlike error events, business event properties are **not** auto-redacted. Ensure that event properties (e.g., `decisionNote`) do not contain user PII. If a PII leak is found in a business event, escalate to the CTO.
 
 ---
 
@@ -58,6 +117,8 @@ Read the issue body to determine:
 | **HIGH** | Feature broken for subset of users (search fails, itinerary not loading) | 4 hours | Investigate root cause. If can fix, do. If not, assign to CTO or Founding Engineer |
 | **MEDIUM** | Non-critical failure (analytics not tracking, minor UI glitch) | 24 hours | Triage during next heartbeat. If low priority, move to backlog |
 | **LOW** | Cosmetic or edge case (rare error path, expected failure handled gracefully) | Best effort | Acknowledge and close, or keep in backlog for monitoring |
+
+**Note on PII:** Error messages and stack traces arriving in PostHog are already scrubbed by the server-side `sanitizeErrorForTelemetry()` function — secrets, file paths, emails, and connection strings are redacted in-place before egress. The original error message is still available in server logs (`journalctl`). For investigating PII leaks, check the server logs, not PostHog.
 
 ### Step 3: Root Cause Investigation
 

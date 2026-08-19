@@ -13,7 +13,7 @@ This directory contains support case assessments for Paperclip features. Each do
 |---|---|---|---|---|
 | Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
 | Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Aug 18, 2026 (PR #48) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
-| Knowledge Starter Packs — curated KB document bundles installed with company templates | v0.5.0 | Aug 18, 2026 (PR #48) | [Starter Packs](assessments/support-case-knowledge-starter-packs.md) |
+| Knowledge Starter Packs — curated KB document bundles installed with company templates or via standalone API | v0.5.0 | Aug 18, 2026 (PR #48) | [Starter Packs](assessments/support-case-knowledge-starter-packs.md) + [API](/api/knowledge-starter-packs) |
 | Billing System — Stripe subscriptions, usage, invoices (trust boundary hardened) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Billing](assessments/support-case-billing-system.md) + [API](/api/billing) |
 | Notification System — 5 types, 3 channels, digests, dedup (idempotency hardened) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Notification](assessments/support-case-notification-system.md) + [API](/docs/api/notifications) |
 | Company Templates — one-click company deploy (production-stable) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Templates](assessments/support-case-company-templates.md) + [API](/docs/api/company-templates) |
@@ -51,7 +51,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Document | Covers | Status |
 |---|---|---|
-| [PostHog Error Monitoring Triage](posthog-error-monitoring-triage-sop.md) | SOP for triaging PostHog error issues auto-created by the monitor | Implementation landed (83db54a); awaiting release |
+| [PostHog Monitoring Triage](posthog-error-monitoring-triage-sop.md) | SOP for triaging PostHog error issues auto-created by the monitor + business event telemetry (approvals, notification digests) | Implementation landed (83db54a); business events landed (VOY-1420); awaiting full release |
 
 ## Planned Assessments
 

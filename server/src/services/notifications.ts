@@ -30,6 +30,7 @@ import {
   trackNotificationDeliverySent,
   trackNotificationDeliveryFailed,
 } from "@paperclipai/shared/telemetry";
+import { captureMetric } from "./posthog.js";
 
 // ---------------------------------------------------------------------------
 // SMTP mailer — lightweight, no external dependency (Node built-ins only)
@@ -75,9 +76,17 @@ async function sendEmailViaSmtp(opts: {
   const cfg = resolveMailerConfig();
   const useSsl = cfg.port === 465;
 
+  let net: typeof import("node:net");
+  let tls: typeof import("node:tls");
   try {
-    const net = await import("node:net");
-    const tls = await import("node:tls");
+    net = await import("node:net");
+    tls = await import("node:tls");
+  } catch (importErr: any) {
+    logger.warn({ err: importErr }, "Failed to import Node.js networking modules; email unavailable");
+    return false;
+  }
+
+  try {
 
     const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const messageId = `<${Date.now()}.${Math.random().toString(36).slice(8)}@${cfg.host}>`;
@@ -262,6 +271,37 @@ function isVapidConfigured(): boolean {
   return Boolean(cfg.publicKey && cfg.privateKey);
 }
 
+/**
+ * Bounded dedup cache for VAPID 410/404 warn logs to avoid per-call spam.
+ * Keyed by endpoint URL → first-warned timestamp (ms).
+ *
+ * Bounded so it cannot grow without bound: stale endpoint URLs (~300 chars
+ * each) accumulate from users clearing browser data / uninstalling PWAs.
+ * When the cache is full, the oldest entry is evicted (FIFO) to make room.
+ */
+const MAX_VAPID_EXPIRED_ENDPOINTS = 10_000;
+const _vapidExpiredWarnedEndpoints = new Map<string, number>();
+
+/**
+ * Returns true if the endpoint should be warned about now (first sighting,
+ * or previously evicted from the bounded cache). Records the sighting.
+ */
+function shouldWarnExpiredEndpoint(endpoint: string): boolean {
+  if (_vapidExpiredWarnedEndpoints.has(endpoint)) {
+    return false;
+  }
+  // FIFO eviction: drop the oldest entry when at capacity so the cache
+  // stays bounded regardless of how many unique expired endpoints accrue.
+  if (_vapidExpiredWarnedEndpoints.size >= MAX_VAPID_EXPIRED_ENDPOINTS) {
+    const oldest = _vapidExpiredWarnedEndpoints.keys().next().value;
+    if (oldest !== undefined) {
+      _vapidExpiredWarnedEndpoints.delete(oldest);
+    }
+  }
+  _vapidExpiredWarnedEndpoints.set(endpoint, Date.now());
+  return true;
+}
+
 async function sendWebPush(
   subscription: { endpoint: string; p256dh: string; auth: string },
   payload: { title: string; body: string; linkUrl?: string; notificationId?: string },
@@ -270,8 +310,16 @@ async function sendWebPush(
     return false;
   }
 
+  let send: any;
   try {
-    const { send } = await import("web-push");
+    const mod: any = await import("web-push");
+    send = mod.send;
+  } catch (importErr: any) {
+    logger.warn({ err: importErr }, "web-push module import failed; push notifications unavailable");
+    return false;
+  }
+
+  try {
     const cfg = resolveVapidConfig();
 
     await send({
@@ -298,9 +346,11 @@ async function sendWebPush(
 
     return true;
   } catch (err: any) {
-    // If subscription is expired/gone, log and return false
+    // If subscription is expired/gone, log once per endpoint to avoid spam
     if (err?.statusCode === 410 || err?.statusCode === 404) {
-      logger.warn({ endpoint: subscription.endpoint }, "Push subscription expired or gone");
+      if (shouldWarnExpiredEndpoint(subscription.endpoint)) {
+        logger.warn({ endpoint: subscription.endpoint }, "Push subscription expired or gone");
+      }
       return false;
     }
     logger.error({ err, endpoint: subscription.endpoint }, "Web push send failed");
@@ -936,6 +986,13 @@ export function notificationService(db: Db) {
       }
     }
 
+    if (sent > 0) {
+      captureMetric("notification.digest.sent", companyId, {
+        frequency,
+        notificationCount: sent,
+      });
+    }
+
     return { sent };
   }
 
@@ -995,4 +1052,10 @@ export function notificationService(db: Db) {
 export type NotificationService = ReturnType<typeof notificationService>;
 
 // Exported for testing of graceful degradation
-export { isSmtpConfigured, sendEmailViaSmtp, isVapidConfigured, sendWebPush };
+export {
+  isSmtpConfigured,
+  sendEmailViaSmtp,
+  isVapidConfigured,
+  sendWebPush,
+  shouldWarnExpiredEndpoint,
+};
