@@ -1,6 +1,7 @@
 import { PostHog } from "posthog-node";
 import type { FeatureFlagEvaluations } from "posthog-node";
 import { logger } from "../middleware/logger.js";
+import { POSTHOG_FLUSH_INTERVAL_MS } from "../timeout-constants.js";
 
 let client: PostHog | null = null;
 let _initialized = false;
@@ -30,7 +31,7 @@ export function initPostHog(): PostHog | null {
     client = new PostHog(apiKey, {
       host,
       flushAt: 20,
-      flushInterval: 10_000,
+      flushInterval: POSTHOG_FLUSH_INTERVAL_MS,
     });
     logger.info({ host }, "[paperclip] PostHog instrumentation enabled");
   } catch (err) {

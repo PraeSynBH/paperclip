@@ -35,6 +35,11 @@ import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import {
+  KEEP_ALIVE_TIMEOUT_MS,
+  HEADERS_TIMEOUT_MS,
+  ORPHANED_RUN_STALE_THRESHOLD_MS,
+} from "./timeout-constants.js";
+import {
   feedbackService,
   backfillPrincipalAccessCompatibility,
   bootstrapExecutionPolicyFromEnv,
@@ -673,8 +678,8 @@ export async function startServer(): Promise<StartedServer> {
   // Increase keep-alive timeouts to safely outlive default idle timeouts
   // of common reverse proxies and load balancers (like AWS ALB, Nginx, or Traefik).
   // This prevents intermittent 502/ECONNRESET errors caused by Node's 5s default.
-  server.keepAliveTimeout = 185000;
-  server.headersTimeout = 186000;
+  server.keepAliveTimeout = KEEP_ALIVE_TIMEOUT_MS;
+  server.headersTimeout = HEADERS_TIMEOUT_MS;
   
   if (listenPort !== requestedListenPort) {
     logger.warn(`Requested port is busy; using next free port (requestedPort=${requestedListenPort}, selectedPort=${listenPort})`);
@@ -901,10 +906,10 @@ export async function startServer(): Promise<StartedServer> {
           logger.error({ err }, "environment customImage setup cleanup failed");
         });
   
-      // Periodically reap orphaned runs (5-min staleness threshold) and make sure
+      // Periodically reap orphaned runs (configurable staleness threshold) and make sure
       // persisted queued work is still being driven forward.
       void heartbeat
-        .reapOrphanedRuns({ staleThresholdMs: 5 * 60 * 1000 })
+        .reapOrphanedRuns({ staleThresholdMs: ORPHANED_RUN_STALE_THRESHOLD_MS })
         .then(() => heartbeat.promoteDueScheduledRetries())
         .then(async (promotion) => {
           await heartbeat.resumeQueuedRuns();

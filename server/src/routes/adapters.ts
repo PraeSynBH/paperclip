@@ -45,6 +45,7 @@ import { loadExternalAdapterPackage, getUiParserSource, getOrExtractUiParserSour
 import { logger } from "../middleware/logger.js";
 import { assertBoardOrgAccess, assertInstanceAdmin } from "./authz.js";
 import { BUILTIN_ADAPTER_TYPES } from "../adapters/builtin-adapter-types.js";
+import { CONFIG_SCHEMA_CACHE_TTL_MS, PLUGIN_NPM_INSTALL_TIMEOUT_MS } from "../timeout-constants.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -264,7 +265,7 @@ export function adapterRoutes() {
 
         await execFileAsync("npm", ["install", "--no-save", spec], {
           cwd: pluginsDir,
-          timeout: 120_000,
+          timeout: PLUGIN_NPM_INSTALL_TIMEOUT_MS,
         });
 
         // Read installed version from package.json
@@ -591,7 +592,7 @@ export function adapterRoutes() {
 
       await execFileAsync("npm", ["install", "--no-save", record.packageName], {
         cwd: pluginsDir,
-        timeout: 120_000,
+        timeout: PLUGIN_NPM_INSTALL_TIMEOUT_MS,
       });
 
       // Reload the freshly installed adapter
@@ -634,7 +635,6 @@ export function adapterRoutes() {
     schema: AdapterConfigSchema;
     fetchedAt: number;
   }>();
-  const CONFIG_SCHEMA_TTL_MS = 30_000;
 
   router.get("/adapters/:type/config-schema", async (req, res) => {
     // Config schemas are read-only form metadata used when org members create
@@ -653,7 +653,7 @@ export function adapterRoutes() {
     }
 
     const cached = configSchemaCache.get(type);
-    if (cached && cached.adapter === adapter && Date.now() - cached.fetchedAt < CONFIG_SCHEMA_TTL_MS) {
+    if (cached && cached.adapter === adapter && Date.now() - cached.fetchedAt < CONFIG_SCHEMA_CACHE_TTL_MS) {
       res.json(cached.schema);
       return;
     }

@@ -31,6 +31,7 @@ import {
 import { badRequest, conflict, HttpError, notFound } from "../errors.js";
 import { companyPortabilityService } from "./company-portability.js";
 import { localEncryptedProvider } from "../secrets/local-encrypted-provider.js";
+import { CLOUD_UPSTREAM_DISCOVERY_TIMEOUT_MS, CLOUD_UPSTREAM_REMOTE_FETCH_TIMEOUT_MS } from "../timeout-constants.js";
 
 const DEFAULT_SCOPES = ["upstream_import:preview", "upstream_import:write", "upstream_import:read"];
 const TRANSFER_SCHEMA = {
@@ -40,8 +41,6 @@ const TRANSFER_SCHEMA = {
   minor: 0,
 } as const;
 const DEFAULT_MAX_ENTITIES_PER_CHUNK = 100;
-const DISCOVERY_FETCH_TIMEOUT_MS = 30_000;
-const REMOTE_FETCH_TIMEOUT_MS = 120_000;
 const CLOUD_CREDENTIAL_PREFIX = "paperclip-cloud-credential:";
 
 type NormalizedSha256 = `sha256:${string}`;
@@ -655,7 +654,7 @@ async function fetchDiscovery(remoteUrl: string): Promise<Record<string, unknown
   if (stackId) {
     discoveryUrl.searchParams.set("stackId", stackId);
   }
-  const response = await fetchWithTimeout(discoveryUrl, undefined, DISCOVERY_FETCH_TIMEOUT_MS);
+  const response = await fetchWithTimeout(discoveryUrl, undefined, CLOUD_UPSTREAM_DISCOVERY_TIMEOUT_MS);
   if (!response.ok) {
     throw badRequest(`Cloud upstream discovery failed: ${response.status}`);
   }
@@ -971,7 +970,7 @@ async function remoteGet(connection: ConnectionRow, path: string): Promise<unkno
   const response = await fetchWithTimeout(`${connection.targetOrigin}${path}`, {
     method: "GET",
     headers: await proofHeaders(connection, "GET", path),
-  }, REMOTE_FETCH_TIMEOUT_MS);
+  }, CLOUD_UPSTREAM_REMOTE_FETCH_TIMEOUT_MS);
   return parseRemoteResponse(response);
 }
 
@@ -983,7 +982,7 @@ async function remotePost(connection: ConnectionRow, path: string, body: unknown
       ...await proofHeaders(connection, "POST", path),
     },
     body: JSON.stringify(body),
-  }, REMOTE_FETCH_TIMEOUT_MS);
+  }, CLOUD_UPSTREAM_REMOTE_FETCH_TIMEOUT_MS);
   return parseRemoteResponse(response);
 }
 
@@ -1086,7 +1085,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
-  }, DISCOVERY_FETCH_TIMEOUT_MS);
+  }, CLOUD_UPSTREAM_DISCOVERY_TIMEOUT_MS);
   const payload = await response.json().catch(() => null);
   if (!response.ok) {
     throw badRequest((payload as { error?: string } | null)?.error ?? `Cloud upstream request failed: ${response.status}`);

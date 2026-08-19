@@ -1,7 +1,6 @@
 import type { ProviderQuotaResult } from "@paperclipai/shared";
 import { listServerAdapters } from "../adapters/registry.js";
-
-const QUOTA_PROVIDER_TIMEOUT_MS = 20_000;
+import { QUOTA_PROVIDER_TIMEOUT_MS } from "../timeout-constants.js";
 
 function providerSlugForAdapterType(type: string): string {
   switch (type) {

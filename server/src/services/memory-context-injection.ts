@@ -7,6 +7,7 @@ import { memoryBindingService } from "./memory-bindings.js";
 import { embeddingService } from "./embedding.js";
 import { knowledgeDocumentService } from "./knowledge-documents.js";
 import { logger } from "../middleware/logger.js";
+import { MEMORY_CONTEXT_INJECTION_TIMEOUT_MS } from "../timeout-constants.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 

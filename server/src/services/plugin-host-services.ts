@@ -28,6 +28,13 @@ import type {
 } from "@paperclipai/plugin-sdk";
 import type { CreateIssueThreadInteraction, InviteJoinType, IssueDocumentSummary, PermissionKey, PrincipalType } from "@paperclipai/shared";
 import { pluginOperationIssueOriginKind } from "@paperclipai/shared";
+import {
+  COMPANY_INVITE_TTL_MS,
+  DNS_LOOKUP_TIMEOUT_MS,
+  LOG_BUFFER_FLUSH_INTERVAL_MS,
+  PLUGIN_FETCH_TIMEOUT_MS,
+  SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS,
+} from "../timeout-constants.js";
 import { companyService } from "./companies.js";
 import { agentService } from "./agents.js";
 import { projectService } from "./projects.js";
@@ -79,12 +86,6 @@ import { sanitizeRecord } from "../redaction.js";
 // ---------------------------------------------------------------------------
 // SSRF protection for plugin HTTP fetch
 // ---------------------------------------------------------------------------
-
-/** Maximum time (ms) a plugin fetch request may take before being aborted. */
-const PLUGIN_FETCH_TIMEOUT_MS = 30_000;
-
-/** Maximum time (ms) to wait for a DNS lookup before aborting. */
-const DNS_LOOKUP_TIMEOUT_MS = 5_000;
 
 /** Only these protocols are allowed for plugin HTTP requests. */
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"]);
@@ -350,9 +351,6 @@ function sanitizeWorkspaceName(name: string, fallbackPath: string): string {
 /** How many buffered log entries trigger an immediate flush. */
 const LOG_BUFFER_FLUSH_SIZE = 100;
 
-/** How often (ms) the buffer is flushed regardless of size. */
-const LOG_BUFFER_FLUSH_INTERVAL_MS = 5_000;
-
 /** Max length for a single plugin log message (bytes/chars). */
 const MAX_LOG_MESSAGE_LENGTH = 10_000;
 
@@ -484,8 +482,6 @@ if (_logFlushInterval.unref) _logFlushInterval.unref();
  * @param eventBus - The system-wide event bus for publishing plugin events.
  * @returns An object implementing the HostServices interface for the plugin SDK.
  */
-/** Maximum time (ms) to keep a session event subscription alive before forcing cleanup. */
-const SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS = 30 * 60 * 1_000; // 30 minutes
 
 export function buildHostServices(
   db: Db,
@@ -868,7 +864,6 @@ export function buildHostServices(
   const INVITE_TOKEN_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
   const INVITE_TOKEN_SUFFIX_LENGTH = 8;
   const INVITE_TOKEN_MAX_RETRIES = 5;
-  const COMPANY_INVITE_TTL_MS = 72 * 60 * 60 * 1000;
 
   const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 

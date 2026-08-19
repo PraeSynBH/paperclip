@@ -1,6 +1,6 @@
 import { logger } from "../middleware/logger.js";
+import { AGENT_START_LOCK_STALE_MS } from "../timeout-constants.js";
 
-const AGENT_START_LOCK_STALE_MS = 30_000;
 const startLocksByAgent = new Map<string, { promise: Promise<void>; startedAtMs: number }>();
 
 async function waitForAgentStartLock(agentId: string, lock: { promise: Promise<void>; startedAtMs: number }) {

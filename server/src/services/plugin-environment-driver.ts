@@ -23,6 +23,7 @@ import type {
 import { unprocessable } from "../errors.js";
 import { pluginRegistryService } from "./plugin-registry.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
+import { PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS, PLUGIN_ENV_DRIVER_RPC_OVERHEAD_MS } from "../timeout-constants.js";
 
 export function pluginDriverProviderKey(config: Pick<PluginEnvironmentConfig, "pluginKey" | "driverKey">): string {
   return `${config.pluginKey}:${config.driverKey}`;
@@ -198,7 +199,7 @@ export async function probePluginEnvironmentDriver(input: {
     companyId: input.companyId,
     environmentId: input.environmentId,
     config: input.config.driverConfig,
-  }, 120_000);
+  }, PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS);
 
   return {
     ok: result.ok,
@@ -243,7 +244,7 @@ export async function probePluginSandboxProviderDriver(input: {
     companyId: input.companyId,
     environmentId: input.environmentId,
     config: driverConfig,
-  }, 120_000);
+  }, PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS);
 
   return {
     ok: result.ok,
@@ -449,7 +450,7 @@ export async function deletePluginEnvironmentTemplate(input: {
   }));
 }
 
-const RPC_OVERHEAD_BUFFER_MS = 30_000;
+const RPC_OVERHEAD_BUFFER_MS = PLUGIN_ENV_DRIVER_RPC_OVERHEAD_MS;
 
 export function resolvePluginExecuteRpcTimeoutMs(input: {
   requestedTimeoutMs?: number;

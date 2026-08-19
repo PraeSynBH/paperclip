@@ -10,8 +10,7 @@ import {
 import { validate } from "../middleware/validate.js";
 import { heartbeatService, issueService, issueTreeControlService, logActivity } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getActorInfo } from "./authz.js";
-
-const TREE_RUN_CANCELLATION_RESPONSE_WAIT_MS = 1_000;
+import { TREE_RUN_CANCELLATION_RESPONSE_WAIT_MS } from "../timeout-constants.js";
 
 function errorToMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);

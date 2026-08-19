@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import type { ServerGitInfo, ServerGitLocalChanges, ServerInfoSnapshot } from "@paperclipai/shared";
+import { GIT_INFO_CACHE_TTL_MS, GIT_COMMAND_TIMEOUT_MS } from "./timeout-constants.js";
 
 export type { ServerGitInfo, ServerInfoSnapshot };
 
@@ -15,7 +16,7 @@ function defaultGitCommand() {
     {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
-      timeout: 1500,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
     },
   );
 }
@@ -27,7 +28,7 @@ function defaultGitStatusCommand() {
     {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
-      timeout: 1500,
+      timeout: GIT_COMMAND_TIMEOUT_MS,
     },
   );
 }
@@ -114,7 +115,6 @@ export function createServerInfoSnapshot(
 // code while keeping this module alive, so a commit captured once at boot goes
 // stale. Re-read git HEAD on demand, throttled by a short TTL so frequent health
 // polls don't spawn git on every request.
-const GIT_INFO_CACHE_TTL_MS = 3000;
 const processStartedAt = new Date().toISOString();
 let gitInfoCache: { value: ServerGitInfo; expiresAt: number } | null = null;
 

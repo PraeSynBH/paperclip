@@ -25,6 +25,7 @@ import type {
 } from "@paperclipai/shared";
 import { notFound } from "../errors.js";
 import { logger } from "../middleware/logger.js";
+import { KNOWLEDGE_SEARCH_CACHE_TTL_MS } from "../timeout-constants.js";
 
 // ─── Knowledge Search Cache ──────────────────────────────────────────────────
 
@@ -37,7 +38,6 @@ const knowledgeSearchCache = new Map<string, {
   cachedAt: number;
 }>();
 const KNOWLEDGE_SEARCH_CACHE_MAX = 200;
-const KNOWLEDGE_SEARCH_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 function buildKnowledgeSearchCacheKey(companyId: string, query: string, limit: number): string {
   return `${companyId}:${query.toLowerCase().trim()}:${limit}`;

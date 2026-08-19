@@ -34,8 +34,9 @@
  * auditable per run (AC4), rather than logging a bare `{"reaped":31}`.
  */
 
-/** How far a pid's kernel start time may drift from the recorded spawn time. */
-export const PROCESS_START_TIME_TOLERANCE_MS = 10_000;
+import { PROCESS_START_TIME_TOLERANCE_MS } from "../timeout-constants.js";
+
+export { PROCESS_START_TIME_TOLERANCE_MS };
 
 export type RunProcessIdentity = {
   runId: string;

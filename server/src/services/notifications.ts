@@ -30,6 +30,11 @@ import {
   trackNotificationDeliverySent,
   trackNotificationDeliveryFailed,
 } from "@paperclipai/shared/telemetry";
+import {
+  SMTP_CONVERSATION_TIMEOUT_MS,
+  WEB_PUSH_TTL_SECONDS,
+  DEFAULT_SMTP_PORT,
+} from "../timeout-constants.js";
 
 // ---------------------------------------------------------------------------
 // SMTP mailer — lightweight, no external dependency (Node built-ins only)
@@ -38,7 +43,7 @@ import {
 function resolveMailerConfig() {
   return {
     host: process.env.SMTP_HOST ?? "",
-    port: Number(process.env.SMTP_PORT ?? "587"),
+    port: Number(process.env.SMTP_PORT ?? String(DEFAULT_SMTP_PORT)),
     user: process.env.SMTP_USER ?? "",
     pass: process.env.SMTP_PASS ?? "",
     from: process.env.SMTP_FROM ?? "noreply@voyonder.com",
@@ -116,7 +121,7 @@ async function sendEmailViaSmtp(opts: {
     const smtpTimeout = setTimeout(() => {
       timedOut = true;
       if (socket) socket.destroy(new Error("SMTP timeout"));
-    }, 30_000);
+    }, SMTP_CONVERSATION_TIMEOUT_MS);
 
     const sendLine = (line: string) => {
       if (!socket) throw new Error("SMTP socket not connected");
@@ -293,7 +298,7 @@ async function sendWebPush(
         publicKey: cfg.publicKey,
         privateKey: cfg.privateKey,
       },
-      TTL: 86400, // 24 hours
+      TTL: WEB_PUSH_TTL_SECONDS, // 24 hours
     });
 
     return true;

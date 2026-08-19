@@ -46,6 +46,7 @@ import { logActivity } from "./activity-log.js";
 import { parseObject } from "../adapters/utils.js";
 import type { RealizedExecutionWorkspace } from "./workspace-runtime.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
+import { ENVIRONMENT_PROVISION_TIMEOUT_MS } from "../timeout-constants.js";
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -424,7 +425,7 @@ export function environmentRunOrchestrator(
           env: {
             SHELL: "/bin/bash",
           },
-          timeoutMs: 300_000,
+          timeoutMs: ENVIRONMENT_PROVISION_TIMEOUT_MS,
         });
         if (provisionResult.exitCode !== 0 || provisionResult.timedOut) {
           throw new Error(formatProvisionFailureDetail(provisionResult));

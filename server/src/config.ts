@@ -29,6 +29,7 @@ import {
   resolveDefaultStorageDir,
   resolveHomeAwarePath,
 } from "./home-paths.js";
+import { TAILSCALE_DETECT_TIMEOUT_MS } from "./timeout-constants.js";
 
 const PAPERCLIP_ENV_FILE_PATH = resolvePaperclipEnvPath();
 if (existsSync(PAPERCLIP_ENV_FILE_PATH)) {
@@ -44,8 +45,6 @@ if (!isSameFile && existsSync(CWD_ENV_PATH)) {
 }
 
 maybeRepairLegacyWorktreeConfigAndEnvFiles();
-
-const TAILSCALE_DETECT_TIMEOUT_MS = 3000;
 
 type DatabaseMode = "embedded-postgres" | "postgres";
 

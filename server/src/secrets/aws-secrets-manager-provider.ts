@@ -14,6 +14,10 @@ import type {
   StoredSecretVersionMaterial,
 } from "./types.js";
 import { SecretProviderClientError } from "./types.js";
+import {
+  AWS_SECRETS_REQUEST_TIMEOUT_MS,
+  AWS_CREDENTIAL_CACHE_TTL_MS,
+} from "../timeout-constants.js";
 
 const AWS_SECRETS_MANAGER_SCHEME = "aws_secrets_manager_v1";
 const DEFAULT_PREFIX = "paperclip";
@@ -21,8 +25,6 @@ const DEFAULT_OWNER_TAG = "paperclip";
 const DEFAULT_VERSION_STAGE = "AWSCURRENT";
 const PAPERCLIP_PENDING_VERSION_STAGE = "PAPERCLIP_PENDING";
 const DEFAULT_DELETE_RECOVERY_WINDOW_DAYS = 30;
-const AWS_SECRETS_MANAGER_REQUEST_TIMEOUT_MS = 30_000;
-const AWS_CREDENTIAL_CACHE_TTL_MS = 5 * 60_000;
 const AWS_CREDENTIAL_EXPIRATION_SKEW_MS = 60_000;
 const PROVIDER_CONFIG_DISCOVERY_SAMPLE_LIMIT = 3;
 const PROVIDER_CONFIG_DISCOVERY_CANDIDATE_LIMIT = 6;

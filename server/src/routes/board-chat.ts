@@ -9,6 +9,7 @@ import type { DeploymentMode } from "@paperclipai/shared";
 import { instanceSettingsService, issueService } from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
 import { logger } from "../middleware/logger.js";
+import { BOARD_CHAT_TIMEOUT_MS } from "../timeout-constants.js";
 
 /**
  * Strip structured action signals (`%%ACTIONS%%{...}%%/ACTIONS%%`) from a
@@ -343,7 +344,7 @@ export function boardChatRoutes(
     const timeout = setTimeout(() => {
       killed = true;
       proc.kill("SIGTERM");
-    }, 120000);
+    }, BOARD_CHAT_TIMEOUT_MS);
 
     // If the client disconnects mid-stream, stop the subprocess rather than
     // letting it run out the remaining timeout window. `close` also fires

@@ -53,25 +53,31 @@ import type {
   InitializeParams,
 } from "@paperclipai/plugin-sdk";
 import { logger } from "../middleware/logger.js";
+import {
+  PLUGIN_WORKER_RPC_TIMEOUT_MS,
+  PLUGIN_WORKER_INIT_TIMEOUT_MS,
+  PLUGIN_WORKER_SHUTDOWN_DRAIN_MS,
+  PLUGIN_WORKER_SIGTERM_GRACE_MS,
+} from "../timeout-constants.js";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 /** Default timeout for RPC calls in milliseconds. */
-const DEFAULT_RPC_TIMEOUT_MS = 30_000;
+const DEFAULT_RPC_TIMEOUT_MS = PLUGIN_WORKER_RPC_TIMEOUT_MS;
 
 /** Hard upper bound for any RPC timeout (15 minutes). Prevents unbounded waits. */
 const MAX_RPC_TIMEOUT_MS = 15 * 60 * 1_000;
 
 /** Timeout for the initialize RPC call. */
-const INITIALIZE_TIMEOUT_MS = 15_000;
+const INITIALIZE_TIMEOUT_MS = PLUGIN_WORKER_INIT_TIMEOUT_MS;
 
 /** Timeout for the shutdown RPC call before escalating to SIGTERM. */
-const SHUTDOWN_DRAIN_MS = 10_000;
+const SHUTDOWN_DRAIN_MS = PLUGIN_WORKER_SHUTDOWN_DRAIN_MS;
 
 /** Time to wait after SIGTERM before sending SIGKILL. */
-const SIGTERM_GRACE_MS = 5_000;
+const SIGTERM_GRACE_MS = PLUGIN_WORKER_SIGTERM_GRACE_MS;
 
 /** Minimum backoff delay for crash recovery (1 second). */
 const MIN_BACKOFF_MS = 1_000;

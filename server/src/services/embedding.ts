@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { logger } from "../middleware/logger.js";
+import { EMBEDDING_TIMEOUT_MS, EMBEDDING_CACHE_TTL_MS } from "../timeout-constants.js";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -29,7 +30,6 @@ export interface EmbeddingConfig {
 
 const DEFAULT_MODEL = "text-embedding-3-small";
 const DEFAULT_DIMENSIONS = 1536;
-const DEFAULT_TIMEOUT_MS = 10_000;
 
 // Simple in-memory cache: key = hash of (text, model), value = embedding
 const embeddingCache = new Map<string, { embedding: number[]; cachedAt: number }>();
@@ -44,7 +44,7 @@ export function embeddingService(config?: EmbeddingConfig) {
     model: process.env.PAPERCLIP_EMBEDDING_MODEL ?? DEFAULT_MODEL,
     dimensions: DEFAULT_DIMENSIONS,
     apiKey: config?.apiKey ?? process.env.PAPERCLIP_EMBEDDING_API_KEY ?? "",
-    timeoutMs: config?.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+    timeoutMs: config?.timeoutMs ?? EMBEDDING_TIMEOUT_MS,
     ...config,
   };
 
