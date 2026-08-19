@@ -5,6 +5,41 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-19 — Heartbeat: VOY-1414 support assessment — knowledge starter packs assessment created, all v0.5.0 features documented
+
+### What was done
+
+1. **Diff assessment for v0.5.0 shipped features (VOY-1414)** — QA verification of v0.5.0 complete (VOY-1397). Shipped features assessed for documentation gaps:
+   - Agent Marketplace — ✅ existing assessment (`support-case-v0.5.0-marketplace.md`)
+   - Self-Service Onboarding — ✅ existing assessment (`support-case-v0.5.0-onboarding.md`)
+   - Company Templates — ✅ existing assessment (`support-case-company-templates.md`)
+   - Billing Integration — ✅ existing assessment (`support-case-billing-system.md`)
+   - Notification System — ✅ existing assessment (`support-case-notification-system.md`) — updated with H-3 delivery telemetry
+   - Knowledge Starter Packs — ❌ **missing assessment — created this heartbeat**
+
+2. **New support case assessment created (1):**
+   - **Knowledge Starter Packs** (`assessments/support-case-knowledge-starter-packs.md`) — Covers all 6 shipped features. New assessment covers: what the feature does (curated KB document bundles installed automatically with company templates), how it works (pack JSON structure, title-based dedup, fast-track publish flow), known limitations (no standalone API, no rollback, data directory dependency), troubleshooting (missing docs, duplicate titles, content accuracy), available packs, and escalation paths. Service lives at `server/src/services/knowledge-starter-packs.ts` — no standalone API routes; used internally by company templates.
+
+3. **Support README updated:**
+   - `docs/support/README.md` — Added Knowledge Starter Packs row to "Recently Shipped Features" table (row inserted between Onboarding and Billing System)
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 0 for v0.5.0 scope — all 6 shipped features now have assessments |
+| Release notes currency | Up to date through v0.5.0 Phase 1 (`fc416b1486`) |
+| Docs synced with live code | ✅ All v0.5.0 features assessed and documented |
+| Branch | `master` (v0.5.0 shipped) |
+
+### Next triggers to watch for
+
+- **PostHog pre-stage (VOY-1029 Phase A)** landing → SOP goes operational
+- **H-2 (VOY-1401)** console→logger conversion lands → internal ops, no doc impact
+- **COO request for documentation health report** — available on demand
+
 ## 2026-08-18 — Heartbeat: v0.5.0 docs — marketplace + onboarding support case assessments
 
 ### What was done
