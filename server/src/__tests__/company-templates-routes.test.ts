@@ -93,6 +93,17 @@ let appImportCounter = 0;
 let routeModule: typeof import("../routes/company-templates.js") | null = null;
 let middlewareModule: typeof import("../middleware/index.js") | null = null;
 
+/**
+ * Minimal fake db for the route harness.  `transaction` runs the callback
+ * inline (like a passthrough transaction) so mocked services execute inside
+ * it, and re-throws on failure — mirroring real rollback semantics.
+ */
+function createFakeDb() {
+  const fakeDb: Record<string, unknown> = {};
+  fakeDb.transaction = vi.fn(async (cb: (tx: unknown) => unknown) => cb(fakeDb));
+  return fakeDb;
+}
+
 // The services graph (via ../services/index.js) is heavy to transform (~25s cold).
 // Preload it once in beforeAll (120s hook budget) so per-test imports are cheap.
 beforeAll(async () => {
@@ -115,15 +126,16 @@ async function createApp(actor: Record<string, unknown>) {
       import(routeModulePath) as Promise<typeof import("../routes/company-templates.js")>,
       import(middlewareModulePath) as Promise<typeof import("../middleware/index.js")>,
     ]);
+  const fakeDb = createFakeDb();
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     (req as any).actor = actor;
     next();
   });
-  app.use("/api/company-templates", freshCompanyTemplateRoutes({} as any));
+  app.use("/api/company-templates", freshCompanyTemplateRoutes(fakeDb as any));
   app.use(freshErrorHandler);
-  return app;
+  return { app, db: fakeDb };
 }
 
 function createCompany() {
@@ -230,6 +242,21 @@ function resetMockDefaults() {
     ...createAgent(),
     ...body,
   }));
+  mockAgentInstructionsService.materializeManagedBundle.mockResolvedValue({
+    bundle: {
+      agentId,
+      companyId,
+      mode: "managed",
+      rootPath: `/tmp/test-instructions/${agentId}`,
+      managedRootPath: `/tmp/test-instructions/${agentId}`,
+      entryFile: "AGENTS.md",
+      resolvedEntryPath: `/tmp/test-instructions/${agentId}/AGENTS.md`,
+      editable: true,
+      warnings: [],
+      legacyPromptTemplateActive: false,
+    },
+    adapterConfig: { instructions: { mode: "managed" } },
+  });
   mockAccessService.ensureMembership.mockResolvedValue(undefined);
   mockAccessService.ensureRoleDefaultGrants.mockResolvedValue(undefined);
   mockBudgetService.upsertPolicy.mockResolvedValue(undefined);
@@ -267,7 +294,7 @@ const boardActor = {
 
 describe("GET /api/company-templates", () => {
   it("lists available templates", async () => {
-    const app = await createApp(boardActor);
+    const { app } = await createApp(boardActor);
     const res = await request(app).get("/api/company-templates");
 
     expect(res.status).toBe(200);
@@ -281,7 +308,7 @@ describe("GET /api/company-templates", () => {
   });
 
   it("returns metadata without agents or goal data", async () => {
-    const app = await createApp(boardActor);
+    const { app } = await createApp(boardActor);
     const res = await request(app).get("/api/company-templates");
 
     expect(res.status).toBe(200);
@@ -299,7 +326,7 @@ describe("GET /api/company-templates", () => {
 
 describe("GET /api/company-templates/:key", () => {
   it("returns a single template with full details", async () => {
-    const app = await createApp(boardActor);
+    const { app } = await createApp(boardActor);
     const res = await request(app).get("/api/company-templates/travel-concierge");
 
     expect(res.status).toBe(200);
@@ -311,7 +338,7 @@ describe("GET /api/company-templates/:key", () => {
   });
 
   it("returns 404 for unknown template key", async () => {
-    const app = await createApp(boardActor);
+    const { app } = await createApp(boardActor);
     const res = await request(app).get("/api/company-templates/unknown-template");
 
     expect(res.status).toBe(404);
@@ -320,7 +347,7 @@ describe("GET /api/company-templates/:key", () => {
 
 describe("POST /api/company-templates/:key/deploy", () => {
   it("deploys a template and creates company + agents", async () => {
-    const app = await createApp(boardActor);
+    const { app, db } = await createApp(boardActor);
     const res = await request(app)
       .post("/api/company-templates/travel-concierge/deploy")
       .send({});
@@ -348,10 +375,13 @@ describe("POST /api/company-templates/:key/deploy", () => {
     expect(mockIssueService.create).toHaveBeenCalledTimes(1);
     expect(mockCompanySkillService.installFromCatalog).toHaveBeenCalled();
     expect(mockStarterPackService.installPack).toHaveBeenCalledWith(companyId, "travel-industry");
+
+    // Verify the deployment was wrapped in a database transaction
+    expect(db.transaction).toHaveBeenCalled();
   });
 
   it("accepts custom company name override", async () => {
-    const app = await createApp(boardActor);
+    const { app } = await createApp(boardActor);
     const res = await request(app)
       .post("/api/company-templates/travel-concierge/deploy")
       .send({ name: "My Custom Travel Co" });
@@ -363,7 +393,7 @@ describe("POST /api/company-templates/:key/deploy", () => {
   });
 
   it("rejects unauthenticated actors", async () => {
-    const app = await createApp({ type: "none", source: "none" });
+    const { app } = await createApp({ type: "none", source: "none" });
     const res = await request(app)
       .post("/api/company-templates/travel-concierge/deploy")
       .send({});
@@ -372,11 +402,141 @@ describe("POST /api/company-templates/:key/deploy", () => {
   });
 
   it("returns 404 for unknown template", async () => {
-    const app = await createApp(boardActor);
+    const { app } = await createApp(boardActor);
     const res = await request(app)
       .post("/api/company-templates/unknown-template/deploy")
       .send({});
 
     expect(res.status).toBe(404);
+  });
+
+  // ── Transactional rollback failure tests ───────────────────
+  // Each step failure triggers a full rollback via db.transaction.
+  // With mocked services, "rollback" is verified by asserting that
+  // (a) the request returns an error (500), and (b) steps after the
+  // failing step were never attempted — no partial deployment state.
+
+  it("rolls back when company creation fails", async () => {
+    mockCompanyService.create.mockRejectedValue(new Error("db down"));
+
+    const { app } = await createApp(boardActor);
+    const res = await request(app)
+      .post("/api/company-templates/travel-concierge/deploy")
+      .send({});
+
+    expect(res.status).toBe(500);
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+    expect(mockGoalService.create).not.toHaveBeenCalled();
+  });
+
+  it("rolls back when membership setup fails", async () => {
+    mockAccessService.ensureMembership.mockRejectedValue(new Error("no membership"));
+
+    const { app } = await createApp(boardActor);
+    const res = await request(app)
+      .post("/api/company-templates/travel-concierge/deploy")
+      .send({});
+
+    expect(res.status).toBe(500);
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+
+  it("rolls back when role grant setup fails", async () => {
+    mockAccessService.ensureRoleDefaultGrants.mockRejectedValue(new Error("no grants"));
+
+    const { app } = await createApp(boardActor);
+    const res = await request(app)
+      .post("/api/company-templates/travel-concierge/deploy")
+      .send({});
+
+    expect(res.status).toBe(500);
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+
+  it("rolls back when skill install fails", async () => {
+    mockCompanySkillService.installFromCatalog.mockRejectedValue(new Error("skill not found"));
+
+    const { app } = await createApp(boardActor);
+    const res = await request(app)
+      .post("/api/company-templates/travel-concierge/deploy")
+      .send({});
+
+    expect(res.status).toBe(500);
+    expect(mockAgentService.create).not.toHaveBeenCalled();
+  });
+
+  it("rolls back when agent creation fails mid-way (agent 2 of 3)", async () => {
+    mockAgentService.create
+      .mockResolvedValueOnce(createAgent())
+      .mockRejectedValueOnce(new Error("agent create failed"));
+
+    const { app } = await createApp(boardActor);
+    const res = await request(app)
+      .post("/api/company-templates/travel-concierge/deploy")
+      .send({});
+
+    expect(res.status).toBe(500);
+    // Only first agent was attempted; second failure halts the loop
+    expect(mockAgentService.create).toHaveBeenCalledTimes(2);
+    // Steps after agent loop were never reached
+    expect(mockStarterPackService.installPack).not.toHaveBeenCalled();
+    expect(mockGoalService.create).not.toHaveBeenCalled();
+    expect(mockProjectService.create).not.toHaveBeenCalled();
+    expect(mockIssueService.create).not.toHaveBeenCalled();
+  });
+
+  it("rolls back when starter pack install fails", async () => {
+    mockStarterPackService.installPack.mockRejectedValue(new Error("pack missing"));
+
+    const { app } = await createApp(boardActor);
+    const res = await request(app)
+      .post("/api/company-templates/travel-concierge/deploy")
+      .send({});
+
+    expect(res.status).toBe(500);
+    expect(mockGoalService.create).not.toHaveBeenCalled();
+    expect(mockProjectService.create).not.toHaveBeenCalled();
+    expect(mockIssueService.create).not.toHaveBeenCalled();
+  });
+
+  it("rolls back when goal creation fails", async () => {
+    mockGoalService.create.mockRejectedValue(new Error("goal failed"));
+
+    const { app } = await createApp(boardActor);
+    const res = await request(app)
+      .post("/api/company-templates/travel-concierge/deploy")
+      .send({});
+
+    expect(res.status).toBe(500);
+    expect(mockProjectService.create).not.toHaveBeenCalled();
+    expect(mockIssueService.create).not.toHaveBeenCalled();
+  });
+
+  it("rolls back when project creation fails", async () => {
+    mockProjectService.create.mockRejectedValue(new Error("project failed"));
+
+    const { app } = await createApp(boardActor);
+    const res = await request(app)
+      .post("/api/company-templates/travel-concierge/deploy")
+      .send({});
+
+    expect(res.status).toBe(500);
+    expect(mockIssueService.create).not.toHaveBeenCalled();
+  });
+
+  it("rolls back when starter issue creation fails", async () => {
+    mockIssueService.create.mockRejectedValue(new Error("issue failed"));
+
+    const { app } = await createApp(boardActor);
+    const res = await request(app)
+      .post("/api/company-templates/travel-concierge/deploy")
+      .send({});
+
+    expect(res.status).toBe(500);
+    // Previous steps (agents, starter pack, goal, project) still happened —
+    // but the transaction rollback undoes them all.
+    expect(mockAgentService.create).toHaveBeenCalled();
+    expect(mockGoalService.create).toHaveBeenCalled();
+    expect(mockProjectService.create).toHaveBeenCalled();
   });
 });
