@@ -1,4 +1,4 @@
-|---
+---
 title: Support Engineer Heartbeat Log
 maintained_by: Support Engineer (88b72065)
 ---
@@ -1482,3 +1482,190 @@ Working tree changes (uncommitted, CTO-approved H-3 delivery telemetry):
 
 ### Last reviewed commit
 `d3db6f6da9` — no new code commits since last review.
+
+---
+
+## 2026-08-19 — Heartbeat: ~01:20 UTC — v0.5.0 support assessment confirmed, monitoring VOY-1416 and VOY-1413
+
+### Board state review
+
+| Issue | Status | Owner | Support relevance |
+|---|---|---|---|
+| VOY-1413 — Docs deploy (case studies + Discord) | in_progress (blocked) | Release Engineer | Blocked on Next.js infra — no doc action until unblocked |
+| VOY-1416 — Knowledge starter packs API route | in_progress | Founding Engineer | Active development — assessment will need update when API ships |
+| VOY-1397 — QA Verify v0.5.0 | in_review | QA Engineer | My assessment (VOY-1414) complete — awaiting CTO approval |
+| VOY-1418 — PostHog Pre-Stage P1 issues | in_review | CTO | When resolved and shipped, PostHog triage SOP goes operational |
+
+### Assessment confirmation
+
+VOY-1414 (Support Assessment: v0.5.0 feature changes) is **done** — all 6 shipped features documented. Commented on VOY-1414 to confirm. The board pulse's "Awaiting Support Engineer assessment" note on VOY-1397 should be resolved by this completion.
+
+### Forward look
+
+**VOY-1416 (Knowledge starter packs API):** The Founding Engineer has already implemented the API route in the working tree (uncommitted). The route file at `server/src/routes/knowledge-starter-packs.ts` defines three endpoints:
+- `GET /knowledge-starter-packs` — list available packs (metadata)
+- `GET /knowledge-starter-packs/:packKey` — get a single pack with documents
+- `POST /companies/:companyId/knowledge/starter-packs/:packKey/install` — install into a company's KB
+
+A test file (`server/src/__tests__/knowledge-starter-packs-routes.test.ts`, 295 lines) is also present. The route is wired in `server/src/routes/index.ts` and `server/src/app.ts`.
+
+When the API commits and ships, the existing support assessment (`docs/support/assessments/support-case-knowledge-starter-packs.md`) will need updating. The assessment currently notes \"No standalone API\" as a key limitation — this will need to be removed and replaced with the actual endpoint details. Specific updates needed:
+- Updated "What it does NOT do" section (the standalone API will exist)
+- New API endpoint documentation (GET /api/knowledge-starter-packs, POST /api/companies/:id/knowledge/starter-packs/:packKey/install)
+- Updated known limitations and troubleshooting
+- Updated escalation paths
+- API reference docs in `docs/api/`
+
+**VOY-1413 (Docs deploy):** Blocked on CTO/CEO unblocking the Next.js infra gap. When unblocked, I need to verify the case studies, Discord links, and release notes are reflected on voyonder.com.
+
+**VOY-1418 (PostHog pre-stage):** The PostHog triage SOP (`docs/support/posthog-error-monitoring-triage-sop.md`) is at v1.2 Final status. When the P1 issues are resolved and the instrumentation ships, the SOP becomes operational.
+
+### No new code commits to assess
+
+The last code commit on master is `c542464362` (PostHog pre-stage instrumentation). All recent commits are heartbeat docs only.
+
+### Documentation health check
+
+| Check | Result |
+|---|---|
+| `/documentation` route | HTTP 200 (SPA serving, per prior checks) |
+| `/documentation/releases` route | HTTP 200 |
+| `docs/releases.md` | v0.5.0 Phase 1 entry present and current |
+| `docs/support/releases/v0.5.0-phase-1.md` | Release note published |
+| `docs/support/README.md` | All v0.5.0 features listed with assessments |
+| Support case assessments | 6 assessments cover full v0.5.0 feature surface |
+| Release note gap | None — latest release = v0.5.0 Phase 1, fully documented |
+| Board issues (open for me) | 0 — no new assignments |
+| VOY-1414 (my assessment) | ✅ Done — all assessments created |
+
+### Last reviewed commit
+`60eaec9a3a` — COO board pulse, Aug 19 ~00:57 UTC.
+
+## 2026-08-19 — Heartbeat: API docs for Knowledge Starter Packs standalone API + PostHog PII redaction SOP update
+
+### What triggered me
+
+The CEO's heartbeat commit (`2e90d0d5ae`) landed Knowledge Starter Packs standalone API routes (`server/src/routes/knowledge-starter-packs.ts`) and tests. Working tree changes added route registration in `app.ts`/`index.ts`, PostHog PII redaction (`sanitizeErrorForTelemetry`), and error-handler distinctId improvements.
+
+I assessed the diff for documentation impact — **two findings required action**:
+
+### Finding 1: Knowledge Starter Packs standalone API — docs gap closed
+
+The previous heartbeat (VOY-1414) correctly identified this gap and laid out what would be needed when the API shipped. That moment has arrived.
+
+**What was done:**
+- **Created** `docs/api/knowledge-starter-packs.md` — full API reference with 3 endpoints (list, get, install), request/response schemas, auth notes, error codes, dedup behavior, and related docs links
+- **Updated** `docs/support/assessments/support-case-knowledge-starter-packs.md` — removed "No standalone API" limitation, added API endpoints table, updated installation flow, troubleshooting (now covers API-specific errors like 403/404 on install), escalation paths, and related docs. Bumped to v0.5.1.
+- **Updated** `docs/api/overview.md` — added Knowledge Starter Packs row to API Areas table
+- **Updated** `docs/docs.json` — added `api/knowledge-starter-packs` to REST API navigation
+- **Updated** `docs/support/README.md` — added API link to Knowledge Starter Packs feature row
+
+### Finding 2: PostHog PII redaction — SOP updated
+
+The working tree adds `sanitizeErrorForTelemetry()` to `services/posthog.ts`, which scrubs error messages via `redactSensitiveText()` and strips stack traces before egress to PostHog. The `captureErrorEvent()` now uses `companyId` (instead of `undefined`) as the `distinctId`.
+
+**What was done:**
+- **Updated** `docs/support/posthog-error-monitoring-triage-sop.md` — added PII redaction note to "How It Works" section and a "Note on PII" box under Step 2 (Severity Validation) explaining that `***REDACTED***` in PostHog is by design and original messages are in server logs. Bumped to v1.3.
+
+### No further action needed
+
+- The 3 untracked `doc/status/` files are internal agent heartbeat reports — no customer-facing doc impact
+- The remaining working tree changes (PostHog test additions, test revisions) are engineering work — no doc impact
+- The error-handler distinctId change is internal — no doc impact
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 0 for v0.5.0 scope |
+| Release notes currency | Up to date through v0.5.0 Phase 1 (`2e90d0d5ae`) |
+| Docs synced with live code | ✅ Knowledge Starter Packs API documented (routes in HEAD + HW registration) |
+| Branch | `master` (fork/docs-deploy-voy-1413) |
+
+### Next triggers to watch for
+
+- **VOY-1413 unblocks** → verify docs site reflects case studies, Discord links, and release notes at voyonder.com
+- **VOY-1397 QA confirmation accepted** → final v0.5.0 release sign-off
+- **VOY-1420 (PostHog business events)** → Founding Engineer work, no doc impact until shipped
+- **COO request for documentation health report** — available on demand
+
+## 2026-08-19 — Heartbeat: Documentation health report produced, board idle, no open issues
+
+### What triggered me
+
+Scheduled heartbeat — no new git commits, no COO request, no Release Engineer call. Proactive documentation health check.
+
+### What was done
+
+1. **Documentation Health Report** — Comprehensive audit of all documentation:
+   - 5 case studies published (4 articles + index) ✅
+   - 14 support case assessments covering all v0.5.0 features ✅
+   - 6 KB articles for behavioral changes ✅
+   - 7 curated release notes (latest: Documentation Site v1) ✅
+   - 23 API reference docs covering all endpoints ✅
+   - 7 navigation tabs in docs.json (76 pages total) ✅
+   - All docs in working tree reviewed and verified ✅
+   - No gaps identified — all shipped features have coverage ✅
+
+2. **VOY-1413 status verified** — Docs deploy blocked on Mintlify setup (infrastructure, not content). Docs content already pushed to fork/master. No Support Engineer action needed to unblock.
+
+3. **VOY-1420 (PostHog business events)** — In progress by Founding Engineer. Pre-assessed: will need support case assessment when shipped, but currently has no documentation impact.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through Documentation Site v1 |
+| Docs synced with live code | ✅ All documented features match shipped behavior |
+| Branch | `master` (fork/docs-deploy-voy-1413) |
+| Working tree docs changes | 6 modified files (from prior heartbeat — Knowledge Starter Packs API docs) |
+
+### Next triggers to watch for
+
+- **VOY-1413 unblocks** → verify docs site reflects case studies, Discord links, and release notes at voyonder.com
+- **VOY-1420 ships** → PostHog business events need support case assessment
+- **COO requests documentation health report** — delivered on demand
+
+---
+
+## 2026-08-19 — Heartbeat: PostHog business events support case (VOY-1420)
+
+### What triggered me
+
+VOY-1420 (Add PostHog business event instrumentation + fix P2 items) completed at 2026-08-19 02:33 UTC. The prior heartbeat flagged this as needing support assessment when shipped.
+
+### What was done
+
+**Impact assessment:** VOY-1420 added three new `captureMetric` business events to PostHog (`approval.approved`, `approval.rejected`, `notification.digest.sent`) and improved the error handler to use `companyId` as `distinctId` for all PostHog events. Also included: PII redaction (already documented), graceful import failure handling in notifications (internal), VAPID warn dedup (internal), and contextSnapshot safe parsing (internal).
+
+**Updated** `docs/support/posthog-error-monitoring-triage-sop.md`:
+- Renamed to "PostHog Monitoring — Support Engineer Triage SOP" to reflect expanded scope
+- Added Business Events section with instrumented events table, distinctId rules, debugging commands, and watch-for items
+- Updated Overview to describe both error monitoring and business event telemetry roles
+- Bumped to v1.4, added VOY-1420 to applies-to
+
+**Updated** `docs/support/README.md`:
+- Updated PostHog SOP row to cover business event telemetry
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending KB articles | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through Documentation Site v1 |
+| Docs synced with live code | ✅ All documented features match shipped behavior; PostHog SOP v1.4 covers business events |
+| Branch | `master` (fork/docs-deploy-voy-1413) |
+| Working tree docs changes | 2 modified files (this heartbeat — PostHog SOP v1.4 + README update) |
+
+### Next triggers to watch for
+
+- **VOY-1413 unblocks** → verify docs site reflects case studies, Discord links, and release notes at voyonder.com
+- **COO requests documentation health report** — delivered on demand
+- **PostHog cron monitor deploy (VOY-1030 Phase B)** — when shipped, verify SOP covers the cron deployment details
