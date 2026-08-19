@@ -140,8 +140,15 @@ function resolveLoginMethod(
   ctx: { request?: Request | { url?: string } } | null,
 ): string {
   if (!ctx?.request?.url) return "unknown";
-  const rawUrl = ctx.request.url;
-  const pathname = rawUrl.includes("?") ? rawUrl.split("?")[0] : rawUrl;
+  // Use URL constructor to safely extract the pathname regardless of
+  // whether the request.url is a relative path or absolute URL (e.g.
+  // behind a proxy that rewrites it).
+  let pathname: string;
+  try {
+    pathname = new URL(ctx.request.url, "http://localhost").pathname;
+  } catch {
+    return "unknown";
+  }
   if (pathname === "/callback/google") return "google";
   if (pathname === "/sign-in/email" || pathname === "/sign-up/email")
     return "email";
@@ -204,14 +211,14 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins:
 
   // Wire PostHog business events for auth lifecycle.
   // These fire only when PostHog is configured (POSTHOG_API_KEY + POSTHOG_HOST).
-  // Each hook is wrapped in try/catch to prevent telemetry errors from
-  // propagating into the auth operation (user/session creation).
+  // Hooks are async to satisfy the better-auth type contract but do not await
+  // captureMetric — PostHog failures must never block the auth response path.
   authConfig.databaseHooks = {
     user: {
       create: {
         after: async (user, ctx) => {
+          const loginMethod = resolveLoginMethod(ctx);
           try {
-            const loginMethod = resolveLoginMethod(ctx);
             captureMetric("auth.signup_completed", user.id, {
               login_method: loginMethod,
             });
@@ -227,8 +234,8 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins:
     session: {
       create: {
         after: async (session, ctx) => {
+          const loginMethod = resolveLoginMethod(ctx);
           try {
-            const loginMethod = resolveLoginMethod(ctx);
             captureMetric("auth.session_started", session.userId, {
               login_method: loginMethod,
             });
