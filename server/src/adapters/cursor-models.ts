@@ -1,7 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { models as cursorFallbackModels } from "@paperclipai/adapter-cursor-local";
 import type { AdapterModel } from "./types.js";
-import { readConfigFile } from "../config-file.js";
 import { CURSOR_MODELS_TIMEOUT_MS, CURSOR_MODELS_CACHE_TTL_MS } from "../timeout-constants.js";
 const MAX_BUFFER_BYTES = 512 * 1024;
 

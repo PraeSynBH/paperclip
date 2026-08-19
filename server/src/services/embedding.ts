@@ -34,7 +34,6 @@ const DEFAULT_DIMENSIONS = 1536;
 // Simple in-memory cache: key = hash of (text, model), value = embedding
 const embeddingCache = new Map<string, { embedding: number[]; cachedAt: number }>();
 const CACHE_MAX_SIZE = 1000;
-const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
 
 // ─── Embedding Service Factory ──────────────────────────────────────────────
 
@@ -68,7 +67,7 @@ export function embeddingService(config?: EmbeddingConfig) {
     // Check cache
     const cacheKey = buildCacheKey(text, resolvedConfig.model!);
     const cached = embeddingCache.get(cacheKey);
-    if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+    if (cached && Date.now() - cached.cachedAt < EMBEDDING_CACHE_TTL_MS) {
       return {
         embedding: cached.embedding,
         model: resolvedConfig.model!,

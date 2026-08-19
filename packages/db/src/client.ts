@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { setTimeout as delay } from "node:timers/promises";
 import { drizzle as drizzlePg } from "drizzle-orm/postgres-js";
 import { migrate as migratePg } from "drizzle-orm/postgres-js/migrator";
 import { readFile, readdir } from "node:fs/promises";
@@ -762,6 +763,35 @@ export async function migratePostgresIfEmpty(url: string): Promise<MigrationBoot
   }
 }
 
+/**
+ * Backoff delays (ms) between retries when the embedded PostgreSQL instance is
+ * still shutting down (SQLSTATE 57P03) after a server crash. The parent server
+ * process dies, launchd restarts it, and it races the old PG's shutdown; before
+ * this retry, ensurePostgresDatabase failed instantly and the server exited,
+ * repeating the cycle ~6 times over ~2.5 min. Backoff: 1s, 2s, 4s, 8s, 16s,
+ * then capped at 30s. Worst-case total wait 121s, comfortably above the
+ * observed ~2.5 min shutdown window.
+ */
+const EMBEDDED_PG_SHUTDOWN_RETRY_DELAYS_MS = [
+  1_000,
+  2_000,
+  4_000,
+  8_000,
+  16_000,
+  30_000,
+  30_000,
+  30_000,
+] as const;
+
+function isPostgresShuttingDownError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code?: unknown }).code === "57P03"
+  );
+}
+
 export async function ensurePostgresDatabase(
   url: string,
   databaseName: string,
@@ -770,17 +800,36 @@ export async function ensurePostgresDatabase(
     throw new Error(`Unsafe database name: ${databaseName}`);
   }
 
-  const sql = createUtilitySql(url);
-  try {
-    const existing = await sql<{ one: number }[]>`
-      select 1 as one from pg_database where datname = ${databaseName} limit 1
-    `;
-    if (existing.length > 0) return "exists";
+  // After a server crash the embedded PostgreSQL may still be shutting down
+  // (57P03 "database system is shutting down"). Retry with exponential backoff
+  // until the old instance finishes stopping; a fresh instance then starts
+  // normally on the next attempt. Each attempt uses a fresh connection because
+  // the failed one is unusable. Non-57P03 errors (auth, unsafe name, etc.)
+  // propagate immediately.
+  for (let attempt = 0; ; attempt += 1) {
+    let failure: unknown;
+    const sql = createUtilitySql(url);
+    try {
+      const existing = await sql<{ one: number }[]>`
+        select 1 as one from pg_database where datname = ${databaseName} limit 1
+      `;
+      if (existing.length > 0) return "exists";
 
-    await sql.unsafe(`create database "${databaseName}" encoding 'UTF8' lc_collate 'C' lc_ctype 'C' template template0`);
-    return "created";
-  } finally {
-    await sql.end();
+      await sql.unsafe(`create database "${databaseName}" encoding 'UTF8' lc_collate 'C' lc_ctype 'C' template template0`);
+      return "created";
+    } catch (err) {
+      failure = err;
+    } finally {
+      await sql.end();
+    }
+
+    if (
+      !isPostgresShuttingDownError(failure) ||
+      attempt >= EMBEDDED_PG_SHUTDOWN_RETRY_DELAYS_MS.length
+    ) {
+      throw failure;
+    }
+    await delay(EMBEDDED_PG_SHUTDOWN_RETRY_DELAYS_MS[attempt]!);
   }
 }
 

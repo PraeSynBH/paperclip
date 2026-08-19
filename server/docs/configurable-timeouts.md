@@ -17,7 +17,7 @@ explicitly says `_SECONDS`.
 | Constant | Env var | Default | Description |
 |---|---|---|---|
 | `KEEP_ALIVE_TIMEOUT_MS` | `PAPERCLIP_KEEP_ALIVE_TIMEOUT_MS` | 185000 | HTTP keep-alive timeout |
-| `HEADERS_TIMEOUT_MS` | `PAPERCLIP_HEADERS_TIMEOUT_MS` | 186000 | HTTP headers timeout (≥ keepAlive) |
+| `HEADERS_TIMEOUT_MS` | *(derived)* | KEEP_ALIVE_TIMEOUT_MS + 1000 | HTTP headers timeout (≥ keepAlive, enforced) |
 | `TAILSCALE_DETECT_TIMEOUT_MS` | `PAPERCLIP_TAILSCALE_DETECT_TIMEOUT_MS` | 3000 | `tailscale ip -4` exec timeout |
 
 ## Board / CLI auth

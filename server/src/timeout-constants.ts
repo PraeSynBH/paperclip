@@ -43,13 +43,12 @@ export const KEEP_ALIVE_TIMEOUT_MS = parsePositiveIntFromEnv(
 );
 
 /**
- * HTTP headers timeout (ms).  Must be >= keepAliveTimeout.
- * Env: PAPERCLIP_HEADERS_TIMEOUT_MS  (default: 186000)
+ * HTTP headers timeout (ms).  Derived from KEEP_ALIVE_TIMEOUT_MS + 1000
+ * to guarantee it always exceeds the keep-alive timeout (Node.js requires
+ * headersTimeout >= keepAliveTimeout, otherwise the server may fail to start).
+ * Not independently configurable — set KEEP_ALIVE_TIMEOUT_MS instead.
  */
-export const HEADERS_TIMEOUT_MS = parsePositiveIntFromEnv(
-  "PAPERCLIP_HEADERS_TIMEOUT_MS",
-  186_000,
-);
+export const HEADERS_TIMEOUT_MS = KEEP_ALIVE_TIMEOUT_MS + 1000;
 
 /**
  * Tailscale `tailscale ip -4` exec timeout (ms).

@@ -202,7 +202,6 @@ export interface EnvironmentRuntimeLeaseRecord {
   leaseContext: ReturnType<typeof buildEnvironmentLeaseContext>;
 }
 
-const DEFAULT_PLUGIN_SANDBOX_WORKER_READY_TIMEOUT_MS = 5_000;
 const DEFAULT_PLUGIN_SANDBOX_WORKER_READY_POLL_MS = 100;
 
 function delay(ms: number): Promise<void> {
@@ -617,7 +616,7 @@ function createSandboxEnvironmentDriver(
   } = {},
 ): EnvironmentRuntimeDriver {
   const pluginWorkerManager = options.pluginWorkerManager;
-  const pluginWorkerReadyTimeoutMs = options.pluginWorkerReadyTimeoutMs ?? DEFAULT_PLUGIN_SANDBOX_WORKER_READY_TIMEOUT_MS;
+  const pluginWorkerReadyTimeoutMs = options.pluginWorkerReadyTimeoutMs ?? SANDBOX_WORKER_READY_TIMEOUT_MS;
   const pluginWorkerReadyPollMs = options.pluginWorkerReadyPollMs ?? DEFAULT_PLUGIN_SANDBOX_WORKER_READY_POLL_MS;
   const environmentsSvc = environmentService(db);
 

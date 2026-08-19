@@ -46,7 +46,6 @@ export interface KnowledgeWarmUpResult {
 // ─── Defaults ───────────────────────────────────────────────────────────────
 
 const DEFAULT_TOP_K = 5;
-const DEFAULT_TIMEOUT_MS = 3_000;
 
 // ─── Preamble Builder (Memory) ──────────────────────────────────────────────
 
@@ -174,7 +173,7 @@ export async function warmUpAgentMemory(
 ): Promise<MemoryWarmUpResult> {
   const start = Date.now();
   const topK = config?.topK ?? DEFAULT_TOP_K;
-  const timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = config?.timeoutMs ?? MEMORY_CONTEXT_INJECTION_TIMEOUT_MS;
 
   // Use AbortController to cancel the warm-up if timeout fires
   const controller = new AbortController();
@@ -281,7 +280,7 @@ export async function warmUpCompanyKnowledge(
   config?: { timeoutMs?: number; limit?: number },
 ): Promise<KnowledgeWarmUpResult> {
   const start = Date.now();
-  const timeoutMs = config?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = config?.timeoutMs ?? MEMORY_CONTEXT_INJECTION_TIMEOUT_MS;
   const limit = config?.limit ?? 3;
 
   const controller = new AbortController();
