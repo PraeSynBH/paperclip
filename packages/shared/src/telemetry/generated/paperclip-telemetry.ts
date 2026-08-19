@@ -61,6 +61,17 @@ created_by_agent_id?: string
 source_run_id?: string
 }
 
+export interface PaperclipNotificationDeliveryFailedDimensions {
+channel: ("email" | "webpush" | "other")
+notification_type: ("review_requested" | "approval_needed" | "work_completed" | "budget_threshold" | "execution_error")
+error_code?: string
+}
+
+export interface PaperclipNotificationDeliverySentDimensions {
+channel: ("email" | "webpush" | "other")
+notification_type: ("review_requested" | "approval_needed" | "work_completed" | "budget_threshold" | "execution_error")
+}
+
 export interface PaperclipProjectCreatedDimensions {
 
 }
@@ -89,6 +100,8 @@ export type PaperclipEventName =
   | "install.completed"
   | "install.started"
   | "interaction.resolved"
+  | "notification.delivery_failed"
+  | "notification.delivery_sent"
   | "project.created"
   | "routine.created"
   | "routine.run"
@@ -104,6 +117,8 @@ export interface EventDimensionsMap {
   "install.completed": PaperclipInstallCompletedDimensions;
   "install.started": PaperclipInstallStartedDimensions;
   "interaction.resolved": PaperclipInteractionResolvedDimensions;
+  "notification.delivery_failed": PaperclipNotificationDeliveryFailedDimensions;
+  "notification.delivery_sent": PaperclipNotificationDeliverySentDimensions;
   "project.created": PaperclipProjectCreatedDimensions;
   "routine.created": PaperclipRoutineCreatedDimensions;
   "routine.run": PaperclipRoutineRunDimensions;
@@ -120,6 +135,8 @@ export const PAPERCLIP_EVENTS = {
   "install.completed": "install.completed",
   "install.started": "install.started",
   "interaction.resolved": "interaction.resolved",
+  "notification.delivery_failed": "notification.delivery_failed",
+  "notification.delivery_sent": "notification.delivery_sent",
   "project.created": "project.created",
   "routine.created": "routine.created",
   "routine.run": "routine.run",
@@ -296,6 +313,34 @@ export const PAPERCLIP_ENUM_DESCRIPTIONS = {
       "custom": "Interaction is bound to a custom target.",
       "none": "Interaction has no bound target.",
       "other": "Fallback when the target type is unknown or not represented by the tracked enum."
+    }
+  },
+  "notification.delivery_failed": {
+    "channel": {
+      "email": "Email delivery (SMTP).",
+      "webpush": "Web push notification (VAPID).",
+      "other": "Unknown or unspecified delivery channel."
+    },
+    "notification_type": {
+      "review_requested": "Issue transitions to in_review.",
+      "approval_needed": "Approval is created on an issue.",
+      "work_completed": "Issue transitions to done.",
+      "budget_threshold": "Budget soft/hard limit crossed.",
+      "execution_error": "Agent run fails or times out."
+    }
+  },
+  "notification.delivery_sent": {
+    "channel": {
+      "email": "Email delivery (SMTP).",
+      "webpush": "Web push notification (VAPID).",
+      "other": "Unknown or unspecified delivery channel."
+    },
+    "notification_type": {
+      "review_requested": "Issue transitions to in_review.",
+      "approval_needed": "Approval is created on an issue.",
+      "work_completed": "Issue transitions to done.",
+      "budget_threshold": "Budget soft/hard limit crossed.",
+      "execution_error": "Agent run fails or times out."
     }
   },
   "routine.run": {

@@ -4,6 +4,8 @@ import type {
   NotificationRecord,
   PushSubscription,
   PushSubscriptionRegisterInput,
+  DeliveryStatus,
+  DeliveryChannelStatus,
 } from "@paperclipai/shared";
 import { api } from "./client";
 

@@ -1,7 +1,7 @@
 # Discord Community Plan — Early Adopters
 
 **Owner:** COO (PRA-921)
-**Status:** Plan ready (execution gated on beta candidate identification by CEO)
+**Status:** Plan complete — ready-to-post assets drafted. Server live (discord.gg/m4HZY7xNG3, 8,600+ members per VOY-1345 verification). Execution of channel config + beta invites is human/CEO-gated.
 **Date:** August 2026
 
 ---
@@ -105,15 +105,15 @@ Automated prompts (via Discord bot or pinned posts):
 
 ## Pre-Launch Checklist
 
-- [ ] Create Discord server (requires human action — use voyonder.com email)
-- [ ] Set up server structure (categories and channels per above)
+- [x] Create Discord server (server live: discord.gg/m4HZY7xNG3 — 8,600+ members, verified VOY-1345)
+- [ ] Set up server structure (categories and channels per above) — human Discord admin
 - [ ] Create invite link set to never-expire
-- [ ] Set up moderation roles and permissions
-- [ ] Write and pin welcome message and rules
+- [ ] Set up moderation roles and permissions — human Discord admin
+- [x] Write and pin welcome message and rules (drafts: discord-welcome-message.md, discord-moderation-guidelines.md — ready to post in #welcome/#rules)
 - [ ] Connect GitHub → #changelog webhook
 - [ ] Create onboarding bot (or use Carl-bot / MEE6 for auto-roles)
 - [ ] Test invite flow with a test account
-- [ ] Invite initial beta customers (from CEO's candidate pool)
+- [ ] Invite initial beta customers (from CEO's candidate pool — doc/status/beta-customer-candidates.md, currently TBD)
 - [ ] Post launch announcement in relevant communities
 
 ---
@@ -147,8 +147,9 @@ Automated prompts (via Discord bot or pinned posts):
 
 When the server is created, the following items are ready to post:
 
-1. **Welcome message** (draft in doc/outreach/discord-welcome-message.md)
-2. **Rules embed** (derived from moderation guidelines above)
+1. **Welcome message** (draft in doc/outreach/discord-welcome-message.md) ✅
+2. **Rules embed** (derived from moderation guidelines — standalone draft in doc/outreach/discord-moderation-guidelines.md) ✅
 3. **Getting started guide** (link to docs quickstart)
-4. **Case study posts** (from PRA-920 deliverables) to seed #showcase
+4. **Case study posts** (from PRA-920 deliverables) to seed #showcase ✅
 5. **Beta program info** (from CEO's beta outreach plan)
+6. **Community launch posts** (drafts in doc/outreach/community-launch-posts.md) ✅

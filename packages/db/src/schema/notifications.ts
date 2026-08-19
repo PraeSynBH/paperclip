@@ -139,6 +139,10 @@ export const notifications = pgTable(
     sentAt: timestamp("sent_at", { withTimezone: true }),
     emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
     pushSentAt: timestamp("push_sent_at", { withTimezone: true }),
+    emailDeliveryStatus: text("email_delivery_status"),
+    emailDeliveryError: text("email_delivery_error"),
+    pushDeliveryStatus: text("push_delivery_status"),
+    pushDeliveryError: text("push_delivery_error"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({

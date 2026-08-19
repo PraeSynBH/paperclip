@@ -62,6 +62,7 @@ import { environmentService } from "../services/environments.js";
 import { resolveEnvironmentExecutionTarget } from "../services/environment-execution-target.js";
 import { environmentRuntimeService } from "../services/environment-runtime.js";
 import type { AdapterExecutionTarget } from "@paperclipai/adapter-utils/execution-target";
+import { logger } from "../middleware/logger.js";
 import type {
   AdapterEnvironmentCheck,
   AdapterEnvironmentTestResult,
@@ -399,8 +400,7 @@ export function agentRoutes(
         }
       } catch (err) {
         // Cleanup failures must not mask the test result.
-        // eslint-disable-next-line no-console
-        console.warn(
+        logger.warn(
           `[adapter-test] Failed to release lease ${leaseRecord.lease.id}: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
