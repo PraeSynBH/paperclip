@@ -11,7 +11,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
-|| Google OAuth Sign-In — "Sign in with Google" button + PostHog auth business events | voy-1420-posthog-p2-fixes (96faa13434) | Committed, reviewed, awaiting env vars from founder (VOY-406) | [Google OAuth](assessments/support-case-google-oauth.md) |
+|| Google OAuth & PostHog auth events + P2 fixes (ts_rank alias, DB client hardening) | voy-1420-posthog-p2-fixes (96faa13434+) | Documented, ready for release to fork/master | [Google OAuth](assessments/support-case-google-oauth.md) |
 | Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
 | Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Aug 18, 2026 (PR #48) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
 | Knowledge Starter Packs — curated KB document bundles installed with company templates or via standalone API | v0.5.0 | Aug 18, 2026 (PR #48) | [Starter Packs](assessments/support-case-knowledge-starter-packs.md) + [API](/api/knowledge-starter-packs) |
@@ -89,7 +89,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
-| Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening | [View](releases/voy-1447-auth-improvements.md) *(Draft — awaiting release to fork/master)* |
+| Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Ready — documentation verified for release to fork/master)* |
 | PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
 | Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
 | v0.5.0 Phase 1 — Security Hardening + Marketplace + Onboarding + Company Templates stable | [View](releases/v0.5.0-phase-1.md) |
@@ -100,5 +100,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-19 ~09:45 UTC — updated to reflect committed state of auth improvements (96faa13434), added draft release note for VOY-1447*
+*Last updated: 2026-08-19 ~10:00 UTC — documentation verified for VOY-1447 release (auth improvements + P2 fixes, P2 ts_rank alias + DB hardening), release note promoted from draft to ready*
 *Maintained by: Support Engineer (88b72065)*

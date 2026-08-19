@@ -1,15 +1,15 @@
 ---
-title: Auth Improvements — Google OAuth + PostHog Lifecycle Events + Structural Hardening
+title: Auth Improvements — Google OAuth + PostHog Lifecycle Events + Structural Hardening + P2 Fixes
 version: voy-1447
 date: 2026-08-19
-commits: 96faa13434
-status: Draft — code committed and reviewed, awaiting release to fork/master
+commits: 96faa13434, multiple
+status: Ready — documentation verified for release to fork/master
 ---
 
-# Auth Improvements: Google OAuth + PostHog Auth Lifecycle Events
+# Auth Improvements: Google OAuth + PostHog Auth Lifecycle Events + P2 Fixes
 
 **Branch:** `voy-1420-posthog-p2-fixes`
-**Release status:** Draft — code committed on branch, reviewed by Staff Engineer and CTO. Awaiting Release Engineer to ship to fork/master.
+**Release status:** Ready for release — code committed on branch, reviewed by Staff Engineer and CTO, documentation verified by Support Engineer. Awaiting Release Engineer to ship to fork/master.
 
 ## What Changed
 
@@ -45,6 +45,21 @@ Two improvements from the Staff Engineer's structural audit of the auth code:
 
 2. **Fire-and-forget telemetry** — PostHog `captureMetric()` calls in auth lifecycle hooks are synchronous and no longer awaited. The hooks remain `async` for better-auth type compliance, but PostHog availability can never delay or block an auth response. If PostHog is unreachable, the auth flow completes normally and the event is silently dropped.
 
+### P2 Fixes: `ts_rank` Column Alias
+
+Two knowledge-base query fixes ensure PostHog and knowledge-search queries correctly reference the computed `ts_rank` score column:
+
+| File | Change | Impact |
+|---|---|---|
+| `server/src/services/knowledge-documents.ts` | Added `AS "score"` alias to `ts_rank()` expression in knowledge document search | Previously the column had no explicit alias, which could cause ambiguous-column or missing-column errors in consumer queries that reference `score` |
+| `server/src/services/memory-context-injection.ts` | Added `AS "score"` alias to `ts_rank()` expression in memory warm-up search | Same fix applied to the memory context injection knowledge search path |
+
+Both fixes are identical in nature: the `ts_rank()` SQL function result is explicitly aliased to `"score"` so that the consuming code can reliably reference the ranking value by name.
+
+### Database Client Hardening
+
+`packages/db/src/client.ts`: Added `prepare: false` option to the postgres connection configuration. This disables automatic prepared statement caching, resolving potential issues with connection pooling and schema changes during migrations.
+
 ## Configuration
 
 ### New Environment Variables
@@ -69,6 +84,7 @@ No new configuration. Existing `POSTHOG_API_KEY` and `POSTHOG_HOST` settings are
 | Auth events in PostHog | `auth.signup_completed` and `auth.session_started` are visible in PostHog. Query by event name and filter by `login_method` to separate Google vs email traffic. |
 | PostHog downtime doesn't break auth | Auth operations complete regardless of PostHog availability. Telemetry gaps are silent — if auth events are missing, check PostHog health, not auth code. |
 | Login method detection | If `login_method` is consistently `"unknown"` for valid sign-ins, check the server's reverse proxy configuration — `resolveLoginMethod` uses `ctx.request.url` which may be affected by URL rewriting. |
+| `ts_rank` alias fix | Knowledge search and memory warm-up results are now reliably sorted by relevance score. If search ranking appears incorrect, verify the consuming query references `score` correctly. |
 
 ## Related Documentation
 

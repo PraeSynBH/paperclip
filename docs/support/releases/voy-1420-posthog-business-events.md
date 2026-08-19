@@ -53,5 +53,5 @@ No new environment variables or configuration changes. PostHog integration conti
 
 ## Related Documentation
 
-- [PostHog Monitoring Triage SOP](../posthog-error-monitoring-triage-sop.md) — v1.4.4, reflects all P2 fixes + Google OAuth auth events
+- [PostHog Monitoring Triage SOP](../posthog-error-monitoring-triage-sop.md) — v1.4.5, reflects all P2 fixes + Google OAuth auth events
 - PostHog Triage SOP: Error troubleshooting workflows, escalation paths, and monitoring script details
