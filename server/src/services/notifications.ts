@@ -272,10 +272,35 @@ function isVapidConfigured(): boolean {
 }
 
 /**
- * Deduplication set for VAPID 410/404 warn logs to avoid per-call spam.
- * Keyed by endpoint URL.
+ * Bounded dedup cache for VAPID 410/404 warn logs to avoid per-call spam.
+ * Keyed by endpoint URL → first-warned timestamp (ms).
+ *
+ * Bounded so it cannot grow without bound: stale endpoint URLs (~300 chars
+ * each) accumulate from users clearing browser data / uninstalling PWAs.
+ * When the cache is full, the oldest entry is evicted (FIFO) to make room.
  */
-const _vapidExpiredWarnedEndpoints = new Set<string>();
+const MAX_VAPID_EXPIRED_ENDPOINTS = 10_000;
+const _vapidExpiredWarnedEndpoints = new Map<string, number>();
+
+/**
+ * Returns true if the endpoint should be warned about now (first sighting,
+ * or previously evicted from the bounded cache). Records the sighting.
+ */
+function shouldWarnExpiredEndpoint(endpoint: string): boolean {
+  if (_vapidExpiredWarnedEndpoints.has(endpoint)) {
+    return false;
+  }
+  // FIFO eviction: drop the oldest entry when at capacity so the cache
+  // stays bounded regardless of how many unique expired endpoints accrue.
+  if (_vapidExpiredWarnedEndpoints.size >= MAX_VAPID_EXPIRED_ENDPOINTS) {
+    const oldest = _vapidExpiredWarnedEndpoints.keys().next().value;
+    if (oldest !== undefined) {
+      _vapidExpiredWarnedEndpoints.delete(oldest);
+    }
+  }
+  _vapidExpiredWarnedEndpoints.set(endpoint, Date.now());
+  return true;
+}
 
 async function sendWebPush(
   subscription: { endpoint: string; p256dh: string; auth: string },
@@ -323,8 +348,7 @@ async function sendWebPush(
   } catch (err: any) {
     // If subscription is expired/gone, log once per endpoint to avoid spam
     if (err?.statusCode === 410 || err?.statusCode === 404) {
-      if (!_vapidExpiredWarnedEndpoints.has(subscription.endpoint)) {
-        _vapidExpiredWarnedEndpoints.add(subscription.endpoint);
+      if (shouldWarnExpiredEndpoint(subscription.endpoint)) {
         logger.warn({ endpoint: subscription.endpoint }, "Push subscription expired or gone");
       }
       return false;
@@ -1028,4 +1052,10 @@ export function notificationService(db: Db) {
 export type NotificationService = ReturnType<typeof notificationService>;
 
 // Exported for testing of graceful degradation
-export { isSmtpConfigured, sendEmailViaSmtp, isVapidConfigured, sendWebPush };
+export {
+  isSmtpConfigured,
+  sendEmailViaSmtp,
+  isVapidConfigured,
+  sendWebPush,
+  shouldWarnExpiredEndpoint,
+};
