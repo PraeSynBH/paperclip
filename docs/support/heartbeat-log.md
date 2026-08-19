@@ -1776,3 +1776,40 @@ The master working tree contains uncommitted M-series technical debt changes (M-
 - **M-series code lands** → update company templates assessment for transactional rollback; expand env-var reference for configurable constants
 - **VOY-1413 unblocks** → verify docs site content live at voyonder.com
 - **COO requests** → documentation health report on demand
+
+## 2026-08-19 ~16:35 UTC — Heartbeat: board idle, M-series docs impact re-assessed, no new triggers
+
+### What triggered me
+
+Scheduled heartbeat. No new code commits since the last support heartbeat (~16:12 UTC) — the only new commit is the Release Engineer heartbeat (`e85f312f9f`, docs-only). Board continues idle: 0 open issues assigned to Support Engineer, 3 founder-gated blockers unchanged, M-series tech debt in progress (Founding Engineer), code review (VOY-1456) blocked on implementation completion.
+
+### Diff assessment
+
+Working tree diff (`HEAD`) contains only the M-series changes already assessed at ~15:32 UTC:
+
+| Change | Scope | Documentation Impact |
+|---|---|---|
+| **M-1 (VOY-1403)** — transactional template rollback (`company-templates.ts`) | Deployment wrapped in DB transaction; partial failures now roll back entirely | **Positive — assessment update deferred** until code is committed/released. Company templates support case currently documents partial-failure-with-warnings; will update on ship. |
+| **M-2 (VOY-1404)** — expanded test coverage | Test-only | None |
+| **M-3 (VOY-1405)** — consolidate duplicate constant definitions (`packages/shared`, `validators/notifications.ts` deleted) | Internal cleanup | None |
+| **M-4 (VOY-1406)** — extract hardcoded timeouts into configurable constants (`server/src/timeout-constants.ts`) | ~100 new `PAPERCLIP_*` env vars for timeouts/TTLs/intervals; new working-tree additions cover WS ping, OTel shutdown, runtime health, plugin worker shutdown/SIGKILL, invite resolution probe | **Positive — env var reference expansion deferred** until code lands. `docs/deploy/environment-variables.md` currently documents 22 env vars; will expand post-merge. |
+
+No user-facing behavior change has shipped since the last assessment. Docs remain in sync with committed code.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed features have current docs |
+| Release notes currency | Up to date through Documentation Site v1 (v0.5.0 Phase 1) |
+| M-series docs impact (pending release) | Company templates assessment: partial-failure → full rollback. Env var reference: ~100 new configurable constants. |
+| PostHog SOP | v1.4.1 on master (limitation documented); v1.4.2 on `voy-1420-posthog-p2-fixes` (awaiting merge) |
+| Blocked items (human-gated, unchanged) | VOY-1421 (Mintlify — founder), VOY-1413 (docs deploy — CEO), VOY-421 (PostHog dashboards — founder) |
+
+### Forward look
+
+- **VOY-1420-posthog-p2-fixes merges** → collapse Known Limitation section in PostHog SOP
+- **M-series code lands** → update company templates assessment for transactional rollback; expand env-var reference for configurable constants
+- **VOY-1413 unblocks** → verify docs site content live at voyonder.com
+- **COO requests** → documentation health report on demand
