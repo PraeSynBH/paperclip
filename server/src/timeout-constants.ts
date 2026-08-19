@@ -12,13 +12,18 @@
 
 // ---------------------------------------------------------------------------
 // Helper: parse a positive integer from an env var, falling back to default
+//
+// NOTE: the parsed value is unit-agnostic — callers use it directly for
+// milliseconds (`_MS` constants), seconds (`_SECONDS` constants), or plain
+// counts (e.g. `DEFAULT_SMTP_PORT`). The suffix of the exported constant
+// name is the source of truth for the unit.
 // ---------------------------------------------------------------------------
 
-function parseMsFromEnv(envName: string, defaultMs: number): number {
+function parsePositiveIntFromEnv(envName: string, defaultValue: number): number {
   const raw = process.env[envName]?.trim();
-  if (!raw) return defaultMs;
+  if (!raw) return defaultValue;
   const parsed = Number(raw);
-  if (!Number.isFinite(parsed) || parsed <= 0) return defaultMs;
+  if (!Number.isFinite(parsed) || parsed <= 0) return defaultValue;
   return Math.floor(parsed);
 }
 
@@ -32,7 +37,7 @@ function parseMsFromEnv(envName: string, defaultMs: number): number {
  * intermittent 502/ECONNRESET errors.
  * Env: PAPERCLIP_KEEP_ALIVE_TIMEOUT_MS  (default: 185000)
  */
-export const KEEP_ALIVE_TIMEOUT_MS = parseMsFromEnv(
+export const KEEP_ALIVE_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_KEEP_ALIVE_TIMEOUT_MS",
   185_000,
 );
@@ -41,7 +46,7 @@ export const KEEP_ALIVE_TIMEOUT_MS = parseMsFromEnv(
  * HTTP headers timeout (ms).  Must be >= keepAliveTimeout.
  * Env: PAPERCLIP_HEADERS_TIMEOUT_MS  (default: 186000)
  */
-export const HEADERS_TIMEOUT_MS = parseMsFromEnv(
+export const HEADERS_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_HEADERS_TIMEOUT_MS",
   186_000,
 );
@@ -50,7 +55,7 @@ export const HEADERS_TIMEOUT_MS = parseMsFromEnv(
  * Tailscale `tailscale ip -4` exec timeout (ms).
  * Env: PAPERCLIP_TAILSCALE_DETECT_TIMEOUT_MS  (default: 3000)
  */
-export const TAILSCALE_DETECT_TIMEOUT_MS = parseMsFromEnv(
+export const TAILSCALE_DETECT_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_TAILSCALE_DETECT_TIMEOUT_MS",
   3_000,
 );
@@ -63,7 +68,7 @@ export const TAILSCALE_DETECT_TIMEOUT_MS = parseMsFromEnv(
  * Default TTL for board API keys (ms).
  * Env: PAPERCLIP_BOARD_API_KEY_TTL_MS  (default: 30 days)
  */
-export const BOARD_API_KEY_TTL_MS = parseMsFromEnv(
+export const BOARD_API_KEY_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_BOARD_API_KEY_TTL_MS",
   30 * 24 * 60 * 60 * 1000,
 );
@@ -72,7 +77,7 @@ export const BOARD_API_KEY_TTL_MS = parseMsFromEnv(
  * Default TTL for CLI auth challenges (ms).
  * Env: PAPERCLIP_CLI_AUTH_CHALLENGE_TTL_MS  (default: 10 minutes)
  */
-export const CLI_AUTH_CHALLENGE_TTL_MS = parseMsFromEnv(
+export const CLI_AUTH_CHALLENGE_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_CLI_AUTH_CHALLENGE_TTL_MS",
   10 * 60 * 1000,
 );
@@ -81,7 +86,7 @@ export const CLI_AUTH_CHALLENGE_TTL_MS = parseMsFromEnv(
  * Default TTL for board claim challenges (ms).
  * Env: PAPERCLIP_BOARD_CLAIM_TTL_MS  (default: 24 hours)
  */
-export const BOARD_CLAIM_TTL_MS = parseMsFromEnv(
+export const BOARD_CLAIM_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_BOARD_CLAIM_TTL_MS",
     24 * 60 * 60 * 1000,
 );
@@ -94,7 +99,7 @@ export const BOARD_CLAIM_TTL_MS = parseMsFromEnv(
  * Default TTL for company invite tokens (ms).
  * Env: PAPERCLIP_COMPANY_INVITE_TTL_MS  (default: 72 hours)
  */
-export const COMPANY_INVITE_TTL_MS = parseMsFromEnv(
+export const COMPANY_INVITE_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_COMPANY_INVITE_TTL_MS",
   72 * 60 * 60 * 1000,
 );
@@ -103,7 +108,7 @@ export const COMPANY_INVITE_TTL_MS = parseMsFromEnv(
  * DNS lookup timeout for invite URL hostname resolution (ms).
  * Env: PAPERCLIP_INVITE_RESOLUTION_DNS_TIMEOUT_MS  (default: 3000)
  */
-export const INVITE_RESOLUTION_DNS_TIMEOUT_MS = parseMsFromEnv(
+export const INVITE_RESOLUTION_DNS_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_INVITE_RESOLUTION_DNS_TIMEOUT_MS",
   3_000,
 );
@@ -116,7 +121,7 @@ export const INVITE_RESOLUTION_DNS_TIMEOUT_MS = parseMsFromEnv(
  * SMTP conversation timeout (ms).
  * Env: PAPERCLIP_SMTP_TIMEOUT_MS  (default: 30000)
  */
-export const SMTP_CONVERSATION_TIMEOUT_MS = parseMsFromEnv(
+export const SMTP_CONVERSATION_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_SMTP_TIMEOUT_MS",
   30_000,
 );
@@ -128,7 +133,7 @@ export const SMTP_CONVERSATION_TIMEOUT_MS = parseMsFromEnv(
  */
 export const WEB_PUSH_TTL_SECONDS = Math.max(
   0,
-  parseMsFromEnv("PAPERCLIP_WEB_PUSH_TTL_SECONDS", 86_400),
+  parsePositiveIntFromEnv("PAPERCLIP_WEB_PUSH_TTL_SECONDS", 86_400),
 );
 
 // ---------------------------------------------------------------------------
@@ -139,7 +144,7 @@ export const WEB_PUSH_TTL_SECONDS = Math.max(
  * Staleness threshold for orphaned run reaping (ms).
  * Env: PAPERCLIP_ORPHANED_RUN_STALE_THRESHOLD_MS  (default: 5 minutes)
  */
-export const ORPHANED_RUN_STALE_THRESHOLD_MS = parseMsFromEnv(
+export const ORPHANED_RUN_STALE_THRESHOLD_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_ORPHANED_RUN_STALE_THRESHOLD_MS",
   5 * 60 * 1000,
 );
@@ -149,7 +154,7 @@ export const ORPHANED_RUN_STALE_THRESHOLD_MS = parseMsFromEnv(
  * flags the run as potentially stuck.
  * Env: PAPERCLIP_ACTIVE_RUN_OUTPUT_SUSPICION_THRESHOLD_MS  (default: 1 hour)
  */
-export const ACTIVE_RUN_OUTPUT_SUSPICION_THRESHOLD_MS = parseMsFromEnv(
+export const ACTIVE_RUN_OUTPUT_SUSPICION_THRESHOLD_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_ACTIVE_RUN_OUTPUT_SUSPICION_THRESHOLD_MS",
   60 * 60 * 1000,
 );
@@ -159,7 +164,7 @@ export const ACTIVE_RUN_OUTPUT_SUSPICION_THRESHOLD_MS = parseMsFromEnv(
  * flags the run as critically stuck.
  * Env: PAPERCLIP_ACTIVE_RUN_OUTPUT_CRITICAL_THRESHOLD_MS  (default: 4 hours)
  */
-export const ACTIVE_RUN_OUTPUT_CRITICAL_THRESHOLD_MS = parseMsFromEnv(
+export const ACTIVE_RUN_OUTPUT_CRITICAL_THRESHOLD_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_ACTIVE_RUN_OUTPUT_CRITICAL_THRESHOLD_MS",
   4 * 60 * 60 * 1000,
 );
@@ -169,7 +174,7 @@ export const ACTIVE_RUN_OUTPUT_CRITICAL_THRESHOLD_MS = parseMsFromEnv(
  * alert, wait this long before alerting again.
  * Env: PAPERCLIP_ACTIVE_RUN_OUTPUT_CONTINUE_REARM_MS  (default: 30 minutes)
  */
-export const ACTIVE_RUN_OUTPUT_CONTINUE_REARM_MS = parseMsFromEnv(
+export const ACTIVE_RUN_OUTPUT_CONTINUE_REARM_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_ACTIVE_RUN_OUTPUT_CONTINUE_REARM_MS",
   30 * 60 * 1000,
 );
@@ -182,7 +187,7 @@ export const ACTIVE_RUN_OUTPUT_CONTINUE_REARM_MS = parseMsFromEnv(
  * Board conversation subprocess timeout (ms).
  * Env: PAPERCLIP_BOARD_CHAT_TIMEOUT_MS  (default: 120000)
  */
-export const BOARD_CHAT_TIMEOUT_MS = parseMsFromEnv(
+export const BOARD_CHAT_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_BOARD_CHAT_TIMEOUT_MS",
   120_000,
 );
@@ -195,7 +200,7 @@ export const BOARD_CHAT_TIMEOUT_MS = parseMsFromEnv(
  * Default pipeline case lease duration (ms).
  * Env: PAPERCLIP_PIPELINE_DEFAULT_LEASE_MS  (default: 15 minutes)
  */
-export const PIPELINE_DEFAULT_LEASE_MS = parseMsFromEnv(
+export const PIPELINE_DEFAULT_LEASE_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PIPELINE_DEFAULT_LEASE_MS",
   15 * 60 * 1000,
 );
@@ -204,7 +209,7 @@ export const PIPELINE_DEFAULT_LEASE_MS = parseMsFromEnv(
  * Maximum pipeline case lease duration (ms).
  * Env: PAPERCLIP_PIPELINE_MAX_LEASE_MS  (default: 24 hours)
  */
-export const PIPELINE_MAX_LEASE_MS = parseMsFromEnv(
+export const PIPELINE_MAX_LEASE_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PIPELINE_MAX_LEASE_MS",
   24 * 60 * 60 * 1000,
 );
@@ -219,7 +224,7 @@ export const PIPELINE_MAX_LEASE_MS = parseMsFromEnv(
  */
 export const EXTERNAL_OBJECT_REFRESH_TTL_SECONDS = Math.max(
   1,
-  parseMsFromEnv("PAPERCLIP_EXTERNAL_OBJECT_REFRESH_TTL_SECONDS", 300),
+  parsePositiveIntFromEnv("PAPERCLIP_EXTERNAL_OBJECT_REFRESH_TTL_SECONDS", 300),
 );
 
 /**
@@ -228,7 +233,7 @@ export const EXTERNAL_OBJECT_REFRESH_TTL_SECONDS = Math.max(
  */
 export const GITHUB_OBJECT_TTL_SECONDS = Math.max(
   1,
-  parseMsFromEnv("PAPERCLIP_GITHUB_OBJECT_TTL_SECONDS", 300),
+  parsePositiveIntFromEnv("PAPERCLIP_GITHUB_OBJECT_TTL_SECONDS", 300),
 );
 
 // ---------------------------------------------------------------------------
@@ -241,7 +246,7 @@ export const GITHUB_OBJECT_TTL_SECONDS = Math.max(
  */
 export const SETUP_SESSION_TTL_SECONDS = Math.max(
   60,
-  parseMsFromEnv("PAPERCLIP_SETUP_SESSION_TTL_SECONDS", 60 * 60),
+  parsePositiveIntFromEnv("PAPERCLIP_SETUP_SESSION_TTL_SECONDS", 60 * 60),
 );
 
 // ---------------------------------------------------------------------------
@@ -252,7 +257,7 @@ export const SETUP_SESSION_TTL_SECONDS = Math.max(
  * AWS Secrets Manager HTTP request timeout (ms).
  * Env: PAPERCLIP_AWS_SECRETS_REQUEST_TIMEOUT_MS  (default: 30000)
  */
-export const AWS_SECRETS_REQUEST_TIMEOUT_MS = parseMsFromEnv(
+export const AWS_SECRETS_REQUEST_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_AWS_SECRETS_REQUEST_TIMEOUT_MS",
   30_000,
 );
@@ -261,7 +266,7 @@ export const AWS_SECRETS_REQUEST_TIMEOUT_MS = parseMsFromEnv(
  * AWS credential cache TTL (ms).
  * Env: PAPERCLIP_AWS_CREDENTIAL_CACHE_TTL_MS  (default: 5 minutes)
  */
-export const AWS_CREDENTIAL_CACHE_TTL_MS = parseMsFromEnv(
+export const AWS_CREDENTIAL_CACHE_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_AWS_CREDENTIAL_CACHE_TTL_MS",
   5 * 60_000,
 );
@@ -274,7 +279,7 @@ export const AWS_CREDENTIAL_CACHE_TTL_MS = parseMsFromEnv(
  * Embedding API request timeout (ms).
  * Env: PAPERCLIP_EMBEDDING_TIMEOUT_MS  (default: 10000)
  */
-export const EMBEDDING_TIMEOUT_MS = parseMsFromEnv(
+export const EMBEDDING_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_EMBEDDING_TIMEOUT_MS",
   10_000,
 );
@@ -284,10 +289,19 @@ export const EMBEDDING_TIMEOUT_MS = parseMsFromEnv(
 // ---------------------------------------------------------------------------
 
 /**
+ * OpenAI / Codex model list fetch timeout (ms).
+ * Env: PAPERCLIP_OPENAI_MODELS_TIMEOUT_MS  (default: 5000)
+ */
+export const OPENAI_MODELS_TIMEOUT_MS = parsePositiveIntFromEnv(
+  "PAPERCLIP_OPENAI_MODELS_TIMEOUT_MS",
+  5_000,
+);
+
+/**
  * OpenAI / Codex model list cache TTL (ms).
  * Env: PAPERCLIP_OPENAI_MODELS_CACHE_TTL_MS  (default: 60000)
  */
-export const OPENAI_MODELS_CACHE_TTL_MS = parseMsFromEnv(
+export const OPENAI_MODELS_CACHE_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_OPENAI_MODELS_CACHE_TTL_MS",
   60_000,
 );
@@ -296,7 +310,7 @@ export const OPENAI_MODELS_CACHE_TTL_MS = parseMsFromEnv(
  * Cursor model list cache TTL (ms).
  * Env: PAPERCLIP_CURSOR_MODELS_CACHE_TTL_MS  (default: 60000)
  */
-export const CURSOR_MODELS_CACHE_TTL_MS = parseMsFromEnv(
+export const CURSOR_MODELS_CACHE_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_CURSOR_MODELS_CACHE_TTL_MS",
   60_000,
 );
@@ -305,7 +319,7 @@ export const CURSOR_MODELS_CACHE_TTL_MS = parseMsFromEnv(
  * Cursor model list subprocess timeout (ms).
  * Env: PAPERCLIP_CURSOR_MODELS_TIMEOUT_MS  (default: 5000)
  */
-export const CURSOR_MODELS_TIMEOUT_MS = parseMsFromEnv(
+export const CURSOR_MODELS_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_CURSOR_MODELS_TIMEOUT_MS",
   5_000,
 );
@@ -318,7 +332,7 @@ export const CURSOR_MODELS_TIMEOUT_MS = parseMsFromEnv(
  * Feedback / telemetry export flush interval (ms).
  * Env: PAPERCLIP_FEEDBACK_EXPORT_FLUSH_INTERVAL_MS  (default: 5000)
  */
-export const FEEDBACK_EXPORT_FLUSH_INTERVAL_MS = parseMsFromEnv(
+export const FEEDBACK_EXPORT_FLUSH_INTERVAL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_FEEDBACK_EXPORT_FLUSH_INTERVAL_MS",
   5_000,
 );
@@ -331,7 +345,7 @@ export const FEEDBACK_EXPORT_FLUSH_INTERVAL_MS = parseMsFromEnv(
  * Git info cache TTL (ms).
  * Env: PAPERCLIP_GIT_INFO_CACHE_TTL_MS  (default: 3000)
  */
-export const GIT_INFO_CACHE_TTL_MS = parseMsFromEnv(
+export const GIT_INFO_CACHE_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_GIT_INFO_CACHE_TTL_MS",
   3_000,
 );
@@ -340,7 +354,7 @@ export const GIT_INFO_CACHE_TTL_MS = parseMsFromEnv(
  * Git command exec timeout (ms).
  * Env: PAPERCLIP_GIT_COMMAND_TIMEOUT_MS  (default: 1500)
  */
-export const GIT_COMMAND_TIMEOUT_MS = parseMsFromEnv(
+export const GIT_COMMAND_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_GIT_COMMAND_TIMEOUT_MS",
   1_500,
 );
@@ -353,7 +367,7 @@ export const GIT_COMMAND_TIMEOUT_MS = parseMsFromEnv(
  * Knowledge document search cache TTL (ms).
  * Env: PAPERCLIP_KNOWLEDGE_SEARCH_CACHE_TTL_MS  (default: 5 minutes)
  */
-export const KNOWLEDGE_SEARCH_CACHE_TTL_MS = parseMsFromEnv(
+export const KNOWLEDGE_SEARCH_CACHE_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_KNOWLEDGE_SEARCH_CACHE_TTL_MS",
   5 * 60 * 1000,
 );
@@ -366,7 +380,7 @@ export const KNOWLEDGE_SEARCH_CACHE_TTL_MS = parseMsFromEnv(
  * Adapter config-schema cache TTL (ms).
  * Env: PAPERCLIP_CONFIG_SCHEMA_CACHE_TTL_MS  (default: 30000)
  */
-export const CONFIG_SCHEMA_CACHE_TTL_MS = parseMsFromEnv(
+export const CONFIG_SCHEMA_CACHE_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_CONFIG_SCHEMA_CACHE_TTL_MS",
   30_000,
 );
@@ -379,7 +393,7 @@ export const CONFIG_SCHEMA_CACHE_TTL_MS = parseMsFromEnv(
  * Plugin UI static file fetch timeout (ms).
  * Env: PAPERCLIP_PLUGIN_UI_STATIC_FETCH_TIMEOUT_MS  (default: 10000)
  */
-export const PLUGIN_UI_STATIC_FETCH_TIMEOUT_MS = parseMsFromEnv(
+export const PLUGIN_UI_STATIC_FETCH_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_UI_STATIC_FETCH_TIMEOUT_MS",
   10_000,
 );
@@ -392,7 +406,7 @@ export const PLUGIN_UI_STATIC_FETCH_TIMEOUT_MS = parseMsFromEnv(
  * Heartbeat run runtime status TTL (ms).
  * Env: PAPERCLIP_HEARTBEAT_RUN_RUNTIME_STATUS_TTL_MS  (default: 90000)
  */
-export const HEARTBEAT_RUN_RUNTIME_STATUS_TTL_MS = parseMsFromEnv(
+export const HEARTBEAT_RUN_RUNTIME_STATUS_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_HEARTBEAT_RUN_RUNTIME_STATUS_TTL_MS",
   90_000,
 );
@@ -405,7 +419,7 @@ export const HEARTBEAT_RUN_RUNTIME_STATUS_TTL_MS = parseMsFromEnv(
  * Wait time for run-cancellation tasks before responding to the client (ms).
  * Env: PAPERCLIP_TREE_RUN_CANCELLATION_RESPONSE_WAIT_MS  (default: 1000)
  */
-export const TREE_RUN_CANCELLATION_RESPONSE_WAIT_MS = parseMsFromEnv(
+export const TREE_RUN_CANCELLATION_RESPONSE_WAIT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_TREE_RUN_CANCELLATION_RESPONSE_WAIT_MS",
   1_000,
 );
@@ -420,7 +434,7 @@ export const TREE_RUN_CANCELLATION_RESPONSE_WAIT_MS = parseMsFromEnv(
  */
 export const DEFAULT_SMTP_PORT = Math.max(
   1,
-  parseMsFromEnv("PAPERCLIP_SMTP_DEFAULT_PORT", 587),
+  parsePositiveIntFromEnv("PAPERCLIP_SMTP_DEFAULT_PORT", 587),
 );
 
 // ---------------------------------------------------------------------------
@@ -431,7 +445,7 @@ export const DEFAULT_SMTP_PORT = Math.max(
  * Default timeout for JSON-RPC calls to plugin worker processes (ms).
  * Env: PAPERCLIP_PLUGIN_WORKER_RPC_TIMEOUT_MS  (default: 30000)
  */
-export const PLUGIN_WORKER_RPC_TIMEOUT_MS = parseMsFromEnv(
+export const PLUGIN_WORKER_RPC_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_WORKER_RPC_TIMEOUT_MS",
   30_000,
 );
@@ -440,7 +454,7 @@ export const PLUGIN_WORKER_RPC_TIMEOUT_MS = parseMsFromEnv(
  * Timeout for the initialize RPC call on worker startup (ms).
  * Env: PAPERCLIP_PLUGIN_WORKER_INIT_TIMEOUT_MS  (default: 15000)
  */
-export const PLUGIN_WORKER_INIT_TIMEOUT_MS = parseMsFromEnv(
+export const PLUGIN_WORKER_INIT_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_WORKER_INIT_TIMEOUT_MS",
   15_000,
 );
@@ -449,7 +463,7 @@ export const PLUGIN_WORKER_INIT_TIMEOUT_MS = parseMsFromEnv(
  * Drain wait after requesting graceful shutdown before escalating to SIGTERM (ms).
  * Env: PAPERCLIP_PLUGIN_WORKER_SHUTDOWN_DRAIN_MS  (default: 10000)
  */
-export const PLUGIN_WORKER_SHUTDOWN_DRAIN_MS = parseMsFromEnv(
+export const PLUGIN_WORKER_SHUTDOWN_DRAIN_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_WORKER_SHUTDOWN_DRAIN_MS",
   10_000,
 );
@@ -458,7 +472,7 @@ export const PLUGIN_WORKER_SHUTDOWN_DRAIN_MS = parseMsFromEnv(
  * Grace period after SIGTERM before sending SIGKILL (ms).
  * Env: PAPERCLIP_PLUGIN_WORKER_SIGTERM_GRACE_MS  (default: 5000)
  */
-export const PLUGIN_WORKER_SIGTERM_GRACE_MS = parseMsFromEnv(
+export const PLUGIN_WORKER_SIGTERM_GRACE_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_WORKER_SIGTERM_GRACE_MS",
   5_000,
 );
@@ -471,7 +485,7 @@ export const PLUGIN_WORKER_SIGTERM_GRACE_MS = parseMsFromEnv(
  * Timeout for plugin-originated HTTP fetches to external services (ms).
  * Env: PAPERCLIP_PLUGIN_FETCH_TIMEOUT_MS  (default: 30000)
  */
-export const PLUGIN_FETCH_TIMEOUT_MS = parseMsFromEnv(
+export const PLUGIN_FETCH_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_FETCH_TIMEOUT_MS",
   30_000,
 );
@@ -480,7 +494,7 @@ export const PLUGIN_FETCH_TIMEOUT_MS = parseMsFromEnv(
  * Timeout for DNS resolution of plugin fetch target hostnames (ms).
  * Env: PAPERCLIP_DNS_LOOKUP_TIMEOUT_MS  (default: 5000)
  */
-export const DNS_LOOKUP_TIMEOUT_MS = parseMsFromEnv(
+export const DNS_LOOKUP_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_DNS_LOOKUP_TIMEOUT_MS",
   5_000,
 );
@@ -489,7 +503,7 @@ export const DNS_LOOKUP_TIMEOUT_MS = parseMsFromEnv(
  * Interval at which the plugin log buffer is flushed to the database (ms).
  * Env: PAPERCLIP_LOG_BUFFER_FLUSH_INTERVAL_MS  (default: 5000)
  */
-export const LOG_BUFFER_FLUSH_INTERVAL_MS = parseMsFromEnv(
+export const LOG_BUFFER_FLUSH_INTERVAL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_LOG_BUFFER_FLUSH_INTERVAL_MS",
   5_000,
 );
@@ -499,7 +513,7 @@ export const LOG_BUFFER_FLUSH_INTERVAL_MS = parseMsFromEnv(
  * subscription is considered expired and the worker is asked to renew.
  * Env: PAPERCLIP_SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS  (default: 30 min)
  */
-export const SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS = parseMsFromEnv(
+export const SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS",
   30 * 60 * 1_000,
 );
@@ -512,7 +526,7 @@ export const SESSION_EVENT_SUBSCRIPTION_TIMEOUT_MS = parseMsFromEnv(
  * Tick interval for the plugin job scheduler (ms).
  * Env: PAPERCLIP_PLUGIN_JOB_SCHEDULER_TICK_INTERVAL_MS  (default: 30000)
  */
-export const PLUGIN_JOB_SCHEDULER_TICK_INTERVAL_MS = parseMsFromEnv(
+export const PLUGIN_JOB_SCHEDULER_TICK_INTERVAL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_JOB_SCHEDULER_TICK_INTERVAL_MS",
   30_000,
 );
@@ -521,7 +535,7 @@ export const PLUGIN_JOB_SCHEDULER_TICK_INTERVAL_MS = parseMsFromEnv(
  * Default timeout for runJob RPC calls (ms).
  * Env: PAPERCLIP_PLUGIN_JOB_RPC_TIMEOUT_MS  (default: 300000 = 5 min)
  */
-export const PLUGIN_JOB_RPC_TIMEOUT_MS = parseMsFromEnv(
+export const PLUGIN_JOB_RPC_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_JOB_RPC_TIMEOUT_MS",
   5 * 60 * 1_000,
 );
@@ -534,7 +548,7 @@ export const PLUGIN_JOB_RPC_TIMEOUT_MS = parseMsFromEnv(
  * Timeout for npm install/uninstall operations on plugin packages (ms).
  * Env: PAPERCLIP_PLUGIN_NPM_INSTALL_TIMEOUT_MS  (default: 120000)
  */
-export const PLUGIN_NPM_INSTALL_TIMEOUT_MS = parseMsFromEnv(
+export const PLUGIN_NPM_INSTALL_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_NPM_INSTALL_TIMEOUT_MS",
   120_000,
 );
@@ -547,7 +561,7 @@ export const PLUGIN_NPM_INSTALL_TIMEOUT_MS = parseMsFromEnv(
  * Timeout for plugin environment driver probe operations (ms).
  * Env: PAPERCLIP_PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS  (default: 120000)
  */
-export const PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS = parseMsFromEnv(
+export const PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS",
   120_000,
 );
@@ -557,7 +571,7 @@ export const PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS = parseMsFromEnv(
  * timeout to cover communication latency (ms).
  * Env: PAPERCLIP_PLUGIN_ENV_DRIVER_RPC_OVERHEAD_MS  (default: 30000)
  */
-export const PLUGIN_ENV_DRIVER_RPC_OVERHEAD_MS = parseMsFromEnv(
+export const PLUGIN_ENV_DRIVER_RPC_OVERHEAD_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PLUGIN_ENV_DRIVER_RPC_OVERHEAD_MS",
   30_000,
 );
@@ -570,7 +584,7 @@ export const PLUGIN_ENV_DRIVER_RPC_OVERHEAD_MS = parseMsFromEnv(
  * Timeout for upstream discovery fetch operations (ms).
  * Env: PAPERCLIP_CLOUD_UPSTREAM_DISCOVERY_TIMEOUT_MS  (default: 30000)
  */
-export const CLOUD_UPSTREAM_DISCOVERY_TIMEOUT_MS = parseMsFromEnv(
+export const CLOUD_UPSTREAM_DISCOVERY_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_CLOUD_UPSTREAM_DISCOVERY_TIMEOUT_MS",
   30_000,
 );
@@ -579,7 +593,7 @@ export const CLOUD_UPSTREAM_DISCOVERY_TIMEOUT_MS = parseMsFromEnv(
  * Timeout for remote upstream entity fetch operations (ms).
  * Env: PAPERCLIP_CLOUD_UPSTREAM_REMOTE_FETCH_TIMEOUT_MS  (default: 120000)
  */
-export const CLOUD_UPSTREAM_REMOTE_FETCH_TIMEOUT_MS = parseMsFromEnv(
+export const CLOUD_UPSTREAM_REMOTE_FETCH_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_CLOUD_UPSTREAM_REMOTE_FETCH_TIMEOUT_MS",
   120_000,
 );
@@ -593,7 +607,7 @@ export const CLOUD_UPSTREAM_REMOTE_FETCH_TIMEOUT_MS = parseMsFromEnv(
  * considered stale and allow a new queued-run start to proceed.
  * Env: PAPERCLIP_AGENT_START_LOCK_STALE_MS  (default: 30000)
  */
-export const AGENT_START_LOCK_STALE_MS = parseMsFromEnv(
+export const AGENT_START_LOCK_STALE_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_AGENT_START_LOCK_STALE_MS",
   30_000,
 );
@@ -606,7 +620,7 @@ export const AGENT_START_LOCK_STALE_MS = parseMsFromEnv(
  * Timeout for quota provider polling operations (ms).
  * Env: PAPERCLIP_QUOTA_PROVIDER_TIMEOUT_MS  (default: 20000)
  */
-export const QUOTA_PROVIDER_TIMEOUT_MS = parseMsFromEnv(
+export const QUOTA_PROVIDER_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_QUOTA_PROVIDER_TIMEOUT_MS",
   20_000,
 );
@@ -620,7 +634,7 @@ export const QUOTA_PROVIDER_TIMEOUT_MS = parseMsFromEnv(
  * process start time (ms).  Used by the reap liveness check.
  * Env: PAPERCLIP_PROCESS_START_TIME_TOLERANCE_MS  (default: 10000)
  */
-export const PROCESS_START_TIME_TOLERANCE_MS = parseMsFromEnv(
+export const PROCESS_START_TIME_TOLERANCE_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PROCESS_START_TIME_TOLERANCE_MS",
   10_000,
 );
@@ -629,7 +643,7 @@ export const PROCESS_START_TIME_TOLERANCE_MS = parseMsFromEnv(
  * Timeout for environment sandbox worker ready signal (ms).
  * Env: PAPERCLIP_SANDBOX_WORKER_READY_TIMEOUT_MS  (default: 5000)
  */
-export const SANDBOX_WORKER_READY_TIMEOUT_MS = parseMsFromEnv(
+export const SANDBOX_WORKER_READY_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_SANDBOX_WORKER_READY_TIMEOUT_MS",
   5_000,
 );
@@ -642,7 +656,7 @@ export const SANDBOX_WORKER_READY_TIMEOUT_MS = parseMsFromEnv(
  * Default timeout for memory context injection warm-up (ms).
  * Env: PAPERCLIP_MEMORY_CONTEXT_INJECTION_TIMEOUT_MS  (default: 3000)
  */
-export const MEMORY_CONTEXT_INJECTION_TIMEOUT_MS = parseMsFromEnv(
+export const MEMORY_CONTEXT_INJECTION_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_MEMORY_CONTEXT_INJECTION_TIMEOUT_MS",
   3_000,
 );
@@ -655,7 +669,7 @@ export const MEMORY_CONTEXT_INJECTION_TIMEOUT_MS = parseMsFromEnv(
  * TTL for embedding result cache (ms).
  * Env: PAPERCLIP_EMBEDDING_CACHE_TTL_MS  (default: 86400000 = 24 hours)
  */
-export const EMBEDDING_CACHE_TTL_MS = parseMsFromEnv(
+export const EMBEDDING_CACHE_TTL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_EMBEDDING_CACHE_TTL_MS",
   24 * 60 * 60 * 1000,
 );
@@ -669,7 +683,7 @@ export const EMBEDDING_CACHE_TTL_MS = parseMsFromEnv(
  * comments (ms). Prevents premature timeout on slow log reads.
  * Env: PAPERCLIP_ISSUE_COMMENT_LOG_DERIVATION_SLACK_MS  (default: 60000)
  */
-export const ISSUE_COMMENT_LOG_DERIVATION_SLACK_MS = parseMsFromEnv(
+export const ISSUE_COMMENT_LOG_DERIVATION_SLACK_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_ISSUE_COMMENT_LOG_DERIVATION_SLACK_MS",
   60_000,
 );
@@ -682,7 +696,7 @@ export const ISSUE_COMMENT_LOG_DERIVATION_SLACK_MS = parseMsFromEnv(
  * Rate-limit window for company search (ms).
  * Env: PAPERCLIP_COMPANY_SEARCH_RATE_LIMIT_WINDOW_MS  (default: 60000)
  */
-export const COMPANY_SEARCH_RATE_LIMIT_WINDOW_MS = parseMsFromEnv(
+export const COMPANY_SEARCH_RATE_LIMIT_WINDOW_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_COMPANY_SEARCH_RATE_LIMIT_WINDOW_MS",
   60_000,
 );
@@ -695,7 +709,7 @@ export const COMPANY_SEARCH_RATE_LIMIT_WINDOW_MS = parseMsFromEnv(
  * Default refresh interval for productivity review evaluations (ms).
  * Env: PAPERCLIP_PRODUCTIVITY_REVIEW_REFRESH_INTERVAL_MS  (default: 3600000 = 1 hour)
  */
-export const PRODUCTIVITY_REVIEW_REFRESH_INTERVAL_MS = parseMsFromEnv(
+export const PRODUCTIVITY_REVIEW_REFRESH_INTERVAL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_PRODUCTIVITY_REVIEW_REFRESH_INTERVAL_MS",
   60 * 60 * 1000,
 );
@@ -708,7 +722,7 @@ export const PRODUCTIVITY_REVIEW_REFRESH_INTERVAL_MS = parseMsFromEnv(
  * Base back-off delay for transient continuation recovery failures (ms).
  * Env: PAPERCLIP_CONTINUATION_RECOVERY_BASE_BACKOFF_MS  (default: 60000)
  */
-export const CONTINUATION_RECOVERY_BASE_BACKOFF_MS = parseMsFromEnv(
+export const CONTINUATION_RECOVERY_BASE_BACKOFF_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_CONTINUATION_RECOVERY_BASE_BACKOFF_MS",
   60_000,
 );
@@ -721,7 +735,7 @@ export const CONTINUATION_RECOVERY_BASE_BACKOFF_MS = parseMsFromEnv(
  * Timeout for git clone operations in managed workspaces (ms).
  * Env: PAPERCLIP_MANAGED_WORKSPACE_GIT_CLONE_TIMEOUT_MS  (default: 600000 = 10 min)
  */
-export const MANAGED_WORKSPACE_GIT_CLONE_TIMEOUT_MS = parseMsFromEnv(
+export const MANAGED_WORKSPACE_GIT_CLONE_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_MANAGED_WORKSPACE_GIT_CLONE_TIMEOUT_MS",
   10 * 60 * 1000,
 );
@@ -734,7 +748,7 @@ export const MANAGED_WORKSPACE_GIT_CLONE_TIMEOUT_MS = parseMsFromEnv(
  */
 export const AGENT_JWT_TIMEOUT_MARGIN_SECONDS = Math.max(
   0,
-  parseMsFromEnv("PAPERCLIP_AGENT_JWT_TIMEOUT_MARGIN_SECONDS", 5 * 60),
+  parsePositiveIntFromEnv("PAPERCLIP_AGENT_JWT_TIMEOUT_MARGIN_SECONDS", 5 * 60),
 );
 
 // ---------------------------------------------------------------------------
@@ -745,7 +759,7 @@ export const AGENT_JWT_TIMEOUT_MARGIN_SECONDS = Math.max(
  * Timeout for environment provision operations (ms).
  * Env: PAPERCLIP_ENVIRONMENT_PROVISION_TIMEOUT_MS  (default: 300000 = 5 min)
  */
-export const ENVIRONMENT_PROVISION_TIMEOUT_MS = parseMsFromEnv(
+export const ENVIRONMENT_PROVISION_TIMEOUT_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_ENVIRONMENT_PROVISION_TIMEOUT_MS",
   300_000,
 );
@@ -758,7 +772,7 @@ export const ENVIRONMENT_PROVISION_TIMEOUT_MS = parseMsFromEnv(
  * Flush interval for PostHog telemetry client (ms).
  * Env: PAPERCLIP_POSTHOG_FLUSH_INTERVAL_MS  (default: 10000)
  */
-export const POSTHOG_FLUSH_INTERVAL_MS = parseMsFromEnv(
+export const POSTHOG_FLUSH_INTERVAL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_POSTHOG_FLUSH_INTERVAL_MS",
   10_000,
 );
