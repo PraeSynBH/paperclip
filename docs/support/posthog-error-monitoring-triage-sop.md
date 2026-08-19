@@ -1,17 +1,17 @@
 ---
 title: PostHog Monitoring — Support Engineer Triage SOP
 summary: SOP for triaging PostHog error issues and business events (VOY-999 / VOY-1420)
-status: draft
+status: final
 applies_to: VOY-999 / VOY-1015 / VOY-1420
 ---
 
 # PostHog Monitoring — Support Engineer Triage SOP
 
-**Version:** 1.4.1
+**Version:** 1.5.0
 **Date:** 2026-08-19
 **Author:** Support Engineer (88b72065)
-**Status:** Final — Business events instrumentation landed (VOY-1420); SOP expanded to cover business event triage; P1 stack-trace limitation documented (pending fix c721d052)
-**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / c721d052
+**Status:** Final — Stack traces now preserved (VOY-1430); P1 stack-trace limitation resolved
+**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / VOY-1428 / VOY-1430
 
 ---
 
@@ -28,7 +28,7 @@ This SOP defines how to triage, classify, and resolve issues in both categories.
 
 ## How It Works
 
-1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — error messages are scrubbed via `redactSensitiveText()`; the sanitizer rebuilds the Error with a redacted message and preserved name, discarding the original stack (see [Known Limitation: Stack Traces](#known-limitation-stack-traces)).
+1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — the `sanitizeErrorForTelemetry()` function mutates the original Error in place, redacting `error.message` and `error.stack` via `redactSensitiveText()`, then recursively redacts the `error.cause` chain. The original stack trace is preserved (with file paths and tokens redacted), enabling triage by throw site. (See [Stack Trace Handling](#stack-trace-handling).)
 2. **Cron poll:** `scripts/posthog-error-monitor.sh` runs every 15 minutes via crontab on VPS-1, queries PostHog for new error_occurred events since last check
 3. **Issue creation:** For each unique error signature (grouped by event+component+normalized message), a Paperclip issue is created:
    - **Title:** `[PostHog] {event}: {component} — {truncated message}`
@@ -62,16 +62,13 @@ All business events use `companyId` as the `distinctId` (never the default `"pap
 
 Starting with VOY-1420, error events (`captureErrorEvent`) also use `companyId` as `distinctId` (resolved from `req.actor?.companyId`), falling back to `"paperclip-server"` when no actor is available. Previously all error events used `undefined` as the default. This enables per-company error tracking.
 
-### Known Limitation: Stack Traces
+### Stack Trace Handling
 
-**Current behavior (unfixed, see issue c721d052):** The `sanitizeErrorForTelemetry()` function creates a new `Error` object with the redacted message, preserving the error name but discarding the original stack trace. PostHog's `captureException` auto-extracts `$exception_stack_trace` from the sanitized error — but this stack points at the sanitizer code in `posthog.ts`, not the original throw site. Every captured error will appear to originate from `posthog.ts`.
+**Since VOY-1430 (fixed):** The `sanitizeErrorForTelemetry()` function now mutates the original Error in place, preserving the stack trace with PII redacted. PostHog's `captureException` auto-extracts `$exception_stack_trace` from the sanitized error, and the stack trace points at the **original throw site** — not the sanitizer code.
 
-**Triage impact:** When reviewing PostHog error issues, do NOT rely on the stack trace location for identifying the source component. Instead:
-- Use the `component` field in the error event properties (maps to `req.originalUrl` → route handler)
-- Use the `errorCode` / error name (e.g. `ValidationError`, `NotFoundError`)
-- Use the `url` and `method` properties to identify the route that failed
+**What gets redacted:** File paths, emails, tokens, connection strings, and other sensitive patterns in both the error message and stack trace are replaced with `***REDACTED***`. The error name and error code (low-risk categorical identifiers) are preserved as-is.
 
-**Expected fix (P1):** The fix is to redact the original error in-place (mutate `error.message` and `error.stack` via `redactSensitiveText()`) instead of creating a new `Error`. This will preserve the original stack trace with PII redacted, restoring meaningful stack-based triage. Once the fix lands, this section can be removed.
+**Verification:** The test suite asserts `expect(sanitized.stack).toContain('posthog.test.ts')` — confirming the stack trace survives redaction and still points at the original throw site in the test file.
 
 ### Debugging Business Events
 
@@ -119,7 +116,7 @@ Read the issue body to determine:
 | **MEDIUM** | Non-critical failure (analytics not tracking, minor UI glitch) | 24 hours | Triage during next heartbeat. If low priority, move to backlog |
 | **LOW** | Cosmetic or edge case (rare error path, expected failure handled gracefully) | Best effort | Acknowledge and close, or keep in backlog for monitoring |
 
-**Note on PII:** Error messages arriving in PostHog are already scrubbed by the server-side `sanitizeErrorForTelemetry()` function — secrets, file paths, emails, and connection strings are redacted before egress. If you see `***REDACTED***` in an error message, that is working as designed. The original error message is still available in server logs (`journalctl`). For investigating PII leaks, check the server logs, not PostHog.
+**Note on PII:** Error messages arriving in PostHog are already scrubbed by the server-side `sanitizeErrorForTelemetry()` function — secrets, file paths, emails, and connection strings are redacted from both the message and stack trace before egress. If you see `***REDACTED***` in an error message or stack trace line, that is working as designed. The original error is still available in server logs (`journalctl`). For investigating PII leaks, check the server logs, not PostHog.
 
 ### Step 3: Root Cause Investigation
 
