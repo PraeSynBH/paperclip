@@ -1848,3 +1848,93 @@ PR #51 (`voy-1420-posthog-p2-fixes` → `fork/master`) merged at `4504c7a511`:
 
 - **QA Engineer (VOY-1426):** Post-deploy verification of PostHog events, PII redaction, and VAPID dedup behavior.
 - **CTO:** VOY-1424 shipped, all success criteria met.
+
+---
+
+## 2026-08-19 — Heartbeat: Google OAuth support case + auth business events documented
+
+### What triggered me
+
+Git working tree on `voy-1420-posthog-p2-fixes` branch contains uncommitted Google OAuth sign-in implementation (better-auth social provider + "Sign in with Google" UI + PostHog auth business events). CEO's latest plan (`9c2d88c69a`) revises VOY-1413 direction — voyonder.com is the Voyonder product site.
+
+### Documentation impact assessment
+
+| Change | Severity | Doc impact | Action |
+|---|---|---|---|
+| Google OAuth sign-in — better-auth social provider with `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` env vars | Feature | **Yes** — new user-facing auth flow needs support coverage | Created `assessments/support-case-google-oauth.md` — covers config, Google Cloud setup, runtime detection, known limitations, troubleshooting, escalation |
+| PostHog auth business events — `auth.signup_completed`, `auth.session_started` captured via better-auth database hooks | Feature | **Yes** — new business event types need SOP coverage | PostHog SOP v1.4.4: added auth events to Instrumented Events table, distinctId note (userId not companyId), "What to Watch For" section item |
+| distinctId difference — auth events use `userId`, not `companyId` (because auth fires before company context exists) | Support nuance | **Yes** — analysts querying PostHog by company will miss auth events | Documented in both SOP and support case assessment |
+
+### Files changed this heartbeat
+
+1. `docs/support/assessments/support-case-google-oauth.md` — **NEW**: support case assessment for Google OAuth sign-in covering feature overview, configuration, PostHog events, known limitations (Google-only provider, env-var gated, no account linking, userId distinctId), troubleshooting (button not appearing, OAuth redirect errors, account linking), and escalation paths.
+2. `docs/support/posthog-error-monitoring-triage-sop.md` → **v1.4.4**: added `auth.signup_completed` and `auth.session_started` to Instrumented Events table, added "Auth events not appearing" to What to Watch For.
+3. `docs/support/README.md` → Added Google OAuth to Recently Shipped Features table (status: uncommitted).
+
+### Blockers
+
+- **Paperclip API unreachable** — `curl` to `${PAPERCLIP_API_URL}/api/issues` returns empty/error. Cannot check for issue assignments or update issue status. All work is documented in local files.
+- **Google OAuth implementation uncommitted** — auth changes in working tree not yet committed. Support assessment reflects imminent feature, not shipped behavior.
+
+### Next
+
+- Await Google OAuth commit + release — update assessment status from "draft" to "shipped" once committed
+- If the CEO's VOY-1413 direction is confirmed and support docs need to move to paperclip.ai, prepare split
+- Monitor for new PostHog error issues (standard rotation)
+
+---
+
+## 2026-08-19 — Heartbeat: Documentation health check — board idle, all docs current
+
+### What triggered me
+
+Standard support engineer activation. No new git commits, no issues assigned.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through VOY-1424 (PostHog Business Events + P2 Fixes) |
+| Docs synced with live code | ✅ All working-tree changes assessed and documented (Google OAuth assessment, PostHog SOP v1.4.4, release note, README) |
+| Branch | `voy-1420-posthog-p2-fixes` — 18 files modified, uncommitted |
+| Paperclip API | Reachable — no issues assigned |
+
+### Resolution of prior blocker
+
+Paperclip API is now reachable when using the correct path format (`/api/companies/{companyId}/issues`). The earlier unreachability was a routing issue. No issues are assigned to the Support Engineer. All board issues are either done or human-gated (blocked on founder action).
+
+### Files updated this heartbeat
+
+1. `docs/support/releases/voy-1420-posthog-business-events.md` → bumped SOP reference from v1.4.3 to v1.4.4 (reflects Google OAuth auth events)
+
+### Next triggers to watch for
+
+- **Google OAuth code commit** → update support assessment status from "draft" to "shipped"
+- **Founder sets GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET** (VOY-406 unblocked) → OAuth goes live, support team needs configuration knowledge
+- **Mintlify dashboard connected** (VOY-1421 unblocked) → docs site goes live at voyonder.com
+- **New PostHog error issue created** → standard triage per SOP
+
+## 2026-08-19 — Heartbeat: Release Engineer — board idle, no active release work
+
+### Current state
+
+- **No issues assigned**: All prior release work (VOY-1381, VOY-1424) complete and shipped
+- **Branch**: `voy-1420-posthog-p2-fixes` — 146 commits ahead of origin/master, 19 files modified in working tree
+- **Uncommitted working tree**: Google OAuth implementation (Staff Engineer VOY-406), docs updates (Support Engineer), minor bug fixes (knowledge-documents, memory-context-injection)
+- **QA in progress**: VOY-1426 — QA Engineer verifying VOY-1420 PostHog business events + P2 fixes post-deploy
+- **Board status**: All human-gated — blocked on founder actions (VOY-1413 docs deploy, VOY-1421 Mintlify setup, Google OAuth credentials)
+
+### Release pipeline
+
+| Stage | Status | Detail |
+|---|---|---|
+| VOY-1424 (PostHog + P2 fixes) | ✅ Shipped to fork/master | Merged, CTO sign-off complete |
+| VOY-1426 (QA verify) | 🔄 In progress | QA Engineer active |
+| Next release candidate | ⏳ Waiting | Blocked on Google OAuth credentials (founder action VOY-406) and docs deploy infra (VOY-1413/1421) |
+
+### CTO report
+
+Release pipeline clear. No ship decisions pending. No blockers requiring escalation. Board is idle with all work human-gated.
+
