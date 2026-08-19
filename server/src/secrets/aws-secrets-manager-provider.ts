@@ -972,7 +972,7 @@ class AwsSecretsManagerJsonGateway implements AwsSecretsManagerGateway {
       method: "POST",
       headers,
       body,
-      signal: AbortSignal.timeout(AWS_SECRETS_MANAGER_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(AWS_SECRETS_REQUEST_TIMEOUT_MS),
     });
     const text = await response.text();
     const parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {};

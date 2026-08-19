@@ -32,7 +32,6 @@ import path from "node:path";
 import fs from "node:fs";
 import crypto from "node:crypto";
 import type { Db } from "@paperclipai/db";
-import { resolvePreviewPath, resolveStaticFilePath } from "../app.js";
 import { pluginRegistryService } from "../services/plugin-registry.js";
 import { logger } from "../middleware/logger.js";
 import { PLUGIN_UI_STATIC_FETCH_TIMEOUT_MS } from "../timeout-constants.js";
