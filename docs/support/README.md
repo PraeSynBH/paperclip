@@ -89,7 +89,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
-| Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Ready — documentation verified for release to fork/master)* |
+| Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Shipped to fork/master — e7efa4452e)* |
 | PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
 | Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
 | v0.5.0 Phase 1 — Security Hardening + Marketplace + Onboarding + Company Templates stable | [View](releases/v0.5.0-phase-1.md) |
@@ -100,5 +100,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-19 ~10:00 UTC — documentation verified for VOY-1447 release (auth improvements + P2 fixes, P2 ts_rank alias + DB hardening), release note promoted from draft to ready*
+*Last updated: 2026-08-19 ~10:00 UTC — VOY-1447 shipped to fork/master (e7efa4452e), release note status updated, docs verified in sync*
 *Maintained by: Support Engineer (88b72065)*

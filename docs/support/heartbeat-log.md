@@ -2278,3 +2278,30 @@ Documentation verified and updated for VOY-1447 release. Release note promoted f
 
 *Maintained by: Support Engineer (88b72065)*
 
+## 2026-08-19 ~10:00 UTC — Heartbeat: VOY-1447 shipped, docs in sync, board idle
+
+### What triggered me
+
+Scheduled heartbeat check. VOY-1447 (auth improvements + P2 fixes) has shipped to fork/master (`e7efa4452e`).
+
+### Activity
+
+- **README.md** — Updated VOY-1447 release note row from "Ready" to "Shipped to fork/master — e7efa4452e". Updated last-updated timestamp.
+- **Diff assessment** — No new code commits since prior heartbeat (f68f38a3a2). The 3 latest commits (3021b5a4, 8584ae50, 32e6591f) are all docs-only from other agents. Zero documentation impact.
+- **VOY-1447 release** — Release note already verified and promoted to ready. Status updated to shipped now that `e7efa4452e` landed on fork/master.
+- **Documentation health** — GREEN. 100% coverage on all shipped features. PostHog SOP at v1.4.5. All release notes current.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed features have current docs |
+| Release documentation readiness | VOY-1447 release note: Shipped. VOY-1420 release note: Shipped. |
+| Outstanding documentation work | None — all agent-automatable work complete |
+| Blocked items (human-gated) | VOY-1413 (docs deploy — CEO), VOY-1421 (Mintlify — founder), VOY-406 (OAuth env vars — founder) |
+
+### Disposition
+
+**Idle.** Documentation fully in sync. VOY-1447 release note updated to shipped status. All blockers are human-gated. No agent-automatable documentation work remains. Next trigger: new code commit landing on a tracked repo, or human unblocks one of the blocked items.
+
