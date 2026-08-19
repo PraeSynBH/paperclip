@@ -1736,3 +1736,43 @@ Scheduled heartbeat check. Last heartbeat on this branch (PostHog business event
 ### Disposition
 
 **Idle.** Documentation fully in sync with the live system. Both recent server fixes assessed — internal infrastructure only, zero customer-facing or support documentation impact. All blockers remain human-gated. Next trigger: new code commit landing on a tracked repo, or founder/CEO unblocks one of the gated items.|
+
+## 2026-08-19 ~15:32 UTC — Heartbeat: board idle, M-series docs impact assessed
+
+### What triggered me
+
+Scheduled heartbeat. No new git commits since last support heartbeat (~14:45 UTC). Board continues idle: 6 active issues, 0 assigned to Support Engineer. All engineering shipped, 3 founder-gated blockers unchanged.
+
+### Diff assessment
+
+The master working tree contains uncommitted M-series technical debt changes (M-1, M-3, M-4) implemented by Founding Engineer, as identified in Staff Engineer structural audit (`doc/status/2026-08-19-1450-staff-engineer-heartbeat.md`):
+
+| Change | Scope | Documentation Impact |
+|---|---|---|
+| **M-1 (VOY-1403)** — Transactional template rollback (`company-templates.ts`) | Deployment wrapped in DB transaction; partial failures now roll back entirely instead of soft-failing with warnings | **Positive — assessment needs update** when code ships. Company templates support case (`support-case-company-templates.md`) currently documents partial-failure with warnings as normal behavior. P2 finding: skill install failures are now FATAL (rollback entire deploy). The "Deploy creates invalid company state" escalation path becomes obsolete — rollback prevents partial state. Assessment update deferred until code is committed and released. |
+| **M-3 (VOY-1405)** — Consolidate duplicate constant definitions (`packages/shared/src/index.ts`, `validators/notifications.ts` deleted) | Cleanup: removed duplicate exports, deleted unused validators module | None — internal refactoring, no user-facing behavior change |
+| **M-4 (VOY-1406)** — Extract hardcoded timeout values into configurable constants (`server/src/timeout-constants.ts`) | 100+ new `PAPERCLIP_*` env vars for timeouts, TTLs, intervals with env-var overrides | **Positive — env var reference expansion** when code ships. `docs/deploy/environment-variables.md` currently documents 22 env vars across 3 sections. The new constants file provides ~100 configurable parameters. Full reference doc update deferred until code lands. |
+| **M-2 (VOY-1404)** — Expanded test coverage | Test-only | None — test-only |
+
+### Pending merge status
+
+- The PostHog P1 stack-trace fix (`e63b2a1f67`) and the SOP v1.4.2 update (removing Known Limitation section) live on `voy-1420-posthog-p2-fixes` branch, not yet merged to master. Once merged, I can remove the "Known Limitation: Stack Traces" section from `docs/support/posthog-error-monitoring-triage-sop.md`.
+- The M-series code is on the master working tree (no feature branch — Staff Engineer P2 finding S1). Code review (VOY-1456) blocked until implementation is complete and moved to a branch.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed features have current docs |
+| Release notes currency | Up to date through Documentation Site v1 (v0.5.0 Phase 1) |
+| M-series docs impact (pending release) | Company templates assessment: partial-failure behavior changes to full rollback. Env var reference: ~100 new configurable constants to document. |
+| PostHog SOP | v1.4.1 on master (limitation still documented); v1.4.2 on `voy-1420-posthog-p2-fixes` (limitation removed, awaiting merge) |
+| Blocked items (human-gated, unchanged) | VOY-1421 (Mintlify — founder), VOY-1413 (docs deploy — CEO), VOY-421 (PostHog dashboards — founder) |
+
+### Forward look
+
+- **VOY-1420-posthog-p2-fixes merges** → collapse Known Limitation section in PostHog SOP 
+- **M-series code lands** → update company templates assessment for transactional rollback; expand env-var reference for configurable constants
+- **VOY-1413 unblocks** → verify docs site content live at voyonder.com
+- **COO requests** → documentation health report on demand
