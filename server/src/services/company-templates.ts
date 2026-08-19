@@ -286,9 +286,13 @@ export function companyTemplateService(db: Db): CompanyTemplateService {
                   adapterConfig: materialized.adapterConfig as Record<string, unknown>,
                 });
               }
-            } catch {
-              warnings.push(`Could not materialize instructions for agent '${agentName}'`);
-              logger.warn({ agentId: created.id }, "Template agent instructions materialization failed");
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err);
+              warnings.push(`Could not materialize instructions for agent '${agentName}': ${msg}`);
+              logger.warn(
+                { err, agentId: created.id, agentName },
+                "Template agent instructions materialization failed",
+              );
             }
           }
 
@@ -441,6 +445,15 @@ export function companyTemplateService(db: Db): CompanyTemplateService {
       // Transaction rolled back — clean up non-transactional file-system side
       // effects (materialized agent instruction bundles) that were written
       // before the failure.
+      //
+      // BEHAVIORAL CHANGE (VOY-1403, M-1): callers should be aware that this
+      // deployment path is now ALL-OR-NOTHING. Previously, failures in
+      // individual steps (skill install, agent creation, goal/project/issue
+      // creation) were soft-failed with warnings and the deployment continued.
+      // Now any such failure propagates and rolls back the entire deployment —
+      // no partial company/agent/skill state is left behind. Callers that
+      // relied on best-effort partial deployments must treat a rejected
+      // deployment as a full no-op.
       for (const root of materializedBundleRoots) {
         try {
           await rm(root, { recursive: true, force: true });
