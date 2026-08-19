@@ -1730,6 +1730,51 @@ No new triggers since prior heartbeat (20:55 UTC). Board state unchanged:
 | P1 fix (stack-trace destruction) | `todo` (issue `70fa0c52`), unassigned |
 | Docs site release | `blocked` on founder Mintlify setup |
 
-**Next triggers**: Identical to prior heartbeat (P1 fix lands → update SOP; docs site unblocks → verify live; PostHog Phase B → verify cron coverage).
+**Next triggers**: Identical to prior heartbeat (docs site unblocks → verify live; PostHog Phase B → verify cron coverage).
 
 **Status**: GREEN. No documentation drift detected. SOP v1.4.1 current and covers all shipped features. No action required.
+
+## 2026-08-19 ~21:25 UTC — Heartbeat: PostHog SOP v1.4.2 — P1 stack-trace fix landed → SOP updated
+
+### Trigger
+
+The P1 fix (VOY-1430 / `e63b2a1f67`) for `sanitizeErrorForTelemetry` destroying stack traces was committed to `voy-1420-posthog-p2-fixes`. This was the trigger from the prior heartbeat: "P1 fix lands → update SOP."
+
+### Documentation impact assessment
+
+| Commit | Fix | Customer-facing doc impact | Action |
+|--------|-----|---------------------------|--------|
+| `e63b2a1f67` | VOY-1430 — sanitizeErrorForTelemetry preserves stack traces in place | **Yes** — PostHog SOP "Known Limitation: Stack Traces" section outdated (fix now applied) | SOP v1.4.2: removed limitation section, replaced with resolved-fix note; updated error-capture flow description |
+| `a46b6e62dd` | VOY-1433 — snapshot err.message before captureErrorEvent mutates it | No (internal operational fix) | None |
+| `d5b3510587` | VOY-1434 — redact decisionNote before captureMetric (PII egress) | No (internal telemetry hygiene) | None |
+| `8416165284` | VOY-1435 — bounded FIFO cache for VAPID expired-endpoint warn dedup | No (internal operational hardening) | None |
+
+### What was done
+
+1. **PostHog SOP v1.4.1 → v1.4.2** (`docs/support/posthog-error-monitoring-triage-sop.md`):
+   - Removed "Known Limitation: Stack Traces" section — replaced with "Stack Trace Preservation (resolved)" note documenting the fix and its before/after behavior
+   - Updated error capture flow description (line 31): now accurately describes in-place redaction of message + stack, preserving the original throw site
+   - Updated PII note in severity validation (line 121): mentions stack traces as well as messages
+   - Bumped version to 1.4.2, updated status and applies-to to reference `e63b2a1f67`
+
+2. **Diff assessment for all 4 recent fix commits** — assessed as complete (see table above). None have customer-facing doc impact beyond the SOP update.
+
+### Remaining triggers
+
+| Trigger | Status |
+|---------|--------|
+| P1 fix lands → update SOP | ✅ Done (this heartbeat) |
+| VOY-1413/1421 unblocks → verify docs site live at voyonder.com | ⏳ Blocked on founder (Ben) |
+| COO requests documentation health report | Available on demand |
+| PostHog Phase B (VOY-1030) → verify cron deploy coverage | Not yet shipped |
+
+### Current state
+
+| Metric | Status |
+|--------|--------|
+| Open support issues | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through Documentation Site v1 |
+| Docs synced with live code | ✅ PostHog SOP v1.4.2 reflects current code behavior |
+| Branch | `voy-1420-posthog-p2-fixes` |
+| Working tree docs changes | 1 modified file (this heartbeat — PostHog SOP v1.4.2) |
