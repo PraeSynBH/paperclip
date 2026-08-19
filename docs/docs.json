@@ -154,6 +154,7 @@
               "api/knowledge",
               "api/chat",
               "api/company-templates",
+              "api/knowledge-starter-packs",
               "api/billing",
               "api/notifications",
               "api/marketplace",
