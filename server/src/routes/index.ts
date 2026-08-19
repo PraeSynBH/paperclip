@@ -30,3 +30,4 @@ export { billingRoutes, billingWebhookRoute } from "./billing.js";
 export { notificationRoutes } from "./notifications.js";
 export { marketplaceRoutes } from "./marketplace.js";
 export { onboardingRoutes } from "./onboarding.js";
+export { knowledgeStarterPackRoutes } from "./knowledge-starter-packs.js";

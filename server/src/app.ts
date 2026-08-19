@@ -57,6 +57,7 @@ import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { marketplaceRoutes } from "./routes/marketplace.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
+import { knowledgeStarterPackRoutes } from "./routes/knowledge-starter-packs.js";
 import { logger } from "./middleware/logger.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager, type PluginWorkerManager } from "./services/plugin-worker-manager.js";
@@ -262,6 +263,7 @@ export async function createApp(
   api.use(instanceSettingsRoutes(db));
   api.use(memoryRoutes(db));
   api.use(knowledgeRoutes(db));
+  api.use(knowledgeStarterPackRoutes(db));
   api.use("/company-templates", companyTemplateRoutes(db));
   api.use(billingRoutes(db));
   api.use(notificationRoutes(db));

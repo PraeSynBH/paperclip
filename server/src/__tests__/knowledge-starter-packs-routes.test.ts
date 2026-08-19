@@ -1,6 +1,6 @@
 import express from "express";
 import request from "supertest";
-import { beforeEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const companyId = "33333333-3333-4333-8333-333333333333";
 
@@ -35,46 +35,22 @@ const mockPackData = {
   },
 };
 
-function registerMocks() {
-  vi.doMock("../services/knowledge-starter-packs.js", () => ({
-    knowledgeStarterPackService: () => mockPackService,
-  }));
-}
+vi.mock("../services/knowledge-starter-packs.js", () => ({
+  knowledgeStarterPackService: () => mockPackService,
+}));
 
-let routeModule: typeof import("../routes/knowledge-starter-packs.js") | null = null;
-let middlewareModule: typeof import("../middleware/index.js") | null = null;
+import { knowledgeStarterPackRoutes } from "../routes/knowledge-starter-packs.js";
+import { errorHandler } from "../middleware/index.js";
 
-beforeAll(async () => {
-  registerMocks();
-  [routeModule, middlewareModule] = await Promise.all([
-    import("../routes/knowledge-starter-packs.js") as Promise<
-      typeof import("../routes/knowledge-starter-packs.js")
-    >,
-    import("../middleware/index.js") as Promise<typeof import("../middleware/index.js")>,
-  ]);
-});
-
-let appImportCounter = 0;
-
-async function createApp(actor: Record<string, unknown>) {
-  appImportCounter += 1;
-  const routeModulePath = `../routes/knowledge-starter-packs.js?ksp-${appImportCounter}`;
-  const middlewareModulePath = `../middleware/index.js?ksp-${appImportCounter}`;
-  const [{ knowledgeStarterPackRoutes: freshRoutes }, { errorHandler: freshErrorHandler }] =
-    await Promise.all([
-      import(routeModulePath) as Promise<
-        typeof import("../routes/knowledge-starter-packs.js")
-      >,
-      import(middlewareModulePath) as Promise<typeof import("../middleware/index.js")>,
-    ]);
+function createApp(actor: Record<string, unknown>) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
     (req as any).actor = actor;
     next();
   });
-  app.use("/api", freshRoutes({} as any));
-  app.use(freshErrorHandler);
+  app.use("/api", knowledgeStarterPackRoutes({} as any));
+  app.use(errorHandler);
   return app;
 }
 
@@ -127,7 +103,7 @@ beforeEach(() => {
 
 describe("GET /api/knowledge-starter-packs", () => {
   it("lists all available starter packs with metadata", async () => {
-    const app = await createApp(boardActor);
+    const app = createApp(boardActor);
     const res = await request(app).get("/api/knowledge-starter-packs");
 
     expect(res.status).toBe(200);
@@ -139,7 +115,7 @@ describe("GET /api/knowledge-starter-packs", () => {
   });
 
   it("returns metadata without documents", async () => {
-    const app = await createApp(boardActor);
+    const app = createApp(boardActor);
     const res = await request(app).get("/api/knowledge-starter-packs");
 
     expect(res.status).toBe(200);
@@ -156,7 +132,7 @@ describe("GET /api/knowledge-starter-packs", () => {
 
   it("returns empty array when no packs exist", async () => {
     mockPackService.listPacks.mockResolvedValue([]);
-    const app = await createApp(boardActor);
+    const app = createApp(boardActor);
     const res = await request(app).get("/api/knowledge-starter-packs");
 
     expect(res.status).toBe(200);
@@ -164,7 +140,7 @@ describe("GET /api/knowledge-starter-packs", () => {
   });
 
   it("is accessible without authentication", async () => {
-    const app = await createApp({ type: "none", source: "none" });
+    const app = createApp({ type: "none", source: "none" });
     const res = await request(app).get("/api/knowledge-starter-packs");
 
     expect(res.status).toBe(200);
@@ -176,7 +152,7 @@ describe("GET /api/knowledge-starter-packs", () => {
 
 describe("GET /api/knowledge-starter-packs/:packKey", () => {
   it("returns a single pack with full documents", async () => {
-    const app = await createApp(boardActor);
+    const app = createApp(boardActor);
     const res = await request(app).get("/api/knowledge-starter-packs/engineering");
 
     expect(res.status).toBe(200);
@@ -187,7 +163,7 @@ describe("GET /api/knowledge-starter-packs/:packKey", () => {
   });
 
   it("returns 404 for unknown pack key", async () => {
-    const app = await createApp(boardActor);
+    const app = createApp(boardActor);
     const res = await request(app).get("/api/knowledge-starter-packs/unknown-pack");
 
     expect(res.status).toBe(404);
@@ -199,7 +175,7 @@ describe("GET /api/knowledge-starter-packs/:packKey", () => {
 
 describe("POST /api/companies/:id/knowledge/starter-packs/:packKey/install", () => {
   it("installs a starter pack into a company knowledge base", async () => {
-    const app = await createApp(boardActor);
+    const app = createApp(boardActor);
     const res = await request(app)
       .post(`/api/companies/${companyId}/knowledge/starter-packs/engineering/install`)
       .send({});
@@ -218,7 +194,7 @@ describe("POST /api/companies/:id/knowledge/starter-packs/:packKey/install", () 
   });
 
   it("accepts actorAgentId override", async () => {
-    const app = await createApp(boardActor);
+    const app = createApp(boardActor);
     const res = await request(app)
       .post(`/api/companies/${companyId}/knowledge/starter-packs/engineering/install`)
       .send({ actorAgentId: "custom-agent-id" });
@@ -232,7 +208,7 @@ describe("POST /api/companies/:id/knowledge/starter-packs/:packKey/install", () 
   });
 
   it("returns 404 for unknown pack key", async () => {
-    const app = await createApp(boardActor);
+    const app = createApp(boardActor);
     const res = await request(app)
       .post(`/api/companies/${companyId}/knowledge/starter-packs/unknown-pack/install`)
       .send({});
@@ -242,7 +218,7 @@ describe("POST /api/companies/:id/knowledge/starter-packs/:packKey/install", () 
   });
 
   it("rejects unauthenticated actors", async () => {
-    const app = await createApp({ type: "none", source: "none" });
+    const app = createApp({ type: "none", source: "none" });
     const res = await request(app)
       .post(`/api/companies/${companyId}/knowledge/starter-packs/engineering/install`)
       .send({});
@@ -258,7 +234,7 @@ describe("POST /api/companies/:id/knowledge/starter-packs/:packKey/install", () 
       companyIds: ["other-company-id"],
       isInstanceAdmin: false,
     };
-    const app = await createApp(noAccessActor);
+    const app = createApp(noAccessActor);
     const res = await request(app)
       .post(`/api/companies/${companyId}/knowledge/starter-packs/engineering/install`)
       .send({});
@@ -267,7 +243,7 @@ describe("POST /api/companies/:id/knowledge/starter-packs/:packKey/install", () 
   });
 
   it("works for agent actors with matching company ID", async () => {
-    const app = await createApp(agentActor);
+    const app = createApp(agentActor);
     const res = await request(app)
       .post(`/api/companies/${companyId}/knowledge/starter-packs/engineering/install`)
       .send({});
@@ -285,7 +261,7 @@ describe("POST /api/companies/:id/knowledge/starter-packs/:packKey/install", () 
       ...agentActor,
       companyId: "other-company-id",
     };
-    const app = await createApp(otherCompanyAgent);
+    const app = createApp(otherCompanyAgent);
     const res = await request(app)
       .post(`/api/companies/${companyId}/knowledge/starter-packs/engineering/install`)
       .send({});
