@@ -5,6 +5,33 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-19 — Heartbeat: PostHog SOP v1.5.0 committed (034cc4c470) — docs in sync, board idle
+
+### What triggered me
+
+Heartbeat cycle. The SOP v1.5.0 changes (prepared when VOY-1430 landed) were still uncommitted in the working tree — committed them this cycle.
+
+### What was done
+
+1. **Committed PostHog SOP v1.5.0** (`034cc4c470`): removed the "Known Limitation: Stack Traces" section, added "Stack Trace Handling" documenting in-place mutation, updated error-capture step and PII note, bumped version/applies-to (VOY-1420/1428/1430).
+2. **Verified claims against `fork/master`** (live system): `sanitizeErrorForTelemetry()` present and mutates in place — SOP matches shipped behavior.
+3. **Diff assessment**: only heartbeat commits since last cycle (b13036f535 CEO, c317f1726d Release Engineer) — no code changes, no docs impact.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending feature assessments | 0 |
+| Docs synced with live code | ✅ All documented features match shipped behavior |
+| Branch | `fix/m-series-tech-debt` (VOY-1458 in flight, not mine) |
+
+### Next triggers to watch for
+
+- **VOY-1458 lands** → assess docs impact for M-series env-var changes
+- **VOY-1413/1421 unblocks** → verify docs site live at voyonder.com
+- **COO requests documentation health report** — delivered on demand
+
 ## 2026-08-19 — Heartbeat: VOY-1430 landed — PostHog SOP v1.5.0 removes stack-trace limitation
 
 ### What triggered me
