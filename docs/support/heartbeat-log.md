@@ -1778,3 +1778,73 @@ The P1 fix (VOY-1430 / `e63b2a1f67`) for `sanitizeErrorForTelemetry` destroying 
 | Docs synced with live code | ✅ PostHog SOP v1.4.2 reflects current code behavior |
 | Branch | `voy-1420-posthog-p2-fixes` |
 | Working tree docs changes | 1 modified file (this heartbeat — PostHog SOP v1.4.2) |
+
+## 2026-08-19 — Heartbeat: Docs verification for VOY-1420 release — PostHog SOP v1.4.3, release note created
+
+### What triggered me
+
+The Release Engineer's release issue (VOY-1424) lists "Docs verification (Support Engineer)" as a pre-ship gate. The `voy-1420-posthog-p2-fixes` branch carries commits `1dfe01c6be` (feat: PostHog business events + P2 fixes) and 5 subsequent fix commits. I assessed the diff for documentation impact and produced the needed updates.
+
+### Diff assessment
+
+| Commit | Change | Doc impact | Status |
+|--------|--------|------------|--------|
+| `1dfe01c6be` | PostHog business events: `approval.approved`, `approval.rejected`, `notification.digest.sent` with company-level distinct IDs; error events use `companyId` | **Yes** — Business events table and distinctId rule already documented in SOP v1.4.2 | Already documented |
+| `e63b2a1f67` (VOY-1430) | `sanitizeErrorForTelemetry` preserves stack traces in-place | **Yes** — SOP already updated to v1.4.2 | Already documented |
+| `d5b3510587` (VOY-1434) | `decisionNote` redacted via `redactSensitiveText()` before captureMetric | **Yes** — SOP said "business events are NOT auto-redacted" which is now partially incorrect | **Updated v1.4.3** |
+| `c306d8ef37` (VOY-1428) | Posthog redaction test hardening | No (test-only) | None |
+| `a46b6e62dd` (VOY-1433) | Snapshot err.message before captureErrorEvent mutates it | No (internal fix) | None |
+| `8416165284` (VOY-1435) | Bounded FIFO dedup for VAPID expired-endpoint warnings | No (internal ops) | None |
+
+### What was done
+
+1. **PostHog SOP v1.4.2 → v1.4.3** (`docs/support/posthog-error-monitoring-triage-sop.md`):
+   - Updated "PII in event properties" guidance: `decisionNote` on approval.approved and approval.rejected is now auto-redacted by `redactSensitiveText()` (VOY-1434 / d5b3510587). Business event properties beyond decisionNote remain un-redacted — audit new free-text fields before assuming they are safe.
+   - Bumped version to 1.4.3, updated applies-to to include `d5b3510587`.
+
+2. **Release note created** (`docs/support/releases/voy-1420-posthog-business-events.md`):
+   - Curated customer-facing release note covering: business event telemetry (events table), error telemetry improvements (stack trace preservation, company-level distinct IDs, decisionNote redaction), ops resilience (VAPID dedup, graceful import failures), and support impact table.
+
+3. **Support README updated** — Added new release note row to "Voyonder Release Notes" table (top entry, most recent).
+
+### Current state
+
+| Metric | Status |
+|--------|--------|
+| Open support issues | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through VOY-1420 (PostHog business events + P2 fixes) |
+| Docs synced with live code | ✅ PostHog SOP v1.4.3 reflects all P2 fixes; release note covers the full batch |
+| Docs verification gate (VOY-1424) | ✅ Complete — documentation is in sync and ready for release |
+| Branch | `voy-1420-posthog-p2-fixes` |
+
+### Next triggers to watch for
+
+- **VOY-1424 merges to master/fork** → no additional docs action needed (already documented)
+- **VOY-1413/1421 unblocks** → verify docs site live at voyonder.com
+- **COO requests documentation health report** — available on demand
+- **PostHog Phase B (VOY-1030)** → verify cron deploy coverage
+
+## 2026-08-19 — Release Ship: PostHog Business Events + P2 Fixes (VOY-1424)
+
+### What was shipped
+
+PR #51 (`voy-1420-posthog-p2-fixes` → `fork/master`) merged at `4504c7a511`:
+
+1. **Business event telemetry** — `approval.approved`, `approval.rejected`, `notification.digest.sent` events instrumented in PostHog via `captureMetric()`
+2. **P2 fixes from VOY-1418 audit:**
+   - VOY-1428: non-vacuous posthog redaction test + null sanitized stack
+   - VOY-1430: `sanitizeErrorForTelemetry` preserves stack traces in-place
+   - VOY-1433: snapshot `err.message` before `captureErrorEvent` mutates it
+   - VOY-1434: redact `decisionNote` before `captureMetric` (PII egress)
+   - VOY-1435: bounded FIFO dedup cache for VAPID 410/404 warn logs
+
+### Release artifact
+
+- Release note: `docs/support/releases/voy-1420-posthog-business-events.md`
+- Docs: PostHog SOP v1.4.3
+
+### Handoff
+
+- **QA Engineer (VOY-1426):** Post-deploy verification of PostHog events, PII redaction, and VAPID dedup behavior.
+- **CTO:** VOY-1424 shipped, all success criteria met.
