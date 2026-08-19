@@ -1,7 +1,7 @@
 ---
 title: Support Case Assessment — Knowledge Starter Packs (v0.5.0)
 summary: Pre-curated knowledge document bundles for common industries — installed via API or company templates
-version: v0.5.1
+version: v0.5.2
 commit: 2e90d0d5ae
 last_updated: 2026-08-19
 ---
@@ -78,7 +78,7 @@ Whether installed via the API or as part of company template deployment:
 | Limitation | Description | Workaround |
 |---|---|---|
 | Data directory may be empty | If `knowledge-starter-packs-data/` does not exist or is empty, the pack list is empty. The server boots fine — this is handled gracefully with a startup warning. | Create the data directory and add pack JSON files. The service logs a warning: "Knowledge starter packs data directory unavailable; serving empty pack list" |
-| Title-based dedup only | Deduplication is by exact title match (case-insensitive). Two documents with different titles but identical content will both be created. | Manually review and remove duplicates from the knowledge base after deployment |
+| Title-based dedup only (100-doc limit) | Deduplication is by exact title match (case-insensitive), and the dedup check only examines the first 100 knowledge documents in the company (due to `list(limit: 100)`). Two documents with different titles but identical content will both be created. Companies with >100 knowledge documents may see duplicates beyond the first 100. | Manually review and remove duplicate documents from the knowledge base after deployment. For large KBs, delete unwanted documents directly. |
 | No rollback | Starter pack installation is not wrapped in a single transaction. If the process fails mid-way, some documents may have been created and others not. | Check the `documentsCreated` count in the API response. Manually create any missing documents. |
 | Published status | All starter pack documents are created as **published**. There is no draft stage for review. | If the content needs modification, edit the published document via the Knowledge API or UI. |
 | No per-document error detail in API response | The API returns a `documentsCreated` count but not per-document error details. | Check the server logs for detailed error messages when a document creation fails. |
@@ -142,7 +142,7 @@ Note: The actual availability of these packs depends on the JSON files present i
 | Pack installation failure (via API) | Medium | Check server logs. Individual document failures are non-fatal — verify `documentsCreated` count. |
 | Pack installation failure (via template) | Medium | Check the warnings array and server logs. Individual document failures are non-fatal. |
 | Documents created with incorrect content | Medium | Content is read from the pack JSON file at install time. Server operator must fix the JSON source. |
-| Title-based dedup not catching near-duplicates | Low | Dedup is exact title match only. Manually clean up duplicate documents in the knowledge base. |
+| Title-based dedup not catching near-duplicates beyond 100 docs | Low | Dedup is exact title match, limited to first 100 docs. Manually clean up duplicate documents in the knowledge base. |
 | Pack key not found | Low | Verify the pack key via `GET /api/knowledge-starter-packs` or check files in the data directory. |
 | Authorization failure on install | Low | Verify actor authentication and company membership. See troubleshooting above. |
 
@@ -158,5 +158,6 @@ Note: The actual availability of these packs depends on the JSON files present i
 
 | Version | Date | Changes |
 |---|---|---|
+| v0.5.2 | 2026-08-19 | Added 100-doc dedup limit to known limitations (P5 from Staff Engineer audit) |
 | v0.5.1 | 2026-08-19 | Updated for standalone API — 3 endpoints added (list, get, install). Removed "no standalone API" limitation. Added API reference link. |
 | v0.5.0 | 2026-08-19 | Initial assessment — service exists as internal dependency of company templates; no standalone API |

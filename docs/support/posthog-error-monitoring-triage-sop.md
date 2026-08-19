@@ -7,11 +7,11 @@ applies_to: VOY-999 / VOY-1015 / VOY-1420
 
 # PostHog Monitoring — Support Engineer Triage SOP
 
-**Version:** 1.4
+**Version:** 1.4.1
 **Date:** 2026-08-19
 **Author:** Support Engineer (88b72065)
-**Status:** Final — Business events instrumentation landed (VOY-1420); SOP expanded to cover business event triage
-**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420
+**Status:** Final — Business events instrumentation landed (VOY-1420); SOP expanded to cover business event triage; P1 stack-trace limitation documented (pending fix c721d052)
+**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / c721d052
 
 ---
 
@@ -28,7 +28,7 @@ This SOP defines how to triage, classify, and resolve issues in both categories.
 
 ## How It Works
 
-1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — error messages are scrubbed via `redactSensitiveText()` and stack traces are stripped entirely. The error name/code is preserved as a low-risk identifier.
+1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — error messages are scrubbed via `redactSensitiveText()`; the sanitizer rebuilds the Error with a redacted message and preserved name, discarding the original stack (see [Known Limitation: Stack Traces](#known-limitation-stack-traces)).
 2. **Cron poll:** `scripts/posthog-error-monitor.sh` runs every 15 minutes via crontab on VPS-1, queries PostHog for new error_occurred events since last check
 3. **Issue creation:** For each unique error signature (grouped by event+component+normalized message), a Paperclip issue is created:
    - **Title:** `[PostHog] {event}: {component} — {truncated message}`
@@ -61,6 +61,17 @@ All business events use `companyId` as the `distinctId` (never the default `"pap
 ### Error Events distinctId
 
 Starting with VOY-1420, error events (`captureErrorEvent`) also use `companyId` as `distinctId` (resolved from `req.actor?.companyId`), falling back to `"paperclip-server"` when no actor is available. Previously all error events used `undefined` as the default. This enables per-company error tracking.
+
+### Known Limitation: Stack Traces
+
+**Current behavior (unfixed, see issue c721d052):** The `sanitizeErrorForTelemetry()` function creates a new `Error` object with the redacted message, preserving the error name but discarding the original stack trace. PostHog's `captureException` auto-extracts `$exception_stack_trace` from the sanitized error — but this stack points at the sanitizer code in `posthog.ts`, not the original throw site. Every captured error will appear to originate from `posthog.ts`.
+
+**Triage impact:** When reviewing PostHog error issues, do NOT rely on the stack trace location for identifying the source component. Instead:
+- Use the `component` field in the error event properties (maps to `req.originalUrl` → route handler)
+- Use the `errorCode` / error name (e.g. `ValidationError`, `NotFoundError`)
+- Use the `url` and `method` properties to identify the route that failed
+
+**Expected fix (P1):** The fix is to redact the original error in-place (mutate `error.message` and `error.stack` via `redactSensitiveText()`) instead of creating a new `Error`. This will preserve the original stack trace with PII redacted, restoring meaningful stack-based triage. Once the fix lands, this section can be removed.
 
 ### Debugging Business Events
 

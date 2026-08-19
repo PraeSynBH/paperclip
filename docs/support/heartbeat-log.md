@@ -5,6 +5,46 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-19 — Heartbeat: Staff Engineer audit triage — PostHog SOP v1.4.1 stack-trace limitation + starter packs dedup limit documented
+
+### What triggered me
+
+Staff Engineer structural audit (`doc/staff-engineering/2026-08-19-structural-audit.md`, ~20:10 UTC) reviewed the uncommitted server diff (VOY-1420 PostHog changes + knowledge-starter-packs wiring, VOY-1416) and found 8 findings (P1-P8). As Support Engineer, I triaged the audit for documentation/support impact.
+
+### Documentation impact assessment
+
+| Finding | Severity | Doc impact | Action |
+|---|---|---|---|
+| P1 — `sanitizeErrorForTelemetry` destroys stack traces (all errors cluster on posthog.ts) | P1 | **Yes** — PostHog SOP described "stack traces stripped entirely", which misrepresented triage value. Error issues will show stack pointing at posthog.ts until fixed. | PostHog SOP v1.4.1: documented Known Limitation section + corrected error capture flow + added c721d052 to applies-to |
+| P2 — weak redaction test (asserts on token not in input) | P3 | No (test-only) | None |
+| P3 — unbounded VAPID dedup Set memory growth | P2 | No (internal ops) | None |
+| P4 — starter pack install not atomic (breaks single-transaction contract) | P2 | Yes — partially. Assessment already documented "No rollback" limitation | Already covered in v0.5.1; no change needed |
+| P5 — starter pack title dedup only checks first 100 docs | P3 | **Yes** — support limitation for companies with >100 knowledge documents | Starter packs assessment v0.5.2: added 100-doc dedup limit to known limitations + escalation table |
+| P6 — self-review approval path may violate reviewer!=creator | P3 | No (unverified path, internal) | None |
+| P7 — dead try/catch around Node builtins | P4 | No (code hygiene) | None |
+| P8 — unauthenticated GET starter-pack routes | P4 | Yes — but **intentional and documented**: assessment + API doc already state "Auth: None" for GET routes | No change; confirmed intentional |
+
+### Files changed this heartbeat
+
+1. `docs/support/posthog-error-monitoring-triage-sop.md` → **v1.4.1**: new "Known Limitation: Stack Traces" section (triage guidance: use component/errorCode/url/method, not stack location; expected P1 fix c721d052), corrected error-capture description, updated applies-to.
+2. `docs/support/assessments/support-case-knowledge-starter-packs.md` → **v0.5.2**: known-limitations row now notes the 100-doc dedup limit; escalation table updated; version history entry.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through Documentation Site v1 |
+| Docs synced with live code | ✅ All documented features match shipped behavior; P1 limitation flagged as pending-fix (not doc-blocking) |
+| Branch | `master` (fork/docs-deploy-voy-1413) |
+
+### Next triggers to watch for
+
+- **P1 fix (c721d052) lands** → remove the "Known Limitation: Stack Traces" section from PostHog SOP (or convert to a normal note)
+- **VOY-1413/1421 unblocks** → verify docs site live at voyonder.com
+- **COO requests documentation health report** — delivered on demand
+
 ## 2026-08-19 — Heartbeat: VOY-1414 support assessment — knowledge starter packs assessment created, all v0.5.0 features documented
 
 ### What was done
