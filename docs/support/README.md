@@ -11,6 +11,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
+|| Google OAuth Sign-In — "Sign in with Google" button + PostHog auth business events | Uncommitted (voy-1420-posthog-p2-fixes) | Ready — awaiting env vars from founder (VOY-406) | [Google OAuth](assessments/support-case-google-oauth.md) |
 | Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
 | Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Aug 18, 2026 (PR #48) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
 | Knowledge Starter Packs — curated KB document bundles installed with company templates or via standalone API | v0.5.0 | Aug 18, 2026 (PR #48) | [Starter Packs](assessments/support-case-knowledge-starter-packs.md) + [API](/api/knowledge-starter-packs) |
@@ -88,6 +89,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
+| PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
 | Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
 | v0.5.0 Phase 1 — Security Hardening + Marketplace + Onboarding + Company Templates stable | [View](releases/v0.5.0-phase-1.md) |
 | v0.4.0-alpha (RC-4) — Deep Planning + Memory & Knowledge + Chat-to-Work + C-Fixes + Extraction Jobs + Billing + Notifications + Company Templates | [View](releases/v0.4.0-alpha-deep-planning.md) |

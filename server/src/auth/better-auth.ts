@@ -1,6 +1,6 @@
 import type { Request, RequestHandler } from "express";
 import type { IncomingHttpHeaders } from "node:http";
-import { betterAuth, type Auth } from "better-auth";
+import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { toNodeHandler } from "better-auth/node";
 import type { Db } from "@paperclipai/db";
@@ -12,6 +12,8 @@ import {
 } from "@paperclipai/db";
 import type { Config } from "../config.js";
 import { resolvePaperclipInstanceId } from "../home-paths.js";
+import { captureMetric } from "../services/posthog.js";
+import { logger } from "../middleware/logger.js";
 
 export type BetterAuthSessionUser = {
   id: string;
@@ -122,6 +124,30 @@ export function deriveAuthTrustedOrigins(config: Config, opts?: { listenPort?: n
   return Array.from(trustedOrigins);
 }
 
+/**
+ * Determine the auth method that triggered a database-hook callback by
+ * inspecting the current request URL from the better-auth context.
+ *
+ * Hook context is `null` for internal / non-request-driven operations.
+ * Context carries the request that triggered the database write, so we can
+ * distinguish email signup (/sign-up/email), email sign-in (/sign-in/email),
+ * and Google OAuth callback (/callback/google).
+ *
+ * Uses the URL pathname (stripping query string) to avoid false matches
+ * from substring-includes on the raw URL.
+ */
+function resolveLoginMethod(
+  ctx: { request?: Request | { url?: string } } | null,
+): string {
+  if (!ctx?.request?.url) return "unknown";
+  const rawUrl = ctx.request.url;
+  const pathname = rawUrl.includes("?") ? rawUrl.split("?")[0] : rawUrl;
+  if (pathname === "/callback/google") return "google";
+  if (pathname === "/sign-in/email" || pathname === "/sign-up/email")
+    return "email";
+  return "unknown";
+}
+
 export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins: string[]): BetterAuthInstance {
   const baseUrl = config.authBaseUrlMode === "explicit" ? config.authPublicBaseUrl : undefined;
   const publicUrl = process.env.PAPERCLIP_PUBLIC_URL?.trim() || baseUrl;
@@ -140,7 +166,7 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins:
     publicUrl,
   });
 
-  const authConfig = {
+  const authConfig: BetterAuthOptions = {
     baseURL: baseUrl,
     secret,
     trustedOrigins,
@@ -161,8 +187,64 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins:
     advanced: buildBetterAuthAdvancedOptions({ disableSecureCookies }),
   };
 
+  const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
+  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
+  if (googleClientId && googleClientSecret) {
+    authConfig.socialProviders = {
+      google: {
+        clientId: googleClientId,
+        clientSecret: googleClientSecret,
+      },
+    };
+  } else if (googleClientId || googleClientSecret) {
+    logger.warn(
+      "[auth] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is set but not both; Google OAuth will not be activated",
+    );
+  }
+
+  // Wire PostHog business events for auth lifecycle.
+  // These fire only when PostHog is configured (POSTHOG_API_KEY + POSTHOG_HOST).
+  // Each hook is wrapped in try/catch to prevent telemetry errors from
+  // propagating into the auth operation (user/session creation).
+  authConfig.databaseHooks = {
+    user: {
+      create: {
+        after: async (user, ctx) => {
+          try {
+            const loginMethod = resolveLoginMethod(ctx);
+            captureMetric("auth.signup_completed", user.id, {
+              login_method: loginMethod,
+            });
+          } catch (err) {
+            logger.warn(
+              { err },
+              "[auth] PostHog hook failed for user.create; continuing auth flow",
+            );
+          }
+        },
+      },
+    },
+    session: {
+      create: {
+        after: async (session, ctx) => {
+          try {
+            const loginMethod = resolveLoginMethod(ctx);
+            captureMetric("auth.session_started", session.userId, {
+              login_method: loginMethod,
+            });
+          } catch (err) {
+            logger.warn(
+              { err },
+              "[auth] PostHog hook failed for session.create; continuing auth flow",
+            );
+          }
+        },
+      },
+    },
+  };
+
   if (!baseUrl) {
-    delete (authConfig as { baseURL?: string }).baseURL;
+    delete authConfig.baseURL;
   }
 
   return betterAuth(authConfig);

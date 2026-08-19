@@ -472,7 +472,7 @@ async function doKnowledgeWarmUp(
       score: sql<number>`ts_rank(
         to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')),
         plainto_tsquery('english', ${searchQuery})
-      )`,
+      ) AS "score"`,
     })
     .from(knowledgeDocuments)
     .where(

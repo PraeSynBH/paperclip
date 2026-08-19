@@ -893,7 +893,7 @@ export function knowledgeDocumentService(db: Db): KnowledgeDocumentService {
         score: sql<number>`ts_rank(
           to_tsvector('english', ${knowledgeDocuments.title} || ' ' || coalesce(${knowledgeDocuments.body}, '')),
           plainto_tsquery('english', ${query})
-        )`,
+        ) AS "score"`,
       })
       .from(knowledgeDocuments)
       .where(
