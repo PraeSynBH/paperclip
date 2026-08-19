@@ -564,6 +564,7 @@ export function notificationService(db: Db) {
     );
 
     // Initialize delivery statuses to pending before dispatch attempts
+    let emailDeferredToDigest = false;
     const initUpdates: Record<string, any> = {};
     if (channels.includes("email") && !emailDeferredToDigest) {
       initUpdates.emailDeliveryStatus = "pending";
@@ -584,7 +585,6 @@ export function notificationService(db: Db) {
     // Determine whether email for this (type, user) is deferred to a digest.
     // When the user has opted into a daily/weekly digest for this type,
     // skip immediate email and leave sentAt null so sendDigest picks it up.
-    let emailDeferredToDigest = false;
     if (channels.includes("email")) {
       const emailPref = await db
         .select({ digestFrequency: notificationPreferences.digestFrequency })

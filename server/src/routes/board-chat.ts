@@ -426,7 +426,7 @@ export function boardChatRoutes(
     });
 
     proc.stderr.on("data", (data: Buffer) => {
-      logger.error(data.toString(), "[board/chat/stream stderr]");
+      logger.error({ stderr: data.toString() }, "board/chat/stream stderr");
     });
 
     proc.on("close", async (exitCode) => {
