@@ -53,7 +53,7 @@ export function errorHandler(
       );
       const tc = getTelemetryClient();
       if (tc) trackErrorHandlerCrash(tc, { errorCode: err.name });
-      captureErrorEvent(err, undefined, {
+      captureErrorEvent(err, req.actor?.companyId ?? "paperclip-server", {
         url: req.originalUrl,
         method: req.method,
         errorCode: err.name,
@@ -84,7 +84,7 @@ export function errorHandler(
 
   const tc = getTelemetryClient();
   if (tc) trackErrorHandlerCrash(tc, { errorCode: rootError.name });
-  captureErrorEvent(rootError, undefined, {
+  captureErrorEvent(rootError, req.actor?.companyId ?? "paperclip-server", {
     url: req.originalUrl,
     method: req.method,
     errorCode: rootError.name,

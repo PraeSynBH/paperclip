@@ -159,7 +159,7 @@ describe("captureErrorEvent", () => {
 
     expect(mockCaptureException).toHaveBeenCalledTimes(1);
     expect(mockCaptureException).toHaveBeenCalledWith(
-      error,
+      expect.any(Error),
       "test-distinct-id",
       { url: "/api/test", method: "POST" },
     );
@@ -174,6 +174,44 @@ describe("captureErrorEvent", () => {
 
     expect(mockCaptureException).toHaveBeenCalledWith(
       expect.any(Error),
+      "paperclip-server",
+      undefined,
+    );
+  });
+
+  it("redacts sensitive data from error message before sending to PostHog", async () => {
+    process.env[API_KEY_ENV] = "phc_test_key";
+    process.env[HOST_ENV] = "http://localhost:8000";
+    const { captureErrorEvent } = await importFreshPosthog();
+
+    // Message contains a JWT-like token which the redactor should catch
+    captureErrorEvent(
+      new Error("SQL constraint violation: user data contains token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBojqkLgDdDZi5uFQxM6lQ"),
+    );
+
+    expect(mockCaptureException).toHaveBeenCalledTimes(1);
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      "paperclip-server",
+      undefined,
+    );
+    const sanitized = mockCaptureException.mock.calls[0][0] as Error;
+    expect(sanitized.message).toContain("***REDACTED***");
+    expect(sanitized.message).not.toContain("eyJhbGciOiJIUzI1NiJ9");
+    // Stack trace should be stripped — the new Error() in sanitizeErrorForTelemetry
+    // creates its own stack, but the original stack from the passed error is gone.
+    expect(sanitized.name).toBe("Error");
+  });
+
+  it("redacts non-Error values as-is (not an Error instance)", async () => {
+    process.env[API_KEY_ENV] = "phc_test_key";
+    process.env[HOST_ENV] = "http://localhost:8000";
+    const { captureErrorEvent } = await importFreshPosthog();
+
+    captureErrorEvent("string-error");
+
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      "string-error",
       "paperclip-server",
       undefined,
     );

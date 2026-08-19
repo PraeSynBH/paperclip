@@ -30,6 +30,7 @@ import {
   trackNotificationDeliverySent,
   trackNotificationDeliveryFailed,
 } from "@paperclipai/shared/telemetry";
+import { captureMetric } from "./posthog.js";
 
 // ---------------------------------------------------------------------------
 // SMTP mailer — lightweight, no external dependency (Node built-ins only)
@@ -75,9 +76,17 @@ async function sendEmailViaSmtp(opts: {
   const cfg = resolveMailerConfig();
   const useSsl = cfg.port === 465;
 
+  let net: typeof import("node:net");
+  let tls: typeof import("node:tls");
   try {
-    const net = await import("node:net");
-    const tls = await import("node:tls");
+    net = await import("node:net");
+    tls = await import("node:tls");
+  } catch (importErr: any) {
+    logger.warn({ err: importErr }, "Failed to import Node.js networking modules; email unavailable");
+    return false;
+  }
+
+  try {
 
     const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const messageId = `<${Date.now()}.${Math.random().toString(36).slice(8)}@${cfg.host}>`;
@@ -262,6 +271,12 @@ function isVapidConfigured(): boolean {
   return Boolean(cfg.publicKey && cfg.privateKey);
 }
 
+/**
+ * Deduplication set for VAPID 410/404 warn logs to avoid per-call spam.
+ * Keyed by endpoint URL.
+ */
+const _vapidExpiredWarnedEndpoints = new Set<string>();
+
 async function sendWebPush(
   subscription: { endpoint: string; p256dh: string; auth: string },
   payload: { title: string; body: string; linkUrl?: string; notificationId?: string },
@@ -270,8 +285,16 @@ async function sendWebPush(
     return false;
   }
 
+  let send: any;
   try {
-    const { send } = await import("web-push");
+    const mod: any = await import("web-push");
+    send = mod.send;
+  } catch (importErr: any) {
+    logger.warn({ err: importErr }, "web-push module import failed; push notifications unavailable");
+    return false;
+  }
+
+  try {
     const cfg = resolveVapidConfig();
 
     await send({
@@ -298,9 +321,12 @@ async function sendWebPush(
 
     return true;
   } catch (err: any) {
-    // If subscription is expired/gone, log and return false
+    // If subscription is expired/gone, log once per endpoint to avoid spam
     if (err?.statusCode === 410 || err?.statusCode === 404) {
-      logger.warn({ endpoint: subscription.endpoint }, "Push subscription expired or gone");
+      if (!_vapidExpiredWarnedEndpoints.has(subscription.endpoint)) {
+        _vapidExpiredWarnedEndpoints.add(subscription.endpoint);
+        logger.warn({ endpoint: subscription.endpoint }, "Push subscription expired or gone");
+      }
       return false;
     }
     logger.error({ err, endpoint: subscription.endpoint }, "Web push send failed");
@@ -934,6 +960,13 @@ export function notificationService(db: Db) {
             ),
           );
       }
+    }
+
+    if (sent > 0) {
+      captureMetric("notification.digest.sent", companyId, {
+        frequency,
+        notificationCount: sent,
+      });
     }
 
     return { sent };

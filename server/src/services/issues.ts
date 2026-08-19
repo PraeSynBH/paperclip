@@ -3885,7 +3885,7 @@ export function issueService(db: Db) {
       agentId: run.agentId,
       runId: run.id,
       wakeupRequestId: run.wakeupRequestId,
-      contextSnapshot: run.contextSnapshot as Record<string, unknown> | null | undefined,
+      contextSnapshot: parseObject(run.contextSnapshot),
     });
   }
 
