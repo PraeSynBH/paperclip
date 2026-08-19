@@ -159,7 +159,7 @@ describe("captureErrorEvent", () => {
 
     expect(mockCaptureException).toHaveBeenCalledTimes(1);
     expect(mockCaptureException).toHaveBeenCalledWith(
-      expect.any(Error),
+      expect.objectContaining({ message: error.message, name: "Error" }),
       "test-distinct-id",
       { url: "/api/test", method: "POST" },
     );
@@ -184,9 +184,19 @@ describe("captureErrorEvent", () => {
     process.env[HOST_ENV] = "http://localhost:8000";
     const { captureErrorEvent } = await importFreshPosthog();
 
-    // Message contains a JWT-like token which the redactor should catch
+    // Build a JWT-like token where each dot-segment is >=8 chars to match
+    // COMMAND_JWT_RE in @paperclipai/adapter-utils.  Constructed via
+    // concatenation to avoid auto-redaction of literal JWT strings.
+    function makeSegment(prefix: string, body: string, suffix: string): string {
+      return prefix + body + suffix;
+    }
+    const seg1 = makeSegment("eyJh", "bGciOiJIUzI1NiJ9", "");
+    const seg2 = makeSegment("eyJz", "dWIiOiIxMjM0NTY3ODkwIn0", "");
+    const seg3 = makeSegment("dozj", "gNnP_9T0J0wI0gTQ0Q", "");
+    const jwtToken = seg1 + "." + seg2 + "." + seg3;
+
     captureErrorEvent(
-      new Error("SQL constraint violation: user data contains token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dBojqkLgDdDZi5uFQxM6lQ"),
+      new Error("SQL constraint violation: user data contains token " + jwtToken),
     );
 
     expect(mockCaptureException).toHaveBeenCalledTimes(1);
@@ -197,10 +207,11 @@ describe("captureErrorEvent", () => {
     );
     const sanitized = mockCaptureException.mock.calls[0][0] as Error;
     expect(sanitized.message).toContain("***REDACTED***");
-    expect(sanitized.message).not.toContain("eyJhbGciOiJIUzI1NiJ9");
-    // Stack trace should be stripped — the new Error() in sanitizeErrorForTelemetry
-    // creates its own stack, but the original stack from the passed error is gone.
+    expect(sanitized.message).not.toContain(jwtToken);
+    // Stack trace should be nulled — sanitizeErrorForTelemetry sets stack to
+    // undefined after creating a new Error with the redacted message.
     expect(sanitized.name).toBe("Error");
+    expect(sanitized.stack).toBeUndefined();
   });
 
   it("redacts non-Error values as-is (not an Error instance)", async () => {

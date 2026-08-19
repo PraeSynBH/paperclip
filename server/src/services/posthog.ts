@@ -111,6 +111,10 @@ function sanitizeErrorForTelemetry(error: unknown): Error | unknown {
   const sanitized = new Error(redactedMessage);
   sanitized.name = error.name;
 
+  // new Error() captures a stack at the sanitizer call site; null it to
+  // prevent the sanitizer's own location from leaking into telemetry.
+  sanitized.stack = undefined;
+
   // Preserve the cause chain if present, also redacted.
   if (error.cause instanceof Error) {
     sanitized.cause = sanitizeErrorForTelemetry(error.cause);
