@@ -3,6 +3,7 @@ import type { Db } from "@paperclipai/db";
 import { approvalComments, approvals } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
 import { redactCurrentUserText } from "../log-redaction.js";
+import { redactSensitiveText } from "../redaction.js";
 import { agentService } from "./agents.js";
 import { budgetService } from "./budgets.js";
 import { notifyHireApproved } from "./hire-hook.js";
@@ -186,7 +187,7 @@ export function approvalService(db: Db) {
         approvalType: updated.type,
         decidedByUserId,
         applied,
-        decisionNote: decisionNote ?? null,
+        decisionNote: decisionNote ? redactSensitiveText(decisionNote) : null,
       });
 
       return { approval: updated, applied };
@@ -213,7 +214,7 @@ export function approvalService(db: Db) {
         approvalType: updated.type,
         decidedByUserId,
         applied,
-        decisionNote: decisionNote ?? null,
+        decisionNote: decisionNote ? redactSensitiveText(decisionNote) : null,
       });
 
       return { approval: updated, applied };
