@@ -2157,4 +2157,36 @@ No automatable documentation work. All board items remain human-gated on CEO/fou
 
 **Idle — board fully human-gated.** No agent-automatable work exists. All engineering work for the current cycle is complete, tested, reviewed, and shipped to fork/master. Awaiting founder action on Mintlify (VOY-1421), OAuth credentials (VOY-406), and upstream PR to paperclipai/paperclip.
 
+
+## 2026-08-19 ~09:45 UTC — Support Engineer — Documentation updates for auth hooks structural hardening (96faa13434), release note draft prepared
+
+### Activity
+
+- **Diff assessment** — Commit `96faa13434` (fix VOY-1447: address Staff Engineer structural findings on auth hooks):
+  - Finding 2: `resolveLoginMethod` URL parsing hardened to use `new URL()` constructor instead of manual string splitting
+  - Finding 3: PostHog `captureMetric` calls in auth hooks are now fire-and-forget (not awaited); hooks remain async for better-auth type compliance only
+  - **Assessment**: Internal implementation changes. No impact on event names, structure, or customer-facing behavior. Documentation updated proactively.
+
+- **Documentation updates applied:**
+  - **PostHog SOP** → v1.4.5 — Added "Auth Hook Resilience" section documenting fire-and-forget telemetry design, including implications for support triage (silent drops during PostHog downtime)
+  - **Google OAuth support assessment** — Updated frontmatter (committed state at 96faa13434, code reviewed status), added telemetry resilience note in feature overview, added "login method graceful fallback" to Known Limitations
+  - **Support README** — Updated Google OAuth row status, added VOY-1447 draft release note to Voyonder Release Notes table
+  - **New: Release note draft** — Created `docs/support/releases/voy-1447-auth-improvements.md` (draft, awaiting release to fork/master)
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed features have current docs |
+| Release documentation readiness | Draft release note prepared for auth improvements (VOY-1447) |
+| Blocked items (human-gated) | Docs site (VOY-1413/1421), OAuth env vars (VOY-406), Discord launch (PRA-921) |
+| Engineering tempo | Idle — auth improvements code committed and reviewed, awaiting Release Engineer |
+
+### Disposition
+
+Documentation is proactively updated to reflect the latest auth hooks structural hardening (96faa13434). A draft release note for the upcoming auth improvements release (VOY-1447) is prepared and will be finalized when the Release Engineer ships to fork/master. No assigned issues require action. All board items remain human-gated on CEO/founder.
+
+*Maintained by: Support Engineer (88b72065)*
+
 *Maintained by: CEO (c2a215b2)*

@@ -1,16 +1,17 @@
 ---
 title: Support Case Assessment — Google OAuth Sign-In
 summary: Google OAuth social sign-in alongside email/password authentication (better-auth)
-version: uncommitted (voy-1420-posthog-p2-fixes branch)
-status: ready — feature code in working tree, awaiting env vars from founder (VOY-406)
+version: voy-1420-posthog-p2-fixes (96faa13434)
+status: ready — code committed and reviewed, awaiting env vars from founder (VOY-406)
 ---
 
 # Support Case Assessment: Google OAuth Sign-In
 
 **Author:** Support Engineer (88b72065)
 **Date:** 2026-08-19
+**Last updated:** 2026-08-19 (96faa13434 — auth hooks structural hardening)
 **Branch:** `voy-1420-posthog-p2-fixes`
-**Status:** Ready — implementation exists in working tree, awaiting env vars from founder (VOY-406)
+**Status:** Ready — code committed and reviewed by Staff Engineer + CTO, awaiting env vars from founder (VOY-406)
 
 ---
 
@@ -30,6 +31,8 @@ The Voyonder authentication system (built on `better-auth`) now supports **Googl
    - `auth.signup_completed` — Fired when a user account is created (regardless of login method)
    - `auth.session_started` — Fired when a new session is created (login)
    Both events include a `login_method` property (`"google"`, `"email"`, or `"unknown"`) identifying the auth method used.
+
+   **Telemetry resilience:** PostHog calls in auth hooks are fire-and-forget — the `captureMetric()` function is synchronous and is never awaited (the enclosing hook is kept `async` only for better-auth type contract compliance). If PostHog is unreachable, slow, or misconfigured, the auth response (sign-in/sign-up) is never delayed or blocked. Errors are silently caught in a `try/catch` block within the hook.
 
 ### What It Does NOT Do
 
@@ -94,6 +97,7 @@ curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=auth.ses
 | No email verification | `requireEmailVerification` is `false` — Google-created accounts skip email verification | Configuration change in better-auth if needed |
 | No account linking | If an email already exists as an email/password account, logging in with Google creates a separate account | Not yet implemented — may cause user confusion if the same email has two accounts |
 | Auth events use `userId` distinctId | Auth business events use user ID (not company ID) as the distinct ID | Per-company analytics for auth events are not directly available; query by user-to-company mapping |
+| Login method detection graceful fallback | If `ctx.request.url` is missing or malformed (e.g., behind a proxy with an unexpected URL format), `resolveLoginMethod()` returns `"unknown"` — the auth flow succeeds but the `login_method` property is ambiguous | Check the server's reverse proxy configuration if `login_method` is consistently `"unknown"` for valid sign-ins |
 
 ## Troubleshooting
 

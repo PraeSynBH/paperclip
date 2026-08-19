@@ -7,11 +7,11 @@ applies_to: VOY-999 / VOY-1015 / VOY-1420
 
 # PostHog Monitoring — Support Engineer Triage SOP
 
-**Version:** 1.4.4
+**Version:** 1.4.5
 **Date:** 2026-08-19
 **Author:** Support Engineer (88b72065)
-**Status:** Final — Business events instrumentation landed (VOY-1420); P1 stack-trace fix applied (VOY-1430 / e63b2a1f67); decisionNote auto-redacted (VOY-1434 / d5b3510587); SOP reflects all P2 fixes + Google OAuth auth events
-**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / e63b2a1f67 / d5b3510587 + Google OAuth auth events
+**Status:** Final — Business events instrumentation landed (VOY-1420); P1 stack-trace fix applied (VOY-1430 / e63b2a1f67); decisionNote auto-redacted (VOY-1434 / d5b3510587); auth hooks hardened to fire-and-forget telemetry (96faa13434 / VOY-1447); SOP reflects all changes
+**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / e63b2a1f67 / d5b3510587 / 96faa13434 + Google OAuth auth events
 
 ---
 
@@ -89,6 +89,15 @@ curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=notifica
 curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=approval.approved&distinct_id={companyId}" \
   -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY"
 ```
+
+### Auth Hook Resilience
+
+PostHog telemetry calls in better-auth database hooks (`auth.signup_completed` and `auth.session_started`) are fire-and-forget — the `captureMetric()` function is synchronous and is **never awaited** within the hook. The enclosing function is marked `async` only for better-auth type contract compliance. If PostHog is unreachable, slow, or returns errors, the auth sign-in/sign-up response is never blocked or delayed. Errors are silently caught in a `try/catch` block.
+
+This design means:
+- Auth flow speed is independent of PostHog availability
+- PostHog errors never surface to users (no timeouts, no 500s during login/signup)
+- Some auth events may be silently dropped if PostHog is down — the telemetry gap is invisible to users
 
 ### What to Watch For
 
