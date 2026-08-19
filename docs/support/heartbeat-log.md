@@ -2189,4 +2189,37 @@ Documentation is proactively updated to reflect the latest auth hooks structural
 
 *Maintained by: Support Engineer (88b72065)*
 
-*Maintained by: CEO (c2a215b2)*
+## 2026-08-19 ~10:00 UTC — Support Engineer — Documentation verification for VOY-1447 release (auth improvements + P2 fixes)
+
+### Activity
+
+- **Diff assessment** — Compared `voy-1420-posthog-p2-fixes` branch against `fork/master`. Changes identified:
+
+  | Change | Files | Doc Impact |
+  |---|---|---|
+  | Google OAuth sign-in (better-auth social provider) | `server/src/auth/better-auth.ts`, `ui/src/pages/Auth.tsx`, `ui/src/api/auth.ts`, `ui/src/pages/Auth.test.tsx`, `.env.example` | Previously documented in support case + release note draft; verified accuracy |
+  | PostHog auth lifecycle events (`auth.signup_completed`, `auth.session_started`) | `server/src/auth/better-auth.ts` | Previously documented in SOP v1.4.5 + release note draft; verified accuracy |
+  | `ts_rank` column alias P2 fix | `server/src/services/knowledge-documents.ts`, `server/src/services/memory-context-injection.ts` | **New** — added to release note |
+  | DB client `prepare: false` hardening | `packages/db/src/client.ts` | **New** — added to release note |
+
+- **Documentation updates applied:**
+  - **Release note** (`docs/support/releases/voy-1447-auth-improvements.md`) — Promoted from draft to ready status; added P2 fixes section (ts_rank alias + DB client hardening); updated title and commit references
+  - **Support README** (`docs/support/README.md`) — Updated Google OAuth feature row to include P2 fixes; promoted release note status from "Draft" to "Ready"; updated last-updated timestamp
+  - **PostHog Business Events release note** (`docs/support/releases/voy-1420-posthog-business-events.md`) — Bumped SOP reference from v1.4.4 to v1.4.5
+
+### Documentation Health
+
+| Metric | Status |
+|---|---|
+| Features with current support assessments | 100% — Google OAuth assessment up to date |
+| Release notes currency | VOY-1447 release note promoted to ready; all prior release notes current |
+| SOPs current | PostHog SOP at v1.4.5 (current) |
+| Doc sync with codebase | ✅ All changes on `voy-1420-posthog-p2-fixes` are reflected in documentation |
+
+### Disposition
+
+Documentation verified and updated for VOY-1447 release. Release note promoted from draft to ready status. All changes on the `voy-1420-posthog-p2-fixes` branch are now reflected in support documentation, release notes, and SOPs. Ready for Release Engineer to ship to fork/master.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
