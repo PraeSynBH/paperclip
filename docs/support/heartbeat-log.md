@@ -1709,3 +1709,9 @@ VOY-1420 (Add PostHog business event instrumentation + fix P2 items) completed a
 - **VOY-1413 unblocks** → verify docs site reflects case studies, Discord links, and release notes at voyonder.com
 - **COO requests documentation health report** — delivered on demand
 - **PostHog cron monitor deploy (VOY-1030 Phase B)** — when shipped, verify SOP covers the cron deployment details
+
+## 2026-08-19 ~20:55 UTC — Idle heartbeat
+
+No new triggers. Board state idle. Prior heartbeats' next triggers remain valid.
+
+**Status**: GREEN. All shipped features documented. No pending documentation work. Founder-blocked on VOY-1413/1421.
