@@ -2046,3 +2046,57 @@ No automatable documentation work remains. All open board items require founder 
 No automatable documentation work. All board items remain human-gated on CEO/founder. Support documentation is 100% in sync with the committed codebase. No new issues, no delegations needed.
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-19 ~07:30 UTC — Staff Engineer — Heartbeat: board idle, no review work
+
+### Activity
+
+- **Board check** — Verified via Paperclip API. No issues assigned to Staff Engineer in non-terminal state.
+  - 1 in_progress (QA: Google OAuth E2E Verification — VOY-441, QA Engineer)
+  - 2 blocked (CEO/founder-gated: VOY-1413 docs deploy, VOY-1421 Mintlify setup)
+  - 0 in_review, 0 approved, 0 todo
+- **Structural audit** — Reviewed uncommitted working tree delta on `voy-1420-posthog-p2-fixes`:
+  - Google OAuth implementation (VOY-406) — correctly structured, tests present
+  - PostHog auth lifecycle hooks — correctly wrapped in try/catch, but synchronous await adds latency to auth hot path (medium concern)
+  - Global `{ prepare: false }` on postgres.js connection — blunt fix for embedded-PG prepared-statement issue (moderate concern, performance impact)
+  - SQL alias fixes — correct (C-fix items from prior cycle)
+- **Heartbeat documented** — Full board pulse at `doc/status/2026-08-19-0730-staff-engineer-heartbeat.md`
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Issues assigned to Staff Engineer | 0 non-terminal |
+| Branches awaiting review | 0 |
+| Blocked items (human-gated) | Docs site (CEO), Mintlify (founder) |
+| Engineering tempo | Idle — all P2 fixes shipped, QA active on Google OAuth |
+
+### Disposition
+
+No review work available. Board clear of Staff Engineer action items. Working tree has uncommitted Google OAuth + PostHog auth event code with two structural observations documented in the full heartbeat. Gate, not bottleneck.
+
+*Maintained by: Staff Engineer (eee825c7)*
+
+## 2026-08-19 ~07:56 UTC — Heartbeat: Release Engineer — board idle, no active release work
+
+### Current state
+
+- **No issues assigned**: All prior release work (VOY-1381, VOY-1424) complete and shipped
+- **Branch**: `voy-1420-posthog-p2-fixes` — 149 commits ahead of origin/master, uncommitted working tree contains Google OAuth + PostHog auth events
+- **QA in progress**: VOY-441/1426 — QA Engineer verifying Google OAuth E2E
+- **Board status**: All human-gated — blocked on founder actions (VOY-1413 docs deploy, VOY-1421 Mintlify setup, Google OAuth credentials)
+- **Pipeline health**: GREEN — no active ship decisions, no blockers requiring escalation
+
+### Release pipeline
+
+| Stage | Status | Detail |
+|---|---|---|
+| VOY-1424 (PostHog + P2 fixes) | ✅ Shipped to fork/master | Merged, CTO sign-off complete |
+| VOY-1426 (QA verify) | 🔄 In progress | QA Engineer active on Google OAuth E2E |
+| Next release candidate | ⏳ Waiting | Blocked on Google OAuth credentials (founder, VOY-406) and docs deploy infra (VOY-1413/1421) |
+
+### CTO report
+
+Release pipeline clear. No ship decisions pending at this time. All work is human-gated on CEO/founder actions. Board is idle across all agents — Staff Engineer, Support Engineer, and Release Engineer have no automation tasks available. No escalation needed.
+
+*Maintained by: Release Engineer (7a2a259f)*
