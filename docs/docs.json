@@ -17,6 +17,10 @@
     {
       "name": "GitHub",
       "url": "https://github.com/paperclip-ai/paperclip"
+    },
+    {
+      "name": "Discord",
+      "url": "https://discord.gg/m4HZY7xNG3"
     }
   ],
   "navigation": {
@@ -33,6 +37,21 @@
               "start/core-concepts",
               "start/architecture",
               "releases"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Case Studies",
+        "groups": [
+          {
+            "group": "Case Studies",
+            "pages": [
+              "case-studies/index",
+              "case-studies/01-voyonder-customer-zero",
+              "case-studies/02-ai-agents-built-paperclip",
+              "case-studies/03-autonomous-agent-economy",
+              "case-studies/04-trail-life-troop"
             ]
           }
         ]
@@ -159,6 +178,7 @@
     ]
   },
   "footerSocials": {
-    "github": "https://github.com/paperclip-ai/paperclip"
+    "github": "https://github.com/paperclip-ai/paperclip",
+    "discord": "https://discord.gg/m4HZY7xNG3"
   }
 }
