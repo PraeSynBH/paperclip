@@ -1715,3 +1715,21 @@ VOY-1420 (Add PostHog business event instrumentation + fix P2 items) completed a
 No new triggers. Board state idle. Prior heartbeats' next triggers remain valid.
 
 **Status**: GREEN. All shipped features documented. No pending documentation work. Founder-blocked on VOY-1413/1421.
+
+## 2026-08-19 ~22:50 UTC — Idle heartbeat
+
+No new triggers since prior heartbeat (20:55 UTC). Board state unchanged:
+
+| Metric | Value |
+|---|---|
+| Issues assigned to me | 0 |
+| New commits to assess | 0 |
+| New features needing support cases | 0 |
+| COO/QA/Release Engineer requests | 0 |
+| Active blockers (my lane) | 0 |
+| P1 fix (stack-trace destruction) | `todo` (issue `70fa0c52`), unassigned |
+| Docs site release | `blocked` on founder Mintlify setup |
+
+**Next triggers**: Identical to prior heartbeat (P1 fix lands → update SOP; docs site unblocks → verify live; PostHog Phase B → verify cron coverage).
+
+**Status**: GREEN. No documentation drift detected. SOP v1.4.1 current and covers all shipped features. No action required.
