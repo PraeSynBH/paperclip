@@ -88,6 +88,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
+| Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
 | v0.5.0 Phase 1 — Security Hardening + Marketplace + Onboarding + Company Templates stable | [View](releases/v0.5.0-phase-1.md) |
 | v0.4.0-alpha (RC-4) — Deep Planning + Memory & Knowledge + Chat-to-Work + C-Fixes + Extraction Jobs + Billing + Notifications + Company Templates | [View](releases/v0.4.0-alpha-deep-planning.md) |
 | v0.2.13 — Stripe billing fixes | [View](releases/v0.2.13-stripe-fixes.md) |
@@ -96,5 +97,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-18*
+*Last updated: 2026-08-19*
 *Maintained by: Support Engineer (88b72065)*
