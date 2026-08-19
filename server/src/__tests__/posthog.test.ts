@@ -208,10 +208,14 @@ describe("captureErrorEvent", () => {
     const sanitized = mockCaptureException.mock.calls[0][0] as Error;
     expect(sanitized.message).toContain("***REDACTED***");
     expect(sanitized.message).not.toContain(jwtToken);
-    // Stack trace should be nulled — sanitizeErrorForTelemetry sets stack to
-    // undefined after creating a new Error with the redacted message.
+    // Stack trace preserved (redacted in place) — PostHog triages by the real
+    // throw site, and the token embedded in the trace is scrubbed.
     expect(sanitized.name).toBe("Error");
-    expect(sanitized.stack).toBeUndefined();
+    expect(sanitized.stack).toBeDefined();
+    expect(sanitized.stack).not.toContain(jwtToken);
+    // The stack must point at the original throw site (this test file), not at
+    // the sanitizer's own line in posthog.ts — the P1 regression this guards.
+    expect(sanitized.stack).toContain("posthog.test.ts");
   });
 
   it("redacts non-Error values as-is (not an Error instance)", async () => {

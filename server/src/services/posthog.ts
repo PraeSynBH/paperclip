@@ -95,34 +95,26 @@ export function captureErrorEvent(
  * - Error message: redacted via `redactSensitiveText()` to catch secrets,
  *   file paths, emails, and connection strings that may appear in messages
  *   (e.g. SQL constraint violation messages containing user email).
- * - Stack trace: stripped entirely. PostHog's `captureException` auto-extracts
- *   `$exception_stack_trace` from the error object; removing the stack
- *   prevents file-path disclosure.
+ * - Stack trace: redacted in place. PostHog's `captureException` auto-extracts
+ *   `$exception_stack_trace` from the error object; preserving the trace
+ *   (with redacted file paths and tokens) enables triage by throw site.
  * - Non-standard Error objects: returned as-is (the caller is responsible).
  */
 function sanitizeErrorForTelemetry(error: unknown): Error | unknown {
   if (!(error instanceof Error)) return error;
 
-  const redactedMessage = redactSensitiveText(error.message);
+  error.message = redactSensitiveText(error.message);
 
-  // Create a minimal error with the redacted message and no stack.
-  // The name/constructor name survives because it is a low-risk categorical
-  // identifier (e.g. "ValidationError", "NotFoundError").
-  const sanitized = new Error(redactedMessage);
-  sanitized.name = error.name;
-
-  // new Error() captures a stack at the sanitizer call site; null it to
-  // prevent the sanitizer's own location from leaking into telemetry.
-  sanitized.stack = undefined;
-
-  // Preserve the cause chain if present, also redacted.
-  if (error.cause instanceof Error) {
-    sanitized.cause = sanitizeErrorForTelemetry(error.cause);
-  } else if (error.cause !== undefined) {
-    sanitized.cause = error.cause;
+  if (typeof error.stack === "string") {
+    error.stack = redactSensitiveText(error.stack);
   }
 
-  return sanitized;
+  // Recursively redact the cause chain (mutating in place preserves identity).
+  if (error.cause instanceof Error) {
+    sanitizeErrorForTelemetry(error.cause);
+  }
+
+  return error;
 }
 
 /**
