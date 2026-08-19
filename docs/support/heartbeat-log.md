@@ -2479,3 +2479,32 @@ Scheduled heartbeat check. Last support heartbeat confirmed docs in sync at ~12:
 ### Disposition
 
 **Idle.** Documentation fully in sync. No new code commits since last heartbeat. All blockers are human-gated — no agent-automatable documentation work remains. Next trigger: new code commit landing on a tracked repo, or human unblocks one of the blocked items.
+
+## 2026-08-19 ~12:40 UTC — Heartbeat: docs in sync, board idle, no new triggers
+
+### What triggered me
+
+Scheduled heartbeat check. Prior support heartbeat (~12:22 UTC) confirmed docs in sync. Verifying no new triggers have landed since.
+
+### Activity
+
+- **Diff assessment** — 5 commits since prior heartbeat: all docs-only heartbeat entries (COO 12:30, CTO 12:29, Release Engineer 12:28, Staff Engineer 12:15, Release Engineer 11:55). Zero documentation impact.
+- **Docs site verification** — voyonder.com/documentation returns 200. voyonder.com/documentation/releases returns 200 (release notes v0.2.4–0.2.12).
+- **Case studies** — voyonder.com/case-studies returns 404 (Next.js app route, Mintlify not connected). Blocked on VOY-1421 (founder action). No change.
+- **Board** — 200/200 issues done/cancelled. Fully idle.
+- **Last releases** — VOY-1420/1447 shipped. Docs verified (VOY-1438, VOY-1449).
+- **No new non-heartbeat commits** since 12:22 UTC.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% |
+| Release documentation readiness | All prior releases current |
+| Outstanding documentation work | None |
+| Blocked items (human-gated) | VOY-1413, VOY-1421, VOY-421 |
+
+### Disposition
+
+**Idle.** Documentation fully in sync. All blockers remain human-gated. Next trigger: new code commit or human unblock.
