@@ -58,6 +58,8 @@ import {
   PLUGIN_WORKER_INIT_TIMEOUT_MS,
   PLUGIN_WORKER_SHUTDOWN_DRAIN_MS,
   PLUGIN_WORKER_SIGTERM_GRACE_MS,
+  PLUGIN_WORKER_SHUTDOWN_SETTLE_MS,
+  PLUGIN_WORKER_SIGKILL_GRACE_MS,
 } from "../timeout-constants.js";
 
 // ---------------------------------------------------------------------------
@@ -1010,7 +1012,7 @@ export function createPluginWorkerHandle(
 
     // Give the process a brief moment to exit after the shutdown response
     if (childProcess) {
-      await waitForExit(500);
+      await waitForExit(PLUGIN_WORKER_SHUTDOWN_SETTLE_MS);
     }
 
     // Check if process already exited
@@ -1030,7 +1032,7 @@ export function createPluginWorkerHandle(
 
     // Step 3: Forcefully kill with SIGKILL
     log.warn("worker did not exit after SIGTERM, sending SIGKILL");
-    await killWithSignal("SIGKILL", 2_000);
+    await killWithSignal("SIGKILL", PLUGIN_WORKER_SIGKILL_GRACE_MS);
 
     if (childProcess) {
       log.error("worker process still alive after SIGKILL — this should not happen");

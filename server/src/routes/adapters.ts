@@ -479,7 +479,7 @@ export function adapterRoutes() {
         const pluginsDir = getAdapterPluginsDir();
         await execFileAsync("npm", ["uninstall", externalRecord.packageName], {
           cwd: pluginsDir,
-          timeout: 60_000,
+          timeout: PLUGIN_NPM_INSTALL_TIMEOUT_MS,
         });
         logger.info(
           { type: adapterType, packageName: externalRecord.packageName },

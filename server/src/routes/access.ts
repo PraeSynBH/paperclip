@@ -87,6 +87,7 @@ import { secretService } from "../services/secrets.js";
 import {
   COMPANY_INVITE_TTL_MS,
   INVITE_RESOLUTION_DNS_TIMEOUT_MS,
+  INVITE_RESOLUTION_PROBE_DEFAULT_TIMEOUT_MS,
 } from "../timeout-constants.js";
 
 function hashToken(token: string) {
@@ -3552,7 +3553,7 @@ export function accessRoutes(
         : NaN;
     const timeoutMs = Number.isFinite(parsedTimeoutMs)
       ? Math.max(1000, Math.min(15000, Math.floor(parsedTimeoutMs)))
-      : 5000;
+      : INVITE_RESOLUTION_PROBE_DEFAULT_TIMEOUT_MS;
     const resolvedTarget = await resolveInviteResolutionTarget(target, routeInviteResolutionNetwork);
     const probe = await probeInviteResolutionTarget(resolvedTarget, timeoutMs, routeInviteResolutionNetwork);
     res.json({

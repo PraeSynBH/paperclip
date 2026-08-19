@@ -27,6 +27,7 @@
 // handler before `process.exit`.
 
 import { logger } from "./middleware/logger.js";
+import { OTEL_SHUTDOWN_TIMEOUT_MS } from "./timeout-constants.js";
 
 const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT;
 
@@ -181,7 +182,7 @@ async function bootstrapOtel(endpoint: string): Promise<void> {
         // SDK's own default flush budget. unref() so the timer itself never
         // keeps the event loop alive after a fast clean shutdown.
         new Promise<void>((_, reject) => {
-          const timer = setTimeout(() => reject(new Error("OTel shutdown timed out")), 5_000);
+          const timer = setTimeout(() => reject(new Error("OTel shutdown timed out")), OTEL_SHUTDOWN_TIMEOUT_MS);
           timer.unref?.();
         }),
       ]);

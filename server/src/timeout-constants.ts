@@ -776,3 +776,80 @@ export const POSTHOG_FLUSH_INTERVAL_MS = parsePositiveIntFromEnv(
   "PAPERCLIP_POSTHOG_FLUSH_INTERVAL_MS",
   10_000,
 );
+
+// ---------------------------------------------------------------------------
+// WebSocket live events
+// ---------------------------------------------------------------------------
+
+/**
+ * Interval between WebSocket ping frames used to detect dead connections (ms).
+ * Env: PAPERCLIP_WS_PING_INTERVAL_MS  (default: 30000)
+ */
+export const WS_PING_INTERVAL_MS = parsePositiveIntFromEnv(
+  "PAPERCLIP_WS_PING_INTERVAL_MS",
+  30_000,
+);
+
+// ---------------------------------------------------------------------------
+// Instrumentation (OTel shutdown)
+// ---------------------------------------------------------------------------
+
+/**
+ * Timeout for OpenTelemetry SDK shutdown during process exit (ms).  The SDK
+ * waits indefinitely for in-flight export batches, so an unreachable collector
+ * must not block process exit.  Matches the SDK's own default flush budget.
+ * Env: PAPERCLIP_OTEL_SHUTDOWN_TIMEOUT_MS  (default: 5000)
+ */
+export const OTEL_SHUTDOWN_TIMEOUT_MS = parsePositiveIntFromEnv(
+  "PAPERCLIP_OTEL_SHUTDOWN_TIMEOUT_MS",
+  5_000,
+);
+
+// ---------------------------------------------------------------------------
+// Workspace runtime health check
+// ---------------------------------------------------------------------------
+
+/**
+ * Timeout for runtime service health-check fetches (ms).
+ * Env: PAPERCLIP_RUNTIME_SERVICE_HEALTH_TIMEOUT_MS  (default: 2000)
+ */
+export const RUNTIME_SERVICE_HEALTH_TIMEOUT_MS = parsePositiveIntFromEnv(
+  "PAPERCLIP_RUNTIME_SERVICE_HEALTH_TIMEOUT_MS",
+  2_000,
+);
+
+// ---------------------------------------------------------------------------
+// Plugin worker — shutdown settle and SIGKILL grace
+// ---------------------------------------------------------------------------
+
+/**
+ * Brief settle time after shutdown RPC response before escalating to SIGTERM (ms).
+ * Env: PAPERCLIP_PLUGIN_WORKER_SHUTDOWN_SETTLE_MS  (default: 500)
+ */
+export const PLUGIN_WORKER_SHUTDOWN_SETTLE_MS = parsePositiveIntFromEnv(
+  "PAPERCLIP_PLUGIN_WORKER_SHUTDOWN_SETTLE_MS",
+  500,
+);
+
+/**
+ * Wait after SIGKILL before declaring the process unkillable (ms).
+ * Env: PAPERCLIP_PLUGIN_WORKER_SIGKILL_GRACE_MS  (default: 2000)
+ */
+export const PLUGIN_WORKER_SIGKILL_GRACE_MS = parsePositiveIntFromEnv(
+  "PAPERCLIP_PLUGIN_WORKER_SIGKILL_GRACE_MS",
+  2_000,
+);
+
+// ---------------------------------------------------------------------------
+// Invite resolution probe
+// ---------------------------------------------------------------------------
+
+/**
+ * Default timeout for invite resolution HTTP probe (ms).  User may override
+ * per-request via the `timeoutMs` query parameter, bounded to [1000, 15000].
+ * Env: PAPERCLIP_INVITE_RESOLUTION_PROBE_DEFAULT_TIMEOUT_MS  (default: 5000)
+ */
+export const INVITE_RESOLUTION_PROBE_DEFAULT_TIMEOUT_MS = parsePositiveIntFromEnv(
+  "PAPERCLIP_INVITE_RESOLUTION_PROBE_DEFAULT_TIMEOUT_MS",
+  5_000,
+);

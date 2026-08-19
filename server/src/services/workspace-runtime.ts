@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "
 import fs from "node:fs/promises";
 import net from "node:net";
 import { createHash, randomUUID } from "node:crypto";
+import { RUNTIME_SERVICE_HEALTH_TIMEOUT_MS } from "../timeout-constants.js";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import type { AdapterRuntimeServiceReport } from "@paperclipai/adapter-utils";
@@ -2500,7 +2501,7 @@ async function isRuntimeServiceUrlHealthy(
   const healthUrl = resolveRuntimeServiceHealthUrl(url, input);
   if (!healthUrl) return true;
   try {
-    const response = await fetch(healthUrl, { signal: AbortSignal.timeout(2_000) });
+    const response = await fetch(healthUrl, { signal: AbortSignal.timeout(RUNTIME_SERVICE_HEALTH_TIMEOUT_MS) });
     return response.ok;
   } catch {
     return false;
