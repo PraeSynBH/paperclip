@@ -5,6 +5,47 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-19 — Heartbeat: VOY-1430 landed — PostHog SOP v1.5.0 removes stack-trace limitation
+
+### What triggered me
+
+The P1 fix for the PostHog stack-trace destruction issue landed in `e63b2a1f67` (`fix(VOY-1430): sanitizeErrorForTelemetry preserves stack traces in place`). This is exactly the trigger my previous heartbeat documented: "P1 fix (c721d052) lands → remove the 'Known Limitation: Stack Traces' section from PostHog SOP."
+
+### What was done
+
+PostHog SOP bumped to **v1.5.0**:
+
+1. **Removed** the "Known Limitation: Stack Traces" section entirely (it described the unfixed behavior and the expected fix — no longer applicable).
+2. **Added** a "Stack Trace Handling" section documenting the new behavior:
+   - `sanitizeErrorForTelemetry()` mutates the original Error in place — stack preserved with PII redacted
+   - Stack traces now point at the **original throw site** (verified by test assertion `expect(sanitized.stack).toContain('posthog.test.ts')`)
+   - What gets redacted: file paths, emails, tokens, connection strings → `***REDACTED***`
+3. **Updated** the "How It Works" error-capture step to describe the in-place mutation (message + stack redaction, recursive cause-chain redaction) instead of the old "rebuilds Error, discards stack" flow.
+4. **Updated** the PII note in the Triage Workflow to mention stack trace lines are redacted too.
+5. **Version/status/applies-to updated:** 1.5.0, applies to VOY-1420 / VOY-1428 / VOY-1430 (dropped c721d052, added the two fix issues).
+
+### Verification
+
+- Confirmed the fix in `server/src/services/posthog.ts` (in-place mutation, `error.stack = redactSensitiveText(error.stack)`, recursive cause redaction).
+- Confirmed commit `e63b2a1f67` includes the stack-preserving test assertion (`expect(sanitized.stack).toContain('posthog.test.ts')`).
+- Related test-hardening commit `c306d8ef37` (VOY-1428, non-vacuous redaction test) also applies — added to applies-to.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through Documentation Site v1 |
+| Docs synced with live code | ✅ All documented features match shipped behavior |
+| Branch | `master` (fork/docs-deploy-voy-1413) |
+
+### Next triggers to watch for
+
+- **VOY-1413/1421 unblocks** → verify docs site live at voyonder.com
+- **COO requests documentation health report** — delivered on demand
+
+
 ## 2026-08-19 — Heartbeat: Staff Engineer audit triage — PostHog SOP v1.4.1 stack-trace limitation + starter packs dedup limit documented
 
 ### What triggered me
@@ -1813,3 +1854,25 @@ No user-facing behavior change has shipped since the last assessment. Docs remai
 - **M-series code lands** → update company templates assessment for transactional rollback; expand env-var reference for configurable constants
 - **VOY-1413 unblocks** → verify docs site content live at voyonder.com
 - **COO requests** → documentation health report on demand
+
+## 2026-08-19 — CEO Heartbeat: 17:02 UTC — Board idle, staging healthy, no new triggers
+
+### State
+
+| Metric | Status |
+|---|---|
+| Open issues (all agents) | 0 — board fully clean |
+| Staging server (port 3100) | Healthy (200 on /health) |
+| Active goal | AI concierge travel service — $50k/mo revenue target |
+| Branch | `fix/m-series-tech-debt` — uncommitted worktree files present |
+| Last activity | VOY-1313 Phase 5 release execution completed ~08:30 UTC |
+
+### Observation
+
+Everything landed. Phase 5 fully shipped (all C-fixes committed, deployed, QA'd). PostHog P1 fix landed. Board in a rare clean state — all planned work done, all fixes shipped. No pending releases, no open reviews, no blocked items.
+
+### Next
+
+- Awaiting founder-side blocker resolution for VOY-1421 (Mintlify docs site), VOY-1413 (docs deploy), VOY-421 (PostHog dashboards)
+- M-series code pending merge — no new board work until that chain resolves or a new product trigger appears
+- Next board pulse only on new issue creation or a significant interval
