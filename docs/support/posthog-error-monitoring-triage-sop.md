@@ -7,11 +7,11 @@ applies_to: VOY-999 / VOY-1015 / VOY-1420
 
 # PostHog Monitoring — Support Engineer Triage SOP
 
-**Version:** 1.4.2
+**Version:** 1.4.5
 **Date:** 2026-08-19
 **Author:** Support Engineer (88b72065)
-**Status:** Final — Business events instrumentation landed (VOY-1420); P1 stack-trace fix applied (VOY-1430 / e63b2a1f67); SOP updated to reflect in-place redaction
-**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / e63b2a1f67
+**Status:** Final — Business events instrumentation landed (VOY-1420); P1 stack-trace fix applied (VOY-1430 / e63b2a1f67); decisionNote auto-redacted (VOY-1434 / d5b3510587); auth hooks hardened to fire-and-forget telemetry (96faa13434 / VOY-1447); SOP reflects all changes
+**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / e63b2a1f67 / d5b3510587 / 96faa13434 + Google OAuth auth events
 
 ---
 
@@ -53,6 +53,8 @@ Business events are sent to PostHog via `captureMetric()` to track key product o
 | `approval.approved` | `services/approvals.ts` | An approval (hire, strategy, plan gate) is approved | `companyId` | `approvalId`, `approvalType`, `decidedByUserId`, `applied`, `decisionNote` |
 | `approval.rejected` | `services/approvals.ts` | An approval is rejected | `companyId` | `approvalId`, `approvalType`, `decidedByUserId`, `applied`, `decisionNote` |
 | `notification.digest.sent` | `services/notifications.ts` | A batch of notification digests is delivered | `companyId` | `frequency` (daily/hourly), `notificationCount` |
+| `auth.signup_completed` | better-auth database hook (`user.create.after`) | A new user account is created (sign-up via email or Google OAuth) | `userId` | `login_method` ("google", "email", or "unknown") |
+| `auth.session_started` | better-auth database hook (`session.create.after`) | A new session is created (sign-in via email or Google OAuth) | `userId` (the logging-in user) | `login_method` ("google", "email", or "unknown") |
 
 ### distinctId Rule
 
@@ -88,11 +90,21 @@ curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=approval
   -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY"
 ```
 
+### Auth Hook Resilience
+
+PostHog telemetry calls in better-auth database hooks (`auth.signup_completed` and `auth.session_started`) are fire-and-forget — the `captureMetric()` function is synchronous and is **never awaited** within the hook. The enclosing function is marked `async` only for better-auth type contract compliance. If PostHog is unreachable, slow, or returns errors, the auth sign-in/sign-up response is never blocked or delayed. Errors are silently caught in a `try/catch` block.
+
+This design means:
+- Auth flow speed is independent of PostHog availability
+- PostHog errors never surface to users (no timeouts, no 500s during login/signup)
+- Some auth events may be silently dropped if PostHog is down — the telemetry gap is invisible to users
+
 ### What to Watch For
 
 - **Missing business events** — If `approval.approved` or `notification.digest.sent` events stop appearing, check that PostHog is configured (env vars) and `captureMetric()` is not being filtered by a feature gate.
 - **Zero counts in dashboards** — Business events rely on `companyId` as distinctId. If a company's events are not grouped correctly, verify the `captureMetric` call passes the correct `companyId`.
-- **PII in event properties** — Unlike error events, business event properties are **not** auto-redacted. Ensure that event properties (e.g., `decisionNote`) do not contain user PII. If a PII leak is found in a business event, escalate to the CTO.
+- **PII in event properties** — Error events are auto-redacted by `sanitizeErrorForTelemetry()`. Business event properties are **not** blanket-redacted, but the `decisionNote` property on `approval.approved` and `approval.rejected` events is now scrubbed via `redactSensitiveText()` (VOY-1434 / d5b3510587). Event properties added in future instrumentation may still contain user PII — check for free-text fields before assuming they are safe. If a PII leak is found in a business event, escalate to the CTO.
+- **Auth events not appearing** — If `auth.signup_completed` or `auth.session_started` events stop appearing, check that PostHog is configured and that better-auth database hooks are registered (`server/src/auth/better-auth.ts` — `databaseHooks.user.create.after` and `databaseHooks.session.create.after`). These events fire regardless of login method (email or Google OAuth).
 
 ---
 

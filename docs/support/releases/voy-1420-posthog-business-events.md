@@ -9,7 +9,7 @@ commits: 1dfe01c6be / e63b2a1f67 / d5b3510587 / 8416165284 / c306d8ef37 / a46b6e
 
 **Branch:** `voy-1420-posthog-p2-fixes`
 **Release date:** 2026-08-19
-**Status:** Shipped to `voy-1420-posthog-p2-fixes` branch, pending CTO sign-off and merge to master.
+**Status:** Shipped to `voy-1420-posthog-p2-fixes` branch. All P2 fixes committed, 34/34 tests pass, stack traces preserved, PII redacted. Pending merge to fork/master.
 
 ## What Changed
 
@@ -53,5 +53,5 @@ No new environment variables or configuration changes. PostHog integration conti
 
 ## Related Documentation
 
-- [PostHog Monitoring Triage SOP](../posthog-error-monitoring-triage-sop.md) — v1.4.3, reflects all P2 fixes
+- [PostHog Monitoring Triage SOP](../posthog-error-monitoring-triage-sop.md) — v1.4.5, reflects all P2 fixes + Google OAuth auth events
 - PostHog Triage SOP: Error troubleshooting workflows, escalation paths, and monitoring script details
