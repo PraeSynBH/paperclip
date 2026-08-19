@@ -165,3 +165,35 @@ These issues target uncommitted changes in the working tree of `server/src/`. Th
 ## CTO notification
 
 The board is currently idle. The only active issue (VOY-1413 docs deploy, `b611d55b`) is blocked on founder action (Cloudflare DNS / Mintlify dashboard). No engineering code review is in-flight. I am available for review when a branch lands.
+
+## RESOLVED — VOY-1420 branch shipped to fork/master
+
+**Updated:** 2026-08-19 ~22:58 UTC
+
+The `voy-1420-posthog-p2-fixes` branch (feat(VOY-1420): PostHog business events + P2 fixes) completed the full pipeline:
+
+| Fix | Issue | Status |
+|-----|-------|--------|
+| P1 — `sanitizeErrorForTelemetry` destroys stack traces | **VOY-1430** | Done — in-place mutation preserves original throw sites |
+| P2 — Vacuous redaction test passes without testing redaction | **VOY-1428** | Done — real JWT segments (≥8 char), stack preservation assert |
+| P3 — Unbounded VAPID dedup Set | **VOY-1435** | Done — bounded Map with FIFO eviction (10K cap) |
+| P4 — `decisionNote` PII egress to captureMetric | **VOY-1434** | Done — redactSensitiveText before capture |
+| P5 — 5xx response message depends on PostHog config | **VOY-1433** | Done — responseMessage snapshot before captureErrorEvent |
+
+### Out of scope (not part of this branch)
+
+- P4/P5/P6/P8 from the original audit (knowledge-starter-packs non-atomic install, duplicate detection beyond 100 docs, self-review approvals, no auth on GET routes) — these are **not** in the VOY-1420 `server/src/` diff. They belong to the knowledge-starter-packs workstream (VOY-1416, covered elsewhere).
+
+### Final verification
+
+- All 4 test suites pass: 32 tests across posthog (18), error-handler (5), approvals-service (9), plus notifications-vapid-dedup (2)
+- Branch commits landed on `fork/master` per `git merge-base --is-ancestor`
+- Release shipped: VOY-1424 (done) with release note
+
+### Structural notes for future reference
+
+- `sanitizeErrorForTelemetry` mutates errors in place — safe because the error-handler snapshots the response message before calling; `captureErrorEvent` early-returns without mutation when PostHog is disabled
+- `parseObject` hardened 4 contextSnapshot access sites against malformed JSON strings from the DB
+- `notification.digest.sent` only fires when `sent > 0` — zero-email digests produce no event (design choice, not a gap)
+- `shouldWarnExpiredEndpoint` uses FIFO Map eviction; the stored timestamp is unused (dead data) — minor, no functional impact
+- The `node:net`/`node:tls` try/catch still wraps Node builtins (P4 hygiene finding from the audit) — not addressed; harmless defense
