@@ -12,6 +12,11 @@ applies_to: VOY-999 / VOY-1015 / VOY-1420
 **Author:** Support Engineer (88b72065)
 **Status:** Final — Stack traces now preserved (VOY-1430); P1 stack-trace limitation resolved
 **Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / VOY-1428 / VOY-1430
+**Version:** 1.4.5
+**Date:** 2026-08-19
+**Author:** Support Engineer (88b72065)
+**Status:** Final — Business events instrumentation landed (VOY-1420); P1 stack-trace fix applied (VOY-1430 / e63b2a1f67); decisionNote auto-redacted (VOY-1434 / d5b3510587); auth hooks hardened to fire-and-forget telemetry (96faa13434 / VOY-1447); SOP reflects all changes
+**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / e63b2a1f67 / d5b3510587 / 96faa13434 + Google OAuth auth events
 
 ---
 
@@ -29,6 +34,7 @@ This SOP defines how to triage, classify, and resolve issues in both categories.
 ## How It Works
 
 1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — the `sanitizeErrorForTelemetry()` function mutates the original Error in place, redacting `error.message` and `error.stack` via `redactSensitiveText()`, then recursively redacts the `error.cause` chain. The original stack trace is preserved (with file paths and tokens redacted), enabling triage by throw site. (See [Stack Trace Handling](#stack-trace-handling).)
+1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — error messages and stack traces are scrubbed in-place via `sanitizeErrorForTelemetry()` (redactSensitiveText on message + stack), preserving the original throw site for triage.
 2. **Cron poll:** `scripts/posthog-error-monitor.sh` runs every 15 minutes via crontab on VPS-1, queries PostHog for new error_occurred events since last check
 3. **Issue creation:** For each unique error signature (grouped by event+component+normalized message), a Paperclip issue is created:
    - **Title:** `[PostHog] {event}: {component} — {truncated message}`
@@ -53,6 +59,8 @@ Business events are sent to PostHog via `captureMetric()` to track key product o
 | `approval.approved` | `services/approvals.ts` | An approval (hire, strategy, plan gate) is approved | `companyId` | `approvalId`, `approvalType`, `decidedByUserId`, `applied`, `decisionNote` |
 | `approval.rejected` | `services/approvals.ts` | An approval is rejected | `companyId` | `approvalId`, `approvalType`, `decidedByUserId`, `applied`, `decisionNote` |
 | `notification.digest.sent` | `services/notifications.ts` | A batch of notification digests is delivered | `companyId` | `frequency` (daily/hourly), `notificationCount` |
+| `auth.signup_completed` | better-auth database hook (`user.create.after`) | A new user account is created (sign-up via email or Google OAuth) | `userId` | `login_method` ("google", "email", or "unknown") |
+| `auth.session_started` | better-auth database hook (`session.create.after`) | A new session is created (sign-in via email or Google OAuth) | `userId` (the logging-in user) | `login_method` ("google", "email", or "unknown") |
 
 ### distinctId Rule
 
@@ -69,6 +77,15 @@ Starting with VOY-1420, error events (`captureErrorEvent`) also use `companyId` 
 **What gets redacted:** File paths, emails, tokens, connection strings, and other sensitive patterns in both the error message and stack trace are replaced with `***REDACTED***`. The error name and error code (low-risk categorical identifiers) are preserved as-is.
 
 **Verification:** The test suite asserts `expect(sanitized.stack).toContain('posthog.test.ts')` — confirming the stack trace survives redaction and still points at the original throw site in the test file.
+### Stack Trace Preservation (resolved)
+
+**VOY-1430 / `e63b2a1f67` — Applied.** The `sanitizeErrorForTelemetry()` function now mutates the original error's `message` and `stack` properties in-place via `redactSensitiveText()` instead of creating a new `Error` object. This preserves the original throw site in `$exception_stack_trace` for PostHog's `captureException`, with file paths and tokens redacted.
+
+**What changed:**
+- **Before (v1.4.1):** `sanitizeErrorForTelemetry` created `new Error(redactedMessage)` — every captured exception appeared to originate from `posthog.ts`, making stack-based triage useless.
+- **After (v1.4.2+):** The original error is redacted in-place. Stack traces point at the original throw site (e.g., a route handler or service file). Tests verify that the sanitized stack contains the original caller's filename (`posthog.test.ts`).
+
+**Triage guidance:** Stack traces can now be relied on for triage, but note that file paths and tokens in stack frames are redacted (replaced with `***REDACTED***`). The error `name` and `code` are preserved unchanged as low-risk identifiers.
 
 ### Debugging Business Events
 
@@ -86,11 +103,21 @@ curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=approval
   -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY"
 ```
 
+### Auth Hook Resilience
+
+PostHog telemetry calls in better-auth database hooks (`auth.signup_completed` and `auth.session_started`) are fire-and-forget — the `captureMetric()` function is synchronous and is **never awaited** within the hook. The enclosing function is marked `async` only for better-auth type contract compliance. If PostHog is unreachable, slow, or returns errors, the auth sign-in/sign-up response is never blocked or delayed. Errors are silently caught in a `try/catch` block.
+
+This design means:
+- Auth flow speed is independent of PostHog availability
+- PostHog errors never surface to users (no timeouts, no 500s during login/signup)
+- Some auth events may be silently dropped if PostHog is down — the telemetry gap is invisible to users
+
 ### What to Watch For
 
 - **Missing business events** — If `approval.approved` or `notification.digest.sent` events stop appearing, check that PostHog is configured (env vars) and `captureMetric()` is not being filtered by a feature gate.
 - **Zero counts in dashboards** — Business events rely on `companyId` as distinctId. If a company's events are not grouped correctly, verify the `captureMetric` call passes the correct `companyId`.
-- **PII in event properties** — Unlike error events, business event properties are **not** auto-redacted. Ensure that event properties (e.g., `decisionNote`) do not contain user PII. If a PII leak is found in a business event, escalate to the CTO.
+- **PII in event properties** — Error events are auto-redacted by `sanitizeErrorForTelemetry()`. Business event properties are **not** blanket-redacted, but the `decisionNote` property on `approval.approved` and `approval.rejected` events is now scrubbed via `redactSensitiveText()` (VOY-1434 / d5b3510587). Event properties added in future instrumentation may still contain user PII — check for free-text fields before assuming they are safe. If a PII leak is found in a business event, escalate to the CTO.
+- **Auth events not appearing** — If `auth.signup_completed` or `auth.session_started` events stop appearing, check that PostHog is configured and that better-auth database hooks are registered (`server/src/auth/better-auth.ts` — `databaseHooks.user.create.after` and `databaseHooks.session.create.after`). These events fire regardless of login method (email or Google OAuth).
 
 ---
 
@@ -117,6 +144,7 @@ Read the issue body to determine:
 | **LOW** | Cosmetic or edge case (rare error path, expected failure handled gracefully) | Best effort | Acknowledge and close, or keep in backlog for monitoring |
 
 **Note on PII:** Error messages arriving in PostHog are already scrubbed by the server-side `sanitizeErrorForTelemetry()` function — secrets, file paths, emails, and connection strings are redacted from both the message and stack trace before egress. If you see `***REDACTED***` in an error message or stack trace line, that is working as designed. The original error is still available in server logs (`journalctl`). For investigating PII leaks, check the server logs, not PostHog.
+**Note on PII:** Error messages and stack traces arriving in PostHog are already scrubbed by the server-side `sanitizeErrorForTelemetry()` function — secrets, file paths, emails, and connection strings are redacted in-place before egress. The original error message is still available in server logs (`journalctl`). For investigating PII leaks, check the server logs, not PostHog.
 
 ### Step 3: Root Cause Investigation
 

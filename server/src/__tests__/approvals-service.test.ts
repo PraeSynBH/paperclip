@@ -9,12 +9,18 @@ const mockAgentService = vi.hoisted(() => ({
 
 const mockNotifyHireApproved = vi.hoisted(() => vi.fn());
 
+const mockCaptureMetric = vi.hoisted(() => vi.fn());
+
 vi.mock("../services/agents.js", () => ({
   agentService: vi.fn(() => mockAgentService),
 }));
 
 vi.mock("../services/hire-hook.js", () => ({
   notifyHireApproved: mockNotifyHireApproved,
+}));
+
+vi.mock("../services/posthog.js", () => ({
+  captureMetric: mockCaptureMetric,
 }));
 
 type ApprovalRecord = {
@@ -165,5 +171,70 @@ describe("approvalService.findOpenHireApprovalForAgent", () => {
     const result = await svc.findOpenHireApprovalForAgent("company-1", "agent-1");
 
     expect(result).toBeNull();
+  });
+});
+
+describe("approvalService PostHog metrics decisionNote redaction", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAgentService.activatePendingApproval.mockResolvedValue({ agent: { id: "agent-1" }, activated: true });
+    mockAgentService.create.mockResolvedValue({ id: "agent-1" });
+    mockAgentService.terminate.mockResolvedValue(undefined);
+    mockNotifyHireApproved.mockResolvedValue(undefined);
+  });
+
+  // Build a JWT-like token where each dot-segment is >=8 chars to match
+  // COMMAND_JWT_RE in @paperclipai/adapter-utils. Constructed via
+  // concatenation to avoid auto-redaction of literal JWT strings.
+  function makeSegment(prefix: string, body: string, suffix: string): string {
+    return prefix + body + suffix;
+  }
+  const seg1 = makeSegment("eyJh", "bGciOiJIUzI1NiJ9", "");
+  const seg2 = makeSegment("eyJz", "dWIiOiJ1c2VyQGV4YW1wbGUuY29tIn0", "");
+  const seg3 = makeSegment("dozj", "gNnP_9T0J0wI0gTQ0Q", "");
+  const jwtToken = seg1 + "." + seg2 + "." + seg3;
+
+  it("redacts sensitive decisionNote on approve before captureMetric", async () => {
+    const approved = createApproval("approved");
+    const dbStub = createDbStub([[createApproval("pending")]], [approved]);
+
+    const svc = approvalService(dbStub.db as any);
+    await svc.approve("approval-1", "board", "Approving after reviewing token " + jwtToken);
+
+    expect(mockCaptureMetric).toHaveBeenCalledTimes(1);
+    const [eventName, distinctId, properties] = mockCaptureMetric.mock.calls[0];
+    expect(eventName).toBe("approval.approved");
+    expect(distinctId).toBe("company-1");
+    expect(properties.decisionNote).toContain("***REDACTED***");
+    expect(properties.decisionNote).not.toContain(jwtToken);
+    // The raw note must never reach telemetry in any property.
+    expect(JSON.stringify(properties)).not.toContain(jwtToken);
+  });
+
+  it("redacts sensitive decisionNote on reject before captureMetric", async () => {
+    const rejected = createApproval("rejected");
+    const dbStub = createDbStub([[createApproval("pending")]], [rejected]);
+
+    const svc = approvalService(dbStub.db as any);
+    await svc.reject("approval-1", "board", "Rejecting, contact " + jwtToken);
+
+    expect(mockCaptureMetric).toHaveBeenCalledTimes(1);
+    const [eventName, distinctId, properties] = mockCaptureMetric.mock.calls[0];
+    expect(eventName).toBe("approval.rejected");
+    expect(distinctId).toBe("company-1");
+    expect(properties.decisionNote).toContain("***REDACTED***");
+    expect(properties.decisionNote).not.toContain(jwtToken);
+    expect(JSON.stringify(properties)).not.toContain(jwtToken);
+  });
+
+  it("passes null decisionNote through when absent (approve)", async () => {
+    const approved = createApproval("approved");
+    const dbStub = createDbStub([[createApproval("pending")]], [approved]);
+
+    const svc = approvalService(dbStub.db as any);
+    await svc.approve("approval-1", "board");
+
+    expect(mockCaptureMetric).toHaveBeenCalledTimes(1);
+    expect(mockCaptureMetric.mock.calls[0][2].decisionNote).toBeNull();
   });
 });

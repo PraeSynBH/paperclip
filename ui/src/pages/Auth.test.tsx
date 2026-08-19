@@ -10,12 +10,14 @@ import { AuthPage } from "./Auth";
 const getSessionMock = vi.hoisted(() => vi.fn());
 const signInEmailMock = vi.hoisted(() => vi.fn());
 const signUpEmailMock = vi.hoisted(() => vi.fn());
+const signInWithGoogleMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/auth", () => ({
   authApi: {
     getSession: () => getSessionMock(),
     signInEmail: (input: unknown) => signInEmailMock(input),
     signUpEmail: (input: unknown) => signUpEmailMock(input),
+    signInWithGoogle: (callbackURL: string) => signInWithGoogleMock(callbackURL),
   },
 }));
 
@@ -87,6 +89,7 @@ describe("AuthPage", () => {
     getSessionMock.mockResolvedValue(null);
     signInEmailMock.mockResolvedValue(undefined);
     signUpEmailMock.mockResolvedValue(undefined);
+    signInWithGoogleMock.mockReset();
   });
 
   afterEach(() => {
@@ -208,6 +211,76 @@ describe("AuthPage", () => {
     expect(emailInput.getAttribute("aria-invalid")).toBe("true");
     expect(passwordInput.getAttribute("aria-describedby")).toBe(errorId);
     expect(passwordInput.getAttribute("aria-invalid")).toBe("true");
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("renders a Google sign-in button that calls the auth API and redirects on success", async () => {
+    const root = await mount();
+
+    const googleButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Sign in with Google"),
+    );
+    expect(googleButton).not.toBeNull();
+    expect(googleButton?.getAttribute("type")).toBe("button");
+
+    // Mock successful response; use a spy on a fresh assign stub because
+    // jsdom's window.location.assign is non-configurable and cannot be
+    // spied on directly.
+    const redirectUrl = "https://accounts.google.com/o/oauth2/auth/...";
+    signInWithGoogleMock.mockResolvedValue({
+      url: redirectUrl,
+      redirect: true,
+    });
+    const assignMock = vi.fn();
+    const originalLocation = window.location;
+    // Replace location with a copy that has a mock assign.
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: { ...originalLocation, assign: assignMock },
+    });
+
+    await act(async () => {
+      googleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReact();
+
+    expect(signInWithGoogleMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^https?:\/\/.*\/$/),
+    );
+    expect(assignMock).toHaveBeenCalledWith(redirectUrl);
+
+    // Restore original location.
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
+
+    await act(async () => {
+      root.unmount();
+    });
+  });
+
+  it("surfaces a Google OAuth failure in the alert region", async () => {
+    const root = await mount();
+
+    const googleButton = Array.from(container.querySelectorAll("button")).find(
+      (button) => button.textContent?.includes("Sign in with Google"),
+    );
+    expect(googleButton).not.toBeNull();
+
+    signInWithGoogleMock.mockRejectedValueOnce(new Error("Google sign-in failed"));
+
+    await act(async () => {
+      googleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+    await flushReact();
+
+    const alert = container.querySelector('[role="alert"]') as HTMLElement;
+    expect(alert).not.toBeNull();
+    expect(alert.textContent).toContain("Google sign-in failed");
 
     await act(async () => {
       root.unmount();

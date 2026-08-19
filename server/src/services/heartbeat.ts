@@ -3976,7 +3976,7 @@ export async function buildPaperclipWakePayload(input: {
 }
 
 function runTaskKey(run: typeof heartbeatRuns.$inferSelect) {
-  return deriveTaskKey(run.contextSnapshot as Record<string, unknown> | null, null);
+  return deriveTaskKey(parseObject(run.contextSnapshot), null);
 }
 
 function isSameTaskScope(left: string | null, right: string | null) {
@@ -6085,7 +6085,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       .where(eq(companies.id, run.companyId))
       .then((rows) => rows[0] ?? null);
 
-    const context = run.contextSnapshot as Record<string, unknown> | null;
+    const context = parseObject(run.contextSnapshot);
     const issueId = typeof context?.issueId === "string" ? context.issueId : null;
     const issue = issueId
       ? await db
@@ -6229,9 +6229,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         triggerDetail: run.triggerDetail,
         error: run.error ?? null,
         errorCode: run.errorCode ?? null,
-        issueId: typeof run.contextSnapshot === "object" && run.contextSnapshot !== null
-          ? (run.contextSnapshot as Record<string, unknown>).issueId ?? null
-          : null,
+        issueId: readNonEmptyString(parseObject(run.contextSnapshot).issueId) ?? null,
         startedAt: run.startedAt ? new Date(run.startedAt).toISOString() : null,
         finishedAt: run.finishedAt ? new Date(run.finishedAt).toISOString() : null,
       },

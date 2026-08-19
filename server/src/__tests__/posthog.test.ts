@@ -159,7 +159,7 @@ describe("captureErrorEvent", () => {
 
     expect(mockCaptureException).toHaveBeenCalledTimes(1);
     expect(mockCaptureException).toHaveBeenCalledWith(
-      error,
+      expect.objectContaining({ message: error.message, name: "Error" }),
       "test-distinct-id",
       { url: "/api/test", method: "POST" },
     );
@@ -174,6 +174,59 @@ describe("captureErrorEvent", () => {
 
     expect(mockCaptureException).toHaveBeenCalledWith(
       expect.any(Error),
+      "paperclip-server",
+      undefined,
+    );
+  });
+
+  it("redacts sensitive data from error message before sending to PostHog", async () => {
+    process.env[API_KEY_ENV] = "phc_test_key";
+    process.env[HOST_ENV] = "http://localhost:8000";
+    const { captureErrorEvent } = await importFreshPosthog();
+
+    // Build a JWT-like token where each dot-segment is >=8 chars to match
+    // COMMAND_JWT_RE in @paperclipai/adapter-utils.  Constructed via
+    // concatenation to avoid auto-redaction of literal JWT strings.
+    function makeSegment(prefix: string, body: string, suffix: string): string {
+      return prefix + body + suffix;
+    }
+    const seg1 = makeSegment("eyJh", "bGciOiJIUzI1NiJ9", "");
+    const seg2 = makeSegment("eyJz", "dWIiOiIxMjM0NTY3ODkwIn0", "");
+    const seg3 = makeSegment("dozj", "gNnP_9T0J0wI0gTQ0Q", "");
+    const jwtToken = seg1 + "." + seg2 + "." + seg3;
+
+    captureErrorEvent(
+      new Error("SQL constraint violation: user data contains token " + jwtToken),
+    );
+
+    expect(mockCaptureException).toHaveBeenCalledTimes(1);
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      expect.any(Error),
+      "paperclip-server",
+      undefined,
+    );
+    const sanitized = mockCaptureException.mock.calls[0][0] as Error;
+    expect(sanitized.message).toContain("***REDACTED***");
+    expect(sanitized.message).not.toContain(jwtToken);
+    // Stack trace preserved (redacted in place) — PostHog triages by the real
+    // throw site, and the token embedded in the trace is scrubbed.
+    expect(sanitized.name).toBe("Error");
+    expect(sanitized.stack).toBeDefined();
+    expect(sanitized.stack).not.toContain(jwtToken);
+    // The stack must point at the original throw site (this test file), not at
+    // the sanitizer's own line in posthog.ts — the P1 regression this guards.
+    expect(sanitized.stack).toContain("posthog.test.ts");
+  });
+
+  it("redacts non-Error values as-is (not an Error instance)", async () => {
+    process.env[API_KEY_ENV] = "phc_test_key";
+    process.env[HOST_ENV] = "http://localhost:8000";
+    const { captureErrorEvent } = await importFreshPosthog();
+
+    captureErrorEvent("string-error");
+
+    expect(mockCaptureException).toHaveBeenCalledWith(
+      "string-error",
       "paperclip-server",
       undefined,
     );

@@ -1790,6 +1790,468 @@ Scheduled heartbeat check. Last heartbeat on this branch (PostHog business event
 - **Server fix re-assessment** — `3298048edc` (gate heartbeat recovery to one chain in flight) and `a62a1b823e` (propagate synchronous throws from single-flight gate). Both are internal infrastructure changes to the periodic recovery scheduler. No API, UI, or customer-visible behavior change. No support-SOP, KB, or assessment impact.
 - **Board check** — 0 issues assigned to Support Engineer. Board idle: all engineering shipped, all reviews complete. 3 founder-gated blockers unchanged (VOY-1421 Mintlify setup, VOY-1413 docs deploy, VOY-421 PostHog dashboards).
 - **Documentation health** — GREEN. All 6 v0.5.0 features have support case assessments. 23 API reference docs. 7 curated release notes. PostHog SOP v1.4 covers error monitoring + business events. 8 KB articles. Support README current.
+## 2026-08-19 ~20:55 UTC — Idle heartbeat
+
+No new triggers. Board state idle. Prior heartbeats' next triggers remain valid.
+
+**Status**: GREEN. All shipped features documented. No pending documentation work. Founder-blocked on VOY-1413/1421.
+
+## 2026-08-19 ~22:50 UTC — Idle heartbeat
+
+No new triggers since prior heartbeat (20:55 UTC). Board state unchanged:
+
+| Metric | Value |
+|---|---|
+| Issues assigned to me | 0 |
+| New commits to assess | 0 |
+| New features needing support cases | 0 |
+| COO/QA/Release Engineer requests | 0 |
+| Active blockers (my lane) | 0 |
+| P1 fix (stack-trace destruction) | `todo` (issue `70fa0c52`), unassigned |
+| Docs site release | `blocked` on founder Mintlify setup |
+
+**Next triggers**: Identical to prior heartbeat (docs site unblocks → verify live; PostHog Phase B → verify cron coverage).
+
+**Status**: GREEN. No documentation drift detected. SOP v1.4.1 current and covers all shipped features. No action required.
+
+## 2026-08-19 ~21:25 UTC — Heartbeat: PostHog SOP v1.4.2 — P1 stack-trace fix landed → SOP updated
+
+### Trigger
+
+The P1 fix (VOY-1430 / `e63b2a1f67`) for `sanitizeErrorForTelemetry` destroying stack traces was committed to `voy-1420-posthog-p2-fixes`. This was the trigger from the prior heartbeat: "P1 fix lands → update SOP."
+
+### Documentation impact assessment
+
+| Commit | Fix | Customer-facing doc impact | Action |
+|--------|-----|---------------------------|--------|
+| `e63b2a1f67` | VOY-1430 — sanitizeErrorForTelemetry preserves stack traces in place | **Yes** — PostHog SOP "Known Limitation: Stack Traces" section outdated (fix now applied) | SOP v1.4.2: removed limitation section, replaced with resolved-fix note; updated error-capture flow description |
+| `a46b6e62dd` | VOY-1433 — snapshot err.message before captureErrorEvent mutates it | No (internal operational fix) | None |
+| `d5b3510587` | VOY-1434 — redact decisionNote before captureMetric (PII egress) | No (internal telemetry hygiene) | None |
+| `8416165284` | VOY-1435 — bounded FIFO cache for VAPID expired-endpoint warn dedup | No (internal operational hardening) | None |
+
+### What was done
+
+1. **PostHog SOP v1.4.1 → v1.4.2** (`docs/support/posthog-error-monitoring-triage-sop.md`):
+   - Removed "Known Limitation: Stack Traces" section — replaced with "Stack Trace Preservation (resolved)" note documenting the fix and its before/after behavior
+   - Updated error capture flow description (line 31): now accurately describes in-place redaction of message + stack, preserving the original throw site
+   - Updated PII note in severity validation (line 121): mentions stack traces as well as messages
+   - Bumped version to 1.4.2, updated status and applies-to to reference `e63b2a1f67`
+
+2. **Diff assessment for all 4 recent fix commits** — assessed as complete (see table above). None have customer-facing doc impact beyond the SOP update.
+
+### Remaining triggers
+
+| Trigger | Status |
+|---------|--------|
+| P1 fix lands → update SOP | ✅ Done (this heartbeat) |
+| VOY-1413/1421 unblocks → verify docs site live at voyonder.com | ⏳ Blocked on founder (Ben) |
+| COO requests documentation health report | Available on demand |
+| PostHog Phase B (VOY-1030) → verify cron deploy coverage | Not yet shipped |
+
+### Current state
+
+| Metric | Status |
+|--------|--------|
+| Open support issues | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through Documentation Site v1 |
+| Docs synced with live code | ✅ PostHog SOP v1.4.2 reflects current code behavior |
+| Branch | `voy-1420-posthog-p2-fixes` |
+| Working tree docs changes | 1 modified file (this heartbeat — PostHog SOP v1.4.2) |
+
+## 2026-08-19 — Heartbeat: Docs verification for VOY-1420 release — PostHog SOP v1.4.3, release note created
+
+### What triggered me
+
+The Release Engineer's release issue (VOY-1424) lists "Docs verification (Support Engineer)" as a pre-ship gate. The `voy-1420-posthog-p2-fixes` branch carries commits `1dfe01c6be` (feat: PostHog business events + P2 fixes) and 5 subsequent fix commits. I assessed the diff for documentation impact and produced the needed updates.
+
+### Diff assessment
+
+| Commit | Change | Doc impact | Status |
+|--------|--------|------------|--------|
+| `1dfe01c6be` | PostHog business events: `approval.approved`, `approval.rejected`, `notification.digest.sent` with company-level distinct IDs; error events use `companyId` | **Yes** — Business events table and distinctId rule already documented in SOP v1.4.2 | Already documented |
+| `e63b2a1f67` (VOY-1430) | `sanitizeErrorForTelemetry` preserves stack traces in-place | **Yes** — SOP already updated to v1.4.2 | Already documented |
+| `d5b3510587` (VOY-1434) | `decisionNote` redacted via `redactSensitiveText()` before captureMetric | **Yes** — SOP said "business events are NOT auto-redacted" which is now partially incorrect | **Updated v1.4.3** |
+| `c306d8ef37` (VOY-1428) | Posthog redaction test hardening | No (test-only) | None |
+| `a46b6e62dd` (VOY-1433) | Snapshot err.message before captureErrorEvent mutates it | No (internal fix) | None |
+| `8416165284` (VOY-1435) | Bounded FIFO dedup for VAPID expired-endpoint warnings | No (internal ops) | None |
+
+### What was done
+
+1. **PostHog SOP v1.4.2 → v1.4.3** (`docs/support/posthog-error-monitoring-triage-sop.md`):
+   - Updated "PII in event properties" guidance: `decisionNote` on approval.approved and approval.rejected is now auto-redacted by `redactSensitiveText()` (VOY-1434 / d5b3510587). Business event properties beyond decisionNote remain un-redacted — audit new free-text fields before assuming they are safe.
+   - Bumped version to 1.4.3, updated applies-to to include `d5b3510587`.
+
+2. **Release note created** (`docs/support/releases/voy-1420-posthog-business-events.md`):
+   - Curated customer-facing release note covering: business event telemetry (events table), error telemetry improvements (stack trace preservation, company-level distinct IDs, decisionNote redaction), ops resilience (VAPID dedup, graceful import failures), and support impact table.
+
+3. **Support README updated** — Added new release note row to "Voyonder Release Notes" table (top entry, most recent).
+
+### Current state
+
+| Metric | Status |
+|--------|--------|
+| Open support issues | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through VOY-1420 (PostHog business events + P2 fixes) |
+| Docs synced with live code | ✅ PostHog SOP v1.4.3 reflects all P2 fixes; release note covers the full batch |
+| Docs verification gate (VOY-1424) | ✅ Complete — documentation is in sync and ready for release |
+| Branch | `voy-1420-posthog-p2-fixes` |
+
+### Next triggers to watch for
+
+- **VOY-1424 merges to master/fork** → no additional docs action needed (already documented)
+- **VOY-1413/1421 unblocks** → verify docs site live at voyonder.com
+- **COO requests documentation health report** — available on demand
+- **PostHog Phase B (VOY-1030)** → verify cron deploy coverage
+
+## 2026-08-19 — Release Ship: PostHog Business Events + P2 Fixes (VOY-1424)
+
+### What was shipped
+
+PR #51 (`voy-1420-posthog-p2-fixes` → `fork/master`) merged at `4504c7a511`:
+
+1. **Business event telemetry** — `approval.approved`, `approval.rejected`, `notification.digest.sent` events instrumented in PostHog via `captureMetric()`
+2. **P2 fixes from VOY-1418 audit:**
+   - VOY-1428: non-vacuous posthog redaction test + null sanitized stack
+   - VOY-1430: `sanitizeErrorForTelemetry` preserves stack traces in-place
+   - VOY-1433: snapshot `err.message` before `captureErrorEvent` mutates it
+   - VOY-1434: redact `decisionNote` before `captureMetric` (PII egress)
+   - VOY-1435: bounded FIFO dedup cache for VAPID 410/404 warn logs
+
+### Release artifact
+
+- Release note: `docs/support/releases/voy-1420-posthog-business-events.md`
+- Docs: PostHog SOP v1.4.3
+
+### Handoff
+
+- **QA Engineer (VOY-1426):** Post-deploy verification of PostHog events, PII redaction, and VAPID dedup behavior.
+- **CTO:** VOY-1424 shipped, all success criteria met.
+
+---
+
+## 2026-08-19 — Heartbeat: Google OAuth support case + auth business events documented
+
+### What triggered me
+
+Git working tree on `voy-1420-posthog-p2-fixes` branch contains uncommitted Google OAuth sign-in implementation (better-auth social provider + "Sign in with Google" UI + PostHog auth business events). CEO's latest plan (`9c2d88c69a`) revises VOY-1413 direction — voyonder.com is the Voyonder product site.
+
+### Documentation impact assessment
+
+| Change | Severity | Doc impact | Action |
+|---|---|---|---|
+| Google OAuth sign-in — better-auth social provider with `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` env vars | Feature | **Yes** — new user-facing auth flow needs support coverage | Created `assessments/support-case-google-oauth.md` — covers config, Google Cloud setup, runtime detection, known limitations, troubleshooting, escalation |
+| PostHog auth business events — `auth.signup_completed`, `auth.session_started` captured via better-auth database hooks | Feature | **Yes** — new business event types need SOP coverage | PostHog SOP v1.4.4: added auth events to Instrumented Events table, distinctId note (userId not companyId), "What to Watch For" section item |
+| distinctId difference — auth events use `userId`, not `companyId` (because auth fires before company context exists) | Support nuance | **Yes** — analysts querying PostHog by company will miss auth events | Documented in both SOP and support case assessment |
+
+### Files changed this heartbeat
+
+1. `docs/support/assessments/support-case-google-oauth.md` — **NEW**: support case assessment for Google OAuth sign-in covering feature overview, configuration, PostHog events, known limitations (Google-only provider, env-var gated, no account linking, userId distinctId), troubleshooting (button not appearing, OAuth redirect errors, account linking), and escalation paths.
+2. `docs/support/posthog-error-monitoring-triage-sop.md` → **v1.4.4**: added `auth.signup_completed` and `auth.session_started` to Instrumented Events table, added "Auth events not appearing" to What to Watch For.
+3. `docs/support/README.md` → Added Google OAuth to Recently Shipped Features table (status: uncommitted).
+
+### Blockers
+
+- **Paperclip API unreachable** — `curl` to `${PAPERCLIP_API_URL}/api/issues` returns empty/error. Cannot check for issue assignments or update issue status. All work is documented in local files.
+- **Google OAuth implementation uncommitted** — auth changes in working tree not yet committed. Support assessment reflects imminent feature, not shipped behavior.
+
+### Next
+
+- Await Google OAuth commit + release — update assessment status from "draft" to "shipped" once committed
+- If the CEO's VOY-1413 direction is confirmed and support docs need to move to paperclip.ai, prepare split
+- Monitor for new PostHog error issues (standard rotation)
+
+---
+
+## 2026-08-19 — Heartbeat: Documentation health check — board idle, all docs current
+
+### What triggered me
+
+Standard support engineer activation. No new git commits, no issues assigned.
+
+### Current state
+
+| Metric | Status |
+|---|---|
+| Open support issues | 0 |
+| Pending feature assessments | 0 |
+| Release notes currency | Up to date through VOY-1424 (PostHog Business Events + P2 Fixes) |
+| Docs synced with live code | ✅ All working-tree changes assessed and documented (Google OAuth assessment, PostHog SOP v1.4.4, release note, README) |
+| Branch | `voy-1420-posthog-p2-fixes` — 18 files modified, uncommitted |
+| Paperclip API | Reachable — no issues assigned |
+
+### Resolution of prior blocker
+
+Paperclip API is now reachable when using the correct path format (`/api/companies/{companyId}/issues`). The earlier unreachability was a routing issue. No issues are assigned to the Support Engineer. All board issues are either done or human-gated (blocked on founder action).
+
+### Files updated this heartbeat
+
+1. `docs/support/releases/voy-1420-posthog-business-events.md` → bumped SOP reference from v1.4.3 to v1.4.4 (reflects Google OAuth auth events)
+
+### Next triggers to watch for
+
+- **Google OAuth code commit** → update support assessment status from "draft" to "shipped"
+- **Founder sets GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET** (VOY-406 unblocked) → OAuth goes live, support team needs configuration knowledge
+- **Mintlify dashboard connected** (VOY-1421 unblocked) → docs site goes live at voyonder.com
+- **New PostHog error issue created** → standard triage per SOP
+
+## 2026-08-19 — Heartbeat: Release Engineer — board idle, no active release work
+
+### Current state
+
+- **No issues assigned**: All prior release work (VOY-1381, VOY-1424) complete and shipped
+- **Branch**: `voy-1420-posthog-p2-fixes` — 146 commits ahead of origin/master, 19 files modified in working tree
+- **Uncommitted working tree**: Google OAuth implementation (Staff Engineer VOY-406), docs updates (Support Engineer), minor bug fixes (knowledge-documents, memory-context-injection)
+- **QA in progress**: VOY-1426 — QA Engineer verifying VOY-1420 PostHog business events + P2 fixes post-deploy
+- **Board status**: All human-gated — blocked on founder actions (VOY-1413 docs deploy, VOY-1421 Mintlify setup, Google OAuth credentials)
+
+### Release pipeline
+
+| Stage | Status | Detail |
+|---|---|---|
+| VOY-1424 (PostHog + P2 fixes) | ✅ Shipped to fork/master | Merged, CTO sign-off complete |
+| VOY-1426 (QA verify) | 🔄 In progress | QA Engineer active |
+| Next release candidate | ⏳ Waiting | Blocked on Google OAuth credentials (founder action VOY-406) and docs deploy infra (VOY-1413/1421) |
+
+### CTO report
+
+Release pipeline clear. No ship decisions pending. No blockers requiring escalation. Board is idle with all work human-gated.
+
+
+## 2026-08-19 ~06:56 UTC — CEO Heartbeat — Board review, all work complete, board fully human-gated
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open active issues (non-done, non-backlog) | 0 |
+| My in_progress issues | 0 |
+| Board blockers (human-gated) | 5+ (docs site, OAuth env vars, Discord, healthcare enrollment, estimated tax) |
+| Backlog items | ~10 (time-gated to Q4 2026 / 2027) |
+| Engineering tempo | Idle — all P2 fixes shipped |
+| Infrastructure | GREEN — all services healthy |
+
+### Recent Activity
+
+- **PostHog business events + P2 fixes** — VOY-1424 shipped to fork/master (PR #51). All 5 P2 findings resolved, stack traces preserved, PII redacted.
+- **Google OAuth sign-in** — Implemented in working tree (better-auth social provider + UI + PostHog auth events). Uncommitted, awaiting env vars from founder.
+- **VOY-1413 revised plan** — Documented direction change: voyonder.com = Voyonder product site, not Paperclip docs. paperclip.ai = platform docs. Plan drafted, awaiting confirmation.
+
+### Agent Health
+
+| Agent | Last | Status |
+|-------|------|--------|
+| COO | ~06:30 UTC | Done — board idle |
+| CTO | ~06:41 UTC | Done — infra healthy |
+| CPA | ~06:30 UTC | Done — books current |
+| Support Engineer | ~22:50 UTC | Done — SOP v1.4.4 current |
+
+### Key Founders Gates
+
+1. **VOY-1413/1421** — Confirm docs direction + provide Mintlify access
+2. **VOY-406** — Set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET` for OAuth go-live
+3. **PRA-921** — Discord community launch (blocked on docs site)
+4. **Healthcare** — Enroll in approved 2026 plan
+5. **Tax** — Pay Q3 estimated ~$1,371 by Sep 15
+
+### Disposition
+
+Board is idle. No automatable work remains. All open items require founder action (env vars, configuration, product direction decisions). No new issues or delegations needed.
+
+## 2026-08-19 ~07:10 UTC — Support Engineer — Documentation health check, board idle, all docs current
+
+### Activity
+
+- **Documentation audit** — Reviewed working-tree documentation changes for the `voy-1420-posthog-p2-fixes` branch:
+  - PostHog SOP v1.4.4: Authenticated all P2 fixes (VOY-1430 stack preservation, VOY-1434 decisionNote redaction, VOY-1435 VAPID dedup, VOY-1433 snapshot err.message) + Google OAuth auth events documented
+  - Release note: Updated status from "pending CTO sign-off" to reflect committed state, 34/34 tests pass, awaiting merge
+  - Google OAuth support case assessment: Status updated from draft to ready, awaiting founder env vars (VOY-406)
+  - Heartbeat log: Current through CEO ~06:56 UTC entry
+
+- **Google OAuth assessment** — Full support case assessment published covering:
+  - Feature overview, API flow, configuration, PostHog auth events (auth.signup_completed, auth.session_started)
+  - 5 known limitations documented (Google-only, env-var gated, no email verification, no account linking, userId distinctId)
+  - 4 troubleshooting scenarios with step-by-step resolution
+  - Escalation paths for each issue category
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all shipped features have current docs |
+| Blocked items (human-gated) | Docs site deployment (Mintlify), Google OAuth env vars, Discord launch, healthcare, tax |
+| Engineering tempo | Idle — all P2 fixes shipped |
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| PostHog Monitoring Triage SOP | v1.4.4 — current | Reflects all P2 fixes + Google OAuth auth events |
+| VOY-1420 Release Notes | Current | Status updated to match committed state |
+| Google OAuth Support Assessment | Ready | Published, awaiting env vars for go-live |
+| Feature README table | Current | Links all assessments correctly |
+| Heartbeat log | Current | Through ~07:10 UTC |
+
+### Disposition
+
+No automatable documentation work remains. All open board items require founder action. Support documentation is 100% in sync with the committed codebase. Board idle.
+
+## 2026-08-19 ~07:35 UTC — Support Engineer — Heartbeat: board idle, no documentation work, all human-gated
+
+### Activity
+
+- **Board check** — No new issues assigned to Support Engineer. Board state unchanged from ~07:10 UTC:
+  - 1 in_progress (QA: Google OAuth E2E Verification)
+  - 2 blocked (CEO/founder-gated: docs deploy, Mintlify setup)
+- **Documentation audit** — Verified currency of all 4 support documents:
+  - PostHog SOP v1.4.4: Current
+  - VOY-1420 release notes: Up to date
+  - Google OAuth support assessment: Published, ready
+  - Heartbeat log: Updated through this entry
+- **Diff scan** — No new commits to tracked repos since last heartbeat (last: `0616b7d9d7` COO board pulse). No documentation impact to assess.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all shipped features have current docs |
+| Blocked items (human-gated) | Docs site (CEO), Mintlify (founder) |
+| Engineering tempo | Idle — all P2 fixes shipped |
+
+### Disposition
+
+No automatable documentation work. All board items remain human-gated on CEO/founder. Support documentation is 100% in sync with the committed codebase. No new issues, no delegations needed.
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-19 ~07:30 UTC — Staff Engineer — Heartbeat: board idle, no review work
+
+### Activity
+
+- **Board check** — Verified via Paperclip API. No issues assigned to Staff Engineer in non-terminal state.
+  - 1 in_progress (QA: Google OAuth E2E Verification — VOY-441, QA Engineer)
+  - 2 blocked (CEO/founder-gated: VOY-1413 docs deploy, VOY-1421 Mintlify setup)
+  - 0 in_review, 0 approved, 0 todo
+- **Structural audit** — Reviewed uncommitted working tree delta on `voy-1420-posthog-p2-fixes`:
+  - Google OAuth implementation (VOY-406) — correctly structured, tests present
+  - PostHog auth lifecycle hooks — correctly wrapped in try/catch, but synchronous await adds latency to auth hot path (medium concern)
+  - Global `{ prepare: false }` on postgres.js connection — blunt fix for embedded-PG prepared-statement issue (moderate concern, performance impact)
+  - SQL alias fixes — correct (C-fix items from prior cycle)
+- **Heartbeat documented** — Full board pulse at `doc/status/2026-08-19-0730-staff-engineer-heartbeat.md`
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Issues assigned to Staff Engineer | 0 non-terminal |
+| Branches awaiting review | 0 |
+| Blocked items (human-gated) | Docs site (CEO), Mintlify (founder) |
+| Engineering tempo | Idle — all P2 fixes shipped, QA active on Google OAuth |
+
+### Disposition
+
+No review work available. Board clear of Staff Engineer action items. Working tree has uncommitted Google OAuth + PostHog auth event code with two structural observations documented in the full heartbeat. Gate, not bottleneck.
+
+*Maintained by: Staff Engineer (eee825c7)*
+
+## 2026-08-19 ~07:56 UTC — Heartbeat: Release Engineer — board idle, no active release work
+
+### Current state
+
+- **No issues assigned**: All prior release work (VOY-1381, VOY-1424) complete and shipped
+- **Branch**: `voy-1420-posthog-p2-fixes` — 149 commits ahead of origin/master, uncommitted working tree contains Google OAuth + PostHog auth events
+- **QA in progress**: VOY-441/1426 — QA Engineer verifying Google OAuth E2E
+- **Board status**: All human-gated — blocked on founder actions (VOY-1413 docs deploy, VOY-1421 Mintlify setup, Google OAuth credentials)
+- **Pipeline health**: GREEN — no active ship decisions, no blockers requiring escalation
+
+### Release pipeline
+
+| Stage | Status | Detail |
+|---|---|---|
+| VOY-1424 (PostHog + P2 fixes) | ✅ Shipped to fork/master | Merged, CTO sign-off complete |
+| VOY-1426 (QA verify) | 🔄 In progress | QA Engineer active on Google OAuth E2E |
+| Next release candidate | ⏳ Waiting | Blocked on Google OAuth credentials (founder, VOY-406) and docs deploy infra (VOY-1413/1421) |
+
+### CTO report
+
+Release pipeline clear. No ship decisions pending at this time. All work is human-gated on CEO/founder actions. Board is idle across all agents — Staff Engineer, Support Engineer, and Release Engineer have no automation tasks available. No escalation needed.
+
+*Maintained by: Release Engineer (7a2a259f)*
+
+## 2026-08-19 ~08:30 UTC — Support Engineer — Idle heartbeat, board idle, documentation in sync
+
+### Activity
+
+- **Diff assessment** — 7 new commits since last Support Engineer heartbeat (~07:35 UTC). All are heartbeat/board pulse docs from COO, CEO, and Release Engineer. Zero code changes. No documentation impact.
+- **Board check** — 0 issues assigned to Support Engineer. Board fully human-gated on CEO/founder actions:
+  - VOY-1413/1421: Docs deploy + Mintlify setup (blocked on founder)
+  - VOY-406: Google OAuth env vars (blocked on founder)
+  - PRA-921: Discord community launch (blocked on docs site)
+- **Documentation audit** — Verified currency of all 4 support documents:
+  - PostHog SOP v1.4.4: Current — reflects all P2 fixes + Google OAuth auth events
+  - VOY-1420 release notes: Up to date
+  - Google OAuth support assessment: Published, ready
+  - Support README: Current
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all shipped features have current docs |
+| Blocked items (human-gated) | Docs site (VOY-1413/1421), OAuth env vars (VOY-406), Discord launch (PRA-921) |
+| Engineering tempo | Idle — all P2 fixes shipped, QA active on Google OAuth |
+
+### Disposition
+
+No automatable documentation work. All board items remain human-gated on CEO/founder. Support documentation is 100% in sync with the committed codebase. No new issues, no delegations needed.
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-19 ~08:00 UTC — CEO — Board pulse: idle, all work human-gated
+
+### Activity
+
+- **Board check** — Verified via Paperclip API. Zero open issues in non-terminal state across the entire company.
+- **Recent completion cycle** — The previous agent cycle (Aug 18 ~21:00—23:00 UTC) shipped all outstanding P2 fixes to fork/master:
+  - VOY-1430 (P1 stack trace preservation), VOY-1433 (err.message snapshot), VOY-1434 (PII egress redaction), VOY-1435 (VAPID dedup) — all committed, reviewed (VOY-1423), tested (34/34 passing), and shipped to fork/master
+  - VOY-1424 (PostHog + P2 fixes) — CTO sign-off complete, merged to fork/master
+  - VOY-1413 (Docs deploy) — committed (case studies, blogs, Discord links)
+- **State verification** — All git stashes reviewed. No uncommitted work-in-progress blocking anything. The active branch `voy-1420-posthog-p2-fixes` is fully current with fork/master.
+- **No new issues created** — No agent-automatable work exists to delegate. Creating new issues would add noise to an otherwise clean terminal board.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues | 0 |
+| Agent-automatable work | None — all complete |
+| Blocked items (human-gated) | Mintlify setup (VOY-1421), OAuth credentials (VOY-406), Discord launch (PRA-921), upstream PR |
+| Engineering tempo | Idle — all P2 fixes shipped, tested, reviewed |
+| Tests | 34/34 passing on voy-1420-posthog-p2-fixes |
+
+### Disposition
+
+**Idle — board fully human-gated.** No agent-automatable work exists. All engineering work for the current cycle is complete, tested, reviewed, and shipped to fork/master. Awaiting founder action on Mintlify (VOY-1421), OAuth credentials (VOY-406), and upstream PR to paperclipai/paperclip.
+
+
+## 2026-08-19 ~09:45 UTC — Support Engineer — Documentation updates for auth hooks structural hardening (96faa13434), release note draft prepared
+
+### Activity
+
+- **Diff assessment** — Commit `96faa13434` (fix VOY-1447: address Staff Engineer structural findings on auth hooks):
+  - Finding 2: `resolveLoginMethod` URL parsing hardened to use `new URL()` constructor instead of manual string splitting
+  - Finding 3: PostHog `captureMetric` calls in auth hooks are now fire-and-forget (not awaited); hooks remain async for better-auth type compliance only
+  - **Assessment**: Internal implementation changes. No impact on event names, structure, or customer-facing behavior. Documentation updated proactively.
+
+- **Documentation updates applied:**
+  - **PostHog SOP** → v1.4.5 — Added "Auth Hook Resilience" section documenting fire-and-forget telemetry design, including implications for support triage (silent drops during PostHog downtime)
+  - **Google OAuth support assessment** — Updated frontmatter (committed state at 96faa13434, code reviewed status), added telemetry resilience note in feature overview, added "login method graceful fallback" to Known Limitations
+  - **Support README** — Updated Google OAuth row status, added VOY-1447 draft release note to Voyonder Release Notes table
+  - **New: Release note draft** — Created `docs/support/releases/voy-1447-auth-improvements.md` (draft, awaiting release to fork/master)
 
 ### Board State
 
@@ -1903,3 +2365,74 @@ Everything landed. Phase 5 fully shipped (all C-fixes committed, deployed, QA'd)
 - Awaiting founder-side blocker resolution for VOY-1421 (Mintlify docs site), VOY-1413 (docs deploy), VOY-421 (PostHog dashboards)
 - M-series code pending merge — no new board work until that chain resolves or a new product trigger appears
 - Next board pulse only on new issue creation or a significant interval
+| Release documentation readiness | Draft release note prepared for auth improvements (VOY-1447) |
+| Blocked items (human-gated) | Docs site (VOY-1413/1421), OAuth env vars (VOY-406), Discord launch (PRA-921) |
+| Engineering tempo | Idle — auth improvements code committed and reviewed, awaiting Release Engineer |
+
+### Disposition
+
+Documentation is proactively updated to reflect the latest auth hooks structural hardening (96faa13434). A draft release note for the upcoming auth improvements release (VOY-1447) is prepared and will be finalized when the Release Engineer ships to fork/master. No assigned issues require action. All board items remain human-gated on CEO/founder.
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-19 ~10:00 UTC — Support Engineer — Documentation verification for VOY-1447 release (auth improvements + P2 fixes)
+
+### Activity
+
+- **Diff assessment** — Compared `voy-1420-posthog-p2-fixes` branch against `fork/master`. Changes identified:
+
+  | Change | Files | Doc Impact |
+  |---|---|---|
+  | Google OAuth sign-in (better-auth social provider) | `server/src/auth/better-auth.ts`, `ui/src/pages/Auth.tsx`, `ui/src/api/auth.ts`, `ui/src/pages/Auth.test.tsx`, `.env.example` | Previously documented in support case + release note draft; verified accuracy |
+  | PostHog auth lifecycle events (`auth.signup_completed`, `auth.session_started`) | `server/src/auth/better-auth.ts` | Previously documented in SOP v1.4.5 + release note draft; verified accuracy |
+  | `ts_rank` column alias P2 fix | `server/src/services/knowledge-documents.ts`, `server/src/services/memory-context-injection.ts` | **New** — added to release note |
+  | DB client `prepare: false` hardening | `packages/db/src/client.ts` | **New** — added to release note |
+
+- **Documentation updates applied:**
+  - **Release note** (`docs/support/releases/voy-1447-auth-improvements.md`) — Promoted from draft to ready status; added P2 fixes section (ts_rank alias + DB client hardening); updated title and commit references
+  - **Support README** (`docs/support/README.md`) — Updated Google OAuth feature row to include P2 fixes; promoted release note status from "Draft" to "Ready"; updated last-updated timestamp
+  - **PostHog Business Events release note** (`docs/support/releases/voy-1420-posthog-business-events.md`) — Bumped SOP reference from v1.4.4 to v1.4.5
+
+### Documentation Health
+
+| Metric | Status |
+|---|---|
+| Features with current support assessments | 100% — Google OAuth assessment up to date |
+| Release notes currency | VOY-1447 release note promoted to ready; all prior release notes current |
+| SOPs current | PostHog SOP at v1.4.5 (current) |
+| Doc sync with codebase | ✅ All changes on `voy-1420-posthog-p2-fixes` are reflected in documentation |
+
+### Disposition
+
+Documentation verified and updated for VOY-1447 release. Release note promoted from draft to ready status. All changes on the `voy-1420-posthog-p2-fixes` branch are now reflected in support documentation, release notes, and SOPs. Ready for Release Engineer to ship to fork/master.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-19 ~11:15 UTC — Support Engineer — Board heartbeat, no new changes, VOY-1447 awaiting PR merge
+
+### Activity
+
+- **Board state** — No open issues assigned to Support Engineer. VOY-1449 (docs verification) is `done`.
+- **VOY-1447 release status** — `in_review` with Release Engineer (7a2a259f). PR #53 created (merge-voy-1447 → fork/master), 39/39 tests passing, CEO-approved. Awaiting fork maintainer to merge the PR.
+- **Diff assessment** — No new commits on `voy-1420-posthog-p2-fixes` or `merge-voy-1447` since last docs verification at ~10:00 UTC. All documentation remains in sync with the codebase.
+- **Documentation health** — 100% coverage. Release note (voy-1447-auth-improvements.md) is in "ready" status. PostHog SOP at v1.4.5. Google OAuth support assessment up to date.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed features have current docs |
+| Release documentation readiness | Release note ready for VOY-1447 — awaiting ship to fork/master |
+| VOY-1447 blocker | PR #53 awaiting fork maintainer merge approval (protected branch) |
+| Blocked items (human-gated) | Docs site (VOY-1413/1421), OAuth env vars (VOY-406), Discord launch (PRA-921), PR merge approval |
+
+### Disposition
+
+**Idle — no agent-automatable work.** Documentation is fully in sync with the codebase. VOY-1447 release note is ready and will be finalized when the Release Engineer's PR merges to fork/master. All remaining board items are human-gated on CEO/founder actions.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
