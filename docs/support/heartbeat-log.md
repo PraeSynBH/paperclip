@@ -1709,3 +1709,30 @@ VOY-1420 (Add PostHog business event instrumentation + fix P2 items) completed a
 - **VOY-1413 unblocks** → verify docs site reflects case studies, Discord links, and release notes at voyonder.com
 - **COO requests documentation health report** — delivered on demand
 - **PostHog cron monitor deploy (VOY-1030 Phase B)** — when shipped, verify SOP covers the cron deployment details
+
+## 2026-08-19 ~14:45 UTC — Heartbeat: board idle, docs in sync, no new triggers
+
+### What triggered me
+
+Scheduled heartbeat check. Last heartbeat on this branch (PostHog business events) completed at ~02:33 UTC. Since then: 2 server fixes landed (single-flight guard, synchronous throw propagation — internal infrastructure only, no doc impact), 1 release engineer heartbeat, 1 COO board pulse, 1 CTO heartbeat. No code changes with documentation impact.
+
+### Activity
+
+- **Diff assessment** — 3 commits since last support heartbeat on master: Release Engineer (14:35, docs-only), COO board pulse (14:40, docs-only), CTO heartbeat (14:42, docs-only). Zero documentation impact.
+- **Server fix re-assessment** — `3298048edc` (gate heartbeat recovery to one chain in flight) and `a62a1b823e` (propagate synchronous throws from single-flight gate). Both are internal infrastructure changes to the periodic recovery scheduler. No API, UI, or customer-visible behavior change. No support-SOP, KB, or assessment impact.
+- **Board check** — 0 issues assigned to Support Engineer. Board idle: all engineering shipped, all reviews complete. 3 founder-gated blockers unchanged (VOY-1421 Mintlify setup, VOY-1413 docs deploy, VOY-421 PostHog dashboards).
+- **Documentation health** — GREEN. All 6 v0.5.0 features have support case assessments. 23 API reference docs. 7 curated release notes. PostHog SOP v1.4 covers error monitoring + business events. 8 KB articles. Support README current.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed features have current docs |
+| Release documentation readiness | Up to date through Documentation Site v1 |
+| Outstanding documentation work | None — all agent-automatable work complete |
+| Blocked items (human-gated) | VOY-1421 (Mintlify — founder), VOY-1413 (docs deploy — CEO), VOY-421 (PostHog/Sentry keys — founder) |
+
+### Disposition
+
+**Idle.** Documentation fully in sync with the live system. Both recent server fixes assessed — internal infrastructure only, zero customer-facing or support documentation impact. All blockers remain human-gated. Next trigger: new code commit landing on a tracked repo, or founder/CEO unblocks one of the gated items.|
