@@ -1,8 +1,8 @@
-# VOY-1413 Plan — Deploy Docs Site with Case Studies + Discord Link (Revised 2026-08-20 v8)
+# VOY-1413 Plan — Deploy Docs Site with Case Studies + Discord Link (Revised 2026-08-20 v9)
 
-**Status**: ✅ **IN PROGRESS — Site restored. Discord link code done (deploy pending). Case studies code DONE in PR #6 (awaiting CTO gate + merge + deploy). Both deliverables NOT LIVE on voyonder.com.**
+**Status**: ✅ **IN PROGRESS — Site restored. Discord link code done (deploy pending). Case studies code DONE in PR #6 (awaiting review + merge + deploy). Both deliverables NOT LIVE on voyonder.com.**
 **Author**: CEO (Voyonder)
-**Date**: 2026-08-20 (v8: ~12:30 UTC — corrected children mapping. VOY-1477 is the case-studies implementation (PR #6, CI green, in_review). VOY-1490 was a duplicate and is **cancelled**. CEO posted wake comments on VOY-1489 + VOY-1477 and raised VOY-1477 to high priority.)
+**Date**: 2026-08-20 (v9: ~07:35 UTC — parent issue switched from blocked/planning to in_progress/standard. Both children assigned to Founding Engineer. PR #6 mergeable, no reviews yet. Verified live: / 200, /case-studies/ 308→404, no Discord link in footer.)
 **Current mode**: Planning (parent) — plan complete, remaining implementation delegated to children
 **Previous plan approval**: v4 approved by founder (Ben, 05:19 UTC Aug 20) — scope, plan, and children accepted
 
@@ -13,7 +13,7 @@
 | VOY-1479 | Founder action: Restore voyonder.com P0 outage + root-cause | ✅ **done** | Site restored ~06:37 UTC, root cause: zombie docker-proxy PID 3951678, uptime monitoring installed, follow-ups VOY-1481/1482 in backlog |
 | VOY-1476 | Add Discord link to voyonder.com footer | ✅ **done (code only)** | Code committed (c4b895b), CI passed, but **deploy to VPS-1 FAILED** — SSH broken pipe. Discord link NOT live. |
 | VOY-1489 | Deploy Discord link — re-run GitHub Actions deploy | ⏳ **todo** | Assigned to Founding Engineer (57fa7e0e). CEO wake comment posted ~07:21 UTC with deploy instructions + manual fallback. |
-| VOY-1477 | Create Voyonder-centric case studies page at /case-studies/ | ⚠️ **in_review** | **Implementation COMPLETE** — PR #6 (feat/voy-1477-case-studies), all CI checks green, `app/case-studies/page.tsx` + footer nav link + sitemap. Awaiting CTO request_confirmation 9c27e7d8 → Staff Engineer review → merge → deploy. Raised to **high** priority. |
+| VOY-1477 | Create Voyonder-centric case studies page at /case-studies/ | ⚠️ **in_review** | **Implementation COMPLETE** — PR #6 (feat/voy-1477-case-studies, PraeSynBH/travel_itenerary_planning), mergeable, all CI checks green, 0 reviews. `app/case-studies/page.tsx` + footer nav link + sitemap. Awaiting CTO confirmation → Staff Engineer review → merge → deploy. Raised to **high** priority. |
 | ~~VOY-1490~~ | ~~Create Voyonder-centric case studies page (dup)~~ | ❌ **cancelled** | Duplicate of VOY-1477 created at 07:16 in error. Cancelled ~07:22 UTC with explanation. All case studies work routes to VOY-1477. |
 | VOY-1478 | Create Voyonder-centric case studies page (dup) | ❌ cancelled | Earlier duplicate of VOY-1477. |
 | VOY-1417 | Docs verification for VOY-1413 | ✅ done | |
@@ -109,7 +109,7 @@ docker compose -f docker-compose.production.yml up -d --force-recreate
 1. **VOY-1489** — Re-run GitHub Actions deploy for Discord link (commit c4b895b on main, CI passed, deploy failed). FE woken with instructions.
 2. **VOY-1477** — Get CTO to accept request_confirmation 9c27e7d8 → Staff Engineer review PR #6 → merge → deploy → verify `/case-studies/` live.
 
-**Parent (VOY-1413)**: in_progress — children own the next steps with clear assignees and wake comments posted. Once both deliverables are confirmed live, VOY-1413 can be marked done.
+**Parent (VOY-1413)**: in_progress — children own the next steps with clear assignees (both → Founding Engineer). Parent switched from blocked/planning to in_progress/standard in heartbeat ~07:35 UTC. Once both deliverables are confirmed live, VOY-1413 can be marked done.
 
 **CEO wake notifications dispatched this heartbeat:**
 - ✅ VOY-1489 (Discord deploy) — FE woken with deploy instructions
