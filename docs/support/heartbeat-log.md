@@ -2683,3 +2683,51 @@ Verified all docs produced in the prior cycle remain accurate:
 Idle. No new code to assess, no releases pending documentation sync, no support case requests. Standing by.
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~15:30 UTC — Support Engineer — M2 post-commit documentation audit: v3 corrections to async-jobs.md
+
+### Diff assessment: M2 commit (`21e006a3d6` — `feat(VOY-1493): M2 research async conversion + process visibility`)
+
+**Scope:** 41 files, +3821/-9. Six M2 scope items implemented (auto-assess bg job, keyword-first+semantic search, BackgroundProcessTray, PDF/ICS export jobs, freshness cues, skeleton loading).
+
+| Area | Documentation Impact |
+|------|---------------------|
+| `server/src/services/background-job-worker.ts` | ✅ Already covered in v2 (async-jobs.md). Verified: 2s poll, FOR UPDATE SKIP LOCKED, 5 processors, real pdfkit PDF rendering + ICS v2.0 calendar text. |
+| `server/src/routes/research.ts` | ✅ POST /activities (M1), POST /auto-assess (M2), POST /search keyword-first + semanticJobId (M2) — all documented |
+| `server/src/routes/exports.ts` | ✅ POST /pdf and POST /ics → 202 + jobId. Real renderers (not scaffolds as v1 claimed). |
+| `server/src/routes/background-jobs.ts` | ⚠️ SSE `/events` route missing `company_scope:read` check — **new known issue #11** |
+| `server/src/routes/research.ts` authz | ⚠️ Research routes use read-level auth for write operations — **new known issue #12** |
+| `ui/src/components/BackgroundProcessTray.tsx` | ✅ Documented |
+| `ui/src/components/ui/FreshnessCue.tsx` | ✅ Documented |
+| `ui/src/components/ui/FadeIn.tsx` | ✅ Documented (component names corrected in prior heartbeat) |
+
+### Documentation changes made
+
+**`doc/async-jobs.md` → v3** (4 corrections + additions):
+
+1. **Corrected known issue #8** (export processors): Changed from "scaffolds that produce metadata responses" to accurate description: PDF uses pdfkit (paginated PDF with title page, items, separators, base64 dataUri), ICS produces valid v2.0 calendar text with VEVENT entries.
+2. **Removed known issue #10** (export processors as placeholders): Replaced with resolved-status entry for activity search processor (was placeholder in M1, now real keyword search in M2).
+3. **Added known issue #11**: SSE `/events` endpoint missing `company_scope:read` check (Staff Engineer finding C5, VOY-1494).
+4. **Added known issue #12**: Research routes use `assertCompanyScopeReadAllowed` (read permission) for write operations (Staff Engineer finding C4, VOY-1494).
+5. **Added troubleshooting entries** for both authz gaps with workarounds and expected fixes.
+6. **Updated escalation table** — export row updated from "scaffold" to accurate description; two new authz rows added.
+7. **Bumped to v3** with commit reference `21e006a3d6`.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed M2 features documented; authz gaps documented as known issues |
+| M2 status | ✅ Committed `21e006a3d6` (15:10 UTC), under Staff Engineer review (VOY-1494) |
+| Blocked items (human-gated) | VOY-1494 (review), VOY-1495 (release), VOY-1496 (QA) — all correctly sequenced |
+
+### Disposition
+
+**Standing by.** M2 post-commit audit complete. Found and corrected two accuracy gaps in the existing documentation (export processor descriptions were outdated from M1). Added two authz known issues surfaced by the Staff Engineer review. Documentation is in sync with the committed code. Waiting for:
+1. Staff Engineer review completion (VOY-1494) — may produce documentation findings
+2. Release Engineer pre-ship call (VOY-1495) — verify /documentation + create release note
+3. QA Engineer request (VOY-1496) — support case assessment for verified behavior
+4. COO request — documentation health report
+
+*Maintained by: Support Engineer (88b72065)*

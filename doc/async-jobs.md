@@ -1,8 +1,8 @@
 # Async Jobs (Background Jobs) — Internal Reference
 
-**Last updated:** 2026-08-20
-**Applies to:** Commit pending (branch `fix/m-series-tech-debt`), VOY-1492 (M1) + VOY-1493 (M2)
-**Status:** M1 foundation + M2 feature complete — worker, processors, export routes, tray, freshness cues, skeleton loading all implemented.
+**Last updated:** 2026-08-20 (v3)
+**Applies to:** Commit `21e006a3d6` (branch `fix/m-series-tech-debt`), VOY-1493 (M2)
+**Status:** M2 committed — worker, 5 real processors, export routes, tray, freshness cues, skeleton loading all implemented and under Staff Engineer review (VOY-1494).
 
 ## Overview
 
@@ -142,22 +142,44 @@ data: {
    `background_jobs` table indefinitely. A future version should
    clean up old terminal jobs.
 
-8. **Export processors are scaffolds.** The `export.pdf` and `export.ics`
-   processors produce metadata responses. The actual renderers (PDF
-   generation with a library, valid iCalendar output) must be wired in
-   a follow-up.
+8. **Export processors use real renderers.** `export.pdf` uses pdfkit
+   to produce a paginated PDF with title page, item cards, and
+   separators — result includes a base64 `dataUri` for direct client
+   download. `export.ics` produces valid iCalendar v2.0 text with
+   VEVENT entries (sanitized SUMMARY, DTSTART, DTEND, LOCATION,
+   DESCRIPTION). ICS includes a 300ms simulated delay before building
+   calendar text. Both run inside the worker's 2s tick loop and
+   briefly block the event loop during rendering. No blob storage
+   integration yet — PDF content is embedded in the result object.
 
 9. **Semantic upgrade requires an embedding provider.** Without
    `PAPERCLIP_EMBEDDING_API_KEY`, `research.semantic_search` falls back
    to keyword ranking automatically, so the job still completes
    successfully.
 
-10. **Export processors are asynchronous placeholders.** PDF export
-    simulates a 400ms render; ICS export simulates 300ms. The generated
-    iCalendar output is valid v2.0 format, but calendar production uses
-    simple string concatenation — no dedicated ICS library is in use.
-    Both run inside the worker's 2s tick loop and block the event loop
-    for the simulated duration.
+10. **[RESOLVED in M2] Research activity search processor.** The
+    `research.activity_search` processor now executes real keyword
+    search (issues, documents, activity log) instead of being a
+    no-op placeholder.
+
+11. **SSE `/events` endpoint missing `company_scope:read` check.** The
+    SSE route authenticates and verifies company access but does NOT
+    call `assertCompanyScopeReadAllowed`. This means an authenticated
+    user with basic company access (but no scope-read permission) can
+    subscribe to the job-status event stream. The list and get-by-id
+    routes DO require scope:read. This is a known authz inconsistency.
+    Workaround: SSE subscribers only see job status events — no
+    sensitive job payload data is streamed over SSE.
+
+12. **Research routes use read-level auth for write operations.** The
+    `POST /research/activities`, `POST /research/auto-assess`, and
+    `POST /research/search` all gate on `assertCompanyScopeReadAllowed`
+    — a permission intended for read operations. By contrast, the
+    general `POST /background-jobs` endpoint is board-only. This means
+    any agent or user with company_scope:read can enqueue background
+    jobs. The Staff Engineer review flagged this as MEDIUM-severity
+    (recommended fix: require board-level auth or create a dedicated
+    `background_job:create` permission).
 
 ## Troubleshooting Guide
 
@@ -233,6 +255,32 @@ data: {
   days. These are defaults; `FreshnessCue` accepts custom thresholds as
   props.
 
+### SSE events visible without proper permissions
+- **Check:** The SSE `/events` endpoint does not check
+  `company_scope:read`. Any authenticated user with company access can
+  subscribe. If this is a concern, restrict SSE access at the
+  infrastructure layer (reverse proxy ACL).
+- **Impact:** SSE subscribers see job status events (progress, status
+  transitions) but not the original job payload or sensitive result
+  data.
+- **Expected fix:** Add `assertCompanyScopeReadAllowed` to the SSE
+  route (tracked as Staff Engineer recommendation C5 in VOY-1494).
+
+### Agent/users can enqueue research jobs without board authorization
+- **Check:** The research routes (`/research/activities`,
+  `/research/auto-assess`, `/research/search`) use
+  `assertCompanyScopeReadAllowed` — a read-level permission — to gate
+  write operations (creating background jobs). Any agent or user with
+  company_scope:read can submit jobs.
+- **Contrast:** The general `POST /background-jobs` endpoint requires
+  board-level auth.
+- **Workaround:** If an agent is enqueueing excessive research jobs,
+  revoke the agent's `company_scope:read` permission or remove the
+  agent from the company.
+- **Expected fix:** Add board-level auth or a dedicated
+  `background_job:create` permission (tracked as Staff Engineer
+  recommendation C4 in VOY-1494).
+
 ## Support Escalation Path
 
 | Issue | Action | Escalate to |
@@ -241,8 +289,10 @@ data: {
 | SSE not working | Check route ordering, verify polling fallback works | Engineering |
 | Activity search returns no data | Verify query terms exist in company data | Engineering |
 | Semantic upgrade missing | Check `PAPERCLIP_EMBEDDING_API_KEY` is set; keyword results still returned | Engineering (config) |
-| Export job has no file | Expected (scaffold) — inform user of workaround | Engineering (feature follow-up) |
+| Export job result contains dataUri (PDF) or calendarText (ICS) | PDF is a real pdfkit-rendered document (base64 dataUri). ICS is valid v2.0 calendar text. No blob storage yet — client downloads from the result object. | Engineering (blob storage follow-up) |
 | UI display issues (StatusCue blank, tray missing, etc.) | Check browser console for errors, refresh | Support Engineer + Engineering |
+| SSE accessible without scope:read | Assess if this is a concern — restrict at reverse proxy if needed | Engineering (authz fix) |
+| Research jobs submitted without board auth | Revoke agent's company_scope:read if abusive | Support Engineer + Engineering (authz fix) |
 
 ## Version History
 
@@ -250,3 +300,4 @@ data: {
 |---|---|---|---|
 | 1 | 2026-08-20 | Support Engineer | Initial support case assessment for VOY-1474/VOY-1492 (M1) |
 | 2 | 2026-08-20 | Support Engineer | M2 update: worker + 5 processors live, export routes, BackgroundProcessTray, FreshnessCue, skeleton loading, keyword-first semantic search (VOY-1493) |
+| 3 | 2026-08-20 | Support Engineer | Corrected export processor accuracy (pdfkit real renderer, ICS v2.0 text), added SSE authz gap (#11) and research route authz inconsistency (#12), added troubleshooting for both authz items, updated escalation table (VOY-1493 post-commit audit) |
