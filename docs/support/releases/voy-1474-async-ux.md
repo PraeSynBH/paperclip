@@ -2,15 +2,15 @@
 title: Async UX Release — Background Jobs + Process Visibility (M1+M2)
 version: voy-1474
 date: 2026-08-20
-commits: 7211f8ba87, 01009090bf, daa8360578, f81d572a40
-status: Pre-release — committed on fix/m-series-tech-debt, pending merge to fork/master
+commits: 7211f8ba87, 01009090bf, daa8360578, f81d572a40, dd2a41f9a0, 10536a49ee, 953249ae19
+status: Released — deployed to production (VPS) 2026-08-20 ~17:20 UTC. All 4 P0/P1 hotfixes applied and verified (VOY-1527 resolved, VOY-1531 follow-up refinements landed)
 ---
 
 # Async UX Release: Background Jobs + Process Visibility (M1+M2)
 
-**Branches:** `fix/m-series-tech-debt`
-**Release status:** Pre-release — committed on `fix/m-series-tech-debt`, pending merge to `fork/master`. Documentation verified in sync (VOY-1525).
-**Applies to:** VOY-1474 (M1) + VOY-1493 (M2 post-review fixes)
+**Branches:** `fix/m-series-tech-debt` (pending merge to `fork/master` — blocked on GitHub billing)
+**Release status:** Released — deployed to VPS production 2026-08-20 ~17:20 UTC. Server restarted, migration 0144 made idempotent, UI rebuilt with all new components. Verified: 31/31 tests passed, all routes confirmed live. **All 4 P0/P1 VOY-1527 hotfix items applied and verified (VOY-1531).**
+**Applies to:** VOY-1474 (M1) + VOY-1493 (M2 post-review fixes) + VOY-1527 (P0/P1 hotfixes) + VOY-1531 (follow-up refinements)
 
 ---
 
@@ -46,9 +46,9 @@ The second milestone added the remaining job types, visual process indicators, a
 | **FreshnessCue / FreshnessDot** | Visual freshness/staleness indicators on research items — green (fresh, ≤7 days), amber (stale, ≤30 days), grey (unknown, >30 days) |
 | **Skeleton loading** | `SkeletonBone` / `SkeletonText` components with `FadeIn` wrapper for non-blocking trip-page reveal |
 
-### Post-Review Hardening (f81d572a40, M2)
+### Post-Review Hardening (f81d572a40, M2 + VOY-1527/VOY-1531 hotfix)
 
-All Staff Engineer findings from the M2 structural audit were addressed:
+All Staff Engineer findings from the M2 structural audit were addressed, and the 4 P0/P1 items that shipped unfixed now have hotfixes applied:
 
 | Finding | Fix |
 |---------|-----|
@@ -61,6 +61,10 @@ All Staff Engineer findings from the M2 structural audit were addressed:
 | **DB CHECK constraints** | Migration 0144 adds CHECK constraints on `status`, `progress`, and `duration_ms` |
 | **Partial queued index** | Partial index on `status = 'queued'` serves the worker's claim query |
 | **Graceful shutdown** | Worker supports draining in-flight jobs with a configurable grace period (default 30s) |
+| **emitEvent try/catch guard** (VOY-1527 P0) | `emitEvent()` wrapped in try/catch so SSE subscriber disconnect cannot propagate to retry loop. Adds terminal-status WHERE clause to `update()` preventing overwrite of succeeded/failed rows |
+| **Stale-job recovery startup sweep** (VOY-1527 P0) | `createBackgroundJobWorker()` runs `requeueStaleJobs()` on startup, requeueing jobs stuck in `running` for longer than `processorTimeoutMs` + 30s grace. Emits live events for reactive UI update |
+| **List endpoint slim projection** (VOY-1527 P1) | `toApi()` now supports `slim` parameter; `list()` passes `slim=true`, stripping `result.dataUri` from responses. Full result available via `getById()` |
+| **Email digest ordering fix** (VOY-1527 P1) | Digest preference query (`SELECT digestFrequency`) now runs *before* the `initUpdates` block, so `emailDeferredToDigest` is correctly resolved before the init-update decision |
 
 ## Job Types
 
@@ -82,6 +86,10 @@ All Staff Engineer findings from the M2 structural audit were addressed:
 | Research routes use `company_scope:read` (read-level auth) for write operations — any agent or user with scope:read can enqueue jobs | Open (Staff Engineer recommendation C4) |
 | No blob storage — export results embed base64 data (PDF) or calendar text (ICS) in the result object | Open |
 | Semantic upgrade requires `PAPERCLIP_EMBEDDING_API_KEY` — falls back to keyword ranking without it | Open (infra config) |
+| **Background job status can be overwritten by retry after SSE failure** — If an SSE subscriber disconnects during a job's success notification, the `emitEvent` failure propagates to the retry loop, causing the job to be re-executed or incorrectly marked `failed`. See [VOY-1527](https://github.com/voyonder/paperclip/issues/1527). | **RESOLVED** — `emitEvent` try/catch guard + terminal-status WHERE clause |
+| **No stale-job recovery after process crash** — If the server process crashes mid-job, the job stays `running` forever and the UI shows an eternal spinner. No automatic recovery path exists. See [VOY-1527](https://github.com/voyonder/paperclip/issues/1527). | **RESOLVED** — startup sweep requeues stale-running jobs automatically |
+| **Large export results inflate list responses** — PDF/ICS export results store full base64 data in the `result` column. The list endpoint returns these for every job, causing multi-MB responses on each tray poll. See [VOY-1527](https://github.com/voyonder/paperclip/issues/1527). | **RESOLVED** — list endpoint slim projection strips `result.dataUri` |
+| **Email digest-deferred notifications show stale "pending" status** — When a notification type uses email+digest, `emailDeliveryStatus` shows "pending" indefinitely even though the email is correctly deferred to the next digest. See [VOY-1527](https://github.com/voyonder/paperclip/issues/1527). | **RESOLVED** — digest preference query runs before status init |
 
 ## Support Impact
 
@@ -97,9 +105,24 @@ All Staff Engineer findings from the M2 structural audit were addressed:
 | **Freshness indicators** | Research items show age via green/amber/grey dots. "Unknown" may indicate a timestamp parse failure |
 | **SSE authz enforced** | The SSE `/events` endpoint requires `company_scope:read`. Users without this permission will see 404/forbidden |
 
+### All Production Issues Resolved (VOY-1527 + VOY-1531)
+
+The 4 P0/P1 issues that shipped with the release are now resolved:
+
+1. **Job status corruption on SSE disconnect** — **RESOLVED.** `emitEvent()` is now wrapped in try/catch (logs warning, does not propagate), and `update()` includes a WHERE clause guard (`IN ('queued', 'running')`) preventing overwrite of terminal-status rows. SSE subscriber disconnect can no longer corrupt job status. See the `background-jobs.ts` and `background-job-worker.ts` hotfix for details.
+
+2. **Eternal spinner after server crash** — **RESOLVED.** `createBackgroundJobWorker()` now runs `requeueStaleJobs()` on startup, which detects jobs stuck in `running` for longer than `processorTimeoutMs` + 30s grace and requeues them. The sweep emits live events for reactive UI update. Manual DB intervention is no longer needed.
+
+3. **Slow tray responses due to large results** — **RESOLVED.** `toApi()` now accepts a `slim` parameter; `list()` calls it with `slim=true`, stripping `result.dataUri` from responses. The full result (including `dataUri`) remains available via `getById()`. Tray poll responses are no longer inflated by large export data.
+
+4. **Email notifications show "pending" indefinitely** — **RESOLVED.** The digest preference query (`SELECT digestFrequency`) now runs *before* the `initUpdates` block, so `emailDeferredToDigest` is correctly resolved before the status init decision. Deferred emails no longer show stale "pending" status.
+
 ## Related Documentation
 
 - [Async Jobs Internal Reference](/doc/async-jobs.md) — Full internal reference with architecture, API details, troubleshooting guide, and escalation paths
 - [Background Jobs API](/api/background-jobs) — API reference for background job endpoints
 - [Research API](/api/research) — API reference for research endpoints (activity search, auto-assess, keyword-first search)
 - [Exports API](/api/exports) — API reference for PDF/ICS export endpoints
+
+*Last updated: 2026-08-20 ~21:30 UTC — VOY-1527 P0/P1 hotfixes and VOY-1531 follow-up refinements resolved: emitEvent guard, stale-job recovery, list slim projection, email digest ordering. All production issues resolved.*
+*Maintained by: Support Engineer (88b72065)*

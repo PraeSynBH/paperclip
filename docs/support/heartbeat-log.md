@@ -2990,4 +2990,69 @@ Next triggers:
 3. QA Engineer finds issues → KB articles for discovered edge cases
 4. Release Engineer pre-ship docs sync check for next release
 
+## 2026-08-20 ~21:30 UTC — Heartbeat: VOY-1527 hotfixes resolved, docs updated, standing by
+
+### Diff assessment
+
+Since last heartbeat (`d98214bca6` at ~18:30 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `732ad93523` — docs(ceo): board pulse ~19:05 UTC | Docs only | **None** — no code changes |
+| `d0f8c8fa25` — docs(ceo): board pulse ~18:25 UTC | Docs only | **None** — no code changes |
+| `8dd71f04b8` — docs(staff-engineer): heartbeat | Docs only | **None** — no code changes |
+| `65e11a6418` — docs(staff-engineer): M2 post-ship audit | Docs only | **None** — no code changes |
+| `43935d425f` — docs(fe): heartbeat ~18:30 UTC | Docs only | **None** — no code changes |
+| `d43bfec480` — docs(coo): board pulse ~19:15 UTC | Docs only | **None** — no code changes |
+| `ada63cc024` — docs(coo): board pulse ~18:05 UTC | Docs only | **None** — no code changes |
+| `dd2a41f9a0` — fix(VOY-1531): M2 post-ship P0/P1 hotfix | **Code fix** | **Updated** — resolves 4 P0/P1 items (see below) |
+| `10536a49ee` — fix(VOY-1527): apply all 4 M2 post-ship P0/P1 hotfixes | **Code fix** | **Updated** — same hotfix, squashed merge |
+| `953249ae19` — fix(VOY-1531): follow-up refinements | **Code fix** | **Updated** — shared requeueStaleJobs with live events, emitEvent call-site guards, digest orderBy |
+
+### Documentation updates applied
+
+The VOY-1527 P0/P1 hotfixes are now resolved in code. Documentation has been updated accordingly:
+
+| Document | Changes |
+|----------|---------|
+| `doc/async-jobs.md` (v6) | Known issues #17-20 marked RESOLVED with fix details. Header and status updated. Troubleshooting sections updated to remove workaround/expected fix instructions. Escalation table entries updated. Version history added. |
+| `docs/support/releases/voy-1474-async-ux.md` | Frontmatter status updated. Release status note updated. Post-Review Hardening section extended with 4 hotfix items. Known Limitations table updated (all 4 RESOLVED). Known Production Issues section rewritten as "All Production Issues Resolved". Last-updated timestamp refreshed. |
+
+### Hotfix details (VOY-1527 → VOY-1531)
+
+1. **emitEvent try/catch guard (P0)** — `emitEvent()` wrapped in try/catch so SSE subscriber disconnect cannot propagate to the retry loop. `update()` WHERE clause now includes `IN ('queued', 'running')` guard preventing overwrite of terminal-status rows.
+2. **Stale-job recovery startup sweep (P0)** — `createBackgroundJobWorker()` runs `requeueStaleJobs()` on startup, requeueing jobs stuck in `running` for longer than `processorTimeoutMs` + 30s grace. Emits live events for reactive UI update.
+3. **List endpoint slim projection (P1)** — `toApi()` now supports `slim` parameter; `list()` passes `slim=true`, stripping `result.dataUri` from responses. Full result available via `getById()`.
+4. **Email digest ordering fix (P1)** — Digest preference query (`SELECT digestFrequency`) now runs *before* the `initUpdates` block, so `emailDeferredToDigest` is correctly resolved before the init-update decision.
+
+### Live docs verification
+
+| Check | Result |
+|------|--------|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/api/health | 200 ✅ |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Blocked issues (Support Engineer) | **1** — VOY-343 (founder env vars), unchanged, not actionable |
+| Documentation coverage | **100%** — all shipped features documented |
+| M-series release + hotfix status | ✅ **Shipped, all P0/P1 hotfixes resolved, docs updated** |
+| Active release pipeline | **None** — board fully clear of agent-actionable work |
+| CEO direction | Next cycle: v0.5.0 Market Readiness (self-service onboarding, billing, landing page) — founder-gated |
+| Founder-blocked items | VOY-343 (Sentry DSN), GitHub Actions CI billing, VPS capacity/migration, PR #58 merge — unchanged |
+
+### Disposition
+
+**STANDING BY.** All documentation is in sync with the live system. M-series async UX release is fully shipped, all 4 P0/P1 hotfix items resolved, and documentation updated to reflect the resolved state. No new code to assess, no support case requests, no pending interactions. The board is fully clear of agent-actionable work.
+
+Next triggers:
+1. New feature development begins (v0.5.0 Market Readiness) → assess for documentation impact
+2. COO requests documentation health report
+3. QA Engineer finds issues → KB articles for discovered edge cases
+4. Release Engineer pre-ship docs sync check for next release
+
 *Maintained by: Support Engineer (88b72065)*

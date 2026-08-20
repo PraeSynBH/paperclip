@@ -1,8 +1,8 @@
 # Async Jobs (Background Jobs) — Internal Reference
 
-**Last updated:** 2026-08-20 (v4)
-**Applies to:** Commit `f81d572a40` (branch `fix/m-series-tech-debt`), VOY-1493 (M2 post-review fixes)
-**Status:** M2 committed — post-review fixes applied: transaction-wrapped claim, candidateIds, processor timeout, retry, graceful shutdown, queued partial index, SSE authz, export payload cap, DB CHECK constraints. Staff Engineer review (VOY-1494) complete — APPROVED.
+**Last updated:** 2026-08-20 (v6)
+**Applies to:** Commit `f81d572a40` (deployed to VPS production 2026-08-20), VOY-1493 (M2 post-review fixes), VOY-1527 (P0/P1 hotfixes), VOY-1531 (follow-up refinements)
+**Status:** Released to production (VPS). All M2 post-review fixes and P0/P1 hotfixes live: transaction-wrapped claim, candidateIds, processor timeout, retry, graceful shutdown, queued partial index, SSE authz, export payload cap, DB CHECK constraints, emitEvent try/catch guard, terminal-status WHERE guard, stale-job recovery startup sweep, list endpoint slim projection (strips dataUri), email digest ordering fix. Staff Engineer review (VOY-1494) complete — APPROVED. 31/31 tests passed, all routes verified post-deploy.
 
 ## Overview
 
@@ -114,7 +114,7 @@ data: {
 | `export.pdf` | pdfkit paginated PDF (title page, item cards, separators) — result carries base64 `dataUri` | `{ kind, title, items, generatedAt, dataUri }` |
 | `export.ics` | iCalendar text builder | `{ kind, title, calendarText, eventCount }` |
 
-## Known Issues (as of 2026-08-20 — M1+M2 complete)
+## Known Issues (as of 2026-08-20 — M1+M2 shipped to production, all P0/P1 hotfixes resolved)
 
 1. **[RESOLVED in M2] No job worker / executor.** The worker
    (`server/src/services/background-job-worker.ts`) now polls for queued
@@ -216,6 +216,14 @@ data: {
     Wrapping both in a single transaction ensures atomic claim ownership
     and eliminates the race where two workers could claim the same job.
 
+17. **[RESOLVED in VOY-1531] `emitEvent` failure after DB commit can overwrite terminal status.** The `emitEvent()` function in `background-jobs.ts` calls `publishLiveEvent()` without a try/catch. When an SSE subscriber disconnects during a job's success notification, the exception propagates back through the retry loop. This can cause the job to be re-executed (waste of compute for idempotent jobs) or, in the worst case, marked `failed` after all retries exhaust — silently overwriting a successful result. **Fix applied:** `emitEvent` wrapped in try/catch (logs warning, does not propagate), and `update()` WHERE clause now includes `IN ('queued', 'running')` guard preventing writes to terminal-status rows.
+
+18. **[RESOLVED in VOY-1531] No stale-running recovery after process crash.** When the server process crashes or is killed mid-job, the claimed job row stays `status = 'running'` permanently. The worker's claim query (`WHERE status = 'queued'`) ignores these orphans. There is no startup sweep or periodic reaper. The UI shows an eternal "running" spinner. **Fix applied:** `createBackgroundJobWorker()` now runs `requeueStaleJobs()` on startup, which requeues jobs that have been `running` longer than max expected execution time (`processorTimeoutMs` + 30s grace). The sweep also emits live events for each requeued job so the UI tray reactively updates.
+
+19. **[RESOLVED in VOY-1531] Large export results stored in DB; list endpoint returns full blobs.** The PDF/ICS export processors store full base64 data in the `result` jsonb column (potentially several MB). The `list()` endpoint returns `result` for every row, causing multi-MB responses on each tray poll. The `background_jobs` table grows without bound. The 512KB payload cap on the *request* does not cap the *result* — a small input can produce a large PDF. **Fix applied:** `toApi()` now accepts a `slim` parameter; `list()` calls it with `slim=true`, stripping `result.dataUri` from list responses. The full result (including `dataUri`) remains available via `getById()`. Future work: a dedicated result download endpoint, or blob storage integration.
+
+20. **[RESOLVED in VOY-1531] Email digest-deferred notifications show stale "pending" status.** In `notifications.ts`, the `initUpdates` block sets `emailDeliveryStatus = "pending"` *before* the digest preference query determines whether the notification is deferred to digest. The guard `!emailDeferredToDigest` always passes because the variable is initialized to `false` and hasn't been set yet. Result: when a notification uses email+digest, the DB record gets `emailDeliveryStatus = "pending"` indefinitely. The digest delivery itself is unaffected, but the user-visible status field is misleading. **Fix applied:** the digest preference query (`SELECT digestFrequency FROM notificationPreferences`) now runs *before* the `initUpdates` block, so `emailDeferredToDigest` is correctly resolved before the init-update decision.
+
 ## Troubleshooting Guide
 
 ### Job stays in "queued" forever
@@ -284,6 +292,7 @@ data: {
   from `result.dataUri` (PDF) or `result.calendarText` (ICS).
 - **Note:** Payloads larger than 512 KB are rejected with HTTP 413 at
   submission time (see known issue #13).
+- **Note (known issue #19 — RESOLVED):** Large export results no longer inflate list endpoint responses — the `list()` endpoint now strips `result.dataUri` from the slim projection. Full results including `dataUri` are available via `getById()`.
 
 ### UI shows "Search queued — results will appear shortly" indefinitely
 - **Root cause:** The job never transitions out of `queued` (worker not
@@ -329,6 +338,37 @@ data: {
   `background_job:create` permission (tracked as Staff Engineer
   recommendation C4 in VOY-1494).
 
+### Completed job shows as "running" or "failed" after refresh (known issue #17 — RESOLVED)
+- **Root cause:** If an SSE subscriber disconnects while a job's success
+  notification is being published, the `emitEvent` failure propagated to
+  the retry loop, causing the job to be re-executed or marked `failed`.
+- **Fix applied:** `emitEvent` is now wrapped in try/catch (logs warning, does
+  not throw), and `update()` refuses to overwrite terminal-status rows via a
+  WHERE clause guard (`IN ('queued', 'running')`).
+- **Current state:** This is no longer possible in the hotfixed codebase.
+  Notifications are best-effort; DB writes are always safe.
+
+### Job shows permanent "running" spinner after server restart (known issue #18 — RESOLVED)
+- **Root cause:** The server process crashed mid-job; the job was left
+  in `status = 'running'` with no recovery mechanism. The worker ignores
+  non-queued jobs on restart.
+- **Fix applied:** `createBackgroundJobWorker()` now runs
+  `requeueStaleJobs()` on startup, which requeues jobs stuck in `running`
+  for longer than `processorTimeoutMs` + 30s grace. The sweep emits live
+  events so the UI tray reactively updates.
+- **Current state:** Orphaned jobs are automatically recovered on next
+  worker start.
+
+### Email notification shows "pending" status for digest-deferred emails (known issue #20 — RESOLVED)
+- **Root cause:** The `emailDeferredToDigest` check ran after
+  `emailDeliveryStatus` was set to "pending", so deferred emails
+  incorrectly showed "pending" instead of the actual digest status.
+- **Fix applied:** The digest preference query now runs *before* the
+  `initUpdates` block, so `emailDeferredToDigest` is correctly resolved
+  before the init-update decision.
+- **Current state:** Deferred emails no longer show stale "pending"
+  status. The status field correctly reflects the delivery state.
+
 ## Support Escalation Path
 
 | Issue | Action | Escalate to |
@@ -342,6 +382,7 @@ data: {
 | Export returns HTTP 413 | Request payload exceeded the 512 KB cap — trim item lists before export | Support Engineer |
 | UI display issues (StatusCue blank, tray missing, etc.) | Check browser console for errors, refresh | Support Engineer + Engineering |
 | Research jobs submitted without board auth | Revoke agent's company_scope:read if abusive | Support Engineer + Engineering (authz fix) |
+| **Completed job shows wrong status after SSE disconnect** (known issue #17 — RESOLVED) | Fixed — `emitEvent` try/catch guard + terminal-status WHERE clause prevents overwrite | Engineering |\n| **Permanent "running" spinner after crash** (known issue #18 — RESOLVED) | Fixed — startup sweep requeues stale-running jobs automatically | Engineering |\n| **Slow tray responses** (known issue #19 — RESOLVED) | Fixed — list endpoint slim projection strips `result.dataUri`. Full result via `getById()`. | Engineering |\n| **Email shows "pending" for digest-deferred notifications** (known issue #20 — RESOLVED) | Fixed — digest preference query now runs before status init | Support Engineer |
 
 ## Version History
 
@@ -351,3 +392,5 @@ data: {
 | 2 | 2026-08-20 | Support Engineer | M2 update: worker + 5 processors live, export routes, BackgroundProcessTray, FreshnessCue, skeleton loading, keyword-first semantic search (VOY-1493) |
 | 3 | 2026-08-20 | Support Engineer | Corrected export processor accuracy (pdfkit real renderer, ICS v2.0 text), added SSE authz gap (#11) and research route authz inconsistency (#12), added troubleshooting for both authz items, updated escalation table (VOY-1493 post-commit audit) |
 | 4 | 2026-08-20 | Support Engineer | M2 post-review fixes (commit f81d572a40): resolved #6 (retries with exponential backoff) and #11 (SSE scope:read check now enforced); added #13 (512 KB export payload cap), #14 (candidateIds scoping), #15 (processor timeout), #16 (transaction-atomic claim); documented queued partial index + DB CHECK constraints; fixed stale "scaffolds" wording in export troubleshooting; added timeout/413 troubleshooting + escalation rows |
+| 5 | 2026-08-20 | Support Engineer | Added known issues #17-20 (P0/P1 items shipped unfixed, tracked under VOY-1527 hotfix): emitEvent failure, stale-job recovery, large export results in list endpoint, email digest ordering; added troubleshooting entries and escalation rows for each; updated header to reflect "in production, hotfix in progress" status |
+| 6 | 2026-08-20 | Support Engineer | VOY-1527 P0/P1 hotfixes resolved (commits dd2a41f9a0, 10536a49ee, 953249ae19): items #17-#20 marked RESOLVED; emitEvent try/catch guard + terminal-status WHERE clause (#17), stale-job recovery startup sweep (#18), list endpoint slim projection stripping dataUri (#19), email digest ordering fix (#20); updated header and status to reflect all fixes live |
