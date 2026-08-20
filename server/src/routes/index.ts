@@ -30,3 +30,6 @@ export { billingRoutes, billingWebhookRoute } from "./billing.js";
 export { notificationRoutes } from "./notifications.js";
 export { marketplaceRoutes } from "./marketplace.js";
 export { onboardingRoutes } from "./onboarding.js";
+export { backgroundJobRoutes } from "./background-jobs.js";
+export { researchRoutes } from "./research.js";
+export { exportRoutes } from "./exports.js";

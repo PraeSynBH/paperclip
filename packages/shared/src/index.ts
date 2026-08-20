@@ -379,7 +379,13 @@ export {
   type PluginApiRouteCheckoutPolicy,
   type PluginEventType,
   type PluginBridgeErrorCode,
+  type BackgroundJobStatus,
 } from "./constants.js";
+
+export {
+  BACKGROUND_JOB_TYPES,
+  type BackgroundJobType,
+} from "./background-job-types.js";
 
 export {
   ALL_INTERFACES_BIND_HOST,
@@ -1629,6 +1635,12 @@ export type {
   KnowledgeCreateBacklinkResponse,
   KnowledgePromoteFromMemoryRequest,
 } from "./types/knowledge.js";
+
+export type {
+  BackgroundJob,
+  CreateBackgroundJobRequest,
+  BackgroundJobEvent,
+} from "./types/background-job.js";
 
 export { API_PREFIX, API } from "./api.js";
 export { normalizeAgentUrlKey, deriveAgentUrlKey, isUuidLike } from "./agent-url-key.js";

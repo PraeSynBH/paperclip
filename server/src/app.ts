@@ -57,6 +57,10 @@ import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { marketplaceRoutes } from "./routes/marketplace.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
+import { backgroundJobRoutes } from "./routes/background-jobs.js";
+import { researchRoutes } from "./routes/research.js";
+import { exportRoutes } from "./routes/exports.js";
+import { createBackgroundJobWorker } from "./services/background-job-worker.js";
 import { logger } from "./middleware/logger.js";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader } from "./services/plugin-loader.js";
 import { createPluginWorkerManager, type PluginWorkerManager } from "./services/plugin-worker-manager.js";
@@ -267,6 +271,9 @@ export async function createApp(
   api.use(notificationRoutes(db));
   api.use(marketplaceRoutes(db));
   api.use("/onboarding", onboardingRoutes(db));
+  api.use(backgroundJobRoutes(db));
+  api.use(researchRoutes(db));
+  api.use(exportRoutes(db));
   if (opts.databaseBackupService) {
     api.use(instanceDatabaseBackupRoutes(opts.databaseBackupService));
   }
@@ -460,6 +467,11 @@ export async function createApp(
 
   jobCoordinator.start();
   scheduler.start();
+  // Background job worker — processes research/export jobs queued via the
+  // research + export routes. Polls every 2s for queued jobs (see
+  // services/background-job-worker.ts). Stopped in shutdownAppServices().
+  const backgroundJobWorker = createBackgroundJobWorker(db);
+  backgroundJobWorker.start();
   let feedbackExportShuttingDown = false;
   let feedbackExportTimer: ReturnType<typeof setInterval> | null = null;
   const disableFeedbackExportFlushes = () => {
@@ -573,6 +585,7 @@ export async function createApp(
   const shutdownAppServices = () => {
     if (appServicesShutdown) return;
     appServicesShutdown = true;
+    backgroundJobWorker.stop();
     disableFeedbackExportFlushes();
     devWatcher?.close();
     viteHtmlRenderer?.dispose();

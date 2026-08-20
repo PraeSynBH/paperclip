@@ -124,3 +124,6 @@ export { agentMarketplaceService, type AgentMarketplaceService } from "./agents-
 export { installDbHealthWatchdog } from "./db-health-watchdog.js";
 export { notificationService } from "./notifications.js";
 export { billingService } from "./billing.js";
+export { backgroundJobService, type BackgroundJobService } from "./background-jobs.js";
+export { createBackgroundJobWorker, type BackgroundJobWorker } from "./background-job-worker.js";
+export { researchSearchService, type ResearchSearchService, type ResearchHit } from "./research-search.js";
