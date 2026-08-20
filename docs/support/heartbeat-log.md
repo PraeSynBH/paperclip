@@ -5,32 +5,55 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
-## 2026-08-20 ~08:25 UTC — Heartbeat: all docs in sync, board human-gated, idle
+## 2026-08-20 ~10:10 UTC — Heartbeat: all docs in sync, board human-gated, standing by
 
 ### Diff assessment
 
-- Commits since last heartbeat: `5c5a7ccb39` (Release Engineer heartbeat, docs-only), `41c7ee8424` (COO heartbeat, docs-only) — all docs-only, no code changes, no documentation impact.
-- Working tree: PRA-1051 watchdog fix (`36d152f5d2`) committed on `fix/m-series-tech-debt` — still pending ship to `fork/master`. Docs already reflect the fix behavior.
-- Board: 0 open issues assigned to Support Engineer. Board fully human-gated on founder actions (VOY-1504/FE deploy Discord, VOY-1503/CTO gate case studies). No pending interactions or support assessment requests.
+Since last heartbeat (`aaa8f37d6a` at ~09:45 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `501a8deda1` — docs(cto): heartbeat — PRA-1089 crm recovered | Docs only | **None** — no code changes |
+| `0af74ac` — fix(deploy): install openssl in builder stage (travel_itenerary_planning) | Infra fix | **None** — deployment-only Dockerfile change, no customer-facing impact |
+| `dbadd14` — feat(VOY-1477): case studies page (travel_itenerary_planning) | Feature code | **None yet** — code on main but NOT deployed; docs cannot reference non-live features. Will assess when deployed. |
+
+No substantive code changes requiring documentation updates. PRA-1051 watchdog fix (`36d152f5d2`) still pending ship from `fix/m-series-tech-debt` to `fork/master`.
 
 ### Live docs verification
 
-| Page | Status |
+| Check | Result |
 |---|---|
 | voyonder.com/documentation | 200 ✅ |
 | voyonder.com/documentation/releases | 200 ✅ |
 | voyonder.com/case-studies/ | 308 (redirect only — content not live; VOY-1477 in_review) |
 | voyonder.com/api/health | 200 ✅ |
 
-### Documentation health
+### Board state
 
-100% coverage maintained. All features documented, release notes current through Documentation Site v1, KB articles in sync with shipped behavior. No documentation gaps identified.
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Active release pipeline | VOY-1413 (docs site + case studies + Discord) — in_progress, CEO-assigned, human-gated on CTO (VOY-1489 deploy) + Staff Engineer review (VOY-1477) |
+| PRA-1051/VOY-1473 ship status | Fix committed on `fix/m-series-tech-debt`, docs ready, pending merge to `fork/master` |
+| Activity discovery (VOY-1484) | Blocked on VOY-1497 (P1 review blockers) — FE in_progress |
+| Async UX (VOY-1474) | Blocked — awaiting implementation |
 
 ### Disposition
 
-Idle. No new code to assess, no releases pending documentation sync, no support case requests. Standing by.
+**STANDING BY.** No new code to assess, no releases pending documentation sync, no support case requests, no pending interactions. Next triggers:
 
-*Maintained by: Support Engineer (88b72065)*
+1. VOY-1489 deploy clears → verify Discord link + case studies live → update release notes + docs navigation
+2. VOY-1484 implementation commits → assess for documentation impact (major feature: activity discovery rewiring)
+3. Release Engineer pre-ship docs sync check
+4. QA Engineer support case assessment request
+5. COO documentation health report request
+
+### Reference
+
+- Previous heartbeat: `aaa8f37d6a` (09:45 UTC) — committed as `doc/status/2026-08-20-0945-support-engineer-heartbeat.md`
+- Current branch: `fix/m-series-tech-debt`
+- Run ID: `501afbef-3a88-4305-abd7-f8804365b806`
 
 ## 2026-08-19 — Heartbeat: PostHog SOP v1.5.0 committed (034cc4c470) — docs in sync, board idle
 
