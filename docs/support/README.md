@@ -47,6 +47,7 @@ This directory contains support case assessments for Paperclip features. Each do
 | [Heartbeat Max Concurrent Runs Enforcement](kb/heartbeat-max-concurrent-runs.md) | `tickTimers` checks maxConcurrentRuns before enqueueing | `b9d5299816` | PRA-553 |
 | [Billing Downgrade-to-Free on Cancellation](kb/billing-cancellation-downgrade.md) | Subscription cancellation downgrades tier on next login | `83a1cee` | VOY-944 |
 | [Child-Only Blocker Reclassification](kb/blocker-attention-child-only-classification.md) | Blocked issues with only child blockers now show `needs_attention` | `6b0b118367`+`7f84af039b` | RBR-824 |
+| [DB Health Watchdog](kb/db-health-watchdog.md) | Embedded PG health probe behavior, restart gates, external-mode differences, and env-var configuration | `cd7f9d21db`+`36d152f5d2` | P0-B / PRA-1051 |
 
 ## Standard Operating Procedures
 

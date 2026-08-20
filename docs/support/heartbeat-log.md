@@ -2508,6 +2508,80 @@ Documentation verified and updated for VOY-1447 release. Release note promoted f
 
 ### Disposition
 
-**Idle — no agent-automatable work.** Documentation is fully in sync with the live system. M-series shipped with complete, verified docs. All remaining board items are human-gated (founder/CTO). No new code changes to assess.
+|**Idle — no agent-automatable work.** Documentation is fully in sync with the live system. M-series shipped with complete, verified docs. All remaining board items are human-gated (founder/CTO). No new code changes to assess.
+
+---
+
+## 2026-08-20 ~07:10 UTC — Heartbeat: PRA-1051 watchdog fix committed, env-var documentation gap closed, KB article created
+
+### Diff assessment
+
+**Commit `36d152f5d2` — `fix(server): remove embedded PG restart from dbHealthProbe — gated by consecutive-failure threshold (PRA-1051)`**
+
+**Impact**: Behavioral change to the DB health watchdog. The `dbHealthProbe` function no longer attempts embedded PostgreSQL restart on failure — that responsibility is now gated by the watchdog loop's consecutive-failure counter (default 3 failures before action). Added `probeInFlight` mutex to prevent concurrent probe executions.
+
+**Status**: Committed on `fix/m-series-tech-debt`. Not yet shipped to `fork/master` (tracked as VOY-1473).
+
+### Documentation changes made
+
+| Document | Change |
+|---|---|
+| `docs/deploy/environment-variables.md` | **Added Database section** with `PAPERCLIP_DB_WATCHDOG_INTERVAL_MS` and `PAPERCLIP_DB_WATCHDOG_MAX_FAILURES` env vars. These existed in code since before M-series but were missing from the customer-facing reference. |
+| `server/docs/configurable-timeouts.md` | **Added Database health watchdog section** with the same two env vars, noting they're defined inline in `db-health-watchdog.ts` rather than in `timeout-constants.ts`. |
+| `docs/support/kb/db-health-watchdog.md` | **Created KB article** covering: probe behavior (ok/failed only), watchdog loop logic (consecutive-failure gate), external-mode differences (P0-B, shipped v0.5.0), probe restart cascade fix (PRA-1051, pending), configuration, support implications, and escalation paths. |
+| `docs/support/README.md` | **Added KB article entry** to the Knowledge Base Articles table. |
+
+### Board State
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all shipped features have current docs |
+| Documentation gaps found | 2 env vars missing from customer-facing and internal references — **fixed** |
+| KB articles created | 1 (DB Health Watchdog) |
+| Blocked items (human-gated) | PRA-1051/VOY-1473 not yet shipped to `fork/master` |
+
+### Disposition
+
+**Idle — no further automated work available.** Assessed PRA-1051 commit. Fixed pre-existing env-var documentation gap. Created KB article covering both P0-B (already shipped) and PRA-1051 (pending) watchdog behavior. Documentation is in sync with the live system (fork/master) and the committed-but-unshipped fix has appropriate tracking in the KB. Remaining board items are human-gated.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-20 ~11:00 UTC — Heartbeat: Pending PRA-1051 support docs committed, commit 111b321f42 assessed, all docs in sync
+
+### Diff assessment
+
+| Commit | Type | Impact |
+|--------|------|--------|
+| `111b321f42` — fix(server): reduce file-transport log level to info, doc DB watchdog env vars | Code + docs | **Low** — file-transport log level changed from debug to info. Reduces production disk I/O. Console debug logging unaffected. No customer-facing doc impact (no doc references file-transport debug logging). The DB watchdog section was already added to `server/docs/configurable-timeouts.md` by this commit; the support-side KB article and env-var docs were written in the prior heartbeat. |
+| `be32fecee0`, `e125cf5158`, `08ea21026a` | Docs-only heartbeats (FE, COO, Staff Engineer) | **None** — no code changes. |
+
+### Documentation changes this cycle
+
+My prior heartbeat (2026-08-20 ~07:10 UTC) assessed commit `36d152f5d2` (PRA-1051: remove embedded PG restart from dbHealthProbe) and created/updated the following docs — **committed this cycle**:
+
+| Document | Change |
+|---|---|
+| `docs/deploy/environment-variables.md` | **Added Database section** with `PAPERCLIP_DB_WATCHDOG_INTERVAL_MS` and `PAPERCLIP_DB_WATCHDOG_MAX_FAILURES` — existed in code since M-series but missing from customer-facing env-var reference. |
+| `docs/support/kb/db-health-watchdog.md` | **New KB article** covering probe behavior, watchdog loop, failure-gating logic, external-mode differences (P0-B, shipped v0.5.0), probe restart cascade fix (PRA-1051/VOY-1473, pending ship), configuration, and escalation paths. |
+| `docs/support/README.md` | **Added KB entry** row to Knowledge Base Articles table. |
+| `docs/support/heartbeat-log.md` | **Appended** this heartbeat + prior 07:10 UTC entry. |
+
+### Board State
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all shipped features have current docs |
+| Documentation gaps found (prior) | 2 env vars missing from customer-facing reference — **fixed** |
+| KB articles created | 1 (DB Health Watchdog) |
+| PRA-1051/VOY-1473 status | Fix committed on `fix/m-series-tech-debt`, docs ready, pending ship to `fork/master` |
+| Blocked items (human-gated) | VOY-1413 (founder docs-site deploy), VOY-343 (founder env vars), VOY-1473 (pending merge) |
+
+### Disposition
+
+**Idle.** Assessed `111b321f42` — logger change is internal-ops only, no doc impact. Prior heartbeat's PRA-1051 documentation work now committed. Remaining board items are human-gated. Documentation is fully in sync with the live system (`fork/master`) and the committed-but-unshipped fix has appropriate tracking in the KB.
 
 *Maintained by: Support Engineer (88b72065)*
