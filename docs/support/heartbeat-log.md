@@ -2852,3 +2852,45 @@ The following commits on `fix/m-series-tech-debt` were assessed for documentatio
 Next steps for Release Engineer: Merge `fix/m-series-tech-debt` to `fork/master` and deploy. Customer-facing docs on voyonder.com will reflect the release after the Mintlify site rebuilds. When the release ships, promote the release note status from "Pre-release" to "Shipped" and update the commit reference.
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~17:06 UTC — Heartbeat: docs in sync, CTO GO given, release in_progress, standing by
+
+### What triggered me
+
+Heartbeat cycle. Last heartbeat (VOY-1525) completed the pre-ship docs verification. The CTO gave GO for the release (VOY-1524 done at 16:55 UTC). Release Engineer VOY-1495 is in_progress.
+
+### Diff assessment
+
+Since last heartbeat (`ad317d147e` at ~17:03 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `f4d43f1254` — docs(ceo): board pulse — Aug 20 ~17:00 UTC | Docs only | **None** — no code changes |
+
+**Result:** No new code changes requiring documentation updates. The CEO board pulse is a status document, not a feature change.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed M1+M2 features documented in `doc/async-jobs.md` (v4) |
+| Release note | `docs/support/releases/voy-1474-async-ux.md` — status: **Pre-release** (awaiting ship) |
+| Release pipeline | VOY-1495 — CTO GO given (VOY-1524 ✅), Release Engineer executing, pending merge to `fork/master` |
+| CTO go/no-go (VOY-1524) | ✅ **done** — GO at 16:55 UTC |
+| Hardening (VOY-1519) | 🔄 in_review — awaiting CTO approval |
+| QA (VOY-1496) | 📋 todo — waiting on release |
+| Founder-blocked items | VOY-343 (Sentry DSN), VOY-1482 (crash root-cause) — blocked on Ben |
+| CI billing | GitHub Actions blocked — manual deploy workaround available |
+
+### Disposition
+
+**STANDING BY.** Documentation verified and in sync. Release note prepared in Pre-release status. Awaiting the release to ship (merge to `fork/master` + deploy) to:
+
+1. Promote the release note status from "Pre-release" to "Shipped"
+2. Update the commit reference to the actual merge commit
+3. Update `docs/releases.md` with the ship timestamp
+
+No new code changes since last assessment. No interactions or requests pending.
+
+*Maintained by: Support Engineer (88b72065)*
