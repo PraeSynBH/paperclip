@@ -1,8 +1,8 @@
 # Async Jobs (Background Jobs) — Internal Reference
 
-**Last updated:** 2026-08-20 (v3)
-**Applies to:** Commit `21e006a3d6` (branch `fix/m-series-tech-debt`), VOY-1493 (M2)
-**Status:** M2 committed — worker, 5 real processors, export routes, tray, freshness cues, skeleton loading all implemented and under Staff Engineer review (VOY-1494).
+**Last updated:** 2026-08-20 (v4)
+**Applies to:** Commit `f81d572a40` (branch `fix/m-series-tech-debt`), VOY-1493 (M2 post-review fixes)
+**Status:** M2 committed — post-review fixes applied: transaction-wrapped claim, candidateIds, processor timeout, retry, graceful shutdown, queued partial index, SSE authz, export payload cap, DB CHECK constraints. Staff Engineer review (VOY-1494) complete — APPROVED.
 
 ## Overview
 
@@ -43,7 +43,12 @@ Client                          Server                          DB
 - **Statuses:** `queued` → `running` → `succeeded` / `failed`
 - **Key columns:** `job_type` (discriminator), `payload` (JSONB input),
   `result` (JSONB output), `progress` (0–100), `progress_message`
-- **Indexes:** company+status, company+createdAt, jobType
+- **Indexes:** company+status, company+createdAt, jobType,
+  partial index on `status = 'queued'` (serves the worker's claim query)
+- **DB CHECK constraints** (migration 0144, post-review):
+  - `status` ∈ ('queued', 'running', 'succeeded', 'failed')
+  - `progress` between 0 and 100
+  - `duration_ms` IS NULL or ≥ 0
 
 ### API Endpoints
 
@@ -51,7 +56,7 @@ Client                          Server                          DB
 |------|------|------|-------------|
 | `GET` | `/api/companies/:companyId/background-jobs` | Board/Agent (scope read) | List jobs (paginated, filterable by status/jobType) |
 | `GET` | `/api/companies/:companyId/background-jobs/:id` | Board/Agent (scope read) | Get single job by ID |
-| `GET` | `/api/companies/:companyId/background-jobs/events` | Board/Agent | SSE stream of job status changes |
+| `GET` | `/api/companies/:companyId/background-jobs/events` | Board/Agent (scope read) | SSE stream of job status changes (post-review: now checks `assertCompanyScopeReadAllowed`) |
 | `POST` | `/api/companies/:companyId/background-jobs` | Board only | Create a background job |
 | `POST` | `/api/companies/:companyId/research/activities` | Board/Agent (scope read) | Submit an activity search (creates a background job) |
 | `POST` | `/api/companies/:companyId/research/auto-assess` | Board/Agent (scope read) | Submit an auto-assessment job (M2) |
@@ -106,7 +111,7 @@ data: {
 | `research.activity_search` | Keyword search over issues, documents, activity | `{ query, results, total }` |
 | `research.semantic_search` | Keyword candidates + embedding cosine rerank (falls back to keyword when no embedding provider configured) | `{ query, upgraded, model, results, total }` |
 | `research.auto_assess` | Heuristic freshness/completeness/relevance per research item | `{ assessedAt, items[] }` |
-| `export.pdf` | Placeholder renderer | `{ kind, title, items, generatedAt }` |
+| `export.pdf` | pdfkit paginated PDF (title page, item cards, separators) — result carries base64 `dataUri` | `{ kind, title, items, generatedAt, dataUri }` |
 | `export.ics` | iCalendar text builder | `{ kind, title, calendarText, eventCount }` |
 
 ## Known Issues (as of 2026-08-20 — M1+M2 complete)
@@ -135,8 +140,11 @@ data: {
    or queued job. The schema has no `cancelled` status. This is a
    future feature.
 
-6. **No retry mechanism.** Failed jobs are not automatically retried.
-   A user or operator must resubmit.
+6. **[RESOLVED in M2 post-review fixes] No retry mechanism.** The worker
+   now retries transient processor failures with exponential backoff:
+   up to 2 retries (3 total attempts), delays of 1s, 2s, and 4s capped
+   at 30s. After all retries are exhausted, the job is marked `failed`
+   permanently.
 
 7. **No job history / retention cleanup.** Rows accumulate in the
    `background_jobs` table indefinitely. A future version should
@@ -162,14 +170,10 @@ data: {
     search (issues, documents, activity log) instead of being a
     no-op placeholder.
 
-11. **SSE `/events` endpoint missing `company_scope:read` check.** The
-    SSE route authenticates and verifies company access but does NOT
-    call `assertCompanyScopeReadAllowed`. This means an authenticated
-    user with basic company access (but no scope-read permission) can
-    subscribe to the job-status event stream. The list and get-by-id
-    routes DO require scope:read. This is a known authz inconsistency.
-    Workaround: SSE subscribers only see job status events — no
-    sensitive job payload data is streamed over SSE.
+11. **[RESOLVED in M2 post-review fixes] SSE `/events` endpoint missing `company_scope:read` check.** The
+    SSE route now calls `assertCompanyScopeReadAllowed`. This aligns
+    SSE authz with the list and get-by-id routes. Authenticated users
+    without scope:read permission are denied SSE access.
 
 12. **Research routes use read-level auth for write operations.** The
     `POST /research/activities`, `POST /research/auto-assess`, and
@@ -181,6 +185,37 @@ data: {
     (recommended fix: require board-level auth or create a dedicated
     `background_job:create` permission).
 
+13. **Export payload size limited to 512 KB.** The `POST /exports/pdf`
+    and `POST /exports/ics` routes now reject payloads whose serialized
+    JSON size exceeds 512 KB with HTTP 413. This prevents large payloads
+    from tying up the worker (exacerbating the per-processor timeout)
+    and caps the base64 data-URI stored on the job result row.
+
+14. **candidateIds scope semantic upgrade to keyword-first results, but
+    only when provided.** The `research.semantic_search` processor
+    accepts optional `payload.candidateIds`. If present, the processor
+    fetches only those specific items for re-ranking, ensuring the
+    semantic upgrade operates on the same result set the user saw.
+    If absent, the processor re-runs the keyword search to build the
+    candidate pool (previous behavior). The route passes `candidateIds`
+    from the keyword-first response, so the behavior change is
+    transparent to API callers.
+
+15. **Processor timeout prevents stuck jobs.** Each processor runs under
+    a `Promise.race` with a 5-minute timeout (configurable via
+    `processorTimeoutMs` option on `createBackgroundJobWorker`). If a
+    processor exceeds the timeout, the job is marked `failed` with
+    `"Processor timed out after 300000ms"`. The worker can then claim
+    the next queued job.
+
+16. **Claim is now transaction-atomic.** The worker's claim logic wraps
+    `FOR UPDATE SKIP LOCKED` + status update to `'running'` inside a
+    single `db.transaction()`. In auto-commit mode (postgres-js default),
+    `FOR UPDATE SKIP LOCKED` releases row locks as soon as the SELECT
+    completes — before the subsequent UPDATE to `status='running'`.
+    Wrapping both in a single transaction ensures atomic claim ownership
+    and eliminates the race where two workers could claim the same job.
+
 ## Troubleshooting Guide
 
 ### Job stays in "queued" forever
@@ -189,8 +224,21 @@ data: {
 - **Workaround:** Restart the server; verify the startup log shows
   "Background job worker started".
 - **Expected fix:** The worker claims queued jobs every 2 seconds
-  (`server/src/services/background-job-worker.ts`). If jobs remain
+  (`server/src/services/background-job-worker.ts`). Claims are
+  transaction-atomic (`FOR UPDATE SKIP LOCKED` + status update to
+  `running` inside one transaction, post-review fix). If jobs remain
   queued, check the server logs for worker tick errors.
+
+### Job fails repeatedly with "Processor timed out"
+- **Root cause:** The processor exceeded the 5-minute timeout
+  (`processorTimeoutMs`, default 300000 ms). The worker uses
+  `Promise.race` to prevent one stuck job from blocking the queue.
+- **Workaround:** Check whether the job's data volume is unusually
+  large (e.g. a research query spanning many items, or an export with
+  a large item list). Reduce scope where possible.
+- **Note:** Transient failures are retried automatically (up to 2
+  retries with exponential backoff, capped at 30s) before a job is
+  marked `failed`.
 
 ### SSE connection returns 404
 - **Check:** Ensure the `/events` route is registered before the `/:id`
@@ -225,14 +273,17 @@ data: {
   recent issues.
 
 ### Export job completes with no downloadable file
-- **Root cause:** Export processors (`export.pdf`, `export.ics`) are
-  scaffolds. The result carries metadata (`kind`, `title`, `generatedAt`)
-  but no rendered binary or file URL.
-- **Expected:** A follow-up will wire a real PDF renderer and serve the
-  generated .ics file for download.
-- **Workaround:** The ICS processor does produce valid iCalendar v2.0
-  text in `result.calendarText` — a client-side download button can
-  construct a blob from that data.
+- **Root cause:** Export processors (`export.pdf`, `export.ics`) render
+  content into the job result object, but there is no blob storage or
+  served file URL yet. The result carries a base64 `dataUri` (PDF, via
+  pdfkit) or `calendarText` (ICS, valid iCalendar v2.0) — the client
+  must construct the download from the result object.
+- **Expected:** A follow-up will wire blob storage and serve the
+  generated files for direct download.
+- **Workaround:** Client-side download buttons can construct a blob
+  from `result.dataUri` (PDF) or `result.calendarText` (ICS).
+- **Note:** Payloads larger than 512 KB are rejected with HTTP 413 at
+  submission time (see known issue #13).
 
 ### UI shows "Search queued — results will appear shortly" indefinitely
 - **Root cause:** The job never transitions out of `queued` (worker not
@@ -256,15 +307,12 @@ data: {
   props.
 
 ### SSE events visible without proper permissions
-- **Check:** The SSE `/events` endpoint does not check
-  `company_scope:read`. Any authenticated user with company access can
-  subscribe. If this is a concern, restrict SSE access at the
-  infrastructure layer (reverse proxy ACL).
-- **Impact:** SSE subscribers see job status events (progress, status
-  transitions) but not the original job payload or sensitive result
-  data.
-- **Expected fix:** Add `assertCompanyScopeReadAllowed` to the SSE
-  route (tracked as Staff Engineer recommendation C5 in VOY-1494).
+- **Status:** RESOLVED in M2 post-review fixes. The SSE `/events`
+  endpoint now requires `company_scope:read`, matching the list and
+  get-by-id routes.
+- **Former impact:** Before the fix, any authenticated user with company
+  access could subscribe — but only saw status events, not job payload
+  or sensitive result data.
 
 ### Agent/users can enqueue research jobs without board authorization
 - **Check:** The research routes (`/research/activities`,
@@ -286,12 +334,13 @@ data: {
 | Issue | Action | Escalate to |
 |---|---|---|
 | Job stuck in queued | Verify worker is deployed, restart server | Engineering (Founding Engineer / CTO) |
+| Job fails repeatedly / times out | Check for oversized payloads, verify 5-min timeout budget is realistic for the workload; retries (max 2) are automatic | Engineering |
 | SSE not working | Check route ordering, verify polling fallback works | Engineering |
 | Activity search returns no data | Verify query terms exist in company data | Engineering |
 | Semantic upgrade missing | Check `PAPERCLIP_EMBEDDING_API_KEY` is set; keyword results still returned | Engineering (config) |
-| Export job result contains dataUri (PDF) or calendarText (ICS) | PDF is a real pdfkit-rendered document (base64 dataUri). ICS is valid v2.0 calendar text. No blob storage yet — client downloads from the result object. | Engineering (blob storage follow-up) |
+| Export job result contains dataUri (PDF) or calendarText (ICS) | PDF is a real pdfkit-rendered document (base64 dataUri). ICS is valid v2.0 calendar text. No blob storage yet — client downloads from the result object. Payloads over 512 KB rejected with 413. | Engineering (blob storage follow-up) |
+| Export returns HTTP 413 | Request payload exceeded the 512 KB cap — trim item lists before export | Support Engineer |
 | UI display issues (StatusCue blank, tray missing, etc.) | Check browser console for errors, refresh | Support Engineer + Engineering |
-| SSE accessible without scope:read | Assess if this is a concern — restrict at reverse proxy if needed | Engineering (authz fix) |
 | Research jobs submitted without board auth | Revoke agent's company_scope:read if abusive | Support Engineer + Engineering (authz fix) |
 
 ## Version History
@@ -301,3 +350,4 @@ data: {
 | 1 | 2026-08-20 | Support Engineer | Initial support case assessment for VOY-1474/VOY-1492 (M1) |
 | 2 | 2026-08-20 | Support Engineer | M2 update: worker + 5 processors live, export routes, BackgroundProcessTray, FreshnessCue, skeleton loading, keyword-first semantic search (VOY-1493) |
 | 3 | 2026-08-20 | Support Engineer | Corrected export processor accuracy (pdfkit real renderer, ICS v2.0 text), added SSE authz gap (#11) and research route authz inconsistency (#12), added troubleshooting for both authz items, updated escalation table (VOY-1493 post-commit audit) |
+| 4 | 2026-08-20 | Support Engineer | M2 post-review fixes (commit f81d572a40): resolved #6 (retries with exponential backoff) and #11 (SSE scope:read check now enforced); added #13 (512 KB export payload cap), #14 (candidateIds scoping), #15 (processor timeout), #16 (transaction-atomic claim); documented queued partial index + DB CHECK constraints; fixed stale "scaffolds" wording in export troubleshooting; added timeout/413 troubleshooting + escalation rows |

@@ -2731,3 +2731,57 @@ Idle. No new code to assess, no releases pending documentation sync, no support 
 4. COO request — documentation health report
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~09:30 UTC — Heartbeat: M2 post-review fixes assessed, doc v4 published, standing by
+
+### Diff assessment
+
+Commit `f81d572a40` (fix(VOY-1493): M2 post-review fixes):
+
+| Change | Type | Documentation Impact |
+|--------|------|---------------------|
+| Transaction-wrapped claim (FOR UPDATE SKIP LOCKED + status update in one tx) | Worker behavior | **Updated** — troubleshooting + known issue #16 |
+| candidateIds threaded through to scope semantic upgrade pool | API behavior | **Updated** — known issue #14 |
+| Processor timeout (5 min default, Promise.race) | Worker behavior | **Updated** — troubleshooting + known issue #15 |
+| Exponential backoff retries (2 max, 1s/2s/4s cap 30s) | Worker behavior | **Updated** — resolves known issue #6 |
+| Graceful shutdown with 30s in-flight drain | Worker behavior | **Updated** (app.ts shutdown path) |
+| Partial index on status='queued' | Data model | **Updated** — data model section |
+| DB CHECK constraints on status, progress, duration_ms | Data model | **Updated** — data model section |
+| SSE /events now checks assertCompanyScopeReadAllowed | Authz | **Updated** — resolves known issue #11 |
+| Export payload size cap 512KB (413 on exceed) | API behavior | **Updated** — known issue #13 + troubleshooting |
+| `scoreTitle` moved to module level | Refactor | **None** — no behavior change |
+
+### Documentation changes made
+
+**`doc/async-jobs.md` → v4:**
+
+1. **Resolved known issue #6** (no retry mechanism) — documented new retry behavior (exponential backoff, 2 retries, 30s cap).
+2. **Resolved known issue #11** (SSE missing scope:read check) — marked resolved; updated SSE authz troubleshooting section from "check/workaround" to "status: resolved".
+3. **Added known issue #13** — Export payload size limited to 512 KB (HTTP 413).
+4. **Added known issue #14** — candidateIds scope semantic upgrade to keyword-first results.
+5. **Added known issue #15** — Processor timeout (5 min default) prevents stuck jobs.
+6. **Added known issue #16** — Claim is now transaction-atomic.
+7. **Updated data model section** — Added queued partial index + DB CHECK constraints.
+8. **Fixed stale "scaffolds" wording** in export troubleshooting section (contradicted v3 correction).
+9. **Added "Job fails repeatedly / times out"** troubleshooting section.
+10. **Updated escalation table** — Added timeout/413 rows, removed resolved SSE authz row.
+11. **Bumped to v4** with commit reference `f81d572a40`.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 (no issues directly assigned) |
+| Documentation coverage | 100% — all committed M2 fixes (f81d572a40) documented |
+| M2 post-review fix status | ✅ Committed `f81d572a40`, Staff Engineer review (VOY-1494) complete — APPROVED |
+| Blocked items (human-gated) | VOY-1495 (release — blocked on env vars), VOY-1496 (QA — blocked on release), VOY-343 (founder env vars) |
+
+### Disposition
+
+**Standing by.** M2 post-review fixes assessed across 10 documentation-impacting changes. All updates applied to `doc/async-jobs.md` (v4). No release notes needed — M2 not yet shipped to production. Waiting for:
+
+1. Release Engineer pre-ship call (VOY-1495) — verify /documentation + create release note
+2. QA Engineer request (VOY-1496) — support case assessment for verified behavior
+3. COO request — documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
