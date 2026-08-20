@@ -1,8 +1,9 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { backgroundJobs } from "@paperclipai/db";
 import type { BackgroundJobStatus } from "@paperclipai/shared";
 import { publishLiveEvent } from "./live-events.js";
+import { logger } from "../middleware/logger.js";
 
 export interface CreateBackgroundJobInput {
   companyId: string;
@@ -23,14 +24,19 @@ export interface UpdateBackgroundJobInput {
 }
 
 export function backgroundJobService(db: Db) {
-  function toApi(row: typeof backgroundJobs.$inferSelect) {
+  function toApi(row: typeof backgroundJobs.$inferSelect, slim?: boolean) {
+    // Strip large binary result data from list/slim responses to avoid
+    // bandwidth amplification on tray polls and DB TOAST bloat on every
+    // list query. The full result (including dataUri) is available via
+    // the single-job getById() endpoint.
+    const result = slim && row.result ? { ...row.result, dataUri: undefined } : row.result;
     return {
       id: row.id,
       companyId: row.companyId,
       jobType: row.jobType,
       status: row.status as BackgroundJobStatus,
       payload: row.payload,
-      result: row.result,
+      result,
       error: row.error,
       durationMs: row.durationMs,
       progress: row.progress,
@@ -44,23 +50,30 @@ export function backgroundJobService(db: Db) {
   }
 
   function emitEvent(row: typeof backgroundJobs.$inferSelect) {
-    publishLiveEvent({
-      companyId: row.companyId,
-      type: "background_job.status",
-      payload: {
-        jobId: row.id,
+    try {
+      publishLiveEvent({
         companyId: row.companyId,
-        status: row.status,
-        progress: row.progress,
-        progressMessage: row.progressMessage,
-        result: row.result,
-        error: row.error,
-        durationMs: row.durationMs,
-        startedAt: row.startedAt?.toISOString() ?? null,
-        finishedAt: row.finishedAt?.toISOString() ?? null,
-        updatedAt: row.updatedAt.toISOString(),
-      },
-    });
+        type: "background_job.status",
+        payload: {
+          jobId: row.id,
+          companyId: row.companyId,
+          status: row.status,
+          progress: row.progress,
+          progressMessage: row.progressMessage,
+          result: row.result,
+          error: row.error,
+          durationMs: row.durationMs,
+          startedAt: row.startedAt?.toISOString() ?? null,
+          finishedAt: row.finishedAt?.toISOString() ?? null,
+          updatedAt: row.updatedAt.toISOString(),
+        },
+      });
+    } catch (err) {
+      // Live events are best-effort fire-and-forget fan-out: a subscriber
+      // throwing must never fail the DB write that already happened. The
+      // job state is durable; the UI tray catches up on next poll.
+      logger.warn({ err, jobId: row.id, status: row.status }, "Failed to publish background job live event");
+    }
   }
 
   return {
@@ -96,7 +109,7 @@ export function backgroundJobService(db: Db) {
         .orderBy(desc(backgroundJobs.createdAt))
         .limit(opts?.limit ?? 50)
         .offset(opts?.offset ?? 0);
-      return rows.map(toApi);
+      return rows.map((r) => toApi(r, true));
     },
 
     getById: async (id: string, companyId: string) => {
@@ -122,7 +135,17 @@ export function backgroundJobService(db: Db) {
       const [row] = await db
         .update(backgroundJobs)
         .set(updates)
-        .where(and(eq(backgroundJobs.id, id), eq(backgroundJobs.companyId, companyId)))
+        .where(
+          and(
+            eq(backgroundJobs.id, id),
+            eq(backgroundJobs.companyId, companyId),
+            // Never overwrite a terminal status. A job that already reached
+            // `succeeded`/`failed` must stay terminal — otherwise a stale
+            // retry loop could flip a succeeded job to failed, or a late
+            // progress report could resurrect a finished job.
+            inArray(backgroundJobs.status, ["queued", "running"]),
+          ),
+        )
         .returning();
 
       if (row) emitEvent(row);

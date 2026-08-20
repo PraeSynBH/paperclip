@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, lt } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { backgroundJobs } from "@paperclipai/db";
 import { BACKGROUND_JOB_TYPES, type BackgroundJobType } from "@paperclipai/shared";
@@ -358,9 +358,41 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
   }
 
   return {
-    start: () => {
+    start: async () => {
       if (timer) return;
       stopped = false;
+
+      // Startup sweep: requeue jobs stuck in `running` for longer than
+      // processorTimeoutMs + 30s grace period. This covers worker crashes
+      // or hard restarts that left claimed jobs orphaned, preventing the
+      // eternal spinner in the UI tray.
+      try {
+        const staleGracePeriod = processorTimeoutMs + 30_000;
+        const staleCutoff = new Date(Date.now() - staleGracePeriod);
+        const stale = await db
+          .update(backgroundJobs)
+          .set({
+            status: "queued",
+            progress: 0,
+            progressMessage: null,
+            startedAt: null,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(backgroundJobs.status, "running"),
+              isNotNull(backgroundJobs.startedAt),
+              lt(backgroundJobs.startedAt, staleCutoff),
+            ),
+          )
+          .returning({ id: backgroundJobs.id });
+        if (stale.length > 0) {
+          logger.info({ count: stale.length, staleCutoff }, "Requeued stale-running background jobs on worker start");
+        }
+      } catch (err) {
+        logger.error({ err }, "Failed to requeue stale-running jobs on worker start — continuing");
+      }
+
       timer = setInterval(() => void tick(), pollIntervalMs);
       timer.unref?.();
       void tick();
