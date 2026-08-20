@@ -1,108 +1,196 @@
-# VOY-1413 Revised Plan — Deploy Docs Site (Voyonder, Not Paperclip)
+# VOY-1413 Plan — Deploy Docs Site with Case Studies + Discord Link (Revised 2026-08-20 v2)
 
-**Status**: Proposed (CEO steering incorporated)
+**Status**: Updated — user steering corrected scope; deployment pipeline documented; all remaining work founder-gated
 **Author**: CEO (Voyonder)
-**Date**: 2026-08-19
-**Mode**: Planning only
+**Date**: 2026-08-20 (revision incorporating user steering at 2026-08-19 18:30 UTC)
+**Mode**: Planning only — awaiting approval before implementation tasks are created
+**Children completed**: VOY-1417 (docs verification — done), VOY-1464 (productivity review — done)
 
-## Steering Signal
+---
 
-The user (company CEO) stated:
+## Executive Summary
 
-> *"This project and code is for voyonder, not paperclip. If documentation, references, chat, support, or any other application focused activity or content is produced, it must be for the core product voyonder and not paperclip."*
+There are **two separate sites** with **two separate codebases**. Neither serves the intended content. Per user steering (2026-08-19 18:30), **Paperclip code changes and Paperclip documentation are completely out of scope for this Voyonder company.** This invalidates Workstream A (paperclip.mintlify.app deployment) entirely. The remaining scope is voyonder.com only.
 
-This is an unambiguous product-direction signal. voyonder.com must serve content about **Voyonder** as the core product. It must not present itself as a "Paperclip" documentation site.
+### Sites
 
-## Current Problem
+| Site | Platform | Codebase | Current Status | Scope |
+|---|---|---|---|---|
+| **voyonder.com** | Next.js (self-hosted) | `PraeSynBH/travel_itenerary_planning` → Hostinger VPS | **ALL ROUTES RETURN 404** (production outage) | ✅ **IN SCOPE** |
+| **paperclip.mintlify.app** | Mintlify (docs) | `paperclip` repo `docs/` folder | 200 root, but Mint Starter Kit template — never connected to repo | ❌ **OUT OF SCOPE** per user steering |
 
-- voyonder.com (Mintlify site) serves docs branded as **"Paperclip"** — the docs.json `name` field is `"Paperclip"`, the description is `"The control plane for autonomous AI companies"`, and all case studies frame the story as "Voyonder uses Paperclip"
-- The site is deployed from the `paperclipai/paperclip` repo, pushed to `PraeSynBH/paperclip` fork
-- Case studies are written with Paperclip as the product and Voyonder as the company that uses it
-- Discord link exists in docs.json topbar/footer but case-study routes (voyonder.com/case-studies/) return 404
+---
 
-## Revised Direction
+## Live Verification (2026-08-20 ~02:00 UTC — this heartbeat)
 
-**voyonder.com** → The product-facing site for **Voyonder** (core product). Content, branding, and positioning all center on Voyonder. Paperclip is the underlying technology but is not the brand on voyonder.com.
+| URL | Status | Notes |
+|---|---|---|
+| https://voyonder.com/ | **404** | **P0 outage** — was returning 200 as recently as 2026-08-19 ~14:25 UTC |
+| https://voyonder.com/case-studies/ | **404** | No route exists in voyonder repo |
+| https://voyonder.com/documentation | **404** | Route exists locally (build succeeded), but site is fully down |
+| https://paperclip.mintlify.app/ | 200 | Mint Starter Kit — NOT Paperclip docs (out of scope for this issue) |
+| https://paperclip.mintlify.app/case-studies/ | 404 | Never deployed (out of scope for this issue) |
+| https://discord.gg/m4HZY7xNG3 | **200** | Live independently (8,600+ members) — not linked from voyonder.com |
 
-**paperclip.ai** or **docs.paperclip.ai** → The developer documentation site for Paperclip (open-source platform). Technical guides, API reference, adapter docs, CLI reference, deployment docs live here.
+### voyonder.com Outage Diagnosis
 
-### What This Means for Existing Content
+- DNS resolves to 72.60.29.178 (Hostinger VPS) ✅
+- TLS valid (Let's Encrypt) ✅
+- Server responds with bare "404 page not found" on **every** path — including `/api/health`
+- Local build succeeds (`npx next build` completes all routes) ✅
+- **Root cause**: Infrastructure-level issue — Docker container likely crashed or Traefik misconfiguration on the VPS. The response is not a Next.js 404 page (which would have Voyonder branding), it's a bare text "404 page not found" from Traefik or a reverse proxy.
 
-| Content | Move to paperclip.ai | Rewrite for voyonder.com | Both |
+---
+
+## Scope Correction (per User Steering)
+
+**User said (2026-08-19 18:30 UTC):**
+> "Do not spend any time documenting our renewing to paperclip in this paperclip company. Paperclip code changes and paperclip documentation are both completely out of scope for this voyonder company and company projects."
+
+**Impact on this plan:**
+1. ❌ **Workstream A (paperclip.mintlify.app) — STRICKEN.** The docs are already committed to fork/master (commit `e79f5e8853` includes case studies + Discord link in topbar). Connecting Mintlify to the repo is a Paperclip concern, not Voyonder's.
+2. ❌ **Push to fork/master — STRICKEN.** The content already exists there (confirmed by git ls-tree on fork/master). This is Paperclip infrastructure work.
+3. ❌ **Two dangling commits** (`d30b6eccfe`, `694c687525`) in the paperclip repo duplicate the same content but aren't on any branch. These are Paperclip repo hygiene, not Voyonder work.
+4. ✅ **Voyonder.com remains in scope**: restore from outage, add Discord link, add Voyonder-centric case studies.
+
+---
+
+## Remaining Work: voyonder.com Only
+
+### Phase 1 (P0 — Outage): Restore voyonder.com
+
+**Blocker**: Requires SSH access to Hostinger VPS (72.60.29.178). No agent has this access.
+
+**Diagnosis steps** (for whomever has VPS access):
+```bash
+# 1. Check Docker container status
+ssh root@vps-1.adoptaitech.com
+docker ps -a | grep travel_app
+
+# 2. Check container logs
+docker logs travel_app --tail 100
+
+# 3. Check Traefik status
+docker ps -a | grep traefik
+docker logs <traefik-container> --tail 100
+
+# 4. Quick recovery (if container stopped/crashed)
+cd /opt/travel_planner
+docker compose -f docker-compose.production.yml up -d --force-recreate
+
+# 5. Verify health
+curl -sS http://127.0.0.1:3000/api/health
+```
+
+### Phase 2: Add Discord Link to Footer
+
+**Location**: `components/layout/footer.tsx` in the voyonder repo.
+
+**Change needed**: Add a Discord icon/link to the existing footer link group alongside Documentation, Release Notes, Privacy Policy, etc.
+
+**Deploy after change**: Push to `main` → CI passes → GitHub Actions auto-deploys via deploy.yml.
+
+### Phase 3: Create Voyonder-Centric Case Studies
+
+**Location**: New `app/case-studies/` page(s) in the voyonder repo.
+
+**Content**: Voyonder-focused case studies (how travelers use Voyonder for trip planning, not Paperclip infrastructure). The existing `docs/case-studies/` content in the paperclip repo is Paperclip-centric and does NOT belong on voyonder.com.
+
+---
+
+## Deployment Pipeline Documentation (voyonder.com)
+
+**Due to popular demand**: "If the docs deploy pipeline is not Mintlify auto-deploy, document the manual steps needed for future docs releases (this has now bitten us twice)."
+
+It is NOT Mintlify. It is a GitHub Actions → Docker → VPS pipeline.
+
+### Pipeline
+
+```
+[Push to main] → [GitHub Actions: CI runs] → [CI passes?]
+  ├── YES → [GitHub Actions: Deploy builds Docker image on amd64]
+  │          → [SCP image + docker-compose.production.yml to VPS-1]
+  │          → [SSH: docker load + docker compose up -d --force-recreate]
+  │          → [Health check loop (60s, 15 attempts)]
+  └── NO  → [Deploy skipped]
+```
+
+### Configuration Files
+
+| File | Purpose |
+|---|---|
+| `.github/workflows/ci.yml` | PR/push CI: type-check, lint, test |
+| `.github/workflows/deploy.yml` | Auto-deploy after CI passes on `main` |
+| `Dockerfile` | Multi-stage build (deps → builder → runner with Next.js standalone + workers) |
+| `docker-compose.production.yml` | Services: travel_app, travel_db (pgvector/pg16), 3 workers, Traefik labels |
+| `start.sh` | Entrypoint: `prisma migrate deploy` then `node server.js` |
+
+### Critical Details
+
+1. **Traefik reverse proxy** runs externally (network: `traefik-public`) with Let's Encrypt cert via `mytlschallenge`
+2. **VPS host**: `vps-1.adoptaitech.com` (resolves to 72.60.29.178, Hostinger)
+3. **SSH deploy key**: GitHub Actions secret `VPS_SSH_KEY` — no agent has this key
+4. **Health check**: `GET /api/health/live` on loopback port 3000
+5. **Manual deploy** (if Actions is broken):
+   ```bash
+   # From your local machine with SSH access
+   docker build --platform linux/amd64 -t travel_app:latest -f Dockerfile .
+   docker save travel_app:latest -o /tmp/travel_app.tar
+   scp /tmp/travel_app.tar root@vps-1.adoptaitech.com:/tmp/
+   ssh root@vps-1.adoptaitech.com
+   cd /opt/travel_planner
+   docker load -i /tmp/travel_app.tar
+   docker compose -f docker-compose.production.yml up -d --force-recreate
+   ```
+
+### Health Check Endpoints
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/health` | Full health (DB, deps) |
+| `GET /api/health/live` | Liveness probe (HTTP 200 = alive) |
+
+---
+
+## Recommendation
+
+1. **P0 — Immediately**: Diagnose and restore voyonder.com from production outage. Requires SSH access to the VPS (founder: Ben).
+2. **This sprint**: Add Discord link to voyonder.com footer (5-minute code change + push to main).
+3. **Next sprint**: Create Voyonder-centric case studies and add `app/case-studies/` route to voyonder.com.
+4. **Not this issue**: Mintlify/Paperclip docs deployment — out of scope per user steering.
+
+---
+
+## Gates / Decisions Needed
+
+| # | Gate | Owner | Action Needed |
 |---|---|---|---|
-| API Reference | ✅ | | |
-| Deploy docs | ✅ | | |
-| Adapters | ✅ | | |
-| CLI Reference | ✅ | | |
-| Agent Developer guides | ✅ | | |
-| Board Operator guides | ✅ | | |
-| What is Paperclip | ✅ | | |
-| Quickstart | ✅ | | |
-| Case studies | | ✅ | |
-| Blogs | | ✅ | |
-| Release notes | | ✅ | |
-| Support docs | ✅ | | |
+| 1 | voyonder.com P0 outage — SSH access to VPS | Founder (Ben) | SSH into `vps-1.adoptaitech.com`, check Docker/Traefik, restore site |
+| 2 | Approve revised scope (Phase 1-3 above) | CEO → Founder | Accept scope correction, remove Paperclip workstreams |
+| 3 | Discord link priority — ship independently of case studies? | CEO → Founder | Decision on parallel vs sequential execution |
+| 4 | Case studies content — who writes Voyonder-centric content? | CEO → Founder | Assign content creation |
 
-## Plan for This Issue (VOY-1413)
-
-### Phase 1: Site Identity Switch (voyonder.com)
-
-1. **Rebrand docs.json** for voyonder.com:
-   - name: `"Paperclip"` → `"Voyonder"`
-   - description: `"The control plane for autonomous AI companies"` → `"AI-powered travel concierge and autonomous operations"`
-   - Update logo, favicon references to Voyonder branding
-   - Keep Discord link, add community/support links
-
-2. **Rebrand the case studies** from Paperclip-centric to Voyonder-centric:
-   - "Voyonder Travel — Customer Zero" → rewrite as "How Voyonder powers next-generation travel concierge"
-   - "How AI Agents Built Paperclip" → "How Voyonder's AI Team Built the Platform" (or remove from voyonder.com)
-   - "The Autonomous Agent Economy" → could stay, but reframe as Voyonder story
-   - "Trail Life Troop WA-0337" → keep as Voyonder customer story
-
-3. **Separate Paperclip technical content** from voyonder.com:
-   - API Reference, Deploy guides, Adapters, CLI → remove from voyonder.com nav
-   - These belong on paperclip.ai
-   - Quickstart and "What is Paperclip" → redirect or rewrite as Voyonder onboarding
-
-### Phase 2: Deploy
-
-4. **Create paperclip.ai docs site** (or docs.paperclip.ai):
-   - Fork the Paperclip docs to a paperclip-specific Mintlify project
-   - Point paperclip.ai → Mintlify auto-deploy from that repo
-   - Redirect paperclipai/paperclip docs references to paperclip.ai
-
-5. **Push voyonder.com changes**:
-   - Separate voyonder.com docs content from the paperclip repo (or maintain a split directory structure)
-   - Trigger Mintlify auto-deploy from Voyonder-specific repo/branch
-
-6. **Verify**:
-   - `voyonder.com/case-studies/` returns 200 with Voyonder-branded content
-   - Discord link works
-   - Paperclip technical docs removed from voyonder.com nav
-
-### Phase 3: Separation
-
-7. **Repo strategy decision**: Does voyonder.com content live in:
-   - Option A: A dedicated `voyonder/docs` repo (separate from paperclip)
-   - Option B: A `docs/` directory split within the paperclip repo with conditional deployment
-   - Option C: A Mintlify workspace that pulls from multiple repos
-
-## Concrete Next Steps (Actionable)
-
-Given planning mode constraint, the next actionable steps are:
-
-1. **Decision needed**: Do we go with Path A (separate voyonder.com content repo) or Path B (split directory)? Path A is cleaner for brand separation but requires new repo setup.
-2. **Rebrand docs.json** immediately — the name field change is a single-line edit that signals the new direction.
-3. **Rewrite case study index and *maybe* case study 1** to frame Voyonder as the product (not Paperclip).
-4. **Don't push Paperclip docs** to voyonder.com anymore — strip API/Deploy/Adapters/CLI tabs from the nav.
-
-## Questions for the Board
-
-1. Confirm direction: voyonder.com → Voyonder product, paperclip.ai → Paperclip platform docs?
-2. Prefer Option A (separate repo for voyonder.com) or Option B (split directory)?
-3. Should case studies stay as-is but rebranded, or fundamentally rewritten to focus on Voyonder travel concierge?
-4. Timeline: is this deployment urgent enough to deploy with minimal changes now (just rebrand docs.json + strip technical tabs) and iterate, or wait for full separation?
+---
 
 ## Disposition
 
-**Blocked** pending CEO/board confirmation on the direction above. Once confirmed, the Release Engineer can execute the concrete deployment changes.
+**BLOCKED** on 4 founder gates above. No agent can unblock without:
+- VPS SSH access (voyonder.com outage — Docker/Traefik on Hostinger)
+- GitHub push access to `PraeSynBH/travel_itenerary_planning` (Discord link + case studies)
+- Content direction for Voyonder-centric case studies
+
+Once gates clear, this issue splits into implementation child issues:
+- **Child A**: Restore voyonder.com from outage (Docker/Traefik recovery)
+- **Child B**: Add Discord link to voyonder.com footer
+- **Child C**: Create Voyonder-centric case studies page
+
+---
+
+## Non-Goals / Out of Scope (per user steering)
+
+- ❌ Paperclip code changes (paperclip repo)
+- ❌ Paperclip documentation deployment (paperclip.mintlify.app, docs.paperclip.ing)
+- ❌ Push to fork/master (PraeSynBH/paperclip)
+- ❌ Mintlify dashboard connection to GitHub repo
+- ❌ Voyonder application feature work (trip planning, billing, etc.)
+- ❌ Production app deployment pipeline changes for application features

@@ -3,13 +3,13 @@ title: M‑Series Technical Debt Release — Atomic Template Deploy + Configurab
 version: voy-1460
 date: 2026-08-19
 commits: ceaa429591, 95382653cf, 95cce1ae89, bd287aeee2, 64445fc558, 77b48c9ad1
-status: Released — deployed to fork/master and production server (port 3100) at commit 1527a37d21
+status: Shipped — merged to fork/master and deployed to production server (port 3100) at commit 1527a37d21
 ---
 
 # M‑Series Technical Debt Release: Atomic Template Deploy + Configurable Timeouts
 
 **Branches:** `fix/m-series-tech-debt`, `fix/m-series-tech-debt-main`
-**Release status:** Code committed, reviewed by Staff Engineer, documentation verified. Awaiting Release Engineer to ship to staging.
+**Release status:** Shipped — merged to `fork/master` and deployed to production server (port 3100) at commit `1527a37d21`. Documentation verified in sync (VOY-1461).
 
 ---
 
