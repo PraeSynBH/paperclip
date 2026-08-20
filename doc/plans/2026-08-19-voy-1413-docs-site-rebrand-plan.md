@@ -1,9 +1,9 @@
-# VOY-1413 Plan — Deploy Docs Site with Case Studies + Discord Link (Revised 2026-08-20 v2)
+# VOY-1413 Plan — Deploy Docs Site with Case Studies + Discord Link (Revised 2026-08-20 v3)
 
-**Status**: Updated — user steering corrected scope; deployment pipeline documented; all remaining work founder-gated
+**Status**: Phase 1 (P0 outage) RESOLVED — voyonder.com is back up. Remaining: Discord link + case studies. Awaiting founder approval of revised scope before implementation child issues.
 **Author**: CEO (Voyonder)
-**Date**: 2026-08-20 (revision incorporating user steering at 2026-08-19 18:30 UTC)
-**Mode**: Planning only — awaiting approval before implementation tasks are created
+**Date**: 2026-08-20 (v3: outage resolved verified live ~03:21 UTC)
+**Mode**: Planning — awaiting approval before implementation tasks are created
 **Children completed**: VOY-1417 (docs verification — done), VOY-1464 (productivity review — done)
 
 ---
@@ -21,24 +21,23 @@ There are **two separate sites** with **two separate codebases**. Neither serves
 
 ---
 
-## Live Verification (2026-08-20 ~02:00 UTC — this heartbeat)
+## Live Verification (2026-08-20 ~03:21 UTC — this heartbeat)
 
 | URL | Status | Notes |
 |---|---|---|
-| https://voyonder.com/ | **404** | **P0 outage** — was returning 200 as recently as 2026-08-19 ~14:25 UTC |
-| https://voyonder.com/case-studies/ | **404** | No route exists in voyonder repo |
-| https://voyonder.com/documentation | **404** | Route exists locally (build succeeded), but site is fully down |
-| https://paperclip.mintlify.app/ | 200 | Mint Starter Kit — NOT Paperclip docs (out of scope for this issue) |
-| https://paperclip.mintlify.app/case-studies/ | 404 | Never deployed (out of scope for this issue) |
+| https://voyonder.com/ | **200** | ✅ Full Voyonder landing page, Next.js RSC rendering |
+| https://voyonder.com/case-studies/ | **308→404** | Route does not exist yet — redirects to /case-studies which 404s |
+| https://voyonder.com/documentation | **200** | ✅ Documentation page serves properly |
+| https://voyonder.com/documentation/releases | **200** | ✅ Release notes page serves properly |
+| https://voyonder.com/api/health | **200 (degraded)** | DB timeout (400ms), OpenRouter timeout (401ms) but site serves |
+| https://paperclip.mintlify.app/ | 200 | Mint Starter Kit — NOT Paperclip docs (out of scope) |
 | https://discord.gg/m4HZY7xNG3 | **200** | Live independently (8,600+ members) — not linked from voyonder.com |
 
-### voyonder.com Outage Diagnosis
+### voyonder.com Outage Resolution
 
-- DNS resolves to 72.60.29.178 (Hostinger VPS) ✅
-- TLS valid (Let's Encrypt) ✅
-- Server responds with bare "404 page not found" on **every** path — including `/api/health`
-- Local build succeeds (`npx next build` completes all routes) ✅
-- **Root cause**: Infrastructure-level issue — Docker container likely crashed or Traefik misconfiguration on the VPS. The response is not a Next.js 404 page (which would have Voyonder branding), it's a bare text "404 page not found" from Traefik or a reverse proxy.
+The P0 outage (all routes returning bare "404 page not found") is **RESOLVED**. Every route now serves proper Next.js-rendered content. Root cause was infra-level (Docker container crash or Traefik misconfiguration on Hostinger VPS) — no code change was needed. Founder action (SSH access) restored the site.
+
+**Footer links currently**: Documentation, Release Notes, Privacy Policy, TOS, Pricing, Gallery, Contact (mailto). **No Discord link.**
 
 ---
 
@@ -57,44 +56,29 @@ There are **two separate sites** with **two separate codebases**. Neither serves
 
 ## Remaining Work: voyonder.com Only
 
-### Phase 1 (P0 — Outage): Restore voyonder.com
+### Phase 1 (P0 — Outage): ✅ RESOLVED
 
-**Blocker**: Requires SSH access to Hostinger VPS (72.60.29.178). No agent has this access.
-
-**Diagnosis steps** (for whomever has VPS access):
-```bash
-# 1. Check Docker container status
-ssh root@vps-1.adoptaitech.com
-docker ps -a | grep travel_app
-
-# 2. Check container logs
-docker logs travel_app --tail 100
-
-# 3. Check Traefik status
-docker ps -a | grep traefik
-docker logs <traefik-container> --tail 100
-
-# 4. Quick recovery (if container stopped/crashed)
-cd /opt/travel_planner
-docker compose -f docker-compose.production.yml up -d --force-recreate
-
-# 5. Verify health
-curl -sS http://127.0.0.1:3000/api/health
-```
+The voyonder.com P0 production outage is **resolved** as of ~2026-08-20 03:21 UTC. The site is serving full Voyonder pages on all routes. No further action needed on Phase 1.
 
 ### Phase 2: Add Discord Link to Footer
 
-**Location**: `components/layout/footer.tsx` in the voyonder repo.
+**Location**: `components/layout/footer.tsx` in the voyonder repo (PraeSynBH/travel_itenerary_planning).
 
 **Change needed**: Add a Discord icon/link to the existing footer link group alongside Documentation, Release Notes, Privacy Policy, etc.
 
 **Deploy after change**: Push to `main` → CI passes → GitHub Actions auto-deploys via deploy.yml.
 
+**Blocker**: Requires GitHub push access to the voyonder repo. Founder-gated.
+
 ### Phase 3: Create Voyonder-Centric Case Studies
 
 **Location**: New `app/case-studies/` page(s) in the voyonder repo.
 
-**Content**: Voyonder-focused case studies (how travelers use Voyonder for trip planning, not Paperclip infrastructure). The existing `docs/case-studies/` content in the paperclip repo is Paperclip-centric and does NOT belong on voyonder.com.
+**Current status**: `/case-studies/` → 308 redirect to `/case-studies` → 404. Route does not exist.
+
+**Content**: Voyonder-focused case studies (how travelers use Voyonder for trip planning, not Paperclip infrastructure).
+
+**Blocker**: Content creation + code change. Founder-gated (GitHub push + content direction).
 
 ---
 
@@ -154,9 +138,9 @@ It is NOT Mintlify. It is a GitHub Actions → Docker → VPS pipeline.
 
 ## Recommendation
 
-1. **P0 — Immediately**: Diagnose and restore voyonder.com from production outage. Requires SSH access to the VPS (founder: Ben).
-2. **This sprint**: Add Discord link to voyonder.com footer (5-minute code change + push to main).
-3. **Next sprint**: Create Voyonder-centric case studies and add `app/case-studies/` route to voyonder.com.
+1. **P0 — ✅ DONE**: voyonder.com P0 outage resolved. Site restored without code change.
+2. **This sprint — Discord link**: Add Discord link to voyonder.com footer (5-minute code change + push to main → auto-deploys via GitHub Actions).
+3. **Next sprint — Case studies**: Create Voyonder-centric case studies and add `app/case-studies/` route to voyonder.com.
 4. **Not this issue**: Mintlify/Paperclip docs deployment — out of scope per user steering.
 
 ---
@@ -165,24 +149,22 @@ It is NOT Mintlify. It is a GitHub Actions → Docker → VPS pipeline.
 
 | # | Gate | Owner | Action Needed |
 |---|---|---|---|
-| 1 | voyonder.com P0 outage — SSH access to VPS | Founder (Ben) | SSH into `vps-1.adoptaitech.com`, check Docker/Traefik, restore site |
-| 2 | Approve revised scope (Phase 1-3 above) | CEO → Founder | Accept scope correction, remove Paperclip workstreams |
-| 3 | Discord link priority — ship independently of case studies? | CEO → Founder | Decision on parallel vs sequential execution |
-| 4 | Case studies content — who writes Voyonder-centric content? | CEO → Founder | Assign content creation |
+| 1 | ✅ voyonder.com P0 outage | **RESOLVED** | Site restored — no action needed |
+| 2 | Approve revised scope (Phases 2-3) | Founder (Ben) | Accept scope: Discord link + case studies, Voyonder-only |
+| 3 | Discord link priority — ship independently of case studies? | Founder (Ben) | Decision on parallel vs sequential execution |
+| 4 | Case studies content — who writes Voyonder-centric content? | Founder (Ben) | Assign content creation |
 
 ---
 
 ## Disposition
 
-**BLOCKED** on 4 founder gates above. No agent can unblock without:
-- VPS SSH access (voyonder.com outage — Docker/Traefik on Hostinger)
+**IN PROGRESS** — P0 outage resolved. Remaining work (Discord link + case studies) is founder-gated on:
 - GitHub push access to `PraeSynBH/travel_itenerary_planning` (Discord link + case studies)
 - Content direction for Voyonder-centric case studies
 
-Once gates clear, this issue splits into implementation child issues:
-- **Child A**: Restore voyonder.com from outage (Docker/Traefik recovery)
-- **Child B**: Add Discord link to voyonder.com footer
-- **Child C**: Create Voyonder-centric case studies page
+Pending founder approval of revised scope (request_confirmation on this issue). Once approved, this issue splits into implementation child issues:
+- **Child A**: Add Discord link to voyonder.com footer
+- **Child B**: Create Voyonder-centric case studies page
 
 ---
 
