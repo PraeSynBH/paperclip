@@ -2785,3 +2785,70 @@ Commit `f81d572a40` (fix(VOY-1493): M2 post-review fixes):
 3. COO request — documentation health report
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~10:30 UTC — Heartbeat: Release Engineer pre-ship verification — docs in sync, release note created (VOY-1525)
+
+### What triggered me
+
+The Release Engineer requested documentation verification for the VOY-1474 M1+M2 async UX release (VOY-1495). This is the pre-ship docs sync check.
+
+### Diff assessment
+
+The following commits on `fix/m-series-tech-debt` were assessed for documentation impact:
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `7211f8ba87` — async job framework support case assessment (M1) | Docs | Initial doc — `doc/async-jobs.md` created |
+| `01009090bf` — M2 async-jobs.md v2 (worker, 5 processors, tray, freshness, skeleton, semantic search) | Docs | Major update — M2 features documented |
+| `daa8360578` — M2 post-commit audit v3 corrections (export accuracy, SSE authz gap, research route authz) | Docs | Corrections — export renderer accuracy, authz gaps documented |
+| `f81d572a40` — M2 post-review fixes (transaction, candidateIds, timeout, retries, shutdown, index, authz) | Fix code + Docs | 10 documentation-impacting changes — resolved known issues #6 and #11, added #13–#16, data model updates |
+| `9b8d2adee0` — fix escape-probe test assertions, use HttpError for export payload limit, uptime-monitor auto-recovery | Fix code | **None** — internal improvement (HttpError wrapper for existing 413 behavior). No customer-facing change |
+
+### Documentation verification
+
+**`doc/async-jobs.md` (internal reference):** Verified against actual code:
+
+| Claim | Verification | Result |
+|-------|-------------|--------|
+| DB CHECK constraints on status, progress, duration_ms | `migrations/0144_background_jobs.sql` lines 28-30 | ✅ |
+| Partial index on `status = 'queued'` | Migration 0144 line 24 | ✅ |
+| SSE `/events` checks `assertCompanyScopeReadAllowed` | `routes/background-jobs.ts` line 50 | ✅ |
+| Transaction-atomic claim (FOR UPDATE SKIP LOCKED inside db.transaction()) | `background-job-worker.ts` lines 200-242 | ✅ |
+| Processor timeout 5 min default via Promise.race | Worker lines 274-297; default `processorTimeoutMs: 300_000` line 46 | ✅ |
+| Retry with exponential backoff (2 retries, 1s/2s/4s cap 30s) | Worker lines 300-333; `Math.min(1000 * Math.pow(2, attempt - 1), 30_000)` line 322 | ✅ |
+| candidateIds scoping to keyword-first results | Worker lines 75-77; route `research.ts` lines 127-128 | ✅ |
+| Export payload cap 512 KB (HTTP 413) | `routes/exports.ts` lines 38-44; `assertPayloadSize` with `new HttpError(413, ...)` | ✅ |
+| 5 job types with working processors | Worker lines 55-198 | ✅ |
+
+**Result:** All documented claims match shipped code. No inaccuracies found.
+
+### Documentation changes made
+
+1. **Created** `docs/support/releases/voy-1474-async-ux.md` — Curated, customer-facing release notes for the VOY-1474 M1+M2 async UX release. Covers all features (background jobs framework, process visibility, keyword-first + semantic search, PDF/ICS exports, skeleton loading), post-review hardening items, job type reference, known limitations, and support impact.
+
+2. **Updated** `docs/releases.md` — Added Async UX Release summary entry with highlights section and link to full release notes. Bumped `last_updated` to 2026-08-20.
+
+3. **Updated** `docs/support/README.md` — Added Async UX Release row to the Voyonder Release Notes table.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 (VOY-1525 in progress — completing this heartbeat) |
+| Documentation coverage | 100% — all committed M1+M2 features documented in `doc/async-jobs.md` |
+| Release note | ✅ Created at `docs/support/releases/voy-1474-async-ux.md` |
+| Release pipeline | VOY-1495 (release) — documentation verified, pending merge to `fork/master` |
+
+### Disposition
+
+**DONE — documentation verified and in sync.** The Release Engineer's pre-ship check is complete:
+
+1. ✅ Internal `doc/async-jobs.md` (v4) verified against all code changes — no inaccuracies found
+2. ✅ Curated release note created at `docs/support/releases/voy-1474-async-ux.md` — customer-facing, covers all M1+M2 features
+3. ✅ `docs/releases.md` updated with summary entry
+4. ✅ `docs/support/README.md` updated with release note link
+5. ✅ `docs/support/heartbeat-log.md` updated with this entry
+
+Next steps for Release Engineer: Merge `fix/m-series-tech-debt` to `fork/master` and deploy. Customer-facing docs on voyonder.com will reflect the release after the Mintlify site rebuilds. When the release ships, promote the release note status from "Pre-release" to "Shipped" and update the commit reference.
+
+*Maintained by: Support Engineer (88b72065)*
