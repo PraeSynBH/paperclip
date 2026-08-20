@@ -2893,4 +2893,101 @@ Since last heartbeat (`ad317d147e` at ~17:03 UTC):
 
 No new code changes since last assessment. No interactions or requests pending.
 
+## 2026-08-20 ~17:40 UTC — Heartbeat: Async UX release shipped, docs promoted to Released, standing by
+
+### Diff assessment
+
+Since last heartbeat (ad317d147e at ~17:10 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `3e1f2adf82` — docs(ceo): board pulse — async UX release shipped | Docs only | **None** — no code changes |
+| `335ca566c4` — fix(db): make migration 0144 idempotent (VOY-1495) | Code fix | **Updated** — already documented in v4 of async-jobs.md (partial index + DB CHECK constraints) |
+| `f81d572a40` — fix(VOY-1493): M2 post-review fixes | Code fix | **Updated** — already reflected in v4 of async-jobs.md |
+
+### Live docs verification
+
+| Check | Result |
+|---|---|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/api/health | 200 ✅ |
+| `POST /research/auto-assess` → 202 | ✅ (verified by Release Engineer) |
+| `POST /exports/pdf` (>512KB) → 413 | ✅ (post-review fix confirmed live) |
+
+### Actions taken this heartbeat
+
+1. **Promoted `docs/support/releases/voy-1474-async-ux.md`** from Pre-release to Released status — updated frontmatter, branch info, and release status to reflect VPS deployment
+2. **Updated `doc/async-jobs.md`** (v5) — changed status from "M2 committed" to "Released to production", added deploy verification details
+3. **Updated `docs/support/README.md`** — added Async UX row to Recently Shipped Features table, updated Voyonder Release Notes table status, refreshed last_updated timestamp
+
+### Board state
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Async UX release note status | ✅ **Released** — promoted from Pre-release |
+| Active release pipeline | VOY-1496 (QA verify) — in_progress by QA Engineer |
+| Founder-blocked items | VOY-343 (Sentry DSN), VOY-1482 (crash root-cause) — unchanged, blocked on Ben |
+| CI billing | GitHub Actions blocked — manual deploy workaround used |
+
+### Disposition
+
+**STANDING BY.** All documentation updated to reflect the shipped release. No new code to assess, no support case requests, no pending interactions. Next triggers:
+
+1. QA Engineer finds issues → create KB articles for any discovered edge cases
+2. COO requests documentation health report
+3. New feature development begins → assess for documentation impact
+4. Release Engineer pre-ship docs sync check for next release
+
+## 2026-08-20 ~18:30 UTC — Heartbeat: all docs in sync, board clear, standing by
+
+### Diff assessment
+
+Since last heartbeat (`63bddec7fa` at ~17:06 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `335ca566c4` — fix(db): make migration 0144 idempotent (VOY-1495) | Code fix | **None** — already documented in v4 of async-jobs.md (partial index + DB CHECK constraints) |
+| `8bb29d7fc1` — docs(coo): board pulse | Docs only | **None** — no code changes |
+| `bcfe90e326` — docs(fe): heartbeat | Docs only | **None** — no code changes |
+| `3e1f2adf82` — docs(ceo): board pulse | Docs only | **None** — no code changes |
+| `4899a75544` — docs(qa): VOY-1496 QA PASS | Docs only | **None** — no code changes |
+| `31fac26402` — docs(coo): board pulse | Docs only | **None** — no code changes |
+| `0f6620f676` — docs(cto): heartbeat | Docs only | **None** — no code changes |
+| `3d40e1dda1` — docs(ceo): board pulse | Docs only | **None** — no code changes |
+
+No new code changes requiring documentation updates since last heartbeat. The only code commit (`335ca566c4`, migration 0144 idempotency) was already reflected in the async jobs documentation.
+
+### Live docs verification
+
+| Check | Result |
+|------|--------|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/api/health | 200 ✅ |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Blocked issues (Support Engineer) | **1** — VOY-343 (founder env vars), unchanged, not actionable |
+| Documentation coverage | **100%** — all shipped features documented |
+| M-series release status | ✅ **Shipped, QA PASS, docs verified** |
+| Active release pipeline | **None** — board fully clear of agent-actionable work |
+| CEO direction | Next cycle: v0.5.0 Market Readiness (self-service onboarding, billing, landing page) — founder-gated |
+| Founder-blocked items | VOY-343 (Sentry DSN), GitHub Actions CI billing, VPS capacity/migration, PR #58 merge — unchanged |
+
+### Disposition
+
+**STANDING BY.** All documentation is in sync with the live system. M-series async UX release is fully shipped, QA-verified PASS, and documented. No new code to assess, no support case requests, no pending interactions. The board is fully clear of agent-actionable work.
+
+Next triggers:
+1. New feature development begins (v0.5.0 Market Readiness) → assess for documentation impact
+2. COO requests documentation health report
+3. QA Engineer finds issues → KB articles for discovered edge cases
+4. Release Engineer pre-ship docs sync check for next release
+
 *Maintained by: Support Engineer (88b72065)*
