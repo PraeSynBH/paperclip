@@ -1,4 +1,4 @@
-CREATE TABLE "background_jobs" (
+CREATE TABLE IF NOT EXISTS "background_jobs" (
   "id" uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   "company_id" uuid NOT NULL REFERENCES "companies"("id") ON DELETE CASCADE,
   "job_type" text NOT NULL,
@@ -18,13 +18,24 @@ CREATE TABLE "background_jobs" (
 
 --> statement-breakpoint
 
-CREATE INDEX "background_jobs_company_status_idx" ON "background_jobs" ("company_id", "status");
-CREATE INDEX "background_jobs_company_created_idx" ON "background_jobs" ("company_id", "created_at");
-CREATE INDEX "background_jobs_job_type_idx" ON "background_jobs" ("job_type");
-CREATE INDEX "background_jobs_queued_status_idx" ON "background_jobs" ("status") WHERE "status" = 'queued';
+CREATE INDEX IF NOT EXISTS "background_jobs_company_status_idx" ON "background_jobs" ("company_id", "status");
+CREATE INDEX IF NOT EXISTS "background_jobs_company_created_idx" ON "background_jobs" ("company_id", "created_at");
+CREATE INDEX IF NOT EXISTS "background_jobs_job_type_idx" ON "background_jobs" ("job_type");
+CREATE INDEX IF NOT EXISTS "background_jobs_queued_status_idx" ON "background_jobs" ("status") WHERE "status" = 'queued';
 
 --> statement-breakpoint
 
-ALTER TABLE "background_jobs" ADD CONSTRAINT "background_jobs_status_check" CHECK ("status" IN ('queued', 'running', 'succeeded', 'failed'));
-ALTER TABLE "background_jobs" ADD CONSTRAINT "background_jobs_progress_check" CHECK ("progress" >= 0 AND "progress" <= 100);
-ALTER TABLE "background_jobs" ADD CONSTRAINT "background_jobs_duration_check" CHECK ("duration_ms" IS NULL OR "duration_ms" >= 0);
+DO $$ BEGIN
+  ALTER TABLE "background_jobs" ADD CONSTRAINT "background_jobs_status_check" CHECK ("status" IN ('queued', 'running', 'succeeded', 'failed'));
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "background_jobs" ADD CONSTRAINT "background_jobs_progress_check" CHECK ("progress" >= 0 AND "progress" <= 100);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+  ALTER TABLE "background_jobs" ADD CONSTRAINT "background_jobs_duration_check" CHECK ("duration_ms" IS NULL OR "duration_ms" >= 0);
+EXCEPTION WHEN duplicate_object THEN NULL;
+END $$;
