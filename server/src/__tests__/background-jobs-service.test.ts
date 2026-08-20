@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { eq as drizzleEq } from "drizzle-orm";
 import { createDb, companies, backgroundJobs } from "@paperclipai/db";
 import {
   getEmbeddedPostgresTestSupport,
@@ -302,5 +303,166 @@ describeEmbeddedPostgres("backgroundJobWorker — processor dispatch", () => {
     // company-agnostic by design; isolation is enforced at the API layer.)
     const jobs = await svc.list(otherCompanyId);
     expect(jobs.some((j) => j.status === "succeeded")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Failure-path tests for the M2 post-ship audit fixes.
+// ---------------------------------------------------------------------------
+
+describeEmbeddedPostgres("backgroundJob failure paths", () => {
+  let db!: ReturnType<typeof createDb>;
+  let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
+  let companyId: string;
+
+  beforeAll(async () => {
+    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-bg-failure-");
+    db = createDb(tempDb.connectionString);
+  });
+
+  afterEach(async () => {
+    await db.delete(backgroundJobs);
+    await db.delete(companies);
+  });
+
+  afterAll(async () => {
+    await tempDb?.cleanup();
+  });
+
+  async function seedCompany(name = "Fail Co"): Promise<string> {
+    const id = randomUUID();
+    await db.insert(companies).values({
+      id,
+      name,
+      issuePrefix: `F${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+      hideAiCosts: false,
+      disableAiCosts: false,
+      disableAgentGoalCreation: false,
+      onboarded: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    return id;
+  }
+
+  it("prevents overwriting a terminal status via update() guard", async () => {
+    companyId = await seedCompany();
+    const svc = backgroundJobService(db);
+
+    // Create and succeed a job
+    const job = await svc.create({
+      companyId,
+      jobType: "research.activity_search",
+      payload: { query: "done" },
+    });
+    const succeeded = await svc.update(job.id, companyId, {
+      status: "succeeded",
+      result: { answer: 42 },
+      finishedAt: new Date(),
+    });
+    expect(succeeded?.status).toBe("succeeded");
+
+    // Attempt to overwrite the terminal status — must be a no-op
+    const overwrite = await svc.update(job.id, companyId, {
+      status: "failed",
+      error: "should not happen",
+    });
+    // update() returns null because no row matched the
+    // status IN ('queued','running') guard
+    expect(overwrite).toBeNull();
+
+    // Verify the row is still succeeded
+    const reload = await svc.getById(job.id, companyId);
+    expect(reload?.status).toBe("succeeded");
+    expect(reload?.error).toBeNull();
+  });
+
+  it("strips dataUri from list result but keeps it in getById", async () => {
+    companyId = await seedCompany();
+    const svc = backgroundJobService(db);
+
+    // Create a job and set a result that contains a dataUri
+    const job = await svc.create({
+      companyId,
+      jobType: "export.pdf",
+      payload: { title: "Test", items: [] },
+    });
+    await svc.update(job.id, companyId, {
+      status: "succeeded",
+      result: {
+        kind: "pdf",
+        title: "Test",
+        dataUri: "data:application/pdf;base64,JVBERi0=",
+        byteLength: 1234,
+        itemCount: 0,
+        generatedAt: new Date().toISOString(),
+      },
+      finishedAt: new Date(),
+    });
+
+    // getById should include dataUri
+    const byId = await svc.getById(job.id, companyId);
+    expect(byId).not.toBeNull();
+    const byIdResult = byId!.result as Record<string, unknown> | null;
+    expect(byIdResult?.dataUri).toBe("data:application/pdf;base64,JVBERi0=");
+
+    // list should strip dataUri
+    const list = await svc.list(companyId);
+    expect(list.length).toBeGreaterThan(0);
+    const listItem = list.find((j) => j.id === job.id);
+    expect(listItem).not.toBeUndefined();
+    const listResult = listItem!.result as Record<string, unknown> | null;
+    expect(listResult?.dataUri).toBeUndefined();
+    // Other result fields should survive
+    expect(listResult?.kind).toBe("pdf");
+    expect(listResult?.title).toBe("Test");
+  });
+
+  it("requeues stale-running jobs on worker start and leaves recent-running alone", async () => {
+    companyId = await seedCompany();
+    const svc = backgroundJobService(db);
+
+    // Create two jobs
+    const staleJob = await svc.create({
+      companyId,
+      jobType: "research.activity_search",
+      payload: { query: "stale" },
+    });
+    const freshJob = await svc.create({
+      companyId,
+      jobType: "research.activity_search",
+      payload: { query: "fresh" },
+    });
+
+    // Transition both to running
+    await svc.update(staleJob.id, companyId, { status: "running", startedAt: new Date() });
+    await svc.update(freshJob.id, companyId, { status: "running", startedAt: new Date() });
+
+    // Manually set staleJob.startedAt far in the past via direct DB
+    const farPast = new Date(Date.now() - 600_000); // 10 minutes ago
+    await db
+      .update(backgroundJobs)
+      .set({ startedAt: farPast })
+      .where(drizzleEq(backgroundJobs.id, staleJob.id));
+
+    // Fresh job's startedAt stays recent (set above)
+
+    // Start the worker — the startup sweep should requeue the stale job,
+    // then tick() immediately processes it to completion. The fresh job
+    // (still 'running', not 'queued') is left alone.
+    const worker = createBackgroundJobWorker(db, { pollIntervalMs: 50_000, batchSize: 5, processorTimeoutMs: 60_000 });
+    await worker.start();
+    worker.stop();
+
+    // The stale job was rescued from eternal 'running' and processed to
+    // succeeded (sweep → requeue → tick claims → processor completes).
+    const staleReload = await svc.getById(staleJob.id, companyId);
+    expect(staleReload?.status).toBe("succeeded");
+
+    // The fresh job was never touched — tick only claims 'queued' jobs,
+    // and the fresh job remained 'running' throughout.
+    const freshReload = await svc.getById(freshJob.id, companyId);
+    expect(freshReload?.status).toBe("running");
   });
 });
