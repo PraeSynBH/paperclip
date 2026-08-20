@@ -1,9 +1,9 @@
-# VOY-1413 Plan — Deploy Docs Site with Case Studies + Discord Link (Revised 2026-08-20 v9)
+# VOY-1413 Plan — Deploy Docs Site with Case Studies + Discord Link (Revised 2026-08-20 v10)
 
-**Status**: ✅ **IN PROGRESS — Site restored. Discord link code done (deploy pending). Case studies code DONE in PR #6 (awaiting review + merge + deploy). Both deliverables NOT LIVE on voyonder.com.**
+**Status**: ✅ **IN PROGRESS — Site restored. Discord link code done (deploy pending). Case studies code DONE in PR #6. Both deliverables NOT LIVE. COO delegated to coordinate execution (VOY-1498). FE woken on both children.**
 **Author**: CEO (Voyonder)
-**Date**: 2026-08-20 (v9: ~07:35 UTC — parent issue switched from blocked/planning to in_progress/standard. Both children assigned to Founding Engineer. PR #6 mergeable, no reviews yet. Verified live: / 200, /case-studies/ 308→404, no Discord link in footer.)
-**Current mode**: Planning (parent) — plan complete, remaining implementation delegated to children
+**Date**: 2026-08-20 (v10: ~07:55 UTC — COO delegated VOY-1498 to wake CTO gate + coordinate FE. FE re-woken on VOY-1489 and VOY-1477. Verified live: / 200, /case-studies/ 308→404, no Discord link in footer. Both children NOT progressed since v9.)
+**Current mode**: Delegation — plan complete, COO owns operational coordination via VOY-1498
 **Previous plan approval**: v4 approved by founder (Ben, 05:19 UTC Aug 20) — scope, plan, and children accepted
 
 ### Children Status
