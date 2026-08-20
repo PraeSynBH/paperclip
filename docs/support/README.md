@@ -103,5 +103,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-20 ~19:30 UTC — Known production issues (VOY-1527) documented in release notes, support impact section expanded with hotfix guidance*
+*Last updated: 2026-08-20 ~21:30 UTC — VOY-1527 P0/P1 hotfixes resolved and verified. All 4 production issues fixed: emitEvent guard, stale-job recovery, list slim projection, email digest ordering.*
 *Maintained by: Support Engineer (88b72065)*

@@ -2,8 +2,8 @@
 
 **Feature**: Multi-channel notification system with user-configurable preferences, email digests, push subscriptions, delivery status tracking, and automatic notifications for key events
 **Assessed by**: Support Engineer
-**Date**: 2026-08-18 (updated 2026-08-20 — VOY-1527 known issue: email digest deferral status bug)
-**Related**: VOY-1342, VOY-1364, VOY-1367, VOY-1365, VOY-1402, VOY-1527
+**Date**: 2026-08-18 (updated 2026-08-20 — VOY-1527 email digest ordering fix resolved and verified)
+**Related**: VOY-1342, VOY-1364, VOY-1367, VOY-1365, VOY-1402, VOY-1527, VOY-1531
 **Release**: v0.4.0-alpha (hotfix VOY-1367) + H-3 delivery telemetry (VOY-1402)
 
 ## Feature Overview (User Perspective)
@@ -145,7 +145,7 @@ Each notification now records per-channel delivery status:
 
 **Status initialization**: When `notify()` dispatches a notification, per-channel statuses are initialized to `pending` for each attempted channel before the SMTP/VAPID calls start. If a channel fails later, its status transitions to `failed` with an error message. If it succeeds, status transitions to `sent`.
 
-> **⚠️ Known bug (VOY-1527, hotfix in progress):** For email+digest notifications, `emailDeliveryStatus` is initialized to `pending` *before* the digest preference query determines whether the notification is deferred to digest. This means deferred emails incorrectly show `pending` indefinitely, even though the email is correctly batched for the next digest delivery. The digest delivery itself is unaffected — only the user-facing status field is misleading. A hotfix is in progress to move the digest query before the status initialization.
+> **✅ Resolved (VOY-1527/VOY-1531, hotfix shipped 2026-08-20 ~17:20 UTC):** For email+digest notifications, `emailDeliveryStatus` is now initialized correctly. The digest preference query (`SELECT digestFrequency`) runs *before* the `initUpdates` block, so `emailDeferredToDigest` is correctly resolved before the status init decision. Deferred emails no longer show stale `pending` status. The fix is confirmed in commit 9949b6dfcb (hotfix VOY-1531) — see the [Async UX Release Notes](../releases/voy-1474-async-ux.md) for details.
 
 **Backfill on existing data**: Notifications created before this feature (`email_sent_at`/`push_sent_at` without delivery status columns) are backfilled during migration 0143: notifications with a non-null `email_sent_at` get `emailDelivery.status = 'sent'`, and similarly for `push_sent_at`.
 
@@ -213,7 +213,7 @@ If SMTP is not configured, email notifications are silently skipped (logged as w
 
 12. **"My notification shows 'Pending' for email delivery and it's been hours"** — Delivery status is updated asynchronously. If SMTP is not configured, the status stays `pending` because email was never attempted. Check SMTP configuration. If SMTP is configured, check the server logs for SMTP connection errors — the status may be stuck at `pending` if the SMTP send threw an unhandled error.
 
-13. **"My notification shows 'Pending' for email delivery but I chose daily/weekly digest"** — This is a known bug (VOY-1527, hotfix in progress): the `emailDeliveryStatus` is set to `pending` before the system checks whether email should be deferred to a digest. The email is correctly batched for the next digest delivery — the "pending" status is misleading. The hotfix will move the digest check earlier so pending is only shown for non-digest emails.
+13. **"My notification shows 'Pending' for email delivery but I chose daily/weekly digest"** — **This was a known bug that is now resolved.** The fix (VOY-1527/VOY-1531, shipped 2026-08-20) moves the digest preference query before the status initialization. If you still see this after the fix, verify the server was restarted with the hotfix (commit 9949b6dfcb+). The email is correctly batched for the next digest delivery regardless.
 
 14. **"My notification shows 'Failed' for email delivery — what does the error mean?"** — The `emailDelivery.error` field contains the SMTP error message. Common causes: SMTP connection refused (wrong host/port), authentication failed (wrong credentials), or TLS negotiation failure. Check the server logs for the full SMTP conversation.
 
@@ -240,7 +240,7 @@ If SMTP is not configured, email notifications are silently skipped (logged as w
 | Notifications stuck at "Pending" for email delivery | Medium | SMTP may be unconfigured or misconfigured. Check SMTP_HOST/SMTP_USER/SMTP_PASS. Test SMTP connectivity manually. If SMTP is configured but notifications remain pending, escalate — the delivery update may not be persisting to the database. |
 || Notification delivery shows "Failed" with specific SMTP error | Medium | Interpret the error: connection refused (wrong host/port), authentication failed (wrong credentials), or TLS error. Verify SMTP credentials and test manually. |
 | Delivery status shows "Failed" for email but user received the email | Low | The SMTP send succeeded but the status update query may have failed. Check server logs for the notification ID. Escalate if repeatable — possible database write issue. |
-| Email status shows "Pending" for digest-deferred notifications | Low | Cosmetic only (VOY-1527, hotfix in progress). The email is correctly deferred to digest — the "Pending" status is misleading. No workaround needed. |
+| Email status shows "Pending" for digest-deferred notifications | Low | **RESOLVED** (VOY-1527/VOY-1531, shipped 2026-08-20). If still seen after fix, server may not have been restarted with the hotfix. Verify server is on commit 9949b6dfcb+. |
 | Notification History UI fails to load | Low | Check browser console for errors. The component queries `GET /notifications` endpoint. If the endpoint fails, check server-side notification route health. |
 | Delivery telemetry events not appearing in PostHog | Low | Telemetry is lazy-loaded and fire-and-forget — failures are silently caught. If PostHog events are missing, check PostHog API key/host configuration and the telemetry import path. |
 
