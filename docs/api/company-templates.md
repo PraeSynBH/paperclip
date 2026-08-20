@@ -85,7 +85,7 @@ Creates a new company from the template. Requires an authenticated user session 
 
 ### Response (201 Created)
 
-Returns the created resources plus any warnings (non-fatal errors during deployment):
+Returns the created resources plus any warnings. The deployment is **atomic** — if any critical step fails (skill install, agent creation, knowledge pack, goal, project, or starter issue), the entire operation rolls back and no partial state is left behind. The only non-fatal failure that produces a warning is agent instructions materialization (the agent still works with adapter defaults).
 
 ```json
 {
@@ -134,4 +134,4 @@ Returns the created resources plus any warnings (non-fatal errors during deploym
 | 403 | Not authenticated as a board user |
 | 404 | Template key not found |
 
-All non-fatal errors during deployment are collected in the `warnings` array. The company and any successfully created resources are still returned.
+The deployment is **all-or-nothing**. In the event of a failure, no partial state is created — the entire operation rolls back. The `warnings` array contains only non-fatal issues (e.g., agent instructions materialization failures).

@@ -11,6 +11,24 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
+## M-Series Technical Debt Release — August 19, 2026
+
+[Full release notes →](/support/releases/voy-1460-m-series-tech-debt)
+
+### Highlights
+
+- **Atomic Company Template Deployment** — Deploying a pre-built company template is now all-or-nothing. If any critical step fails (skill install, agent creation, knowledge pack, goal, project, or starter issue), the entire deployment rolls back cleanly — no partially-created company to clean up.
+
+- **Configurable Timeouts** — 50+ previously hardcoded timeout, TTL, and interval values across the server are now configurable via `PAPERCLIP_*` environment variables. Defaults are unchanged, so existing deployments behave identically out of the box, but operators can now tune performance and reliability characteristics per their infrastructure.
+
+- **Server Reliability Fixes** — Notification and board-chat fixes from the recent merge, plus cleanup of dead code and unused imports (M-series audit findings). The HTTP headers timeout is now automatically derived from the keep-alive timeout, preventing misconfiguration that could crash the server.
+
+- **Database Client Hardening** — Prepared statement caching disabled in the Postgres client to prevent connection-pooling issues during migrations.
+
+[Full release notes →](/support/releases/voy-1460-m-series-tech-debt)
+
+---
+
 ## Documentation Site v1 — August 19, 2026
 
 [Full release notes →](/support/releases/docs-site-case-studies-and-community)

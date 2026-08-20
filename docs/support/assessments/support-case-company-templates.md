@@ -2,10 +2,10 @@
 
 **Feature**: Pre-built company templates that create a full company (agents, skills, knowledge, goals, projects, starter issues) in one click
 **Assessed by**: Support Engineer
-**Date**: 2026-08-17
-**Related**: VOY-1340
-**Commits**: `e5276f9037`, `62d532d119`, `c067b8c494`
-**Release**: v0.4.0-alpha (post-hotfix)
+**Date**: 2026-08-17 (updated 2026-08-19 — VOY-1403 atomic deploy)
+**Related**: VOY-1340, VOY-1403
+**Commits**: `e5276f9037`, `62d532d119`, `c067b8c494`, `ceaa429591` (VOY-1403)
+**Release**: v0.4.0-alpha (post-hotfix), M-series tech debt release (VOY-1460)
 
 ## Feature Overview (User Perspective)
 
@@ -87,11 +87,11 @@ Returns the created company, agents, goal, project, starter issue, and any warni
 
 2. **"The template I want isn't available"** — Templates are loaded from JSON files on the server (`server/src/company-template-data/`). The list endpoint returns whatever is on disk. If no templates show, check the server logs for template load errors.
 
-3. **"My agent is missing its skills"** — Skill installation from the catalog can fail if the catalog skill ID doesn't exist on the server. The deploy will still succeed (with a warning in the response). Check the `warnings` array in the deploy response.
+3. **"My agent is missing its skills"** — Skill installation from the catalog runs inside the deployment transaction. If a catalog skill ID doesn't exist on the server, the **entire deployment rolls back** (VOY-1403) — no company, agents, or partial state is left behind. The deploy request fails; the user must fix the underlying cause and retry. Since v0.5.0 production-stable, all bundled template skills are verified present at release time.
 
 4. **"I can't edit the agent instructions"** — Agents deployed from templates have a materialized instructions bundle (AGENTS.md). These can be edited via the agent settings page or the instructions API.
 
-5. **"The knowledge starter pack didn't load"** — Starter pack installation is non-fatal. If the pack key doesn't exist in the system, the deploy succeeds with a warning.
+5. **"The knowledge starter pack didn't load"** — Starter pack installation is now **fatal** (VOY-1403). If the pack key doesn't exist in the system, the deployment rolls back entirely. This is by design — the pack is part of the template contract. A `warnings` entry only appears for agent instructions materialization failures (non-fatal; the agent still works with adapter defaults).
 
 ## Known Limitations
 
@@ -111,7 +111,8 @@ Returns the created company, agents, goal, project, starter issue, and any warni
 |---|---|---|
 | "Template not found" error | Invalid template key | Check available templates via `GET /company-templates` |
 | Deploy fails with 403 | Not authenticated as a board user | Ensure you're logged in as a board user with company creation permissions |
-| Warnings in deploy response | Skill install or starter pack failed | Review the `warnings` array; the company and agents are still created |
+| Deploy fails (no company created) | A critical step failed (skill install, agent creation, pack, goal, project, or issue) | Deployment is atomic (VOY-1403): no partial state remains. Check server logs for the failing step, fix the cause, retry |
+| Warnings in deploy response | Agent instructions materialization failed | The agent still works with adapter defaults; check the `warnings` array |
 | Agents created but not waking | Agents created in "idle" status; need timer or manual wake | Check agent status; triggers should wake them on the next heartbeat cycle |
 | Duplicate company name | No uniqueness check on company name | Companies can have the same name; rename in the UI or deploy with a custom name |
 
@@ -119,10 +120,10 @@ Returns the created company, agents, goal, project, starter issue, and any warni
 
 | Issue | Severity | Action |
 |---|---|---|
-| Deploy creates invalid company state (missing agents, broken permissions) | High | Escalate to Staff Engineer — verify the deploy transaction completeness |
+| Deploy rolls back entirely (no partial state) | High | This is expected behavior since VOY-1403 (atomic deploy). Check server logs for the failing step; escalate to Staff Engineer only if a *valid* template deployment fails |
 | Template load failure on server startup | High | Check server logs for JSON parse errors in `server/src/company-template-data/` |
 | Agent instructions not materialized | Medium | The agent still works with adapter defaults; instructions can be set manually via the API |
-| Knowledge starter pack not available | Medium | Verify the pack exists in the system; escalate to CTO if missing |
+| Knowledge starter pack not available | Medium | Since VOY-1403 the deployment rolls back when the pack is missing — verify the pack exists in the system; escalate to CTO if missing |
 | User wants to add a custom template | Low | Refer to server operator; templates are JSON files on disk |
 
 ## Related Documentation
