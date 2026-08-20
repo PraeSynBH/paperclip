@@ -1,4 +1,5 @@
-import { pgTable, uuid, text, timestamp, jsonb, integer, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, jsonb, integer, index, check } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { companies } from "./companies.js";
 
 /**
@@ -62,6 +63,14 @@ export const backgroundJobs = pgTable(
       table.createdAt,
     ),
     jobTypeIdx: index("background_jobs_job_type_idx").on(table.jobType),
+    // Partial index for the worker's claim query: filters on status='queued'
+    // with no company_id predicate, so a leftmost-prefix index on
+    // (company_id, status) cannot serve it. Without this the claim query
+    // seq-scans as the table grows.
+    queuedStatusIdx: index("background_jobs_queued_status_idx").on(table.status).where(sql`${table.status} = 'queued'`),
+    statusCheck: check("background_jobs_status_check", sql`${table.status} IN ('queued', 'running', 'succeeded', 'failed')`),
+    progressCheck: check("background_jobs_progress_check", sql`${table.progress} >= 0 AND ${table.progress} <= 100`),
+    durationCheck: check("background_jobs_duration_check", sql`${table.durationMs} IS NULL OR ${table.durationMs} >= 0`),
   }),
 );
 

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { backgroundJobs } from "@paperclipai/db";
 import { BACKGROUND_JOB_TYPES, type BackgroundJobType } from "@paperclipai/shared";
@@ -17,8 +17,8 @@ import PDFDocument from "pdfkit";
  *
  * The worker is intentionally simple: a single in-process polling loop
  * with bounded concurrency. It is safe to run multiple instances — each
- * claim uses `FOR UPDATE SKIP LOCKED`, so two workers never process the
- * same job.
+ * claim uses `FOR UPDATE SKIP LOCKED` inside a transaction, so two workers
+ * never process the same job.
  */
 
 export interface BackgroundJobWorkerOptions {
@@ -26,6 +26,10 @@ export interface BackgroundJobWorkerOptions {
   pollIntervalMs?: number;
   /** Max jobs claimed per tick. Default 5. */
   batchSize?: number;
+  /** Per-processor timeout in ms. Default 5 minutes. */
+  processorTimeoutMs?: number;
+  /** Max retries for transient processor failures. Default 2. */
+  maxRetries?: number;
 }
 
 type JobProcessor = (ctx: {
@@ -39,6 +43,8 @@ type JobProcessor = (ctx: {
 export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerOptions) {
   const pollIntervalMs = options?.pollIntervalMs ?? 2_000;
   const batchSize = options?.batchSize ?? 5;
+  const processorTimeoutMs = options?.processorTimeoutMs ?? 300_000; // 5 min default
+  const maxRetries = options?.maxRetries ?? 2;
   const svc = backgroundJobService(db);
   const research = researchSearchService(db);
 
@@ -66,9 +72,12 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
         ? payload.scope
         : "all";
       const limit = typeof payload.limit === "number" ? payload.limit : undefined;
+      const candidateIds = Array.isArray(payload.candidateIds)
+        ? payload.candidateIds.filter((id): id is string => typeof id === "string")
+        : undefined;
 
       await report(20, "Keyword pass complete — upgrading with semantic ranking…");
-      const result = await research.upgradeSemanticResults(companyId, { query, scope, limit });
+      const result = await research.upgradeSemanticResults(companyId, { query, scope, limit, candidateIds });
       await report(100, result.upgraded ? "Semantic ranking applied" : "Keyword results returned");
       return result;
     },
@@ -190,16 +199,47 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
 
   async function claimQueuedJobs(): Promise<Array<typeof backgroundJobs.$inferSelect>> {
     // Claim up to batchSize queued jobs, skipping rows locked by other workers.
+    // The claim + status update MUST be inside a transaction: in auto-commit mode
+    // (postgres-js default), FOR UPDATE SKIP LOCKED releases row locks as soon as
+    // the SELECT completes — before the subsequent UPDATE to status='running'.
+    // Wrapping both in a single transaction ensures atomic claim ownership.
     // NOTE: deliberately NOT filtered by known job types — a job whose type has
     // no registered processor must still be claimed so processJob() can fail it
     // with "No processor registered" instead of leaving it queued forever.
-    const rows = await db
-      .select()
-      .from(backgroundJobs)
-      .where(eq(backgroundJobs.status, "queued"))
-      .orderBy(backgroundJobs.createdAt)
-      .limit(batchSize)
-      .for("update", { skipLocked: true });
+    const rows = await db.transaction(async (tx) => {
+      const claimed = await tx
+        .select()
+        .from(backgroundJobs)
+        .where(eq(backgroundJobs.status, "queued"))
+        .orderBy(backgroundJobs.createdAt)
+        .limit(batchSize)
+        .for("update", { skipLocked: true });
+
+      if (claimed.length > 0) {
+        const claimedIds = claimed.map((r) => r.id);
+        await tx
+          .update(backgroundJobs)
+          .set({
+            status: "running",
+            startedAt: new Date(),
+            progress: 5,
+            progressMessage: "Starting…",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(backgroundJobs.status, "queued"),
+              inArray(backgroundJobs.id, claimedIds),
+            ),
+          );
+        // Mark the claimed rows as running in-memory for the caller.
+        for (const row of claimed) {
+          row.status = "running";
+        }
+      }
+
+      return claimed;
+    });
 
     return rows;
   }
@@ -228,35 +268,81 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
       await svc.update(row.id, row.companyId, { progress, progressMessage: message });
     };
 
-    try {
-      const result = await processor({
-        db,
-        companyId: row.companyId,
-        jobId: row.id,
-        payload: row.payload,
-        report,
+    // Run the processor with a timeout to prevent stuck jobs from blocking
+    // the worker permanently. Uses Promise.race — the processor promise is
+    // the primary; the timeout signal rejects after processorTimeoutMs.
+    const processorWithTimeout = async (): Promise<Record<string, unknown>> => {
+      let timeout: NodeJS.Timeout | null = null;
+      const timeoutPromise = new Promise<Record<string, unknown>>((_, reject) => {
+        timeout = setTimeout(() => {
+          reject(new Error(`Processor timed out after ${processorTimeoutMs}ms`));
+        }, processorTimeoutMs);
       });
-      const finishedAt = new Date();
-      await svc.update(row.id, row.companyId, {
-        status: "succeeded",
-        result,
-        progress: 100,
-        progressMessage: "Complete",
-        finishedAt,
-        durationMs: finishedAt.getTime() - startedAt.getTime(),
-      });
-      logger.info({ jobId: row.id, jobType: row.jobType }, "Background job succeeded");
-    } catch (err) {
-      const finishedAt = new Date();
-      const message = err instanceof Error ? err.message : String(err);
-      await svc.update(row.id, row.companyId, {
-        status: "failed",
-        error: message,
-        finishedAt,
-        durationMs: finishedAt.getTime() - startedAt.getTime(),
-      });
-      logger.error({ err, jobId: row.id, jobType: row.jobType }, "Background job failed");
+
+      try {
+        const result = await Promise.race([
+          processor({
+            db,
+            companyId: row.companyId,
+            jobId: row.id,
+            payload: row.payload,
+            report,
+          }),
+          timeoutPromise,
+        ]);
+        return result;
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+    };
+
+    // Retry loop for transient failures.
+    let lastError: Error | null = null;
+    let attempt = 0;
+    const maxAttempts = 1 + maxRetries; // first attempt + retries
+
+    while (attempt < maxAttempts) {
+      attempt++;
+      try {
+        const result = await processorWithTimeout();
+        const finishedAt = new Date();
+        await svc.update(row.id, row.companyId, {
+          status: "succeeded",
+          result,
+          progress: 100,
+          progressMessage: "Complete",
+          finishedAt,
+          durationMs: finishedAt.getTime() - startedAt.getTime(),
+        });
+        logger.info({ jobId: row.id, jobType: row.jobType, attempt }, "Background job succeeded");
+        return;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < maxAttempts) {
+          const delay = Math.min(1000 * Math.pow(2, attempt - 1), 30_000); // exponential backoff, cap at 30s
+          logger.warn(
+            { err, jobId: row.id, jobType: row.jobType, attempt, maxAttempts, delayMs: delay },
+            "Background job attempt failed, will retry",
+          );
+          await svc.update(row.id, row.companyId, {
+            progress: Math.min(95, 5 + attempt * 20),
+            progressMessage: `Failed (attempt ${attempt}/${maxAttempts}) — retrying…`,
+          });
+          await sleep(delay);
+        }
+      }
     }
+
+    // All attempts exhausted — mark permanently failed.
+    const finishedAt = new Date();
+    const message = lastError?.message ?? "Unknown error";
+    await svc.update(row.id, row.companyId, {
+      status: "failed",
+      error: message,
+      finishedAt,
+      durationMs: finishedAt.getTime() - startedAt.getTime(),
+    });
+    logger.error({ err: lastError, jobId: row.id, jobType: row.jobType, attempts: attempt }, "Background job failed after all retries");
   }
 
   async function tick() {
@@ -287,6 +373,28 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
         timer = null;
       }
       logger.info("Background job worker stopped");
+    },
+    /** Graceful shutdown — waits for in-flight jobs up to the given timeout. */
+    shutdown: async (gracePeriodMs = 30_000) => {
+      stopped = true;
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      if (inFlight === 0) {
+        logger.info("Background job worker shut down (no in-flight jobs)");
+        return;
+      }
+      logger.info({ inFlight, gracePeriodMs }, "Background job worker waiting for in-flight jobs to complete…");
+      const deadline = Date.now() + gracePeriodMs;
+      while (inFlight > 0 && Date.now() < deadline) {
+        await sleep(200);
+      }
+      if (inFlight > 0) {
+        logger.warn({ inFlight, elapsed: gracePeriodMs }, "Background job worker shutdown timed out — in-flight jobs abandoned");
+      } else {
+        logger.info("Background job worker shut down gracefully");
+      }
     },
     /** Exposed for tests — runs one poll cycle. */
     tick,

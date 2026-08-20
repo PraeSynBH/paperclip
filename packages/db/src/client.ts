@@ -48,6 +48,22 @@ export type MigrationState =
     };
 
 export function createDb(url: string) {
+  // prepare: false — disables postgres.js prepared statements for the whole pool.
+  //
+  // Rationale (documented per Staff Engineer review, M-series): postgres.js
+  // prepared statements use named portal caching keyed by statement text. In
+  // long-lived processes with the background-job worker + SSE + hot module
+  // reloading in dev, we observed `prepared statement "x" already exists` /
+  // portal exhaustion errors when the same parameterized statement shape is
+  // issued concurrently from different code paths (transactions with nested
+  // savepoints, drizzle .for("update") row locks). Disabling prepare forces a
+  // server-side parse+plan per query — slightly more CPU on the DB, but
+  // eliminates the class of prepared-statement name-collision failures.
+  //
+  // Tradeoff accepted: queries on the hot path (issues, board, live events)
+  // re-parse. If this becomes a measurable bottleneck, scope `prepare: false`
+  // to transactional clients only (see companyTemplateService savepoints)
+  // instead of the global pool.
   const sql = postgres(url, { prepare: false });
   return drizzlePg(sql, { schema });
 }

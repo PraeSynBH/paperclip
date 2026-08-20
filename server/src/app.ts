@@ -585,7 +585,9 @@ export async function createApp(
   const shutdownAppServices = () => {
     if (appServicesShutdown) return;
     appServicesShutdown = true;
-    backgroundJobWorker.stop();
+    backgroundJobWorker.shutdown(30_000).catch((err) => {
+      logger.error({ err }, "Background job worker shutdown error");
+    });
     disableFeedbackExportFlushes();
     devWatcher?.close();
     viteHtmlRenderer?.dispose();

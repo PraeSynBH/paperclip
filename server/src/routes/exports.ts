@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { Request, Response } from "express";
 import type { Db } from "@paperclipai/db";
 import { BACKGROUND_JOB_TYPES } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
@@ -28,6 +29,21 @@ const exportIcsSchema = z.object({
 });
 
 /**
+ * Reject export payloads whose serialized size exceeds `limitBytes`.
+ * Guards against a large payload tying up the PDF/ICS worker in-process
+ * (exacerbating the per-processor timeout), and caps the base64 data-URI
+ * stored on the job result row.
+ */
+function assertPayloadSize(req: Request, limitBytes = 512 * 1024): void {
+  const body = req.body as unknown;
+  if (body === undefined || body === null) return;
+  const size = Buffer.byteLength(JSON.stringify(body), "utf8");
+  if (size > limitBytes) {
+    throw Object.assign(new Error(`Export payload too large (${size} bytes, max ${limitBytes})`), { status: 413 });
+  }
+}
+
+/**
  * Export routes — PDF and ICS generation run as background jobs so the
  * request returns immediately and the client tracks progress via the
  * background-jobs API/SSE.
@@ -49,6 +65,7 @@ export function exportRoutes(db: Db) {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);
       if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
+      assertPayloadSize(req);
 
       const job = await jobs.create({
         companyId,
@@ -77,6 +94,7 @@ export function exportRoutes(db: Db) {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);
       if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
+      assertPayloadSize(req);
 
       const job = await jobs.create({
         companyId,

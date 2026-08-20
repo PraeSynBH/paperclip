@@ -83,23 +83,23 @@ function escapeLikePattern(value: string): string {
   return value.replace(/[\\%_]/g, "\\$&");
 }
 
+function scoreTitle(title: string, normalizedQuery: string, tokens: string[]): number {
+  const lower = title.toLowerCase();
+  let score = 0;
+  if (lower.includes(normalizedQuery)) score += 60;
+  if (lower.startsWith(normalizedQuery)) score += 20;
+  for (const token of tokens) {
+    if (lower.includes(token)) score += 10;
+  }
+  return score;
+}
+
 /**
  * Search across issues, documents, and activity log by keyword.
  * This is the "keyword-first" pass — fast, deterministic, no embeddings.
  */
 export function researchSearchService(db: Db) {
   const embed = embeddingService();
-
-  function scoreTitle(title: string, normalizedQuery: string, tokens: string[]): number {
-    const lower = title.toLowerCase();
-    let score = 0;
-    if (lower.includes(normalizedQuery)) score += 60;
-    if (lower.startsWith(normalizedQuery)) score += 20;
-    for (const token of tokens) {
-      if (lower.includes(token)) score += 10;
-    }
-    return score;
-  }
 
   async function searchIssues(
     companyId: string,
@@ -345,14 +345,35 @@ export function researchSearchService(db: Db) {
       total: number;
     }> => {
       const normalizedQuery = normalizeQuery(payload.query);
+      const tokens = normalizedQuery
+        .split(/\s+/)
+        .filter((t) => t.length >= 2)
+        .slice(0, 8);
       const limit = clampLimit(payload.limit);
 
-      // First get the keyword-first results — these are the candidate pool.
-      const { results } = await keywordSearch(companyId, {
-        query: payload.query,
-        scope: payload.scope,
-        limit,
-      });
+      // When candidateIds are provided, fetch only those specific items for
+      // re-ranking — this ensures the semantic upgrade operates on the same
+      // result set the user saw in the keyword-first response.
+      // Otherwise, re-run the keyword search to build the candidate pool.
+      let results: ResearchHit[];
+      if (payload.candidateIds && payload.candidateIds.length > 0) {
+        // Fetch and reconstruct ResearchHit[] from the candidate IDs.
+        // The candidateIds come from the keyword-first pass and could reference
+        // issues, documents, or activity entries. We search each type table.
+        const [issueResults, docResults, activityResults] = await Promise.all([
+          fetchIssuesByIds(db, companyId, payload.candidateIds, normalizedQuery, tokens),
+          fetchDocumentsByIds(db, companyId, payload.candidateIds, normalizedQuery, tokens),
+          fetchActivityByIds(db, companyId, payload.candidateIds, normalizedQuery, tokens),
+        ]);
+        results = [...issueResults, ...docResults, ...activityResults].sort((a, b) => b.score - a.score).slice(0, limit);
+      } else {
+        const kwResult = await keywordSearch(companyId, {
+          query: payload.query,
+          scope: payload.scope,
+          limit,
+        });
+        results = kwResult.results;
+      }
 
       if (normalizedQuery.length === 0 || results.length === 0) {
         return { query: payload.query, upgraded: false, model: null, results, total: results.length };
@@ -476,6 +497,148 @@ export function researchSearchService(db: Db) {
       return { assessedAt: new Date().toISOString(), items };
     },
   };
+}
+
+/**
+ * Fetch issues by their IDs and return them as ResearchHit[].
+ * Used by upgradeSemanticResults when candidateIds are provided.
+ */
+async function fetchIssuesByIds(
+  db: Db,
+  companyId: string,
+  ids: string[],
+  normalizedQuery: string,
+  tokens: string[],
+): Promise<ResearchHit[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({
+      id: issues.id,
+      identifier: issues.identifier,
+      title: issues.title,
+      description: issues.description,
+      updatedAt: issues.updatedAt,
+    })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.companyId, companyId),
+        inArray(issues.id, ids),
+        isNull(issues.hiddenAt),
+      ),
+    )
+    .limit(ids.length);
+
+  return rows.map((row) => {
+    const description = row.description ?? "";
+    const matchIndex = description.toLowerCase().indexOf(normalizedQuery);
+    const snippet =
+      matchIndex >= 0
+        ? `...${description.slice(Math.max(0, matchIndex - 60), matchIndex + 120)}...`
+        : description.slice(0, 160);
+    const title = row.identifier ? `${row.identifier} ${row.title}` : row.title;
+    return {
+      id: row.id,
+      type: "issue" as const,
+      title,
+      snippet: snippet.length > 0 ? snippet : null,
+      updatedAt: row.updatedAt.toISOString(),
+      score: scoreTitle(title, normalizedQuery, tokens),
+    };
+  });
+}
+
+/**
+ * Fetch documents by their IDs and return them as ResearchHit[].
+ * Used by upgradeSemanticResults when candidateIds are provided.
+ */
+async function fetchDocumentsByIds(
+  db: Db,
+  companyId: string,
+  ids: string[],
+  normalizedQuery: string,
+  tokens: string[],
+): Promise<ResearchHit[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({
+      id: documents.id,
+      title: documents.title,
+      latestBody: documents.latestBody,
+      updatedAt: documents.updatedAt,
+    })
+    .from(documents)
+    .where(
+      and(
+        eq(documents.companyId, companyId),
+        inArray(documents.id, ids),
+      ),
+    )
+    .limit(ids.length);
+
+  return rows.map((row) => {
+    const body = row.latestBody ?? "";
+    const matchIndex = body.toLowerCase().indexOf(normalizedQuery);
+    const snippet =
+      matchIndex >= 0
+        ? `...${body.slice(Math.max(0, matchIndex - 60), matchIndex + 120)}...`
+        : body.slice(0, 160);
+    return {
+      id: row.id,
+      type: "document" as const,
+      title: row.title ?? body.slice(0, 80),
+      snippet: snippet.length > 0 ? snippet : null,
+      updatedAt: row.updatedAt.toISOString(),
+      score: scoreTitle(row.title ?? body.slice(0, 80), normalizedQuery, tokens),
+    };
+  });
+}
+
+/**
+ * Fetch activity log entries by their IDs and return them as ResearchHit[].
+ * Used by upgradeSemanticResults when candidateIds are provided.
+ */
+async function fetchActivityByIds(
+  db: Db,
+  companyId: string,
+  ids: string[],
+  normalizedQuery: string,
+  tokens: string[],
+): Promise<ResearchHit[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({
+      id: activityLog.id,
+      entityType: activityLog.entityType,
+      entityId: activityLog.entityId,
+      action: activityLog.action,
+      createdAt: activityLog.createdAt,
+    })
+    .from(activityLog)
+    .where(
+      and(
+        eq(activityLog.companyId, companyId),
+        inArray(activityLog.id, ids),
+      ),
+    )
+    .limit(ids.length);
+
+  return rows.map((row) => {
+    const action = row.action ?? "";
+    const matchIndex = action.toLowerCase().indexOf(normalizedQuery);
+    const snippet =
+      matchIndex >= 0
+        ? `...${action.slice(Math.max(0, matchIndex - 60), matchIndex + 120)}...`
+        : action.slice(0, 160);
+    return {
+      id: row.id,
+      type: "activity" as const,
+      title: action.slice(0, 80),
+      snippet: snippet.length > 0 ? snippet : null,
+      updatedAt: row.createdAt.toISOString(),
+      score: scoreTitle(action, normalizedQuery, tokens),
+    };
+  });
 }
 
 function cosineSimilarity(a: number[], b: number[]): number {

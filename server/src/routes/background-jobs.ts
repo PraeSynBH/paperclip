@@ -47,6 +47,7 @@ export function backgroundJobRoutes(db: Db) {
     assertAuthenticated(req);
     const companyId = req.params.companyId as string;
     assertCompanyAccess(req, companyId);
+    if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
 
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
