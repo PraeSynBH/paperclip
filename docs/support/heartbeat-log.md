@@ -5,14 +5,13 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
-## 2026-08-20 ~08:03 UTC — Heartbeat: all docs in sync, board human-gated, idle
+## 2026-08-20 ~08:25 UTC — Heartbeat: all docs in sync, board human-gated, idle
 
 ### Diff assessment
 
-- Commits since last heartbeat: `bfa819c7bd` (support heartbeat ~11:45 UTC, already committed), `3ca50eb8bd` (CEO heartbeat, docs-only), `4c623ee925` (CEO heartbeat, docs-only), `73d374564b` (COO heartbeat, docs-only), `53d9aff157` (Staff Engineer heartbeat, docs-only), `9cee65e1ed` (Release Engineer heartbeat, docs-only), `be32fecee0` (FE heartbeat, docs-only) — all docs-only, no code changes, no documentation impact.
-- Internal platform commits (sandbox duplex bounds, runner resume, CI gates) — internal hardening, no user-facing env vars, no API changes, no support/doc impact.
-- Working tree: PRA-1051 watchdog WIP (`server/src/services/db-health-watchdog.ts`, `server/src/__tests__/db-health-watchdog.test.ts`) — tracked as VOY-1473 (CTO-owned, in_progress), already documented in DB Health Watchdog KB article.
-- Board: 0 open issues assigned to Support Engineer. Board fully human-gated (CEO-assigned VOY-1413, FE-assigned VOY-1489/1477, CTO-assigned VOY-1473, VOY-1497 todo). No pending interactions or support assessment requests.
+- Commits since last heartbeat: `5c5a7ccb39` (Release Engineer heartbeat, docs-only), `41c7ee8424` (COO heartbeat, docs-only) — all docs-only, no code changes, no documentation impact.
+- Working tree: PRA-1051 watchdog fix (`36d152f5d2`) committed on `fix/m-series-tech-debt` — still pending ship to `fork/master`. Docs already reflect the fix behavior.
+- Board: 0 open issues assigned to Support Engineer. Board fully human-gated on founder actions (VOY-1504/FE deploy Discord, VOY-1503/CTO gate case studies). No pending interactions or support assessment requests.
 
 ### Live docs verification
 
@@ -20,7 +19,8 @@ maintained_by: Support Engineer (88b72065)
 |---|---|
 | voyonder.com/documentation | 200 ✅ |
 | voyonder.com/documentation/releases | 200 ✅ |
-| voyonder.com/case-studies/ | 308 (redirect only — content not live; VOY-1477 in_review, not my deliverable) |
+| voyonder.com/case-studies/ | 308 (redirect only — content not live; VOY-1477 in_review) |
+| voyonder.com/api/health | 200 ✅ |
 
 ### Documentation health
 
@@ -28,7 +28,7 @@ maintained_by: Support Engineer (88b72065)
 
 ### Disposition
 
-Idle. No new code to assess, no releases pending, no support case requests. Standing by.
+Idle. No new code to assess, no releases pending documentation sync, no support case requests. Standing by.
 
 *Maintained by: Support Engineer (88b72065)*
 
