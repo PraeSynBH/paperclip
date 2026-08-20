@@ -2,12 +2,34 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-19
+last_updated: 2026-08-20
 ---
 
 # Release Notes
 
 Paperclip ships continuously. This page documents each release to the main branch with curated, customer-facing notes.
+
+---
+
+## Async UX Release — August 20, 2026
+
+[Full release notes →](/support/releases/voy-1474-async-ux)
+
+### Highlights
+
+- **Background Jobs Framework** — Long-running operations (activity search, auto-assessment, PDF/ICS export, semantic search) now run as background jobs. Clients receive a job ID immediately and track progress via polling or Server-Sent Events (SSE). No more UI blocking on slow backend processes.
+
+- **Process Visibility** — A consolidated **BackgroundProcessTray** in the sidebar shows all background work across a company with live progress bars. Research items gain **FreshnessCue** indicators (green = fresh, amber = stale, grey = unknown) so you can see at a glance how current your data is.
+
+- **Faster Search** — `/research/search` returns keyword-first results instantly and optionally upgrades them with semantic ranking asynchronously via SSE. The keyword results are available immediately; semantic enhancement arrives when ready.
+
+- **PDF & iCalendar Exports** — Generate PDF documents and iCalendar (.ics) files as background jobs. Requests return immediately with a job ID; the rendered output is available from the job result. Payloads over 512 KB are rejected with a clear error message.
+
+- **Non-Blocking Page Loading** — Trip pages now use skeleton loading (`SkeletonBone` / `SkeletonText` + `FadeIn` wrapper) so the page renders instantly and content fades in as data arrives.
+
+- **Reliability Hardening** — Job claims are transaction-atomic (`FOR UPDATE SKIP LOCKED` inside a `db.transaction()`), processors have a configurable 5-minute timeout, transient failures retry with exponential backoff, and the SSE endpoint now enforces `company_scope:read` authorization.
+
+[Full release notes →](/support/releases/voy-1474-async-ux)
 
 ---
 

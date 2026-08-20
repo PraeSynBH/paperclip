@@ -22,3 +22,4 @@ export { inboxDismissalsApi } from "./inboxDismissals";
 export { companySkillsApi } from "./companySkills";
 export { memoryApi } from "./memory";
 export { companyTemplatesApi } from "./companyTemplates";
+export { backgroundJobsApi, researchApi, exportsApi } from "./background-jobs";

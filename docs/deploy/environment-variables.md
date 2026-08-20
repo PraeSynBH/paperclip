@@ -140,6 +140,13 @@ A full reference with all variables, defaults, and descriptions is available at 
 | `PAPERCLIP_ACTIVE_RUN_OUTPUT_CRITICAL_THRESHOLD_MS` | 4 h | Critical threshold (no output) |
 | `PAPERCLIP_CONTINUATION_RECOVERY_BASE_BACKOFF_MS` | 60000 | Base back-off for continuation recovery |
 
+### Database
+
+| Variable | Default | Description |
+|---|---|---|
+| `PAPERCLIP_DB_WATCHDOG_INTERVAL_MS` | 30000 | DB health probe interval (ms). How often the watchdog checks database connectivity. |
+| `PAPERCLIP_DB_WATCHDOG_MAX_FAILURES` | 3 | Consecutive probe failures before the watchdog takes action (embedded PG restart or process exit). |
+
 ### Infrastructure / Telemetry
 
 | Variable | Default | Description |

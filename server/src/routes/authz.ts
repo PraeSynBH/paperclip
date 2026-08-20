@@ -1,4 +1,5 @@
-import type { Request } from "express";
+import type { Request, Response } from "express";
+import type { AuthorizationAction, AuthorizationActor, AuthorizationResource } from "../services/authorization.js";
 import { forbidden, unauthorized } from "../errors.js";
 
 export function assertAuthenticated(req: Request) {
@@ -72,6 +73,33 @@ export function assertCompanyAccess(req: Request, companyId: string) {
       }
     }
   }
+}
+
+/**
+ * Assert that the authenticated actor has `company_scope:read` permission
+ * in the given company.  Surfaces an error via `res` and returns `false`
+ * when denied; returns `true` when allowed.
+ *
+ * Note: `assertAuthenticated(req)` and `assertCompanyAccess(req, companyId)`
+ * must already have passed before calling this.
+ *
+ * @param access — an `accessService()` instance for the current request.
+ */
+export async function assertCompanyScopeReadAllowed(
+  req: Request,
+  res: Response,
+  companyId: string,
+  access: { decide: (input: { actor: AuthorizationActor; action: AuthorizationAction; resource: AuthorizationResource }) => Promise<{ allowed: boolean }> },
+  opts?: { errorMessage?: string },
+): Promise<boolean> {
+  const decision = await access.decide({
+    actor: req.actor,
+    action: "company_scope:read",
+    resource: { type: "company", companyId },
+  });
+  if (decision.allowed) return true;
+  res.status(403).json({ error: opts?.errorMessage ?? "Access denied" });
+  return false;
 }
 
 export function getActorInfo(req: Request): (

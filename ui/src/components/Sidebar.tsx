@@ -42,6 +42,7 @@ import { cn, SIDEBAR_RAIL_HIDDEN_LABEL } from "../lib/utils";
 import { PluginSlotOutlet } from "@/plugins/slots";
 import { PluginLauncherOutlet } from "@/plugins/launchers";
 import { SidebarCompanyMenu } from "./SidebarCompanyMenu";
+import { BackgroundProcessTray } from "./BackgroundProcessTray";
 
 export function Sidebar() {
   const { openNewIssue } = useDialogActions();
@@ -215,6 +216,14 @@ export function Sidebar() {
         {streamlined ? null : <SidebarProjects />}
 
         <SidebarAgents streamlined={streamlined} />
+
+        {/* Consolidated background-process tray — shows running/finished jobs
+            for the current company. Collapsed by default when idle. */}
+        {selectedCompanyId && !rail && (
+          <div className="px-3">
+            <BackgroundProcessTray companyId={selectedCompanyId} maxItems={10} />
+          </div>
+        )}
 
         <SidebarSection label="Company">
           <SidebarNavItem to="/org" label="Org" icon={Network} />

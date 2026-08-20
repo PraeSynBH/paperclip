@@ -563,28 +563,14 @@ export function notificationService(db: Db) {
       input.notificationType,
     );
 
-    // Initialize delivery statuses to pending before dispatch attempts
-    let emailDeferredToDigest = false;
-    const initUpdates: Record<string, any> = {};
-    if (channels.includes("email") && !emailDeferredToDigest) {
-      initUpdates.emailDeliveryStatus = "pending";
-    }
-    if (channels.includes("webpush")) {
-      initUpdates.pushDeliveryStatus = "pending";
-    }
-    if (Object.keys(initUpdates).length > 0) {
-      await db
-        .update(notifications)
-        .set(initUpdates)
-        .where(eq(notifications.id, record.id));
-    }
-
-    // Dispatch to channels in parallel
-    const dispatchPromises: Promise<void>[] = [];
-
     // Determine whether email for this (type, user) is deferred to a digest.
     // When the user has opted into a daily/weekly digest for this type,
     // skip immediate email and leave sentAt null so sendDigest picks it up.
+    // NOTE: this must be resolved BEFORE the initUpdates block below — the
+    // `!emailDeferredToDigest` guard there was previously always true because
+    // the variable hadn't been populated yet, causing deferred emails to be
+    // wrongly marked emailDeliveryStatus='pending'.
+    let emailDeferredToDigest = false;
     if (channels.includes("email")) {
       const emailPref = await db
         .select({ digestFrequency: notificationPreferences.digestFrequency })
@@ -602,6 +588,24 @@ export function notificationService(db: Db) {
       emailDeferredToDigest =
         emailPref?.digestFrequency === "daily" || emailPref?.digestFrequency === "weekly";
     }
+
+    // Initialize delivery statuses to pending before dispatch attempts
+    const initUpdates: Record<string, any> = {};
+    if (channels.includes("email") && !emailDeferredToDigest) {
+      initUpdates.emailDeliveryStatus = "pending";
+    }
+    if (channels.includes("webpush")) {
+      initUpdates.pushDeliveryStatus = "pending";
+    }
+    if (Object.keys(initUpdates).length > 0) {
+      await db
+        .update(notifications)
+        .set(initUpdates)
+        .where(eq(notifications.id, record.id));
+    }
+
+    // Dispatch to channels in parallel
+    const dispatchPromises: Promise<void>[] = [];
 
     if (channels.includes("email") && !emailDeferredToDigest) {
       dispatchPromises.push(
@@ -933,6 +937,7 @@ export function notificationService(db: Db) {
             isNull(notifications.sentAt),
           ),
         )
+        .orderBy(notifications.createdAt)
         .limit(50);
 
       if (pending.length === 0) continue;

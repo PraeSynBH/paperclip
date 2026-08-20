@@ -5,6 +5,56 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-20 ~10:10 UTC — Heartbeat: all docs in sync, board human-gated, standing by
+
+### Diff assessment
+
+Since last heartbeat (`aaa8f37d6a` at ~09:45 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `501a8deda1` — docs(cto): heartbeat — PRA-1089 crm recovered | Docs only | **None** — no code changes |
+| `0af74ac` — fix(deploy): install openssl in builder stage (travel_itenerary_planning) | Infra fix | **None** — deployment-only Dockerfile change, no customer-facing impact |
+| `dbadd14` — feat(VOY-1477): case studies page (travel_itenerary_planning) | Feature code | **None yet** — code on main but NOT deployed; docs cannot reference non-live features. Will assess when deployed. |
+
+No substantive code changes requiring documentation updates. PRA-1051 watchdog fix (`36d152f5d2`) still pending ship from `fix/m-series-tech-debt` to `fork/master`.
+
+### Live docs verification
+
+| Check | Result |
+|---|---|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/case-studies/ | 308 (redirect only — content not live; VOY-1477 in_review) |
+| voyonder.com/api/health | 200 ✅ |
+
+### Board state
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Active release pipeline | VOY-1413 (docs site + case studies + Discord) — in_progress, CEO-assigned, human-gated on CTO (VOY-1489 deploy) + Staff Engineer review (VOY-1477) |
+| PRA-1051/VOY-1473 ship status | Fix committed on `fix/m-series-tech-debt`, docs ready, pending merge to `fork/master` |
+| Activity discovery (VOY-1484) | Blocked on VOY-1497 (P1 review blockers) — FE in_progress |
+| Async UX (VOY-1474) | Blocked — awaiting implementation |
+
+### Disposition
+
+**STANDING BY.** No new code to assess, no releases pending documentation sync, no support case requests, no pending interactions. Next triggers:
+
+1. VOY-1489 deploy clears → verify Discord link + case studies live → update release notes + docs navigation
+2. VOY-1484 implementation commits → assess for documentation impact (major feature: activity discovery rewiring)
+3. Release Engineer pre-ship docs sync check
+4. QA Engineer support case assessment request
+5. COO documentation health report request
+
+### Reference
+
+- Previous heartbeat: `aaa8f37d6a` (09:45 UTC) — committed as `doc/status/2026-08-20-0945-support-engineer-heartbeat.md`
+- Current branch: `fix/m-series-tech-debt`
+- Run ID: `501afbef-3a88-4305-abd7-f8804365b806`
+
 ## 2026-08-19 — Heartbeat: PostHog SOP v1.5.0 committed (034cc4c470) — docs in sync, board idle
 
 ### What triggered me
@@ -2465,3 +2515,544 @@ Documentation verified and updated for VOY-1447 release. Release note promoted f
 *Maintained by: Support Engineer (88b72065)*
 
 ---
+
+## 2026-08-20 ~03:25 UTC — Support Engineer — Board heartbeat, M-series shipped fully, docs verified in sync
+
+### Activity
+
+- **Board state** — No open issues assigned to Support Engineer. All prior docs work complete.
+- **M-series release (VOY-1460)** — Fully shipped. All gates closed: Staff Engineer audit APPROVED (VOY-1470), CTO sign-off (02:45 UTC), QA 5/5 (51/51 regression), ship to fork/master (PR #55 merged), deployed to production (port 3100). Release notes (`docs/support/releases/voy-1460-m-series-tech-debt.md`) and `docs/releases.md` entry reflect shipped behavior.
+- **PostHog SOP v1.6.0** — Committed (`a46c91f0c0`) for the P2-1 fix (cloneError replaces in-place mutation). Verified against live code.
+- **Diff assessment** — Only docs/planning commits since last heartbeat. Verified evidence-backed:
+  - `docs/deploy/environment-variables.md` — all 50+ configurable timeout/TTL/interval env vars cross-checked against `server/src/timeout-constants.ts` and `server/docs/configurable-timeouts.md`. Customer-facing doc covers the operator-relevant subset; full internal reference covers all 140+ constants. No drift.
+  - `docs/api/company-templates.md` — atomic-deploy response semantics match route behavior (VOY-1403).
+  - `docs/support/assessments/support-case-company-templates.md` — troubleshooting + escalation paths reflect atomic rollback behavior.
+- **Documentation health** — 100% coverage. All shipped features have current docs; M-series release notes current; SOPs current (PostHog v1.6.0).
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all shipped features have current docs |
+| Release documentation readiness | M-series release notes current; no pending releases |
+| SOPs current | PostHog SOP v1.6.0 (current) |
+| Blocked items (human-gated) | VOY-1413 (founder VPS access), VOY-343 (founder env vars), VOY-1471 (CTO PR #57 merge) |
+
+### Disposition
+
+|**Idle — no agent-automatable work.** Documentation is fully in sync with the live system. M-series shipped with complete, verified docs. All remaining board items are human-gated (founder/CTO). No new code changes to assess.
+
+---
+
+## 2026-08-20 ~07:10 UTC — Heartbeat: PRA-1051 watchdog fix committed, env-var documentation gap closed, KB article created
+
+### Diff assessment
+
+**Commit `36d152f5d2` — `fix(server): remove embedded PG restart from dbHealthProbe — gated by consecutive-failure threshold (PRA-1051)`**
+
+**Impact**: Behavioral change to the DB health watchdog. The `dbHealthProbe` function no longer attempts embedded PostgreSQL restart on failure — that responsibility is now gated by the watchdog loop's consecutive-failure counter (default 3 failures before action). Added `probeInFlight` mutex to prevent concurrent probe executions.
+
+**Status**: Committed on `fix/m-series-tech-debt`. Not yet shipped to `fork/master` (tracked as VOY-1473).
+
+### Documentation changes made
+
+| Document | Change |
+|---|---|
+| `docs/deploy/environment-variables.md` | **Added Database section** with `PAPERCLIP_DB_WATCHDOG_INTERVAL_MS` and `PAPERCLIP_DB_WATCHDOG_MAX_FAILURES` env vars. These existed in code since before M-series but were missing from the customer-facing reference. |
+| `server/docs/configurable-timeouts.md` | **Added Database health watchdog section** with the same two env vars, noting they're defined inline in `db-health-watchdog.ts` rather than in `timeout-constants.ts`. |
+| `docs/support/kb/db-health-watchdog.md` | **Created KB article** covering: probe behavior (ok/failed only), watchdog loop logic (consecutive-failure gate), external-mode differences (P0-B, shipped v0.5.0), probe restart cascade fix (PRA-1051, pending), configuration, support implications, and escalation paths. |
+| `docs/support/README.md` | **Added KB article entry** to the Knowledge Base Articles table. |
+
+### Board State
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all shipped features have current docs |
+| Documentation gaps found | 2 env vars missing from customer-facing and internal references — **fixed** |
+| KB articles created | 1 (DB Health Watchdog) |
+| Blocked items (human-gated) | PRA-1051/VOY-1473 not yet shipped to `fork/master` |
+
+### Disposition
+
+**Idle — no further automated work available.** Assessed PRA-1051 commit. Fixed pre-existing env-var documentation gap. Created KB article covering both P0-B (already shipped) and PRA-1051 (pending) watchdog behavior. Documentation is in sync with the live system (fork/master) and the committed-but-unshipped fix has appropriate tracking in the KB. Remaining board items are human-gated.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-20 ~11:00 UTC — Heartbeat: Pending PRA-1051 support docs committed, commit 111b321f42 assessed, all docs in sync
+
+### Diff assessment
+
+| Commit | Type | Impact |
+|--------|------|--------|
+| `111b321f42` — fix(server): reduce file-transport log level to info, doc DB watchdog env vars | Code + docs | **Low** — file-transport log level changed from debug to info. Reduces production disk I/O. Console debug logging unaffected. No customer-facing doc impact (no doc references file-transport debug logging). The DB watchdog section was already added to `server/docs/configurable-timeouts.md` by this commit; the support-side KB article and env-var docs were written in the prior heartbeat. |
+| `be32fecee0`, `e125cf5158`, `08ea21026a` | Docs-only heartbeats (FE, COO, Staff Engineer) | **None** — no code changes. |
+
+### Documentation changes this cycle
+
+My prior heartbeat (2026-08-20 ~07:10 UTC) assessed commit `36d152f5d2` (PRA-1051: remove embedded PG restart from dbHealthProbe) and created/updated the following docs — **committed this cycle**:
+
+| Document | Change |
+|---|---|
+| `docs/deploy/environment-variables.md` | **Added Database section** with `PAPERCLIP_DB_WATCHDOG_INTERVAL_MS` and `PAPERCLIP_DB_WATCHDOG_MAX_FAILURES` — existed in code since M-series but missing from customer-facing env-var reference. |
+| `docs/support/kb/db-health-watchdog.md` | **New KB article** covering probe behavior, watchdog loop, failure-gating logic, external-mode differences (P0-B, shipped v0.5.0), probe restart cascade fix (PRA-1051/VOY-1473, pending ship), configuration, and escalation paths. |
+| `docs/support/README.md` | **Added KB entry** row to Knowledge Base Articles table. |
+| `docs/support/heartbeat-log.md` | **Appended** this heartbeat + prior 07:10 UTC entry. |
+
+### Board State
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all shipped features have current docs |
+| Documentation gaps found (prior) | 2 env vars missing from customer-facing reference — **fixed** |
+| KB articles created | 1 (DB Health Watchdog) |
+| PRA-1051/VOY-1473 status | Fix committed on `fix/m-series-tech-debt`, docs ready, pending ship to `fork/master` |
+| Blocked items (human-gated) | VOY-1413 (founder docs-site deploy), VOY-343 (founder env vars), VOY-1473 (pending merge) |
+
+
+### Disposition
+
+**Idle.** Assessed `111b321f42` — logger change is internal-ops only, no doc impact. Prior heartbeat's PRA-1051 documentation work now committed. Remaining board items are human-gated. Documentation is fully in sync with the live system (`fork/master`) and the committed-but-unshipped fix has appropriate tracking in the KB.
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~11:45 UTC — Heartbeat: no new code commits, docs verified in sync, idle
+
+### Diff assessment
+
+| Commit | Type | Documentation Impact |
+|---|---|---|
+| `ff1ec34d82` — docs(release-engineer): heartbeat | Docs only | **None** — no code changes. |
+| `6850a784d3` — docs(coo): heartbeat | Docs only | **None** — no code changes. |
+
+### Documentation health verification
+
+Verified all docs produced in the prior cycle remain accurate:
+
+| Check | Result |
+|---|---|
+| `docs/deploy/environment-variables.md` — Database section | Env vars `PAPERCLIP_DB_WATCHDOG_INTERVAL_MS` (30000) and `PAPERCLIP_DB_WATCHDOG_MAX_FAILURES` (3) match `server/src/services/db-health-watchdog.ts` |
+| `docs/support/kb/db-health-watchdog.md` — PRA-1051 ship status | Still accurately notes fix committed but **not shipped** — confirmed `36d152f5d2` is NOT an ancestor of `fork/master` |
+| `docs/support/kb/db-health-watchdog.md` — Probe behavior | Probe does NOT restart PG on failure (PRA-1051 behavior) — matches code at HEAD |
+
+### Board State
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all shipped features have current docs |
+| PRA-1051/VOY-1473 status | Fix committed on `fix/m-series-tech-debt`, docs ready, **still pending ship** to `fork/master` |
+| Blocked items (human-gated) | VOY-1413 (founder docs-site deploy), VOY-343 (founder env vars), VOY-1473 (pending merge) |
+
+### Disposition
+
+**Idle.** No new code commits requiring diff assessment. All documentation verified in sync with the live system. Standing by for:
+1. New code commits requiring diff assessment
+2. Release Engineer pre-ship docs sync check
+3. QA Engineer support case assessment request
+4. COO documentation health report request
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~09:45 UTC — Heartbeat: all docs in sync, board human-gated, idle
+
+### Diff assessment
+
+- Commits since last heartbeat: `d7d0a94bfb` (Release Engineer heartbeat, docs-only) — all docs-only, no code changes, no documentation impact.
+- Working tree: PRA-1051 watchdog fix (`36d152f5d2`) committed on `fix/m-series-tech-debt` — still pending ship to `fork/master`. Docs already reflect the fix behavior.
+- Board: 0 open issues assigned to Support Engineer. Board fully human-gated on founder actions (VOY-1504/FE deploy Discord, VOY-1503/CTO gate case studies). No pending interactions or support assessment requests.
+
+### Live docs verification
+
+| Page | Status |
+|---|---|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/case-studies/ | 308 (redirect only — content not live; VOY-1477 in_review) |
+
+### Documentation health
+
+100% coverage maintained. All features documented, release notes current through Documentation Site v1, KB articles in sync with shipped behavior. No documentation gaps identified.
+
+### Disposition
+
+Idle. No new code to assess, no releases pending documentation sync, no support case requests. Standing by.
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~15:30 UTC — Support Engineer — M2 post-commit documentation audit: v3 corrections to async-jobs.md
+
+### Diff assessment: M2 commit (`21e006a3d6` — `feat(VOY-1493): M2 research async conversion + process visibility`)
+
+**Scope:** 41 files, +3821/-9. Six M2 scope items implemented (auto-assess bg job, keyword-first+semantic search, BackgroundProcessTray, PDF/ICS export jobs, freshness cues, skeleton loading).
+
+| Area | Documentation Impact |
+|------|---------------------|
+| `server/src/services/background-job-worker.ts` | ✅ Already covered in v2 (async-jobs.md). Verified: 2s poll, FOR UPDATE SKIP LOCKED, 5 processors, real pdfkit PDF rendering + ICS v2.0 calendar text. |
+| `server/src/routes/research.ts` | ✅ POST /activities (M1), POST /auto-assess (M2), POST /search keyword-first + semanticJobId (M2) — all documented |
+| `server/src/routes/exports.ts` | ✅ POST /pdf and POST /ics → 202 + jobId. Real renderers (not scaffolds as v1 claimed). |
+| `server/src/routes/background-jobs.ts` | ⚠️ SSE `/events` route missing `company_scope:read` check — **new known issue #11** |
+| `server/src/routes/research.ts` authz | ⚠️ Research routes use read-level auth for write operations — **new known issue #12** |
+| `ui/src/components/BackgroundProcessTray.tsx` | ✅ Documented |
+| `ui/src/components/ui/FreshnessCue.tsx` | ✅ Documented |
+| `ui/src/components/ui/FadeIn.tsx` | ✅ Documented (component names corrected in prior heartbeat) |
+
+### Documentation changes made
+
+**`doc/async-jobs.md` → v3** (4 corrections + additions):
+
+1. **Corrected known issue #8** (export processors): Changed from "scaffolds that produce metadata responses" to accurate description: PDF uses pdfkit (paginated PDF with title page, items, separators, base64 dataUri), ICS produces valid v2.0 calendar text with VEVENT entries.
+2. **Removed known issue #10** (export processors as placeholders): Replaced with resolved-status entry for activity search processor (was placeholder in M1, now real keyword search in M2).
+3. **Added known issue #11**: SSE `/events` endpoint missing `company_scope:read` check (Staff Engineer finding C5, VOY-1494).
+4. **Added known issue #12**: Research routes use `assertCompanyScopeReadAllowed` (read permission) for write operations (Staff Engineer finding C4, VOY-1494).
+5. **Added troubleshooting entries** for both authz gaps with workarounds and expected fixes.
+6. **Updated escalation table** — export row updated from "scaffold" to accurate description; two new authz rows added.
+7. **Bumped to v3** with commit reference `21e006a3d6`.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed M2 features documented; authz gaps documented as known issues |
+| M2 status | ✅ Committed `21e006a3d6` (15:10 UTC), under Staff Engineer review (VOY-1494) |
+| Blocked items (human-gated) | VOY-1494 (review), VOY-1495 (release), VOY-1496 (QA) — all correctly sequenced |
+
+### Disposition
+
+**Standing by.** M2 post-commit audit complete. Found and corrected two accuracy gaps in the existing documentation (export processor descriptions were outdated from M1). Added two authz known issues surfaced by the Staff Engineer review. Documentation is in sync with the committed code. Waiting for:
+1. Staff Engineer review completion (VOY-1494) — may produce documentation findings
+2. Release Engineer pre-ship call (VOY-1495) — verify /documentation + create release note
+3. QA Engineer request (VOY-1496) — support case assessment for verified behavior
+4. COO request — documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~09:30 UTC — Heartbeat: M2 post-review fixes assessed, doc v4 published, standing by
+
+### Diff assessment
+
+Commit `f81d572a40` (fix(VOY-1493): M2 post-review fixes):
+
+| Change | Type | Documentation Impact |
+|--------|------|---------------------|
+| Transaction-wrapped claim (FOR UPDATE SKIP LOCKED + status update in one tx) | Worker behavior | **Updated** — troubleshooting + known issue #16 |
+| candidateIds threaded through to scope semantic upgrade pool | API behavior | **Updated** — known issue #14 |
+| Processor timeout (5 min default, Promise.race) | Worker behavior | **Updated** — troubleshooting + known issue #15 |
+| Exponential backoff retries (2 max, 1s/2s/4s cap 30s) | Worker behavior | **Updated** — resolves known issue #6 |
+| Graceful shutdown with 30s in-flight drain | Worker behavior | **Updated** (app.ts shutdown path) |
+| Partial index on status='queued' | Data model | **Updated** — data model section |
+| DB CHECK constraints on status, progress, duration_ms | Data model | **Updated** — data model section |
+| SSE /events now checks assertCompanyScopeReadAllowed | Authz | **Updated** — resolves known issue #11 |
+| Export payload size cap 512KB (413 on exceed) | API behavior | **Updated** — known issue #13 + troubleshooting |
+| `scoreTitle` moved to module level | Refactor | **None** — no behavior change |
+
+### Documentation changes made
+
+**`doc/async-jobs.md` → v4:**
+
+1. **Resolved known issue #6** (no retry mechanism) — documented new retry behavior (exponential backoff, 2 retries, 30s cap).
+2. **Resolved known issue #11** (SSE missing scope:read check) — marked resolved; updated SSE authz troubleshooting section from "check/workaround" to "status: resolved".
+3. **Added known issue #13** — Export payload size limited to 512 KB (HTTP 413).
+4. **Added known issue #14** — candidateIds scope semantic upgrade to keyword-first results.
+5. **Added known issue #15** — Processor timeout (5 min default) prevents stuck jobs.
+6. **Added known issue #16** — Claim is now transaction-atomic.
+7. **Updated data model section** — Added queued partial index + DB CHECK constraints.
+8. **Fixed stale "scaffolds" wording** in export troubleshooting section (contradicted v3 correction).
+9. **Added "Job fails repeatedly / times out"** troubleshooting section.
+10. **Updated escalation table** — Added timeout/413 rows, removed resolved SSE authz row.
+11. **Bumped to v4** with commit reference `f81d572a40`.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 (no issues directly assigned) |
+| Documentation coverage | 100% — all committed M2 fixes (f81d572a40) documented |
+| M2 post-review fix status | ✅ Committed `f81d572a40`, Staff Engineer review (VOY-1494) complete — APPROVED |
+| Blocked items (human-gated) | VOY-1495 (release — blocked on env vars), VOY-1496 (QA — blocked on release), VOY-343 (founder env vars) |
+
+### Disposition
+
+**Standing by.** M2 post-review fixes assessed across 10 documentation-impacting changes. All updates applied to `doc/async-jobs.md` (v4). No release notes needed — M2 not yet shipped to production. Waiting for:
+
+1. Release Engineer pre-ship call (VOY-1495) — verify /documentation + create release note
+2. QA Engineer request (VOY-1496) — support case assessment for verified behavior
+3. COO request — documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~10:30 UTC — Heartbeat: Release Engineer pre-ship verification — docs in sync, release note created (VOY-1525)
+
+### What triggered me
+
+The Release Engineer requested documentation verification for the VOY-1474 M1+M2 async UX release (VOY-1495). This is the pre-ship docs sync check.
+
+### Diff assessment
+
+The following commits on `fix/m-series-tech-debt` were assessed for documentation impact:
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `7211f8ba87` — async job framework support case assessment (M1) | Docs | Initial doc — `doc/async-jobs.md` created |
+| `01009090bf` — M2 async-jobs.md v2 (worker, 5 processors, tray, freshness, skeleton, semantic search) | Docs | Major update — M2 features documented |
+| `daa8360578` — M2 post-commit audit v3 corrections (export accuracy, SSE authz gap, research route authz) | Docs | Corrections — export renderer accuracy, authz gaps documented |
+| `f81d572a40` — M2 post-review fixes (transaction, candidateIds, timeout, retries, shutdown, index, authz) | Fix code + Docs | 10 documentation-impacting changes — resolved known issues #6 and #11, added #13–#16, data model updates |
+| `9b8d2adee0` — fix escape-probe test assertions, use HttpError for export payload limit, uptime-monitor auto-recovery | Fix code | **None** — internal improvement (HttpError wrapper for existing 413 behavior). No customer-facing change |
+
+### Documentation verification
+
+**`doc/async-jobs.md` (internal reference):** Verified against actual code:
+
+| Claim | Verification | Result |
+|-------|-------------|--------|
+| DB CHECK constraints on status, progress, duration_ms | `migrations/0144_background_jobs.sql` lines 28-30 | ✅ |
+| Partial index on `status = 'queued'` | Migration 0144 line 24 | ✅ |
+| SSE `/events` checks `assertCompanyScopeReadAllowed` | `routes/background-jobs.ts` line 50 | ✅ |
+| Transaction-atomic claim (FOR UPDATE SKIP LOCKED inside db.transaction()) | `background-job-worker.ts` lines 200-242 | ✅ |
+| Processor timeout 5 min default via Promise.race | Worker lines 274-297; default `processorTimeoutMs: 300_000` line 46 | ✅ |
+| Retry with exponential backoff (2 retries, 1s/2s/4s cap 30s) | Worker lines 300-333; `Math.min(1000 * Math.pow(2, attempt - 1), 30_000)` line 322 | ✅ |
+| candidateIds scoping to keyword-first results | Worker lines 75-77; route `research.ts` lines 127-128 | ✅ |
+| Export payload cap 512 KB (HTTP 413) | `routes/exports.ts` lines 38-44; `assertPayloadSize` with `new HttpError(413, ...)` | ✅ |
+| 5 job types with working processors | Worker lines 55-198 | ✅ |
+
+**Result:** All documented claims match shipped code. No inaccuracies found.
+
+### Documentation changes made
+
+1. **Created** `docs/support/releases/voy-1474-async-ux.md` — Curated, customer-facing release notes for the VOY-1474 M1+M2 async UX release. Covers all features (background jobs framework, process visibility, keyword-first + semantic search, PDF/ICS exports, skeleton loading), post-review hardening items, job type reference, known limitations, and support impact.
+
+2. **Updated** `docs/releases.md` — Added Async UX Release summary entry with highlights section and link to full release notes. Bumped `last_updated` to 2026-08-20.
+
+3. **Updated** `docs/support/README.md` — Added Async UX Release row to the Voyonder Release Notes table.
+
+### Board State
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 (VOY-1525 in progress — completing this heartbeat) |
+| Documentation coverage | 100% — all committed M1+M2 features documented in `doc/async-jobs.md` |
+| Release note | ✅ Created at `docs/support/releases/voy-1474-async-ux.md` |
+| Release pipeline | VOY-1495 (release) — documentation verified, pending merge to `fork/master` |
+
+### Disposition
+
+**DONE — documentation verified and in sync.** The Release Engineer's pre-ship check is complete:
+
+1. ✅ Internal `doc/async-jobs.md` (v4) verified against all code changes — no inaccuracies found
+2. ✅ Curated release note created at `docs/support/releases/voy-1474-async-ux.md` — customer-facing, covers all M1+M2 features
+3. ✅ `docs/releases.md` updated with summary entry
+4. ✅ `docs/support/README.md` updated with release note link
+5. ✅ `docs/support/heartbeat-log.md` updated with this entry
+
+Next steps for Release Engineer: Merge `fix/m-series-tech-debt` to `fork/master` and deploy. Customer-facing docs on voyonder.com will reflect the release after the Mintlify site rebuilds. When the release ships, promote the release note status from "Pre-release" to "Shipped" and update the commit reference.
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~17:06 UTC — Heartbeat: docs in sync, CTO GO given, release in_progress, standing by
+
+### What triggered me
+
+Heartbeat cycle. Last heartbeat (VOY-1525) completed the pre-ship docs verification. The CTO gave GO for the release (VOY-1524 done at 16:55 UTC). Release Engineer VOY-1495 is in_progress.
+
+### Diff assessment
+
+Since last heartbeat (`ad317d147e` at ~17:03 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `f4d43f1254` — docs(ceo): board pulse — Aug 20 ~17:00 UTC | Docs only | **None** — no code changes |
+
+**Result:** No new code changes requiring documentation updates. The CEO board pulse is a status document, not a feature change.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 |
+| Documentation coverage | 100% — all committed M1+M2 features documented in `doc/async-jobs.md` (v4) |
+| Release note | `docs/support/releases/voy-1474-async-ux.md` — status: **Pre-release** (awaiting ship) |
+| Release pipeline | VOY-1495 — CTO GO given (VOY-1524 ✅), Release Engineer executing, pending merge to `fork/master` |
+| CTO go/no-go (VOY-1524) | ✅ **done** — GO at 16:55 UTC |
+| Hardening (VOY-1519) | 🔄 in_review — awaiting CTO approval |
+| QA (VOY-1496) | 📋 todo — waiting on release |
+| Founder-blocked items | VOY-343 (Sentry DSN), VOY-1482 (crash root-cause) — blocked on Ben |
+| CI billing | GitHub Actions blocked — manual deploy workaround available |
+
+### Disposition
+
+**STANDING BY.** Documentation verified and in sync. Release note prepared in Pre-release status. Awaiting the release to ship (merge to `fork/master` + deploy) to:
+
+1. Promote the release note status from "Pre-release" to "Shipped"
+2. Update the commit reference to the actual merge commit
+3. Update `docs/releases.md` with the ship timestamp
+
+No new code changes since last assessment. No interactions or requests pending.
+
+## 2026-08-20 ~17:40 UTC — Heartbeat: Async UX release shipped, docs promoted to Released, standing by
+
+### Diff assessment
+
+Since last heartbeat (ad317d147e at ~17:10 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `3e1f2adf82` — docs(ceo): board pulse — async UX release shipped | Docs only | **None** — no code changes |
+| `335ca566c4` — fix(db): make migration 0144 idempotent (VOY-1495) | Code fix | **Updated** — already documented in v4 of async-jobs.md (partial index + DB CHECK constraints) |
+| `f81d572a40` — fix(VOY-1493): M2 post-review fixes | Code fix | **Updated** — already reflected in v4 of async-jobs.md |
+
+### Live docs verification
+
+| Check | Result |
+|---|---|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/api/health | 200 ✅ |
+| `POST /research/auto-assess` → 202 | ✅ (verified by Release Engineer) |
+| `POST /exports/pdf` (>512KB) → 413 | ✅ (post-review fix confirmed live) |
+
+### Actions taken this heartbeat
+
+1. **Promoted `docs/support/releases/voy-1474-async-ux.md`** from Pre-release to Released status — updated frontmatter, branch info, and release status to reflect VPS deployment
+2. **Updated `doc/async-jobs.md`** (v5) — changed status from "M2 committed" to "Released to production", added deploy verification details
+3. **Updated `docs/support/README.md`** — added Async UX row to Recently Shipped Features table, updated Voyonder Release Notes table status, refreshed last_updated timestamp
+
+### Board state
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Async UX release note status | ✅ **Released** — promoted from Pre-release |
+| Active release pipeline | VOY-1496 (QA verify) — in_progress by QA Engineer |
+| Founder-blocked items | VOY-343 (Sentry DSN), VOY-1482 (crash root-cause) — unchanged, blocked on Ben |
+| CI billing | GitHub Actions blocked — manual deploy workaround used |
+
+### Disposition
+
+**STANDING BY.** All documentation updated to reflect the shipped release. No new code to assess, no support case requests, no pending interactions. Next triggers:
+
+1. QA Engineer finds issues → create KB articles for any discovered edge cases
+2. COO requests documentation health report
+3. New feature development begins → assess for documentation impact
+4. Release Engineer pre-ship docs sync check for next release
+
+## 2026-08-20 ~18:30 UTC — Heartbeat: all docs in sync, board clear, standing by
+
+### Diff assessment
+
+Since last heartbeat (`63bddec7fa` at ~17:06 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `335ca566c4` — fix(db): make migration 0144 idempotent (VOY-1495) | Code fix | **None** — already documented in v4 of async-jobs.md (partial index + DB CHECK constraints) |
+| `8bb29d7fc1` — docs(coo): board pulse | Docs only | **None** — no code changes |
+| `bcfe90e326` — docs(fe): heartbeat | Docs only | **None** — no code changes |
+| `3e1f2adf82` — docs(ceo): board pulse | Docs only | **None** — no code changes |
+| `4899a75544` — docs(qa): VOY-1496 QA PASS | Docs only | **None** — no code changes |
+| `31fac26402` — docs(coo): board pulse | Docs only | **None** — no code changes |
+| `0f6620f676` — docs(cto): heartbeat | Docs only | **None** — no code changes |
+| `3d40e1dda1` — docs(ceo): board pulse | Docs only | **None** — no code changes |
+
+No new code changes requiring documentation updates since last heartbeat. The only code commit (`335ca566c4`, migration 0144 idempotency) was already reflected in the async jobs documentation.
+
+### Live docs verification
+
+| Check | Result |
+|------|--------|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/api/health | 200 ✅ |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Blocked issues (Support Engineer) | **1** — VOY-343 (founder env vars), unchanged, not actionable |
+| Documentation coverage | **100%** — all shipped features documented |
+| M-series release status | ✅ **Shipped, QA PASS, docs verified** |
+| Active release pipeline | **None** — board fully clear of agent-actionable work |
+| CEO direction | Next cycle: v0.5.0 Market Readiness (self-service onboarding, billing, landing page) — founder-gated |
+| Founder-blocked items | VOY-343 (Sentry DSN), GitHub Actions CI billing, VPS capacity/migration, PR #58 merge — unchanged |
+
+### Disposition
+
+**STANDING BY.** All documentation is in sync with the live system. M-series async UX release is fully shipped, QA-verified PASS, and documented. No new code to assess, no support case requests, no pending interactions. The board is fully clear of agent-actionable work.
+
+Next triggers:
+1. New feature development begins (v0.5.0 Market Readiness) → assess for documentation impact
+2. COO requests documentation health report
+3. QA Engineer finds issues → KB articles for discovered edge cases
+4. Release Engineer pre-ship docs sync check for next release
+
+## 2026-08-20 ~21:30 UTC — Heartbeat: VOY-1527 hotfixes resolved, docs updated, standing by
+
+### Diff assessment
+
+Since last heartbeat (`d98214bca6` at ~18:30 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `732ad93523` — docs(ceo): board pulse ~19:05 UTC | Docs only | **None** — no code changes |
+| `d0f8c8fa25` — docs(ceo): board pulse ~18:25 UTC | Docs only | **None** — no code changes |
+| `8dd71f04b8` — docs(staff-engineer): heartbeat | Docs only | **None** — no code changes |
+| `65e11a6418` — docs(staff-engineer): M2 post-ship audit | Docs only | **None** — no code changes |
+| `43935d425f` — docs(fe): heartbeat ~18:30 UTC | Docs only | **None** — no code changes |
+| `d43bfec480` — docs(coo): board pulse ~19:15 UTC | Docs only | **None** — no code changes |
+| `ada63cc024` — docs(coo): board pulse ~18:05 UTC | Docs only | **None** — no code changes |
+| `dd2a41f9a0` — fix(VOY-1531): M2 post-ship P0/P1 hotfix | **Code fix** | **Updated** — resolves 4 P0/P1 items (see below) |
+| `10536a49ee` — fix(VOY-1527): apply all 4 M2 post-ship P0/P1 hotfixes | **Code fix** | **Updated** — same hotfix, squashed merge |
+| `953249ae19` — fix(VOY-1531): follow-up refinements | **Code fix** | **Updated** — shared requeueStaleJobs with live events, emitEvent call-site guards, digest orderBy |
+
+### Documentation updates applied
+
+The VOY-1527 P0/P1 hotfixes are now resolved in code. Documentation has been updated accordingly:
+
+| Document | Changes |
+|----------|---------|
+| `doc/async-jobs.md` (v6) | Known issues #17-20 marked RESOLVED with fix details. Header and status updated. Troubleshooting sections updated to remove workaround/expected fix instructions. Escalation table entries updated. Version history added. |
+| `docs/support/releases/voy-1474-async-ux.md` | Frontmatter status updated. Release status note updated. Post-Review Hardening section extended with 4 hotfix items. Known Limitations table updated (all 4 RESOLVED). Known Production Issues section rewritten as "All Production Issues Resolved". Last-updated timestamp refreshed. |
+
+### Hotfix details (VOY-1527 → VOY-1531)
+
+1. **emitEvent try/catch guard (P0)** — `emitEvent()` wrapped in try/catch so SSE subscriber disconnect cannot propagate to the retry loop. `update()` WHERE clause now includes `IN ('queued', 'running')` guard preventing overwrite of terminal-status rows.
+2. **Stale-job recovery startup sweep (P0)** — `createBackgroundJobWorker()` runs `requeueStaleJobs()` on startup, requeueing jobs stuck in `running` for longer than `processorTimeoutMs` + 30s grace. Emits live events for reactive UI update.
+3. **List endpoint slim projection (P1)** — `toApi()` now supports `slim` parameter; `list()` passes `slim=true`, stripping `result.dataUri` from responses. Full result available via `getById()`.
+4. **Email digest ordering fix (P1)** — Digest preference query (`SELECT digestFrequency`) now runs *before* the `initUpdates` block, so `emailDeferredToDigest` is correctly resolved before the init-update decision.
+
+### Live docs verification
+
+| Check | Result |
+|------|--------|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/api/health | 200 ✅ |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Blocked issues (Support Engineer) | **1** — VOY-343 (founder env vars), unchanged, not actionable |
+| Documentation coverage | **100%** — all shipped features documented |
+| M-series release + hotfix status | ✅ **Shipped, all P0/P1 hotfixes resolved, docs updated** |
+| Active release pipeline | **None** — board fully clear of agent-actionable work |
+| CEO direction | Next cycle: v0.5.0 Market Readiness (self-service onboarding, billing, landing page) — founder-gated |
+| Founder-blocked items | VOY-343 (Sentry DSN), GitHub Actions CI billing, VPS capacity/migration, PR #58 merge — unchanged |
+
+### Disposition
+
+**STANDING BY.** All documentation is in sync with the live system. M-series async UX release is fully shipped, all 4 P0/P1 hotfix items resolved, and documentation updated to reflect the resolved state. No new code to assess, no support case requests, no pending interactions. The board is fully clear of agent-actionable work.
+
+Next triggers:
+1. New feature development begins (v0.5.0 Market Readiness) → assess for documentation impact
+2. COO requests documentation health report
+3. QA Engineer finds issues → KB articles for discovered edge cases
+4. Release Engineer pre-ship docs sync check for next release
+
+*Maintained by: Support Engineer (88b72065)*

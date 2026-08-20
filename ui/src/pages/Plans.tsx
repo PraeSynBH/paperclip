@@ -22,6 +22,8 @@ import { createIssueDetailLocationState } from "../lib/issueDetailBreadcrumb";
 import { EmptyState } from "../components/EmptyState";
 import { PageSkeleton } from "../components/PageSkeleton";
 import { PlanStatusBadge } from "../components/PlanStatusBadge";
+import { FreshnessDot } from "../components/ui/FreshnessCue";
+import { FadeIn } from "../components/ui/FadeIn";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -246,9 +248,10 @@ export function Plans() {
         </div>
       )}
 
-      {/* Plan cards */}
+      {/* Plan cards — fade in after skeleton */}
       {!isLoading && items.length > 0 && (
-        <div className="space-y-2">
+        <FadeIn delayMs={50} durationMs={400}>
+          <div className="space-y-2">
           {filteredItems.length === 0 && (
             <div className="rounded-lg border border-border p-6 text-center text-sm text-muted-foreground">
               No plans match the current filters.
@@ -275,6 +278,7 @@ export function Plans() {
                       <span className="font-mono text-xs text-muted-foreground">
                         {item.issue.identifier}
                       </span>
+                      <FreshnessDot updatedAt={item.issue.updatedAt} />
                       <PlanStatusBadge status={status} />
                     </div>
                     <h2 className="mt-1 text-sm font-semibold text-foreground line-clamp-2">
@@ -348,7 +352,8 @@ export function Plans() {
               </Link>
             );
           })}
-        </div>
+          </div>
+        </FadeIn>
       )}
     </div>
   );

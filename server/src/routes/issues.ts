@@ -140,6 +140,7 @@ import { environmentService } from "../services/environments.js";
 import { environmentRuntimeService } from "../services/environment-runtime.js";
 import { redactSensitiveText } from "../redaction.js";
 import { checkPremiumSLABreachDuplicate } from "../services/premium-sla-dedup.js";
+import { checkStandardSLABreachDuplicate } from "../services/standard-sla-dedup.js";
 import {
   createCompanySearchRateLimiter,
   type CompanySearchRateLimiter,
@@ -5402,7 +5403,9 @@ export function issueRoutes(
     if (!watchdogProductBugFollowUp && !rawCreateBody.parentId) {
       // Title-pattern fallback — legacy SLA monitor (sends originKind="manual",
       // originFingerprint="default", so fingerprint dedup would never match).
-      const slaMatch = await checkPremiumSLABreachDuplicate(db, companyId, rawCreateBody.title);
+      // Check PremiumSLA first, then StandardSLA as fallback.
+      const slaMatch = await checkPremiumSLABreachDuplicate(db, companyId, rawCreateBody.title)
+        ?? await checkStandardSLABreachDuplicate(db, companyId, rawCreateBody.title);
       if (slaMatch) {
         // Suppress creation entirely: add comment to tracking issue and return
         // early instead of creating a new child issue. This closes the gap for
@@ -5588,6 +5591,8 @@ export function issueRoutes(
     // committed row and suppress if a near-simultaneous duplicate exists.
     if (!watchdogProductBugFollowUp && !rawCreateBody.parentId) {
       const postInsertDedup = await checkPremiumSLABreachDuplicate(
+        db, companyId, rawCreateBody.title
+      ) ?? await checkStandardSLABreachDuplicate(
         db, companyId, rawCreateBody.title
       );
       if (postInsertDedup && postInsertDedup.existingIssueId !== issue.id) {

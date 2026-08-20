@@ -53,6 +53,15 @@ explicitly says `_SECONDS`.
 | `ACTIVE_RUN_OUTPUT_CRITICAL_THRESHOLD_MS` | `PAPERCLIP_ACTIVE_RUN_OUTPUT_CRITICAL_THRESHOLD_MS` | 4 h | Critical threshold (no output) |
 | `ACTIVE_RUN_OUTPUT_CONTINUE_REARM_MS` | `PAPERCLIP_ACTIVE_RUN_OUTPUT_CONTINUE_REARM_MS` | 30 min | Re-arm interval after suspicion alert |
 
+## Database health watchdog
+
+These values are defined directly in `server/src/services/db-health-watchdog.ts` (not in `timeout-constants.ts`).
+
+| Constant | Env var | Default | Description |
+|---|---|---|---|
+| *(inline)* | `PAPERCLIP_DB_WATCHDOG_INTERVAL_MS` | 30000 | DB health probe interval (ms). How often the watchdog checks database connectivity. |
+| *(inline)* | `PAPERCLIP_DB_WATCHDOG_MAX_FAILURES` | 3 | Consecutive probe failures before watchdog action (embedded PG restart or process exit). |
+
 ## Board chat
 
 | Constant | Env var | Default | Description |
