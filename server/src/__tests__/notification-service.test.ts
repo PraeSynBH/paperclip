@@ -161,7 +161,11 @@ describeEmbeddedPostgres("notification service fixes", () => {
 
       expect(rows.length).toBeGreaterThan(0);
       for (const row of rows) {
+        // Core fix: digest-deferred notifications must NOT get
+        // emailDeliveryStatus = 'pending' — they should have no delivery
+        // status until the digest job sends them.
         expect(row.sentAt).toBeNull();
+        expect(row.emailDeliveryStatus).toBeNull();
       }
     });
   });

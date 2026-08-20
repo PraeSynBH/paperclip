@@ -72,7 +72,12 @@ export function backgroundJobService(db: Db) {
       // Live events are best-effort fire-and-forget fan-out: a subscriber
       // throwing must never fail the DB write that already happened. The
       // job state is durable; the UI tray catches up on next poll.
-      logger.warn({ err, jobId: row.id, status: row.status }, "Failed to publish background job live event");
+      try {
+        logger.warn({ err, jobId: row.id, status: row.status }, "Failed to publish background job live event");
+      } catch {
+        // Swallow logger failures too — emitEvent must absolutely never throw.
+        // The row is already committed; failing here would orphan the job.
+      }
     }
   }
 
@@ -90,7 +95,8 @@ export function backgroundJobService(db: Db) {
           updatedAt: now,
         })
         .returning();
-      emitEvent(row);
+      // emitEvent must not fail the create — the row is already committed.
+      try { emitEvent(row); } catch { /* already logged inside emitEvent */ }
       return toApi(row);
     },
 
@@ -148,7 +154,10 @@ export function backgroundJobService(db: Db) {
         )
         .returning();
 
-      if (row) emitEvent(row);
+      if (row) {
+        // emitEvent must not fail the update — the row is already committed.
+        try { emitEvent(row); } catch { /* already logged inside emitEvent */ }
+      }
       return row ? toApi(row) : null;
     },
   };

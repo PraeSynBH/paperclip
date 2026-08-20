@@ -4,6 +4,7 @@ import { backgroundJobs } from "@paperclipai/db";
 import { BACKGROUND_JOB_TYPES, type BackgroundJobType } from "@paperclipai/shared";
 import { backgroundJobService } from "./background-jobs.js";
 import { researchSearchService } from "./research-search.js";
+import { publishLiveEvent } from "./live-events.js";
 import { logger } from "../middleware/logger.js";
 import PDFDocument from "pdfkit";
 
@@ -345,6 +346,59 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
     logger.error({ err: lastError, jobId: row.id, jobType: row.jobType, attempts: attempt }, "Background job failed after all retries");
   }
 
+  async function requeueStaleJobs() {
+    // Requeue jobs stuck in `running` for longer than processorTimeoutMs + 30s
+    // grace period. Covers worker crashes or hard restarts that left claimed
+    // jobs orphaned, preventing the eternal spinner in the UI tray.
+    // Also handles the case where emitEvent failure after a successful DB
+    // update orphaned a job in `running` state.
+    try {
+      const staleGracePeriod = processorTimeoutMs + 30_000;
+      const staleCutoff = new Date(Date.now() - staleGracePeriod);
+      const stale = await db
+        .update(backgroundJobs)
+        .set({
+          status: "queued",
+          progress: 0,
+          progressMessage: null,
+          startedAt: null,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(backgroundJobs.status, "running"),
+            isNotNull(backgroundJobs.startedAt),
+            lt(backgroundJobs.startedAt, staleCutoff),
+          ),
+        )
+        .returning();
+      if (stale.length > 0) {
+        logger.info({ count: stale.length, staleCutoff }, "Requeued stale-running background jobs");
+        // Emit live events for each requeued job so the UI tray can react.
+        for (const r of stale) {
+          try {
+            publishLiveEvent({
+              companyId: r.companyId,
+              type: "background_job.status",
+              payload: {
+                jobId: r.id,
+                companyId: r.companyId,
+                status: "queued",
+                progress: 0,
+                progressMessage: null,
+                updatedAt: r.updatedAt.toISOString(),
+              },
+            });
+          } catch {
+            // Best-effort — the tray catches up on next poll.
+          }
+        }
+      }
+    } catch (err) {
+      logger.error({ err }, "Failed to requeue stale-running jobs — continuing");
+    }
+  }
+
   async function tick() {
     if (stopped) return;
     if (inFlight >= batchSize) return;
@@ -366,32 +420,7 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
       // processorTimeoutMs + 30s grace period. This covers worker crashes
       // or hard restarts that left claimed jobs orphaned, preventing the
       // eternal spinner in the UI tray.
-      try {
-        const staleGracePeriod = processorTimeoutMs + 30_000;
-        const staleCutoff = new Date(Date.now() - staleGracePeriod);
-        const stale = await db
-          .update(backgroundJobs)
-          .set({
-            status: "queued",
-            progress: 0,
-            progressMessage: null,
-            startedAt: null,
-            updatedAt: new Date(),
-          })
-          .where(
-            and(
-              eq(backgroundJobs.status, "running"),
-              isNotNull(backgroundJobs.startedAt),
-              lt(backgroundJobs.startedAt, staleCutoff),
-            ),
-          )
-          .returning({ id: backgroundJobs.id });
-        if (stale.length > 0) {
-          logger.info({ count: stale.length, staleCutoff }, "Requeued stale-running background jobs on worker start");
-        }
-      } catch (err) {
-        logger.error({ err }, "Failed to requeue stale-running jobs on worker start — continuing");
-      }
+      await requeueStaleJobs();
 
       timer = setInterval(() => void tick(), pollIntervalMs);
       timer.unref?.();

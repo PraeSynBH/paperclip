@@ -937,6 +937,7 @@ export function notificationService(db: Db) {
             isNull(notifications.sentAt),
           ),
         )
+        .orderBy(notifications.createdAt)
         .limit(50);
 
       if (pending.length === 0) continue;
