@@ -1,174 +1,122 @@
-# VOY-1413 Plan — Deploy Docs Site with Case Studies + Discord Link (Revised 2026-08-20 v3)
+# VOY-1413 Plan — Deploy Docs Site with Case Studies + Discord Link (Revised 2026-08-20 v8)
 
-**Status**: Phase 1 (P0 outage) RESOLVED — voyonder.com is back up. Remaining: Discord link + case studies. Awaiting founder approval of revised scope before implementation child issues.
+**Status**: ✅ **IN PROGRESS — Site restored. Discord link code done (deploy pending). Case studies code DONE in PR #6 (awaiting CTO gate + merge + deploy). Both deliverables NOT LIVE on voyonder.com.**
 **Author**: CEO (Voyonder)
-**Date**: 2026-08-20 (v3: outage resolved verified live ~03:21 UTC)
-**Mode**: Planning — awaiting approval before implementation tasks are created
-**Children completed**: VOY-1417 (docs verification — done), VOY-1464 (productivity review — done)
+**Date**: 2026-08-20 (v8: ~12:30 UTC — corrected children mapping. VOY-1477 is the case-studies implementation (PR #6, CI green, in_review). VOY-1490 was a duplicate and is **cancelled**. CEO posted wake comments on VOY-1489 + VOY-1477 and raised VOY-1477 to high priority.)
+**Current mode**: Planning (parent) — plan complete, remaining implementation delegated to children
+**Previous plan approval**: v4 approved by founder (Ben, 05:19 UTC Aug 20) — scope, plan, and children accepted
 
----
+### Children Status
 
-## Executive Summary
+| ID | Title | Status | Notes |
+|---|---|---|---|
+| VOY-1479 | Founder action: Restore voyonder.com P0 outage + root-cause | ✅ **done** | Site restored ~06:37 UTC, root cause: zombie docker-proxy PID 3951678, uptime monitoring installed, follow-ups VOY-1481/1482 in backlog |
+| VOY-1476 | Add Discord link to voyonder.com footer | ✅ **done (code only)** | Code committed (c4b895b), CI passed, but **deploy to VPS-1 FAILED** — SSH broken pipe. Discord link NOT live. |
+| VOY-1489 | Deploy Discord link — re-run GitHub Actions deploy | ⏳ **todo** | Assigned to Founding Engineer (57fa7e0e). CEO wake comment posted ~07:21 UTC with deploy instructions + manual fallback. |
+| VOY-1477 | Create Voyonder-centric case studies page at /case-studies/ | ⚠️ **in_review** | **Implementation COMPLETE** — PR #6 (feat/voy-1477-case-studies), all CI checks green, `app/case-studies/page.tsx` + footer nav link + sitemap. Awaiting CTO request_confirmation 9c27e7d8 → Staff Engineer review → merge → deploy. Raised to **high** priority. |
+| ~~VOY-1490~~ | ~~Create Voyonder-centric case studies page (dup)~~ | ❌ **cancelled** | Duplicate of VOY-1477 created at 07:16 in error. Cancelled ~07:22 UTC with explanation. All case studies work routes to VOY-1477. |
+| VOY-1478 | Create Voyonder-centric case studies page (dup) | ❌ cancelled | Earlier duplicate of VOY-1477. |
+| VOY-1417 | Docs verification for VOY-1413 | ✅ done | |
 
-There are **two separate sites** with **two separate codebases**. Neither serves the intended content. Per user steering (2026-08-19 18:30), **Paperclip code changes and Paperclip documentation are completely out of scope for this Voyonder company.** This invalidates Workstream A (paperclip.mintlify.app deployment) entirely. The remaining scope is voyonder.com only.
-
-### Sites
-
-| Site | Platform | Codebase | Current Status | Scope |
-|---|---|---|---|---|
-| **voyonder.com** | Next.js (self-hosted) | `PraeSynBH/travel_itenerary_planning` → Hostinger VPS | **ALL ROUTES RETURN 404** (production outage) | ✅ **IN SCOPE** |
-| **paperclip.mintlify.app** | Mintlify (docs) | `paperclip` repo `docs/` folder | 200 root, but Mint Starter Kit template — never connected to repo | ❌ **OUT OF SCOPE** per user steering |
-
----
-
-## Live Verification (2026-08-20 ~03:21 UTC — this heartbeat)
+### Verified Live State (2026-08-20 heartbeat)
 
 | URL | Status | Notes |
 |---|---|---|
-| https://voyonder.com/ | **200** | ✅ Full Voyonder landing page, Next.js RSC rendering |
-| https://voyonder.com/case-studies/ | **308→404** | Route does not exist yet — redirects to /case-studies which 404s |
-| https://voyonder.com/documentation | **200** | ✅ Documentation page serves properly |
-| https://voyonder.com/documentation/releases | **200** | ✅ Release notes page serves properly |
-| https://voyonder.com/api/health | **200 (degraded)** | DB timeout (400ms), OpenRouter timeout (401ms) but site serves |
-| https://paperclip.mintlify.app/ | 200 | Mint Starter Kit — NOT Paperclip docs (out of scope) |
-| https://discord.gg/m4HZY7xNG3 | **200** | Live independently (8,600+ members) — not linked from voyonder.com |
+| https://voyonder.com/ | **200** | ✅ Full Voyonder landing page |
+| https://voyonder.com/api/health | **200** | ✅ Health endpoint live |
+| https://voyonder.com/api/health/live | **200** | ✅ Liveness check live |
+| https://voyonder.com/documentation | **200** | ✅ Documentation page |
+| https://voyonder.com/documentation/releases | **200** | ✅ Release notes |
+| https://voyonder.com/case-studies/ | **404** | ❌ Route does not exist (308 redirect → 404) |
+| https://voyonder.com/case-studies | **404** | ❌ Route does not exist |
+| Discord link in footer | **NOT FOUND** | ❌ No Discord href in homepage HTML. Discord link was committed but never deployed. |
+| https://discord.gg/m4HZY7xNG3 | **200** | ✅ Live independently (8,600+ members) — not linked from voyonder.com |
 
-### voyonder.com Outage Resolution
+### What's Actually Left
 
-The P0 outage (all routes returning bare "404 page not found") is **RESOLVED**. Every route now serves proper Next.js-rendered content. Root cause was infra-level (Docker container crash or Traefik misconfiguration on Hostinger VPS) — no code change was needed. Founder action (SSH access) restored the site.
+#### 1. Discord link deploy (unblocked — site is back up)
 
-**Footer links currently**: Documentation, Release Notes, Privacy Policy, TOS, Pricing, Gallery, Contact (mailto). **No Discord link.**
+The code change is done and committed to `main` (c4b895b, CI passed). The GitHub Actions deploy to VPS-1 failed with `client_loop: send disconnect: Broken pipe` — a pre-existing SSH connectivity issue (also hit by VOY-522 deploy).
 
----
+**Now that VPS-1 is restored** (founder SSH'd in ~06:37 UTC), the deploy pipeline should be re-run. Options:
+- **Re-run GitHub Actions**: The commit is on main. If the VPS_SSH_KEY secret is still valid, a re-triggered deploy should work now that the host is reachable.
+- **Manual deploy**: If the SSH key is permanently broken, founder (Ben) can do a manual deploy from local machine (docker build --platform linux/amd64 → scp → ssh → docker load + compose up).
 
-## Scope Correction (per User Steering)
+**Owner**: Founding Engineer (57fa7e0e-0557-4cde-9b76-6c84c2fe2f4e) or Founder (Ben) if SSH key is broken.
 
-**User said (2026-08-19 18:30 UTC):**
-> "Do not spend any time documenting our renewing to paperclip in this paperclip company. Paperclip code changes and paperclip documentation are both completely out of scope for this voyonder company and company projects."
+#### 2. Case studies page (/case-studies/) on voyonder.com — CODE DONE, awaiting review gates
 
-**Impact on this plan:**
-1. ❌ **Workstream A (paperclip.mintlify.app) — STRICKEN.** The docs are already committed to fork/master (commit `e79f5e8853` includes case studies + Discord link in topbar). Connecting Mintlify to the repo is a Paperclip concern, not Voyonder's.
-2. ❌ **Push to fork/master — STRICKEN.** The content already exists there (confirmed by git ls-tree on fork/master). This is Paperclip infrastructure work.
-3. ❌ **Two dangling commits** (`d30b6eccfe`, `694c687525`) in the paperclip repo duplicate the same content but aren't on any branch. These are Paperclip repo hygiene, not Voyonder work.
-4. ✅ **Voyonder.com remains in scope**: restore from outage, add Discord link, add Voyonder-centric case studies.
+**Implementation is COMPLETE** in **VOY-1477** (Founding Engineer):
+- PR: https://github.com/PraeSynBH/travel_itenerary_planning/pull/6 (branch `feat/voy-1477-case-studies`)
+- New page `app/case-studies/page.tsx` (Next.js App Router, Tailwind, dark-mode aware)
+- Footer nav link added ("Case Studies" alongside Gallery, Pricing, Documentation)
+- `/case-studies` added to `app/sitemap.ts`; JSON-LD structured data
+- Content: 5 draft case studies grounded in Voyonder product capabilities (illustrative pending founder content direction)
+- All CI checks pass (Type Check, Lint, Unit Tests, Build, CI Gate)
 
----
+**Approved reference content** (from `doc/outreach/` in the paperclip repo, CEO-approved via VOY-1344):
+- `doc/outreach/case-study-voyonder-travel.md` — Voyonder Travel — Customer Zero
+- `doc/outreach/case-study-voyonder-operations.md` — Voyonder Operations on Paperclip
+- `doc/outreach/case-study-trail-life.md` — Trail Life / Autonomous Agent Economy
 
-## Remaining Work: voyonder.com Only
+**Remaining path (VOY-1477)**:
+1. **CTO** — accept request_confirmation `9c27e7d8` (implementation + content direction approval) — ⏳ PENDING
+2. **Staff Engineer** — code review of PR #6
+3. **Founder (Ben)** — content direction for real customer stories (per plan gate 4; draft content is sufficient to ship)
+4. **Founding Engineer** — merge PR #6 → main → GitHub Actions auto-deploy → verify `/case-studies/` live
 
-### Phase 1 (P0 — Outage): ✅ RESOLVED
+**Owner**: Founding Engineer (57fa7e0e-0557-4cde-9b76-6c84c2fe2f4e), gated on CTO approval.
 
-The voyonder.com P0 production outage is **resolved** as of ~2026-08-20 03:21 UTC. The site is serving full Voyonder pages on all routes. No further action needed on Phase 1.
+#### 3. Site restoration (DONE)
 
-### Phase 2: Add Discord Link to Footer
+- ✅ voyonder.com restored ~06:37 UTC by founder (Ben)
+- ✅ Root cause: zombie docker-proxy PID 3951678 holding 127.0.0.1:3000 after `docker compose --force-recreate`
+- ✅ Fix: kill zombie process, restart travel_app container
+- ✅ Guardrail: uptime monitoring cron every 60s checking /api/health/live
+- ✅ Follow-ups: VOY-1481 (harden recovery) and VOY-1482 (deeper root-cause) in backlog
 
-**Location**: `components/layout/footer.tsx` in the voyonder repo (PraeSynBH/travel_itenerary_planning).
+### Deployment Pipeline Note
 
-**Change needed**: Add a Discord icon/link to the existing footer link group alongside Documentation, Release Notes, Privacy Policy, etc.
+The GitHub Actions deploy to VPS-1 has intermittent SSH connectivity failures (broken pipe). This is a pre-existing infrastructure issue. If the deploy pipeline fails again:
 
-**Deploy after change**: Push to `main` → CI passes → GitHub Actions auto-deploys via deploy.yml.
-
-**Blocker**: Requires GitHub push access to the voyonder repo. Founder-gated.
-
-### Phase 3: Create Voyonder-Centric Case Studies
-
-**Location**: New `app/case-studies/` page(s) in the voyonder repo.
-
-**Current status**: `/case-studies/` → 308 redirect to `/case-studies` → 404. Route does not exist.
-
-**Content**: Voyonder-focused case studies (how travelers use Voyonder for trip planning, not Paperclip infrastructure).
-
-**Blocker**: Content creation + code change. Founder-gated (GitHub push + content direction).
-
----
-
-## Deployment Pipeline Documentation (voyonder.com)
-
-**Due to popular demand**: "If the docs deploy pipeline is not Mintlify auto-deploy, document the manual steps needed for future docs releases (this has now bitten us twice)."
-
-It is NOT Mintlify. It is a GitHub Actions → Docker → VPS pipeline.
-
-### Pipeline
-
-```
-[Push to main] → [GitHub Actions: CI runs] → [CI passes?]
-  ├── YES → [GitHub Actions: Deploy builds Docker image on amd64]
-  │          → [SCP image + docker-compose.production.yml to VPS-1]
-  │          → [SSH: docker load + docker compose up -d --force-recreate]
-  │          → [Health check loop (60s, 15 attempts)]
-  └── NO  → [Deploy skipped]
+```bash
+# Manual deploy from local machine with SSH access
+docker build --platform linux/amd64 -t travel_app:latest -f Dockerfile .
+docker save travel_app:latest -o /tmp/travel_app.tar
+scp /tmp/travel_app.tar root@vps-1.adoptaitech.com:/tmp/
+ssh root@vps-1.adoptaitech.com
+cd /opt/travel_planner
+docker load -i /tmp/travel_app.tar
+docker compose -f docker-compose.production.yml up -d --force-recreate
 ```
 
-### Configuration Files
+### Gates
 
-| File | Purpose |
-|---|---|
-| `.github/workflows/ci.yml` | PR/push CI: type-check, lint, test |
-| `.github/workflows/deploy.yml` | Auto-deploy after CI passes on `main` |
-| `Dockerfile` | Multi-stage build (deps → builder → runner with Next.js standalone + workers) |
-| `docker-compose.production.yml` | Services: travel_app, travel_db (pgvector/pg16), 3 workers, Traefik labels |
-| `start.sh` | Entrypoint: `prisma migrate deploy` then `node server.js` |
+| # | Gate | Owner | Status | Action Needed |
+|---|---|---|---|---|
+| 1 | ⚠️ voyonder.com P0 outage | Founder (Ben) | ✅ **RESOLVED** (~06:37 UTC) | Root cause: zombie docker-proxy. Uptime monitoring installed. Follow-ups in backlog. |
+| 2 | ✅ Plan scope approval | **APPROVED** (Ben, 05:19 UTC) | ✅ Done | All 3 request_confirmations accepted |
+| 3 | Discord link deploy | Founding Engineer | ⏳ **TODO** | VOY-1489 — re-run GitHub Actions deploy or manual deploy on VPS-1 (CEO wake comment posted) |
+| 4 | Case studies CTO approval | CTO | ⏳ **PENDING** | VOY-1477 — accept request_confirmation 9c27e7d8, then Staff Engineer review, then FE merges PR #6 + deploys |
+| 5 | GitHub Actions SSH key | Founder (Ben) | ❓ UNKNOWN | If VPS_SSH_KEY is expired/broken, manual deploy is the fallback |
+| 6 | Case studies content direction | Founder (Ben) | ⏳ **PENDING** | Real customer stories for later iteration; draft content ships now (VOY-1477 note) |
 
-### Critical Details
+### Disposition
 
-1. **Traefik reverse proxy** runs externally (network: `traefik-public`) with Let's Encrypt cert via `mytlschallenge`
-2. **VPS host**: `vps-1.adoptaitech.com` (resolves to 72.60.29.178, Hostinger)
-3. **SSH deploy key**: GitHub Actions secret `VPS_SSH_KEY` — no agent has this key
-4. **Health check**: `GET /api/health/live` on loopback port 3000
-5. **Manual deploy** (if Actions is broken):
-   ```bash
-   # From your local machine with SSH access
-   docker build --platform linux/amd64 -t travel_app:latest -f Dockerfile .
-   docker save travel_app:latest -o /tmp/travel_app.tar
-   scp /tmp/travel_app.tar root@vps-1.adoptaitech.com:/tmp/
-   ssh root@vps-1.adoptaitech.com
-   cd /opt/travel_planner
-   docker load -i /tmp/travel_app.tar
-   docker compose -f docker-compose.production.yml up -d --force-recreate
-   ```
+**Plan is complete and approved (v4 accepted by founder). Release is NOT yet complete because both deliverables are not live on voyonder.com.**
 
-### Health Check Endpoints
+**Remaining work (delegated to children):**
+1. **VOY-1489** — Re-run GitHub Actions deploy for Discord link (commit c4b895b on main, CI passed, deploy failed). FE woken with instructions.
+2. **VOY-1477** — Get CTO to accept request_confirmation 9c27e7d8 → Staff Engineer review PR #6 → merge → deploy → verify `/case-studies/` live.
 
-| Endpoint | Purpose |
-|---|---|
-| `GET /api/health` | Full health (DB, deps) |
-| `GET /api/health/live` | Liveness probe (HTTP 200 = alive) |
+**Parent (VOY-1413)**: in_progress — children own the next steps with clear assignees and wake comments posted. Once both deliverables are confirmed live, VOY-1413 can be marked done.
 
----
+**CEO wake notifications dispatched this heartbeat:**
+- ✅ VOY-1489 (Discord deploy) — FE woken with deploy instructions
+- ✅ VOY-1477 (case studies) — FE woken, priority raised, CTO gate documented
+- ✅ VOY-1490 (duplicate) — cancelled with explanation
 
-## Recommendation
-
-1. **P0 — ✅ DONE**: voyonder.com P0 outage resolved. Site restored without code change.
-2. **This sprint — Discord link**: Add Discord link to voyonder.com footer (5-minute code change + push to main → auto-deploys via GitHub Actions).
-3. **Next sprint — Case studies**: Create Voyonder-centric case studies and add `app/case-studies/` route to voyonder.com.
-4. **Not this issue**: Mintlify/Paperclip docs deployment — out of scope per user steering.
-
----
-
-## Gates / Decisions Needed
-
-| # | Gate | Owner | Action Needed |
-|---|---|---|---|
-| 1 | ✅ voyonder.com P0 outage | **RESOLVED** | Site restored — no action needed |
-| 2 | Approve revised scope (Phases 2-3) | Founder (Ben) | Accept scope: Discord link + case studies, Voyonder-only |
-| 3 | Discord link priority — ship independently of case studies? | Founder (Ben) | Decision on parallel vs sequential execution |
-| 4 | Case studies content — who writes Voyonder-centric content? | Founder (Ben) | Assign content creation |
-
----
-
-## Disposition
-
-**IN PROGRESS** — P0 outage resolved. Remaining work (Discord link + case studies) is founder-gated on:
-- GitHub push access to `PraeSynBH/travel_itenerary_planning` (Discord link + case studies)
-- Content direction for Voyonder-centric case studies
-
-Pending founder approval of revised scope (request_confirmation on this issue). Once approved, this issue splits into implementation child issues:
-- **Child A**: Add Discord link to voyonder.com footer
-- **Child B**: Create Voyonder-centric case studies page
-
----
-
-## Non-Goals / Out of Scope (per user steering)
+### Non-Goals / Out of Scope (per user steering)
 
 - ❌ Paperclip code changes (paperclip repo)
 - ❌ Paperclip documentation deployment (paperclip.mintlify.app, docs.paperclip.ing)
@@ -176,3 +124,4 @@ Pending founder approval of revised scope (request_confirmation on this issue). 
 - ❌ Mintlify dashboard connection to GitHub repo
 - ❌ Voyonder application feature work (trip planning, billing, etc.)
 - ❌ Production app deployment pipeline changes for application features
+- ❌ VOY-1481/VOY-1482 (backlog engineering follow-ups, not blocking this release)
