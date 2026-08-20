@@ -96,7 +96,7 @@ data: {
   polling; running jobs sort to the top with progress bars and timing.
 - **`FreshnessCue` / `FreshnessDot`** (M2) — Visual freshness/staleness
   indicator for research items (green fresh / amber stale / grey unknown).
-- **`Skeleton` / `SkeletonBlock` / `FadeIn`** (M2) — Skeleton loading
+- **`SkeletonBone` / `SkeletonText` / `FadeIn`** (M2) — Skeleton loading
   placeholders + fade-in wrapper for non-blocking trip-page data.
 
 ### Job Types (M2)
