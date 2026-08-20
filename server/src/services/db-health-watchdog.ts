@@ -20,6 +20,10 @@
  *      Exiting the process would not restore an external DB, and could cause
  *      unnecessary restart loops.
  *
+ * The probe function (`dbHealthProbe`) does NOT restart PG on failure — that
+ * is gated by the consecutive-failure threshold to prevent restart cascades
+ * (fixed in PRA-1051). An in-flight mutex prevents concurrent probe execution.
+ *
  * Without this watchdog, a dead embedded Postgres leaves the server silently
  * serving 503s indefinitely. That is exactly what caused PRA-902 (and PRA-808
  * before it): 14+ hours of monitored downtime for paperclip.praesyn.int.
@@ -89,34 +93,21 @@ export type DbProbeResult = "ok" | "restarted" | "failed";
 /**
  * Run a single DB health probe. Returns the outcome so the caller (or tests)
  * can inspect what happened without inspecting logs or exit behaviour.
+ *
+ * NOTE: The probe does NOT attempt to restart PostgreSQL on failure — that
+ * responsibility belongs to the watchdog loop's consecutive-failure threshold
+ * logic. Immediate restarts here bypass the threshold and can cause restart
+ * cascades (PRA-1051).
  */
 export async function dbHealthProbe(
   db: Db,
   mode: "embedded-postgres" | "external-postgres",
-  embeddedPostgres: { stop: () => Promise<void>; start: () => Promise<void> } | null,
+  _embeddedPostgres: { stop: () => Promise<void>; start: () => Promise<void> } | null,
 ): Promise<DbProbeResult> {
   try {
     await db.execute(sql`SELECT 1`);
     return "ok";
   } catch {
-    // Attempt restart in embedded mode
-    if (mode === "embedded-postgres" && embeddedPostgres) {
-      logger.warn("DB health probe failed; attempting embedded PostgreSQL restart");
-      try {
-        await embeddedPostgres.stop();
-        await embeddedPostgres.start();
-        logger.info("Embedded PostgreSQL restarted; re-probing");
-        // Re-probe after restart
-        try {
-          await db.execute(sql`SELECT 1`);
-          return "restarted";
-        } catch {
-          return "failed";
-        }
-      } catch {
-        return "failed";
-      }
-    }
     return "failed";
   }
 }
@@ -148,8 +139,14 @@ export function installDbHealthWatchdog(opts: DbHealthWatchdogOptions): () => vo
 
   let consecutiveFailures = 0;
   let restartAttempted = false;
+  let probeInFlight = false;
 
   async function probe(): Promise<void> {
+    if (probeInFlight) {
+      logger.warn("DB health probe skipped — previous probe still in-flight");
+      return;
+    }
+    probeInFlight = true;
     let result: DbProbeResult;
     if (testProbe) {
       result = await testProbe(opts.db, opts.embeddedPostgres);
@@ -215,6 +212,7 @@ export function installDbHealthWatchdog(opts: DbHealthWatchdogOptions): () => vo
         break;
       }
     }
+    probeInFlight = false;
   }
 
   const timer = setInterval(probe, intervalMs);

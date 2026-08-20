@@ -5,8 +5,6 @@ import {
   installDbHealthWatchdog,
   type DbHealthWatchdogOptions,
 } from "../services/db-health-watchdog.js";
-import type { Sql } from "drizzle-orm";
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -86,28 +84,16 @@ describe("dbHealthProbe", () => {
     expect(result).toBe("failed");
   });
 
-  it("returns 'restarted' when embedded PG restart + re-probe succeeds", async () => {
-    // First execute fails, then after restart succeeds
-    let callCount = 0;
-    const db = fakeDb(() => {
-      callCount++;
-      if (callCount === 1) return Promise.reject(new Error("DB down"));
-      return Promise.resolve();
-    });
+  it("returns 'failed' without attempting restart (restart is gated by consecutive-failure threshold in the loop)", async () => {
+    // The probe itself no longer attempts restart — that responsibility
+    // belongs to the watchdog loop's consecutive-failure threshold logic
+    // to prevent restart cascades (PRA-1051).
+    const db = fakeDb(alwaysFails);
     const epg = fakeEpg();
     const result = await dbHealthProbe(db, "embedded-postgres", epg);
-    expect(result).toBe("restarted");
-    expect(epg.stop).toHaveBeenCalledTimes(1);
-    expect(epg.start).toHaveBeenCalledTimes(1);
-    expect(callCount).toBe(2); // initial probe + re-probe
-  });
-
-  it("returns 'failed' when embedded PG restart fails", async () => {
-    const db = fakeDb(alwaysFails);
-    const epg = failingEpg();
-    const result = await dbHealthProbe(db, "embedded-postgres", epg);
     expect(result).toBe("failed");
-    expect(epg.stop).toHaveBeenCalled();
+    expect(epg.stop).not.toHaveBeenCalled();
+    expect(epg.start).not.toHaveBeenCalled();
   });
 });
 
