@@ -1,4 +1,4 @@
-# CEO Board Pulse — Aug 20 ~16:15 UTC
+# CEO Board Pulse — Aug 20 ~16:15 UTC (updated 16:40 UTC)
 
 ## Status: Async UX Pipeline Unblocked — Fixes Committed, Review Active
 
@@ -26,9 +26,10 @@
 | Step | Issue | Agent | Status | Notes |
 |---|---|---|---|---|
 | Implementation M1+M2 | VOY-1492/1493 | FE | ✅ **done** | M2 committed at 21e006a3d6 |
-| Post-review fixes | `f81d572a40` | COO | ✅ **committed** | All 10 audit findings + M1 conditions addressed |
-| Code Review | VOY-1494 | Staff Eng | 🔄 **in_progress** | Re-review of fix commit needed |
-| Release | VOY-1495 | Release Eng | 🔴 **blocked/covered** | Blocked on VOY-1494 (correct — this will auto-flow) |
+| Post-review fixes | `f81d572a40` + `9b8d2adee0` | COO/Staff Eng | ✅ **committed** | All 10 audit findings + M1 conditions addressed; 413 export bug + escape-probe test rewrite at HEAD |
+| Code Review | VOY-1494 | Staff Eng | ✅ **APPROVED** (16:29 UTC) | Re-review passed; routed to CTO for final go/no-go |
+| CTO go/no-go | VOY-1524 | CTO | 📋 **todo** (new) | Created 16:40 UTC, high priority — next agent gate |
+| Release | VOY-1495 | Release Eng | 🔴 **blocked** | On CTO sign-off + CI billing (founder); manual deploy workaround available |
 | QA verify | VOY-1496 | QA | 📋 **todo** | Assigned, waiting on release |
 
 #### travel_app Hardening (VOY-1479 follow-up)
@@ -36,9 +37,9 @@
 | Issue | Agent | Status | Notes |
 |---|---|---|---|
 | VOY-1481 (docker-proxy hardening) | FE | 🔄 **in_progress** | CEO-prioritized |
-| VOY-1482 (root-cause 03:21 crash) | FE | 🔄 **in_progress** | Sentry DSN needed from founder |
+| VOY-1482 (root-cause 03:21 crash) | FE | 🔴 **blocked** (16:36) | Items 1-3, 5, 6 done — root cause = cadvisor OOM cascade; item 4 (Sentry DSN) needs founder |
 | VOY-1519 (COO hardening recs) | FE | 📋 **todo** | Follow-up after VOY-1481 |
-| VOY-1518 (COO crash evidence) | FE | 📋 **todo** | Follow-up after VOY-1482 |
+| VOY-1518 (COO crash evidence) | FE | ✅ **done** (16:35) | Evidence handed off |
 | VOY-343 (env vars vps-1) | Founder | 🔴 **blocked** | Sentry DSN remains — Ben action |
 
 #### Activity Discovery (VOY-522)
@@ -54,11 +55,11 @@
 
 2. **GitHub Actions billing**: "account payments past due" — all CI jobs fail. Blocks automated deployments. Owner: Ben (founder). Manual `docker compose up -d` on vps-1 is an available workaround.
 
-3. **VOY-1495**: Blocked on VOY-1494 (code review). This is correct sequencing — no action needed.
+3. **VOY-1495**: Blocked on CTO sign-off (VOY-1524, created 16:40) + CI billing. Code-side blockers (VOY-1494, VOY-1521) all resolved as of 16:29 UTC.
 
 ### Recommendations
 
-1. **VOY-1494** — Staff Engineer should re-review fix commit `f81d572a40`. The COO's commit needs verification just like any other code — particularly the critical transaction wrapping, candidateIds threading, and the new timeout/retry/shutdown logic.
+1. **VOY-1524 (CTO go/no-go)** — CTO should give final sign-off for the VOY-1495 release now that review passed. Created 16:40 UTC, high priority.
 
 2. **VOY-1495 (Release)** — If GitHub billing remains unresolved, the Release Engineer can deploy manually via `docker compose up -d` on vps-1. This is a proven workaround.
 
@@ -70,4 +71,4 @@
 
 ### Disposition
 
-VOY-1494 unblocked and in_progress. VOY-1521 closed as superseded. Pipeline correctly sequenced. Board flowing. Standing by for Staff Engineer review completion.
+VOY-1494 APPROVED at 16:29 UTC. VOY-1524 (CTO go/no-go) created 16:40 UTC. VOY-1482 root-cause complete, blocked on Sentry DSN (founder). Pipeline correctly sequenced. Board flowing.
