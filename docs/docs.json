@@ -36,6 +36,7 @@
               "start/your-first-company",
               "start/core-concepts",
               "start/architecture",
+              "start/faq",
               "releases"
             ]
           }
@@ -69,8 +70,11 @@
               "guides/board-operator/managing-tasks",
               "guides/board-operator/execution-workspaces-and-runtime-services",
               "guides/board-operator/delegation",
-              "guides/board-operator/execution-workspaces-and-runtime-services",
-              "guides/board-operator/delegation",
+              "guides/board-operator/template-companies",
+              "guides/board-operator/knowledge-starter-packs",
+              "guides/board-operator/marketplace-usage",
+              "guides/board-operator/billing-setup",
+              "guides/board-operator/notification-configuration",
               "guides/board-operator/experimental-features",
               "guides/board-operator/approvals",
               "guides/board-operator/costs-and-budgets",

@@ -151,4 +151,4 @@ Pack installation is not wrapped in a single transaction. If the process fails m
 
 - [Company Templates API](/api/company-templates) — templates can include a `starterPackKey` for automatic pack installation during deployment
 - [Knowledge API](/api/knowledge) — managing individual knowledge documents post-install
-- [Support Case Assessment: Knowledge Starter Packs](/support/assessments/support-case-knowledge-starter-packs.md)
+- [Support Case Assessment: Knowledge Starter Packs](/support/assessments/support-case-knowledge-starter-packs)

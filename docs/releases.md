@@ -11,6 +11,32 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
+## v0.5.0 Market Readiness Release — August 20, 2026
+
+[Full release notes →](/support/releases/v0.5.0-market-readiness)
+
+### Highlights
+
+- **Self-Service Onboarding** — New users can sign up with email/password and create a company in minutes via the onboarding wizard. `POST /api/start` creates a company, CEO agent, goal, project, and starter task in one request. Twelve role packs with tailored skills and knowledge assets.
+
+- **Stripe Billing Integration** — Full Stripe subscription management: tier plans, create/update/cancel/reactivate subscriptions, usage reporting (seats, agent runs, storage), invoice sync, and Stripe webhooks. Billing mutations are board-user-only — agents are blocked with 403.
+
+- **Multi-Channel Notifications** — Five notification types delivered via in-app panel, SMTP email, or web push (VAPID). Per-type preferences with instant/daily/weekly digest options. Delivery telemetry with per-channel status tracking. Fire-and-forget dispatch — failures never break the triggering operation.
+
+- **Agent Marketplace** — Browse pre-built agents and hire them with one click. Each agent ships with curated skills, default adapter config, and permissions. Hires are gated behind `agents:create` permission and board-approval policy.
+
+- **Company Templates (Production-Stable)** — Four pre-built templates (Travel Concierge, Support Ops, Engineering Team, CPA Firm) with atomic all-or-nothing deployment. Already graduated from alpha in Phase 1 with this release adding documentation and polish.
+
+- **Knowledge Starter Packs** — Pre-curated knowledge document bundles (Engineering, Travel Industry) that install directly into a company's knowledge base. Title-based deduplication, operator-extensible via JSON data files.
+
+- **Multi-User Invites** — Company invites with viewer/operator/admin roles, structured join-request flow, and a dedicated invite landing page.
+
+- **Documentation Expansion** — New setup guides for billing, notifications, marketplace, templates, and knowledge packs. Full FAQ. Updated quickstart covering the entire v0.5.0 feature surface. All new API reference docs for onboarding, billing, notifications, marketplace, company templates, and knowledge starter packs.
+
+[Full release notes →](/support/releases/v0.5.0-market-readiness)
+
+---
+
 ## Async UX Release — August 20, 2026
 
 [Full release notes →](/support/releases/voy-1474-async-ux)
