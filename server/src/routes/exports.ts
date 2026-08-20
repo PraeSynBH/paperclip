@@ -6,6 +6,7 @@ import { BACKGROUND_JOB_TYPES } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { backgroundJobService } from "../services/background-jobs.js";
 import { accessService } from "../services/index.js";
+import { HttpError } from "../errors.js";
 import { assertAuthenticated, assertCompanyAccess, assertCompanyScopeReadAllowed } from "./authz.js";
 
 const exportPdfSchema = z.object({
@@ -39,7 +40,7 @@ function assertPayloadSize(req: Request, limitBytes = 512 * 1024): void {
   if (body === undefined || body === null) return;
   const size = Buffer.byteLength(JSON.stringify(body), "utf8");
   if (size > limitBytes) {
-    throw Object.assign(new Error(`Export payload too large (${size} bytes, max ${limitBytes})`), { status: 413 });
+    throw new HttpError(413, `Export payload too large (${size} bytes, max ${limitBytes})`);
   }
 }
 
