@@ -65,22 +65,18 @@ function installWithFakeTimers(
 describe("dbHealthProbe", () => {
   it("returns 'ok' when SELECT 1 succeeds", async () => {
     const db = fakeDb(alwaysSucceeds);
-    await expect(dbHealthProbe(db, "embedded-postgres", null)).resolves.toBe("ok");
+    await expect(dbHealthProbe(db, "embedded-postgres")).resolves.toBe("ok");
   });
 
   it("returns 'failed' in external mode without restart attempt", async () => {
     const db = fakeDb(alwaysFails);
-    const epg = fakeEpg();
-    const result = await dbHealthProbe(db, "external-postgres", epg);
+    const result = await dbHealthProbe(db, "external-postgres");
     expect(result).toBe("failed");
-    // Should not attempt to restart
-    expect(epg.stop).not.toHaveBeenCalled();
-    expect(epg.start).not.toHaveBeenCalled();
   });
 
   it("returns 'failed' in embedded mode without restart when epg is null", async () => {
     const db = fakeDb(alwaysFails);
-    const result = await dbHealthProbe(db, "embedded-postgres", null);
+    const result = await dbHealthProbe(db, "embedded-postgres");
     expect(result).toBe("failed");
   });
 
@@ -89,11 +85,8 @@ describe("dbHealthProbe", () => {
     // belongs to the watchdog loop's consecutive-failure threshold logic
     // to prevent restart cascades (PRA-1051).
     const db = fakeDb(alwaysFails);
-    const epg = fakeEpg();
-    const result = await dbHealthProbe(db, "embedded-postgres", epg);
+    const result = await dbHealthProbe(db, "embedded-postgres");
     expect(result).toBe("failed");
-    expect(epg.stop).not.toHaveBeenCalled();
-    expect(epg.start).not.toHaveBeenCalled();
   });
 });
 
@@ -245,5 +238,38 @@ describe("installDbHealthWatchdog — with fake probes and timers", () => {
       _testProbe: async () => "ok" as const,
     });
     expect(() => stop()).not.toThrow();
+  });
+
+  it("releases the probe mutex when the probe throws (try/finally guard)", async () => {
+    // Regression test for the probeInFlight mutex hazard: if the probe body
+    // throws/rejects outside the switch (e.g. a throwing _testProbe), the
+    // mutex must still be released — otherwise every subsequent tick logs
+    // "probe skipped" and the watchdog goes permanently blind. The watchdog
+    // must also stay alive (catch + log) instead of crashing the process via
+    // an unhandled rejection from void probe() / setInterval.
+    const db = fakeDb(alwaysSucceeds);
+    let probeCalls = 0;
+    const throwingProbe = async (): Promise<"ok" | "failed"> => {
+      probeCalls++;
+      throw new Error("boom");
+    };
+    const { exitFn, stop } = installWithFakeTimers({
+      db,
+      failuresBeforeAction: 3,
+      _testProbe: throwingProbe,
+    });
+
+    // Let the immediate probe (and any timers it scheduled) settle.
+    await vi.advanceTimersByTimeAsync(0);
+
+    // Advance several more ticks — if the mutex were leaked, these would all
+    // be skipped and probeCalls would stay at 1.
+    for (let i = 0; i < 3; i++) {
+      await vi.advanceTimersByTimeAsync(30_000);
+    }
+
+    expect(probeCalls).toBeGreaterThan(1);
+    expect(exitFn).not.toHaveBeenCalled();
+    stop();
   });
 });
