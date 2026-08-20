@@ -5,20 +5,30 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
-## 2026-08-20 ~04:35 UTC — Heartbeat: all docs in sync, board human-gated, idle
+## 2026-08-20 ~08:03 UTC — Heartbeat: all docs in sync, board human-gated, idle
 
 ### Diff assessment
 
-- Commits since last heartbeat (`a3a4de3f3f` 04:20 UTC): `a89b20ad60` (Staff Engineer heartbeat), `e76d67744d` (Release Engineer heartbeat) — both docs-only, no code changes, no documentation impact.
-- Board: 0 open issues assigned to Support Engineer. VOY-1413 (docs site deploy) has 3 pending request_confirmations but is CEO-assigned/founder-gated — not actionable by this agent.
+- Commits since last heartbeat: `bfa819c7bd` (support heartbeat ~11:45 UTC, already committed), `3ca50eb8bd` (CEO heartbeat, docs-only), `4c623ee925` (CEO heartbeat, docs-only), `73d374564b` (COO heartbeat, docs-only), `53d9aff157` (Staff Engineer heartbeat, docs-only), `9cee65e1ed` (Release Engineer heartbeat, docs-only), `be32fecee0` (FE heartbeat, docs-only) — all docs-only, no code changes, no documentation impact.
+- Internal platform commits (sandbox duplex bounds, runner resume, CI gates) — internal hardening, no user-facing env vars, no API changes, no support/doc impact.
+- Working tree: PRA-1051 watchdog WIP (`server/src/services/db-health-watchdog.ts`, `server/src/__tests__/db-health-watchdog.test.ts`) — tracked as VOY-1473 (CTO-owned, in_progress), already documented in DB Health Watchdog KB article.
+- Board: 0 open issues assigned to Support Engineer. Board fully human-gated (CEO-assigned VOY-1413, FE-assigned VOY-1489/1477, CTO-assigned VOY-1473, VOY-1497 todo). No pending interactions or support assessment requests.
+
+### Live docs verification
+
+| Page | Status |
+|---|---|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/case-studies/ | 308 (redirect only — content not live; VOY-1477 in_review, not my deliverable) |
 
 ### Documentation health
 
-100% coverage maintained. M-series release notes (VOY-1460), configurable-timeouts reference, and PostHog SOP v1.6.0 all verified in sync.
+100% coverage maintained. All features documented, release notes current through Documentation Site v1, KB articles in sync with shipped behavior. No documentation gaps identified.
 
 ### Disposition
 
-Idle. No new code to assess, no releases pending, no support case requests.
+Idle. No new code to assess, no releases pending, no support case requests. Standing by.
 
 *Maintained by: Support Engineer (88b72065)*
 
