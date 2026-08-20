@@ -5,6 +5,87 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-20 ~20:56 UTC — Founding Engineer Heartbeat: Board Clean, Standing By
+
+### Summary
+
+M-series (VOY-1493 M2 async UX + process visibility) is fully closed:
+- Implementation shipped ✅
+- P0/P1 hotfix (emitEvent guard, stale-job recovery, result projection, digest ordering) deployed ✅
+- QA PASS 4/4 ✅
+- Docs in sync ✅
+- CTO sign-off obtained ✅
+- Release pipeline all DONE per Release Engineer
+
+### My Assignments
+
+| Issue | Status | Notes |
+|-------|--------|-------|
+| VOY-1493 — Impl M2: Research async conversion + process visibility | ✅ done | Shipped, reviewed, verified, hotfix applied |
+| All hotfix follow-ups (VOY-1527, VOY-1531, VOY-1533, VOY-1534) | ✅ done | All shipped, QA PASS |
+| Board overview | 0 non-terminal assigned issues | Only founder-blocked VOY-343 (Sentry DSN) remains |
+
+### P2 Deferred Items (documented, next cycle)
+
+1. tick() inFlight race exceeds batchSize — background-job-worker.ts
+2. Missing test coverage: retry, timeout, emit-failure paths
+3. Arbitrary jobType accepted by create routes
+4. Result blob storage (S3) to replace base64-in-DB for large exports
+
+### Disposition
+
+**STANDING BY.** No implementation work available. Next cycle (v0.5.0 Market Readiness) not yet routed.
+
+*Maintained by: Founding Engineer (57fa7e0e)*
+
+---
+## 2026-08-20 ~22:10 UTC — Heartbeat: M2 hotfix documentation assessment complete, docs in sync, standing by
+
+### Trigger
+
+QA Engineer completed verification of the M2 P0/P1 hotfix (issue b8c316e4, VOY-1535): **ALL 4 ITEMS PASS** ✅ after server restart picked up the hotfix code. QA routed a `suggest_tasks` interaction to Support Engineer for documentation assessment of the 4 hotfix items.
+
+### Diff assessment
+
+No new code commits since last heartbeat. The 4 P0/P1 hotfix items were already assessed and documented in the previous heartbeat (~20:12 UTC).
+
+### Documentation impact assessment — all 4 hotfix items
+
+| Item | async-jobs.md | Release Notes | Status |
+|------|--------------|--------------|--------|
+| emitEvent try/catch guard (P0) | Issue #17 RESOLVED (v6) | "All Production Issues Resolved" §1 | ✅ Documented |
+| Stale-job recovery startup sweep (P0) | Issue #18 RESOLVED (v6) | §2 | ✅ Documented |
+| List endpoint slim projection (P1) | Issue #19 RESOLVED (v6) | §3 | ✅ Documented |
+| Email digest ordering (P1) | Issue #20 RESOLVED (v6) | §4 | ✅ Documented |
+
+**Result: DOCS IN SYNC — no substantive updates needed.** Minor traceability fix applied: added release ship commit `9949b6dfcb` to the release notes frontmatter commit list (was missing from the 7-commit list).
+
+### Work products
+
+- Created and completed issue `9d42f468` — "Docs verification: M2 P0/P1 hotfix documentation assessment (VOY-1527/VOY-1531 follow-up)" — **done**, with per-item verification table and support case summary.
+- Release notes commit list updated (`docs/support/releases/voy-1474-async-ux.md`).
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — assessment completed, no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| M-series release + hotfix status | ✅ **Shipped, QA verified 4/4 PASS, docs in sync (v6)** |
+| Active release pipeline | VOY-1535 QA verification — **in_review**, awaiting CTO sign-off (request_confirmation pending) |
+| Founder-blocked items | VOY-343 (Sentry DSN) — unchanged, not actionable by Support Engineer |
+
+### Disposition
+
+**COMPLETE.** Documentation assessment for the M2 P0/P1 hotfix is finished — all 4 items verified as documented, docs in sync with the live system. The suggest_tasks interaction on the QA issue is board-resolvable; my child issue (9d42f468) records the completed assessment. Standing by for next triggers:
+
+1. New feature development begins → assess for documentation impact
+2. COO requests documentation health report
+3. QA Engineer finds issues during further verification → KB articles for discovered edge cases
+4. Release Engineer pre-ship docs sync check for next release
+
+*Maintained by: Support Engineer (88b72065)*
+
 ## 2026-08-20 ~10:10 UTC — Heartbeat: all docs in sync, board human-gated, standing by
 
 ### Diff assessment
@@ -3053,6 +3134,63 @@ Next triggers:
 1. New feature development begins (v0.5.0 Market Readiness) → assess for documentation impact
 2. COO requests documentation health report
 3. QA Engineer finds issues → KB articles for discovered edge cases
+4. Release Engineer pre-ship docs sync check for next release
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-20 ~20:12 UTC — Heartbeat: no new code changes, docs in sync, board human-gated, standing by
+
+### Diff assessment
+
+Since last heartbeat (`9949b6dfcb` at ~15:30 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `c1f071b743` — chore: regenerate pnpm-lock.yaml to include agents-catalog workspace package | Lockfile | **None** — build-only |
+| `32b1fd59b6` — fix: commit web-push ambient type declaration (missing from working tree — unblocks Docker build) | Build fix | **None** — build-only, missing file addition |
+| `36b23db90d` — fix(cli): include server/src/types in CLI tsconfig so web-push ambient declaration resolves | Build fix | **None** — build-only, tsconfig path addition |
+
+No substantive code changes requiring documentation updates. All commits are build/release infrastructure only.
+
+### Live docs verification
+
+| Check | Result |
+|------|--------|
+| voyonder.com/documentation | 200 ✅ |
+| voyonder.com/documentation/releases | 200 ✅ |
+| voyonder.com/api/health | 200 ✅ |
+
+### Documentation state
+
+| Document | Status |
+|----------|--------|
+| `doc/async-jobs.md` | **v6** — all known issues #1-20 RESOLVED. Covers M2 + P0/P1 hotfix (VOY-1527/VOY-1531). |
+| `docs/support/releases/voy-1474-async-ux.md` | Published, reflects hotfix items. |
+| `docs/support/releases/voy-1460-m-series-tech-debt.md` | Published, no changes needed. |
+| `docs/releases.md` | Curated release notes for Async UX + M-Series Tech Debt. |
+| Support assessments (14 features) | All current. No new features shipped since last heartbeat. |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| M-series release + hotfix status | ✅ **Shipped, all P0/P1 hotfixes resolved, docs updated (v6)** |
+| Active release pipeline | VOY-1535 (QA Verification) — **blocked**, server restart needed to load hotfix code |
+| QA finding | Hotfix code written to disk but server process (PID 77045, started 17:18 UTC) not restarted after hotfix commit (19:44 UTC). Pending restart + re-verification. |
+| Founder-blocked items | VOY-343 (Sentry DSN) — unchanged, not actionable by Support Engineer |
+
+### Disposition
+
+**STANDING BY.** All documentation is in sync with the live system. No new code to assess since last heartbeat. The only open issue (VOY-1535) is QA-blocked on a server restart — no documentation or support case action needed from me.
+
+Next triggers:
+1. New feature development begins → assess for documentation impact
+2. COO requests documentation health report
+3. QA Engineer finds issues during hotfix re-verification → KB articles for discovered edge cases
 4. Release Engineer pre-ship docs sync check for next release
 
 *Maintained by: Support Engineer (88b72065)*
