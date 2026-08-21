@@ -40,7 +40,7 @@ describeEmbeddedPostgres("productivity review service", () => {
   beforeAll(async () => {
     tempDb = await startEmbeddedPostgresTestDatabase("paperclip-productivity-review-");
     db = createDb(tempDb.connectionString);
-  }, 30_000);
+  }, 120_000);
 
   afterEach(async () => {
     await db.execute(sql.raw(`TRUNCATE TABLE "companies" CASCADE`));
@@ -48,7 +48,7 @@ describeEmbeddedPostgres("productivity review service", () => {
 
   afterAll(async () => {
     await tempDb?.cleanup();
-  });
+  }, 120_000);
 
   async function seedAssignedIssue(opts?: {
     status?: "todo" | "in_progress";
@@ -205,7 +205,7 @@ describeEmbeddedPostgres("productivity review service", () => {
     expect(reviews[0]?.originId).toBe(seeded.issueId);
     expect(reviews[0]?.originFingerprint).toBe(`productivity-review:${seeded.issueId}`);
     expect(reviews[0]?.description).toContain("Primary trigger: `no_comment_streak`");
-    expect(reviews[0]?.description).toContain("No-comment completed-run streak: 10");
+    expect(reviews[0]?.description).toContain("No-comment executed-run streak: 10");
 
     expect(await listRefreshComments(reviews[0]!.id)).toHaveLength(0);
   });
@@ -535,6 +535,59 @@ describeEmbeddedPostgres("productivity review service", () => {
       .where(eq(activityLog.action, "issue.productivity_review_continuation_held"));
     expect(activities).toHaveLength(1);
     expect(activities[0]?.entityId).toBe(seeded.issueId);
+  });
+
+  // RBR-983 AC1/AC2/AC6: the monitor fired on RBR-920 because the assignee
+  // agent had gone into `error` (no live process) while 9 of its runs
+  // cancelled each other in a pre-start reassignment race and never
+  // executed. Neither the dead process nor the never-started runs are
+  // evidence about the assignee's diligence -- this must produce zero
+  // productivity reviews, not a false-positive no-comment-streak finding.
+  it("produces zero productivity reviews for an error-status assignee with no-comment cancelled runs on an in_progress issue", async () => {
+    const now = new Date("2026-08-06T16:28:39.000Z");
+    const seeded = await seedAssignedIssue({ status: "in_progress" });
+
+    await db
+      .update(agents)
+      .set({ status: "error", errorReason: "Process lost -- server may have restarted" })
+      .where(eq(agents.id, seeded.coderId));
+
+    // Nine pre-start cancels (reassignment race), none of which executed or
+    // could have posted a comment -- mirrors the RBR-920 run breakdown.
+    const neverStartedRuns: Array<typeof heartbeatRuns.$inferInsert> = [];
+    for (let index = 0; index < 9; index += 1) {
+      const createdAt = new Date(now.getTime() - (index + 1) * 5_000);
+      neverStartedRuns.push({
+        id: randomUUID(),
+        companyId: seeded.companyId,
+        agentId: seeded.coderId,
+        status: "cancelled",
+        invocationSource: "assignment",
+        triggerDetail: "system",
+        startedAt: null,
+        finishedAt: createdAt,
+        error: "Cancelled because issue assignee changed before the queued run could start",
+        errorCode: "issue_assignee_changed",
+        contextSnapshot: { issueId: seeded.issueId, taskId: seeded.issueId },
+        createdAt,
+        updatedAt: createdAt,
+      });
+    }
+    await db.insert(heartbeatRuns).values(neverStartedRuns);
+
+    const service = productivityReviewService(db);
+    const result = await service.reconcileProductivityReviews({ now, companyId: seeded.companyId });
+
+    expect(result.created).toBe(0);
+    expect(await listProductivityReviews(seeded.companyId)).toHaveLength(0);
+
+    const suppressionLogs = await db
+      .select()
+      .from(activityLog)
+      .where(eq(activityLog.action, "issue.productivity_review_suppressed_infra"));
+    expect(suppressionLogs).toHaveLength(1);
+    expect(suppressionLogs[0]?.entityId).toBe(seeded.issueId);
+    expect((suppressionLogs[0]?.details as Record<string, unknown> | undefined)?.preStartCancelledRunCount).toBe(9);
   });
 
   it("clamps poisoned requestDepth metadata instead of aborting productivity reconciliation", async () => {

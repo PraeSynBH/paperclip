@@ -2,6 +2,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, notInArray, sql } from "drizzl
 import type { Db } from "@paperclipai/db";
 import { clampIssueRequestDepth } from "@paperclipai/shared";
 import {
+  activityLog,
   agents,
   companies,
   costEvents,
@@ -36,12 +37,65 @@ const ACTIVE_RUN_STATUSES = ["queued", "running", "scheduled_retry"] as const;
 const MAX_CANDIDATE_ISSUES = 250;
 const MAX_RUNS_FOR_STREAK = 100;
 const MAX_PARENT_WALK_DEPTH = 25;
+const MAX_DISPOSITIONED_REVIEW_LOOKBACK = 5;
 export const PRODUCTIVITY_REVIEW_REFRESH_COMMENT_PREFIX = "Productivity review evidence refreshed.";
+export const PRODUCTIVITY_REVIEW_RECURRENCE_COMMENT_PREFIX =
+  "Productivity review cause recurred (no new review minted).";
+
+/**
+ * Run terminations that happen *before* the adapter ever executes. A run that
+ * terminated with one of these codes produced no work and could not have
+ * produced an issue comment, so it must never increment a no-comment streak
+ * (RBR-983 AC2). Nine such runs cancelled each other inside a 43-second window
+ * on RBR-920 and were counted as evidence of poor diligence.
+ */
+export const PRODUCTIVITY_REVIEW_PRE_START_CANCEL_ERROR_CODES = new Set<string>([
+  "issue_assignee_changed",
+  "lock_released_on_reassignment",
+  "issue_reassigned",
+  "issue_terminal_status",
+  "issue_not_in_progress",
+  "issue_execution_lock_changed",
+  "issue_review_participant_changed",
+  "issue_continuation_waiting_on_review",
+  "issue_paused",
+  "issue_dependencies_blocked",
+  "issue_not_found",
+  "agent_not_found",
+  "agent_not_invokable",
+  "budget_blocked",
+]);
+
+/**
+ * Statuses in which the assignee cannot act right now. This is deliberately
+ * stricter than `isAgentStatusInvokable`: an `error` agent can be *re-invoked*
+ * later, but at this instant it has no process and cannot comment, so measuring
+ * the absence of its output says nothing about its work habits (RBR-983 AC1/AC4).
+ */
+const NON_ACTING_AGENT_STATUSES = new Set<string>([
+  "error",
+  "paused",
+  "terminated",
+  "pending_approval",
+]);
 
 type IssueRow = typeof issues.$inferSelect;
 type AgentRow = typeof agents.$inferSelect;
 type HeartbeatRunRow = typeof heartbeatRuns.$inferSelect;
 type ProductivityReviewTrigger = "no_comment_streak" | "long_active_duration" | "high_churn";
+/**
+ * What the fired signal is actually evidence *about*:
+ * - `productivity`: the assignee's diligence/output (the only kind that is a performance finding)
+ * - `capacity`: the time budget — runs were killed mid-flight by the wall clock (RBR-983 AC3)
+ * - `infra`: the platform — the assignee had no live process (RBR-983 AC1)
+ */
+type ProductivityReviewSignalClass = "productivity" | "capacity" | "infra";
+
+type AssigneeActability = {
+  canAct: boolean;
+  reason: string | null;
+  detail: Record<string, unknown>;
+};
 
 type ProductivityReviewThresholds = {
   noCommentStreakRuns: number;
@@ -57,12 +111,17 @@ type ProductivityReviewThresholds = {
 
 type ProductivityReviewEvidence = {
   trigger: ProductivityReviewTrigger;
+  signalClass: ProductivityReviewSignalClass;
+  signalClassReason: string;
   triggerReasons: string[];
   sourceIssue: IssueRow;
   sourceAgent: AgentRow;
   noCommentStreak: number;
   totalRunCount: number;
   terminalRunCount: number;
+  executedRunCount: number;
+  preStartCancelledRunCount: number;
+  wallClockTimeoutRunCount: number;
   activeRunCount: number;
   runCountLastHour: number;
   runCountLastSixHours: number;
@@ -200,6 +259,106 @@ function formatTrigger(trigger: ProductivityReviewTrigger) {
   return "Long active duration";
 }
 
+function formatSignalClass(signalClass: ProductivityReviewSignalClass) {
+  if (signalClass === "capacity") return "Capacity signal (time budget)";
+  if (signalClass === "infra") return "Infrastructure signal (platform fault)";
+  return "Productivity signal (assignee diligence)";
+}
+
+/**
+ * True when the run terminated before the adapter ever started executing.
+ * Such a run produced no work and could not have posted a comment.
+ *
+ * Detection is defence-in-depth: a pre-start cancel is identified by errorCode
+ * (the authoritative signal, set by `evaluateQueuedRunStaleness` /
+ * `cancelScheduledRetryForGate` / lock-release), and additionally by the
+ * structural fact that a cancelled run never received a `startedAt` stamp
+ * (`claimQueuedRun` sets `startedAt` at the moment it flips queued -> running).
+ */
+export function isPreStartCancelledRun(run: {
+  status: string;
+  errorCode?: string | null;
+  startedAt?: Date | null;
+  resultJson?: Record<string, unknown> | null;
+}) {
+  if (run.status !== "cancelled") return false;
+  if (run.errorCode && PRODUCTIVITY_REVIEW_PRE_START_CANCEL_ERROR_CODES.has(run.errorCode)) return true;
+  const stopReason = run.resultJson?.stopReason;
+  if (typeof stopReason === "string" && PRODUCTIVITY_REVIEW_PRE_START_CANCEL_ERROR_CODES.has(stopReason)) {
+    return true;
+  }
+  // A cancelled run with no startedAt was never claimed, so it never executed.
+  return !run.startedAt;
+}
+
+/**
+ * True when the run was killed mid-flight by the harness wall clock. It was
+ * doing real work; the evidence is about the time budget, not diligence.
+ */
+export function isWallClockTimeoutRun(run: { status: string; errorCode?: string | null }) {
+  return run.status === "timed_out" || run.errorCode === "timeout";
+}
+
+/**
+ * A run "executed" if it was actually claimed and handed to the adapter. Only
+ * executed runs are admissible evidence about the assignee's output.
+ */
+export function isExecutedRun(run: {
+  status: string;
+  errorCode?: string | null;
+  startedAt?: Date | null;
+  resultJson?: Record<string, unknown> | null;
+}) {
+  if (!TERMINAL_RUN_STATUSES.includes(run.status as (typeof TERMINAL_RUN_STATUSES)[number])) return false;
+  return !isPreStartCancelledRun(run);
+}
+
+/**
+ * Classify what the fired trigger is evidence about. Order matters: an infra
+ * fault dominates (the agent had no process), then capacity (the wall clock
+ * killed the work), then genuine productivity.
+ */
+function classifySignal(input: {
+  trigger: ProductivityReviewTrigger;
+  actability: AssigneeActability;
+  executedRunCount: number;
+  wallClockTimeoutRunCount: number;
+}): { signalClass: ProductivityReviewSignalClass; signalClassReason: string } {
+  if (!input.actability.canAct) {
+    return {
+      signalClass: "infra",
+      signalClassReason:
+        input.actability.reason ??
+        "Assignee could not act at evidence-collection time; elapsed time and missing output measure an outage, not effort.",
+    };
+  }
+  if (
+    input.trigger === "no_comment_streak" &&
+    input.wallClockTimeoutRunCount > 0 &&
+    input.wallClockTimeoutRunCount >= input.executedRunCount
+  ) {
+    return {
+      signalClass: "capacity",
+      signalClassReason:
+        `Every executed run in the sample (${input.wallClockTimeoutRunCount}/${input.executedRunCount}) was killed mid-flight by the wall clock. ` +
+        "This is evidence about the run time budget, not about the assignee's diligence.",
+    };
+  }
+  if (input.trigger === "no_comment_streak" && input.wallClockTimeoutRunCount > 0) {
+    return {
+      signalClass: "capacity",
+      signalClassReason:
+        `${input.wallClockTimeoutRunCount} of ${input.executedRunCount} executed runs were killed mid-flight by the wall clock. ` +
+        "Treat the timed-out portion as a time-budget signal; only the remaining runs speak to diligence.",
+    };
+  }
+  return {
+    signalClass: "productivity",
+    signalClassReason:
+      "Assignee had a live process and executed runs completed without being killed by the wall clock, so the pattern is about output.",
+  };
+}
+
 export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: EnqueueWakeup }) {
   const issuesSvc = issueService(db);
   const budgets = budgetService(db);
@@ -222,6 +381,40 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
 
   function isAgentInvokable(agent: AgentRow | null | undefined) {
     return Boolean(agent && !["paused", "terminated", "pending_approval"].includes(agent.status));
+  }
+
+  /**
+   * Can the assignee act *right now*? If not, absence of output is an infra
+   * fault, not a performance finding (RBR-983 AC1/AC4).
+   *
+   * The only signal used is agent lifecycle status. This is deliberately
+   * simple: an `error` agent (e.g. "Process lost -- server may have
+   * restarted") has no process and cannot have produced the missing output,
+   * so measuring its absence says nothing about work habits. An *idle* agent
+   * legitimately has no process between heartbeats, so bare process-absence
+   * is not itself a fault -- only the disqualifying lifecycle statuses are.
+   */
+  async function resolveAssigneeActability(
+    sourceIssue: IssueRow,
+    sourceAgent: AgentRow,
+    activeRunCount: number,
+  ): Promise<AssigneeActability> {
+    if (NON_ACTING_AGENT_STATUSES.has(sourceAgent.status)) {
+      return {
+        canAct: false,
+        reason:
+          `Assignee ${sourceAgent.name} is in status \`${sourceAgent.status}\`` +
+          (sourceAgent.errorReason ? ` (${truncateInline(sourceAgent.errorReason, 200)})` : "") +
+          ". It had no process and could not have produced output; this is an infra fault, not a productivity finding.",
+        detail: {
+          assigneeStatus: sourceAgent.status,
+          assigneeErrorReason: sourceAgent.errorReason ?? null,
+          check: "agent_status",
+        },
+      };
+    }
+
+    return { canAct: true, reason: null, detail: { check: "actable", assigneeStatus: sourceAgent.status } };
   }
 
   async function isProductivityReviewDescendant(issue: Pick<IssueRow, "companyId" | "parentId">) {
@@ -281,6 +474,88 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       .orderBy(desc(issues.updatedAt))
       .limit(1)
       .then((rows) => rows[0] ?? null);
+  }
+
+  /**
+   * Has an infra-suppression log already been written for this issue inside
+   * the window? Used to rate-limit the AC1 suppression signal so a stuck
+   * assignee does not spam the activity log on every reconcile tick.
+   */
+  async function findRecentInfraSuppressionLog(companyId: string, sourceIssueId: string, since: Date) {
+    return db
+      .select({ id: activityLog.id })
+      .from(activityLog)
+      .where(
+        and(
+          eq(activityLog.companyId, companyId),
+          eq(activityLog.action, "issue.productivity_review_suppressed_infra"),
+          eq(activityLog.entityType, "issue"),
+          eq(activityLog.entityId, sourceIssueId),
+          gt(activityLog.createdAt, since),
+        ),
+      )
+      .orderBy(desc(activityLog.createdAt))
+      .limit(1)
+      .then((rows) => rows[0] ?? null);
+  }
+
+  /**
+   * AC5: a review that closed `done` with an infra/capacity signal class is a
+   * disposition that a mechanical fault (or the time budget) caused the
+   * pattern, not the assignee. If that closed review's cause has not since
+   * been superseded by a newer review on the same source issue, re-firing a
+   * fresh review re-derives a conclusion that has already been recorded.
+   * Look back over the most recent dispositioned reviews (bounded) rather
+   * than only the single latest one, since intervening `cancelled` reviews
+   * (route probes, races) should not hide a real disposition.
+   */
+  async function findUnresolvedDispositionedReviewCause(
+    companyId: string,
+    sourceIssueId: string,
+  ): Promise<{ reviewIssueId: string; reviewIdentifier: string | null; signalClass: ProductivityReviewSignalClass; signalClassReason: string } | null> {
+    const dispositioned = await db
+      .select({ id: issues.id, identifier: issues.identifier, updatedAt: issues.updatedAt })
+      .from(issues)
+      .where(
+        and(
+          eq(issues.companyId, companyId),
+          eq(issues.originKind, PRODUCTIVITY_REVIEW_ORIGIN_KIND),
+          eq(issues.originId, sourceIssueId),
+          eq(issues.status, "done"),
+        ),
+      )
+      .orderBy(desc(issues.updatedAt))
+      .limit(MAX_DISPOSITIONED_REVIEW_LOOKBACK);
+    for (const review of dispositioned) {
+      const [creationLog] = await db
+        .select({ details: activityLog.details })
+        .from(activityLog)
+        .where(
+          and(
+            eq(activityLog.companyId, companyId),
+            eq(activityLog.action, "issue.productivity_review_created"),
+            eq(activityLog.entityType, "issue"),
+            eq(activityLog.entityId, review.id),
+          ),
+        )
+        .orderBy(asc(activityLog.createdAt))
+        .limit(1);
+      const signalClass = (creationLog?.details as Record<string, unknown> | undefined)?.signalClass;
+      if (signalClass === "infra" || signalClass === "capacity") {
+        const signalClassReason = (creationLog?.details as Record<string, unknown> | undefined)?.signalClassReason;
+        return {
+          reviewIssueId: review.id,
+          reviewIdentifier: review.identifier,
+          signalClass,
+          signalClassReason: typeof signalClassReason === "string" ? signalClassReason : formatSignalClass(signalClass),
+        };
+      }
+      // Only the most recent disposition governs recurrence: if it closed as
+      // a genuine productivity finding, an older infra disposition further
+      // back is stale and must not keep suppressing new reviews.
+      return null;
+    }
+    return null;
   }
 
   async function countRecentProductivityReviews(
@@ -423,8 +698,15 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
     const terminalRuns = latestRuns.filter((run) =>
       TERMINAL_RUN_STATUSES.includes(run.status as (typeof TERMINAL_RUN_STATUSES)[number]),
     );
+    // RBR-983 AC2: a run that terminated before the adapter ever started (a
+    // pre-start cancel from a reassignment race, a stale-queue sweep, etc.)
+    // produced no work and could not have posted a comment. Only executed
+    // runs are admissible evidence about the assignee's output.
+    const executedRuns = terminalRuns.filter((run) => isExecutedRun(run));
+    const preStartCancelledRunCount = terminalRuns.length - executedRuns.length;
+    const wallClockTimeoutRunCount = executedRuns.filter((run) => isWallClockTimeoutRun(run)).length;
     let noCommentStreak = 0;
-    for (const run of terminalRuns) {
+    for (const run of executedRuns) {
       if (commentRunIds.has(run.id)) break;
       noCommentStreak += 1;
     }
@@ -475,8 +757,47 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       ? Math.max(0, now.getTime() - activeStartedAt.getTime())
       : null;
 
+    // RBR-983 AC1/AC4: resolve whether the assignee could act at all *before*
+    // deciding which triggers are admissible. An assignee that cannot act
+    // produces no comments and accrues elapsed time purely from being stuck,
+    // neither of which is a productivity finding.
+    const actability = await resolveAssigneeActability(sourceIssue, sourceAgent, activeRunCount);
+
+    // AC1: suppress the review entirely when the assignee cannot act. This is
+    // an infra fault -- route it to the operator via the activity log instead
+    // of minting a performance finding against an agent with no process.
+    // Rate-limited the same way refresh comments are, so a stuck agent does
+    // not spam the activity log on every reconcile tick.
+    if (!actability.canAct) {
+      const since = new Date(now.getTime() - thresholds.refreshIntervalMs);
+      const alreadyLogged = await findRecentInfraSuppressionLog(sourceIssue.companyId, sourceIssue.id, since);
+      if (!alreadyLogged) {
+        await logActivity(db, {
+          companyId: sourceIssue.companyId,
+          actorType: "system",
+          actorId: "system",
+          agentId: sourceAgent.id,
+          action: "issue.productivity_review_suppressed_infra",
+          entityType: "issue",
+          entityId: sourceIssue.id,
+          details: {
+            source: "productivity_review.reconcile",
+            reason: actability.reason,
+            detail: actability.detail,
+            noCommentStreak,
+            executedRunCount: executedRuns.length,
+            preStartCancelledRunCount,
+            elapsedMs,
+          },
+        });
+      }
+      return null;
+    }
+
     const noComment = noCommentStreak >= thresholds.noCommentStreakRuns;
-    const longActive = elapsedMs !== null && elapsedMs >= thresholds.longActiveMs;
+    // AC4: elapsed time on an assignee that cannot act measures an outage,
+    // not effort, so the long-active-duration trigger must not fire on it.
+    const longActive = actability.canAct && elapsedMs !== null && elapsedMs >= thresholds.longActiveMs;
     const highChurn =
       runCountLastHour >= thresholds.highChurnHourly ||
       assigneeRunCommentCountLastHour >= thresholds.highChurnHourly ||
@@ -485,23 +806,40 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
     const trigger = choosePrimaryTrigger({ noComment, longActive, highChurn });
     if (!trigger) return null;
 
+    const { signalClass, signalClassReason } = classifySignal({
+      trigger,
+      actability,
+      executedRunCount: executedRuns.length,
+      wallClockTimeoutRunCount,
+    });
+
     const triggerReasons: string[] = [];
-    if (noComment) triggerReasons.push(`${noCommentStreak} consecutive completed issue-linked runs had no run-created issue comment`);
+    if (noComment) triggerReasons.push(`${noCommentStreak} consecutive executed issue-linked runs had no run-created issue comment`);
     if (longActive) triggerReasons.push(`current active episode has lasted ${msToHuman(elapsedMs)}`);
     if (highChurn) {
       triggerReasons.push(
         `${runCountLastHour} runs/${assigneeRunCommentCountLastHour} assignee-run comments in 1h; ${runCountLastSixHours} runs/${assigneeRunCommentCountLastSixHours} assignee-run comments in 6h`,
       );
     }
+    if (preStartCancelledRunCount > 0) {
+      triggerReasons.push(
+        `${preStartCancelledRunCount} sampled run(s) never started (pre-start cancel) and were excluded from the no-comment streak`,
+      );
+    }
 
     return {
       trigger,
+      signalClass,
+      signalClassReason,
       triggerReasons,
       sourceIssue,
       sourceAgent,
       noCommentStreak,
       totalRunCount: latestRuns.length,
       terminalRunCount: terminalRuns.length,
+      executedRunCount: executedRuns.length,
+      preStartCancelledRunCount,
+      wallClockTimeoutRunCount,
       activeRunCount,
       runCountLastHour,
       runCountLastSixHours,
@@ -578,6 +916,8 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       `- Source issue: ${issueUiLink(evidence.sourceIssue, prefix)}`,
       `- Assigned agent: ${evidence.sourceAgent.name} (${evidence.sourceAgent.role})`,
       `- Primary trigger: \`${evidence.trigger}\` (${formatTrigger(evidence.trigger)})`,
+      `- Signal class: \`${evidence.signalClass}\` (${formatSignalClass(evidence.signalClass)})`,
+      `- Signal class reason: ${evidence.signalClassReason}`,
       `- Trigger reasons: ${evidence.triggerReasons.join("; ")}`,
       `- Generated at: ${evidence.generatedAt.toISOString()}`,
       "",
@@ -585,8 +925,11 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       "",
       `- Total sampled issue-linked runs: ${evidence.totalRunCount}`,
       `- Terminal sampled runs: ${evidence.terminalRunCount}`,
+      `- Executed runs (adapter actually started): ${evidence.executedRunCount}`,
+      `- Pre-start cancelled runs (excluded from streak): ${evidence.preStartCancelledRunCount}`,
+      `- Wall-clock timed-out runs: ${evidence.wallClockTimeoutRunCount}`,
       `- Active queued/running/scheduled runs: ${evidence.activeRunCount}`,
-      `- No-comment completed-run streak: ${evidence.noCommentStreak}`,
+      `- No-comment executed-run streak: ${evidence.noCommentStreak}`,
       `- Current active elapsed time: ${msToHuman(evidence.elapsedMs)}`,
       `- Runs in rolling windows: ${evidence.runCountLastHour}/1h, ${evidence.runCountLastSixHours}/6h`,
       `- Assignee run-linked comments total/window: ${evidence.commentCount} total, ${evidence.commentCountLastHour}/1h, ${evidence.commentCountLastSixHours}/6h`,
@@ -626,6 +969,7 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       "",
       `- Source issue: ${issueUiLink(evidence.sourceIssue, prefix)}`,
       `- Trigger: \`${evidence.trigger}\` (${formatTrigger(evidence.trigger)})`,
+      `- Signal class: \`${evidence.signalClass}\` (${formatSignalClass(evidence.signalClass)})`,
       `- Reasons: ${evidence.triggerReasons.join("; ")}`,
       `- No-comment streak: ${evidence.noCommentStreak}`,
       `- Runs/assignee comments: ${evidence.runCountLastHour}/${evidence.commentCountLastHour} in 1h, ${evidence.runCountLastSixHours}/${evidence.commentCountLastSixHours} in 6h`,
@@ -660,12 +1004,59 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
           source: "productivity_review.reconcile",
           sourceIssueId: evidence.sourceIssue.id,
           trigger: evidence.trigger,
+          signalClass: evidence.signalClass,
+          signalClassReason: evidence.signalClassReason,
           noCommentStreak: evidence.noCommentStreak,
           runCountLastHour: evidence.runCountLastHour,
           commentCountLastHour: evidence.commentCountLastHour,
         },
       });
       return { kind: "updated" as const, reviewIssueId: existing.id };
+    }
+
+    // RBR-983 AC5: if the most recent dispositioned (closed `done`) review on
+    // this source issue already concluded the cause was infra or capacity,
+    // and this evidence collection is still that same non-productivity class,
+    // the cause has already been dispositioned and is presumably still
+    // unresolved (the pattern recurred). Extend that closed review with a
+    // recurrence comment instead of minting a fresh one that re-derives an
+    // identical conclusion.
+    if (evidence.signalClass !== "productivity") {
+      const priorDisposition = await findUnresolvedDispositionedReviewCause(
+        evidence.sourceIssue.companyId,
+        evidence.sourceIssue.id,
+      );
+      if (priorDisposition) {
+        const recurrenceBody = [
+          PRODUCTIVITY_REVIEW_RECURRENCE_COMMENT_PREFIX,
+          "",
+          `- Source issue: ${issueUiLink(evidence.sourceIssue, opts.prefix)}`,
+          `- New trigger: \`${evidence.trigger}\` (${formatTrigger(evidence.trigger)})`,
+          `- Signal class: \`${evidence.signalClass}\` (${formatSignalClass(evidence.signalClass)})`,
+          `- Reasons: ${evidence.triggerReasons.join("; ")}`,
+          `- Prior disposition: \`${priorDisposition.signalClass}\` — ${priorDisposition.signalClassReason}`,
+          "- No new review minted; the underlying cause was already dispositioned as non-productivity and appears unresolved.",
+        ].join("\n");
+        await addRefreshComment(priorDisposition.reviewIssueId, recurrenceBody, evidence.generatedAt);
+        await logActivity(db, {
+          companyId: evidence.sourceIssue.companyId,
+          actorType: "system",
+          actorId: "system",
+          action: "issue.productivity_review_recurrence_held",
+          entityType: "issue",
+          entityId: evidence.sourceIssue.id,
+          agentId: evidence.sourceAgent.id,
+          details: {
+            source: "productivity_review.reconcile",
+            sourceIssueId: evidence.sourceIssue.id,
+            trigger: evidence.trigger,
+            signalClass: evidence.signalClass,
+            priorReviewIssueId: priorDisposition.reviewIssueId,
+            priorSignalClass: priorDisposition.signalClass,
+          },
+        });
+        return { kind: "recurrence_deduped" as const, reviewIssueId: priorDisposition.reviewIssueId };
+      }
     }
 
     const recentCreationCount = await countRecentProductivityReviews(
@@ -788,6 +1179,7 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
       existing: 0,
       snoozed: 0,
       creationCapped: 0,
+      recurrenceDeduped: 0,
       skipped: 0,
       failed: 0,
       reviewIssueIds: [] as string[],
@@ -828,6 +1220,7 @@ export function productivityReviewService(db: Db, deps?: { enqueueWakeup?: Enque
         if (outcome.kind === "created") result.created += 1;
         else if (outcome.kind === "updated") result.updated += 1;
         else if (outcome.kind === "creation_capped") result.creationCapped += 1;
+        else if (outcome.kind === "recurrence_deduped") result.recurrenceDeduped += 1;
         else result.existing += 1;
         if (outcome.reviewIssueId) result.reviewIssueIds.push(outcome.reviewIssueId);
       } catch (err) {
