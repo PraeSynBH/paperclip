@@ -11,6 +11,7 @@ import {
   stripeWebhookEvents as stripeWebhookEventsTable,
 } from "@paperclipai/db";
 import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES } from "@paperclipai/shared";
+import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { publishLiveEvent } from "./live-events.js";
 
@@ -335,17 +336,6 @@ export function billingService(db: Db) {
       return;
     }
 
-    const existing = await db
-      .select()
-      .from(companySubscriptionsTable)
-      .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
-      .then((r) => r[0] ?? null);
-
-    if (existing) {
-      logger.info({ stripeSubscriptionId: subId }, "Subscription already exists — skipping checkout.session.completed");
-      return;
-    }
-
     const stripe = getStripeClient();
     const stripeSub = await stripe.subscriptions.retrieve(subId);
 
@@ -354,72 +344,90 @@ export function billingService(db: Db) {
       : null;
     const stripeCustomerId = sessionCustomerId ?? stripeSub.customer as string;
 
-    const cust = await db
-      .select()
-      .from(stripeCustomersTable)
-      .where(eq(stripeCustomersTable.stripeCustomerId, stripeCustomerId as string))
-      .then((r) => r[0] ?? null);
+    // Use transaction + upsert for idempotent handling of at-least-once Stripe delivery.
+    // The UNIQUE index on stripe_subscription_id prevents duplicate rows; the upsert
+    // makes the second-and-later deliveries a safe no-op.
+    await db.transaction(async (tx) => {
+      const cust = await tx
+        .select()
+        .from(stripeCustomersTable)
+        .where(eq(stripeCustomersTable.stripeCustomerId, stripeCustomerId as string))
+        .then((r) => r[0] ?? null);
 
-    if (!cust) {
-      logger.warn(
-        { stripeCustomerId, companyId },
-        "No local Stripe customer record found — cannot create subscription",
+      if (!cust) {
+        logger.warn(
+          { stripeCustomerId, companyId },
+          "No local Stripe customer record found — cannot create subscription",
+        );
+        return;
+      }
+
+      const tier = await getTier(tierId);
+      const stripeSubItemId = stripeSub.items.data[0]?.id ?? null;
+
+      // Upsert: INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE
+      // Handles at-least-once delivery from Stripe (race-free with the UNIQUE index)
+      await tx.execute(sql`
+        INSERT INTO "company_subscriptions"
+          ("company_id", "tier_id", "stripe_customer_id", "status", "billing_period",
+           "current_period_start", "current_period_end", "stripe_subscription_id",
+           "stripe_subscription_item_id", "cancel_at_period_end", "trial_end",
+           "created_at", "updated_at")
+        VALUES (
+          ${companyId}, ${tierId}, ${cust.id}, ${stripeSub.status},
+          ${billingPeriod},
+          ${new Date(stripeSub.current_period_start * 1000)},
+          ${new Date(stripeSub.current_period_end * 1000)},
+          ${subId}, ${stripeSubItemId},
+          ${stripeSub.cancel_at_period_end},
+          ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null},
+          NOW(), NOW()
+        )
+        ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
+          "status" = EXCLUDED."status",
+          "current_period_start" = EXCLUDED."current_period_start",
+          "current_period_end" = EXCLUDED."current_period_end",
+          "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
+          "updated_at" = NOW()
+      `);
+
+      // Insert usage metrics with ON CONFLICT DO NOTHING — if the row already exists
+      // from a duplicate event the unique constraint silently prevents re-insertion.
+      const usageMetrics: Array<{ metric: string; included: number }> = [
+        { metric: "seats", included: tier.includedSeats },
+        { metric: "agent_runs", included: tier.includedAgentRuns },
+        { metric: "storage_gb", included: tier.includedStorageGb },
+      ];
+
+      for (const m of usageMetrics) {
+        await tx.execute(sql`
+          INSERT INTO "subscription_usage"
+            ("company_id", "subscription_id", "metric", "usage", "included",
+             "overage", "overage_cents", "period_start", "period_end")
+          VALUES (
+            ${companyId},
+            (SELECT "id" FROM "company_subscriptions" WHERE "stripe_subscription_id" = ${subId}),
+            ${m.metric}, 0, ${m.included},
+            0, 0,
+            ${new Date(stripeSub.current_period_start * 1000)},
+            ${new Date(stripeSub.current_period_end * 1000)}
+          )
+          ON CONFLICT ("subscription_id", "metric", "period_start", "period_end") DO NOTHING
+        `);
+      }
+
+      logger.info(
+        { companyId, tierId, stripeSubscriptionId: subId },
+        "Created subscription from Checkout Session",
       );
-      return;
-    }
-
-    const tier = await getTier(tierId);
-    const stripeSubItemId = stripeSub.items.data[0]?.id ?? null;
-
-    const created = await db
-      .insert(companySubscriptionsTable)
-      .values({
-        companyId,
-        tierId,
-        stripeCustomerId: cust.id,
-        status: stripeSub.status,
-        billingPeriod,
-        currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-        currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
-        stripeSubscriptionId: stripeSub.id,
-        stripeSubscriptionItemId: stripeSubItemId,
-        cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
-        trialEnd: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
-      })
-      .returning()
-      .then((r) => r[0]);
-
-    const usageMetrics: Array<{ metric: string; included: number }> = [
-      { metric: "seats", included: tier.includedSeats },
-      { metric: "agent_runs", included: tier.includedAgentRuns },
-      { metric: "storage_gb", included: tier.includedStorageGb },
-    ];
-
-    for (const m of usageMetrics) {
-      await db.insert(subscriptionUsageTable).values({
-        companyId,
-        subscriptionId: created.id,
-        metric: m.metric,
-        usage: 0,
-        included: m.included,
-        overage: 0,
-        overageCents: 0,
-        periodStart: created.currentPeriodStart,
-        periodEnd: created.currentPeriodEnd,
-      });
-    }
-
-    logger.info(
-      { companyId, tierId, stripeSubscriptionId: stripeSub.id },
-      "Created subscription from Checkout Session",
-    );
+    });
 
     publishLiveEvent({
       companyId,
       type: "subscription.status.updated",
       payload: {
         status: stripeSub.status,
-        stripeSubscriptionId: stripeSub.id,
+        stripeSubscriptionId: subId,
         cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
         tierId,
       },
