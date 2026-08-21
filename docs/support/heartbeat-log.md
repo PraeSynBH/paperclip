@@ -5,6 +5,77 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## Heartbeat — Aug 21 ~16:55 UTC
+
+### Summary
+
+**Board state:** Clean — no open issues assigned to Support Engineer (88b72065). Documentation in sync with all shipped code.
+
+**Active billing restoration cycle (VOY-1590):**
+- VOY-1590 in_progress (Staff Engineer) — Stripe billing flow E2E verification
+- VOY-1611 in_progress (Founding Engineer) — Build billing/pricing UI page
+- VOY-1609 blocked (Founding Engineer) — Implement feature gating / paywall logic
+- VOY-1613 blocked (CEO) — Provision Stripe test-mode API keys
+- VOY-1616/1610/1612/1617/1614 todo — billing follow-ups (idempotency, SSE, yearly prices)
+- VOY-1621 in_progress (Release Engineer) — Merge PR #60 VOY-1413 SHIPPED status sync
+
+### Diff assessment (working tree, uncommitted)
+
+The billing restoration code is sitting in the working tree (Staff Engineer, VOY-1590). Assessment:
+
+| Code Area | Documentation Impact |
+|-----------|---------------------|
+| `server/src/routes/billing.ts` (+267 lines) — restored billing endpoints | API contracts **match** documented contracts in `docs/api/billing.md` and `docs/support/assessments/support-case-billing-system.md` → docs remain structurally accurate |
+| `server/src/services/billing.ts` (+1024 lines) — restored billing service | No documentation change — internal service implementation |
+| `server/src/errors.ts` — new `paywall()` function (403 with code: "PAYWALL") | **NEW support-relevant behavior** — NOT yet wired to any route (confirmed dead-code per structural audit v3). Documented as pending in support assessment. |
+| `packages/shared/src/billing-features.ts` — FEATURE_KEYS, FREE_FEATURES, ACTIVE_SUBSCRIPTION_STATUSES | **NEW infrastructure** — subscription feature-gating keys. No user-facing behavior change until VOY-1609 wires `requireFeature` middleware. |
+| `server/src/middleware/require-feature.ts` — feature-gating middleware | **Not wired to any route** (P0 gap per Staff Engineer audit). Zero callers today. |
+| `packages/shared/src/validators/billing.ts` — Zod schemas | Matches documented schemas. |
+| `server/src/__tests__/billing-feature-gate.test.ts` (+238 lines) | Internal test file — no documentation impact. |
+
+**Key finding:** The restored billing code matches the documented API contracts. The feature-gating/paywall system (`FEATURE_KEYS`, `requireFeature`, `paywall()` 403) is a **new infrastructure capability** that will create support-relevant behavior once VOY-1609 is unblocked and wired to routes. Currently dead code — no user-facing impact.
+
+### Documentation sync status
+
+- ✅ **Billing docs** (`docs/api/billing.md`, `docs/support/assessments/support-case-billing-system.md`) — REMOVED banners accurate: "fork-only impl removed; upstream-compatible restoration in progress (VOY-1590)". All API contracts in restoration code match documented endpoints.
+- ✅ **Support README** (`docs/support/README.md`) — Accurate, links to billing assessment with restoration banner.
+- ✅ **Release notes** (`docs/support/releases/`) — All shipped releases have accurate notes.
+- ✅ **KB articles** — All current.
+
+### Support readiness note
+
+The feature-gating/paywall system (`PAYWALL` 403 with error code `code: "PAYWALL"` plus `featureKey`/`tierName` details) will need a KB article when VOY-1609 ships. Anticipated support questions:
+- "Why am I getting a 403 PAYWALL error?"
+- "What features am I missing on my current tier?"
+- "How do I upgrade to access this feature?"
+
+**Trigger:** VOY-1609 completion → create KB article on PAYWALL error handling.
+
+### Board assessment
+
+| Issue | Status | Assignee | Notes |
+|-------|--------|----------|-------|
+| VOY-1587: Customer Acquisition cycle | blocked | COO | Blocked on founder contacts |
+| VOY-1590: Stripe billing E2E verification | in_progress | Staff Engineer | Active restoration in working tree |
+| VOY-1611: Billing/pricing UI page | in_progress | Founding Engineer | |
+| VOY-1609: Feature gating / paywall | blocked | Founding Engineer | Needs VOY-1590 first |
+| VOY-1613: Stripe test-mode keys | blocked | CEO | |
+| VOY-1621: PR #60 merge | in_progress | Release Engineer | VOY-1413 SHIPPED status sync |
+| VOY-1592: Invite flow verification | in_progress | QA Engineer | |
+| VOY-1610/1612/1614/1616/1617 | todo | — | Billing follow-ups |
+
+### Disposition
+
+**STANDING BY.** All documentation in sync with shipped code. No open assignments for Support Engineer. The billing restoration (VOY-1590) is actively in progress with matching API contracts — docs will need updating when the restoration commits and ships. The feature-gating/paywall system (VOY-1609) is a planned support-readiness trigger.
+
+Next triggers:
+1. COO creates child issues under new feature work → documentation and support assessments needed
+2. VOY-1590 commits and lands → billing docs need restoration-banner removal + API contract verification
+3. VOY-1609 completes → create KB article on PAYWALL 403 errors
+4. Release Engineer pre-ship docs sync check
+5. QA Engineer requests support case assessment
+6. COO requests documentation health report
+
 ## Heartbeat — Aug 21 ~16:45 UTC
 
 ### Summary
