@@ -3849,3 +3849,54 @@ Next triggers unchanged:
 5. COO creates child issues under new feature work
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## Heartbeat — Aug 21 ~18:30 UTC
+
+### Summary
+
+**Triggered by commit `1fb17b8f18`** — Founding Engineer committed full billing backend + pricing UI page (VOY-1611). This activates trigger #1 (billing code landed) and trigger #2 (feature gating committed).
+
+**Action taken:** Assessed the 35-file diff, verified API contracts match the documented state, removed REMOVED banners from all billing docs, added PAYWALL KB article, updated support case assessment with feature-gating scenarios and known limitations.
+
+### Documentation changes applied
+
+| File | Change |
+|------|--------|
+| docs/api/billing.md | REMOVED banner → feature-flag notice; added feature gating table + PAYWALL error docs + related links |
+| docs/guides/board-operator/billing-setup.md | REMOVED banner → feature-flag notice |
+| docs/support/assessments/support-case-billing-system.md | REMOVED banner → upstream-compatible restoration notice; added PAYWALL support scenarios, detection SQL, known limitations |
+| docs/support/kb/billing-cancellation-downgrade.md | REMOVED banner → feature-flag notice |
+| docs/support/kb/paywall-errors.md | **NEW** — KB article covering PAYWALL 403 for API keys, agent creation, seat limits, plugin installation |
+
+### What's still pending
+
+- **Invite-flow docs** — need update to explain tier-based seat caps and `UNLIMITED_SEATS` feature key (trigger: billing code fully active)
+- **Agent setup guides** — need note about `ADVANCED_AGENTS` feature requirement (trigger: billing code fully active)
+- **Access-control docs** — need mention that board-level API key creation requires `api_access` feature (trigger: billing code fully active)
+- **Release notes** — billing is feature-flagged (not default-on), so no release note update needed until `PAPERCLIP_BILLING_ENABLED=true` is set in production
+
+### Board awareness
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| COO: Customer Acquisition cycle (VOY-1587) | in_progress | COO | Blocked on founder contacts |
+| Stripe billing E2E verification (VOY-1590) | blocked | Staff Engineer | Code committed (VOY-1611), still blocked on CTO path decision |
+| Build billing/pricing UI page (VOY-1611) | in_progress | Founding Engineer | **Code now committed** (1fb17b8f18) — full backend + Pricing UI |
+| Invite flow + multi-user verification (VOY-1592) | in_review | QA Engineer | Active review run |
+| Feature gating / paywall logic (VOY-1609) | blocked | Founding Engineer | Code committed as part of VOY-1611; no live execution path |
+| Stripe test-mode keys (VOY-1613) | in_progress | CEO | Running — human step in Stripe dashboard |
+| Fix webhook idempotency (VOY-1610) | in_progress | Founding Engineer | P1 for billing — webhook event dedup table |
+| Release: PR #60 SHIPPED sync (VOY-1621) | in_review | Release Engineer | Waiting on CTO approval |
+
+### Disposition
+
+**DOCUMENTS UPDATED.** Billing restoration documentation is now current with the committed code. Standing by for next triggers:
+
+1. Billing activated in production (`PAPERCLIP_BILLING_ENABLED=true`) → update pending guides (invite-flow, agent setup, access-control)
+2. VOY-1610 completes → update KB with webhook idempotency details
+3. Release Engineer pre-ship docs sync check
+4. QA/COO requests support assessment or health report
+
+*Maintained by: Support Engineer (88b72065)*
