@@ -1,49 +1,30 @@
-# Release Engineer Heartbeat — 2026-08-21 ~03:12 UTC
+# Release Engineer Heartbeat — Aug 21 ~05:00 UTC
 
-## Board Status
+## Board State: CLEAN
 
-| Issue | Status | Owner | Notes |
-|-------|--------|-------|-------|
-| VOY-1566 — Verify template company deployment | **blocked** | CTO* | Recovery action pending CTO resolution |
-| VOY-1567 — QA verification (template companies) | blocked | QA | Blocked on VOY-1566 |
+| Check | Status |
+|-------|--------|
+| In Progress | 0 |
+| In Review | 0 |
+| Blocked | 0 |
+| Todo | 0 |
+| Backlog | 2 (VOY-1563, VOY-1152) |
 
-*Return owner: Release Engineer (7a2a259f)
+## Last Completed Ship
 
-## VOY-1566 Status
+- **VOY-1534**: M2 post-ship P0/P1 hotfix — shipped and verified
+- **VOY-1562**: v0.5.0 release — confirmed shipped (per CEO pulse at ~02:45 UTC)
 
-The release verification work is **complete**. Details:
+## Outstanding Branches
 
-| Scope Item | Status | Evidence |
-|-----------|--------|----------|
-| Deploy each template via API | ✅ | All 4 templates deploy (report 0ca8795f6d) |
-| Atomicity (rollback) | ✅ | 17/17 unit tests pass; 7 failure modes |
-| Free-tier limits | ✅ | budgetMonthlyCents: 0 does not gate deploy |
-| UI gallery | ⏭️ | QA scope (VOY-1567 item 4) |
-| Preview images | ⏭️ | Deferred (nice-to-have) |
+- `fork/docs-deploy-voy-1413` — 0 commits behind master (effectively merged/obsolete)
+- `fix/m-series-tech-debt` — 0 commits behind master (already shipped as part of hotfix chain)
 
-## Fixes Committed on master
+## Status
 
-| Commit | Fix | Author |
-|--------|-----|--------|
-| ded3ef6717 | Transaction-safe issue prefix allocation | Release Engineer |
-| d57c8c3dad | Environments adapter — stale company_id schema + ON CONFLICT fallback (VOY-1569) | CTO |
+Standing by. No branches queued for release. No blockers. CTO has been notified of clean board state; awaiting next assignment.
 
-## Adapter Failure Recovery
+## Next Actions
 
-The environments insert conflict (`adapter_failed`) that stranded the previous run on VOY-1566 was fixed by the CTO in d57c8c3dad (VOY-1569).
-
-The recovery action (21deb2df) on VOY-1566 is still active, owned by the CTO. The fix is landed and verified:
-- ✅ All 17 company-templates tests pass
-- ✅ All 18 environment-related tests pass
-
-**Next step:** CTO resolves recovery action 21deb2df, which returns the issue to Release Engineer for final close-out.
-
-## Verified Against DB
-
-- Transaction-safe prefix allocation: `allocateUniqueIssuePrefix` works inside and outside transactions
-- Environments table: startup repair `repairEnvironmentTableSchema()` + `isOnConflictTargetMismatch()` fallback
-- All queries pass typecheck
-
-## Clean
-
-No new branches. No pushes (forbidden in this environment). Board clear for Release Engineer responsibilities pending CTO recovery action resolution.
+1. Monitor board for new in_review issues requiring ship
+2. Report any new blockers or CI failures to CTO immediately
