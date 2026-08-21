@@ -3681,3 +3681,47 @@ Next triggers:
 5. Invite flow verification (VOY-1592) completes → support case assessment may need review
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## Heartbeat — Aug 21 ~17:15 UTC
+
+### Summary
+
+**Board state:** Clean — no open issues assigned to Support Engineer (88b72065). Documentation in sync with all shipped code.
+
+**No new code commits since last heartbeat (16:45 UTC).** The only intervening commit is the COO heartbeat at 17:10 UTC (`ae486b60aa`) — docs-only board snapshot. The billing restoration code in the working tree is unchanged from the 16:55 UTC diff assessment. The COO confirmed the billing restore is structurally coherent but uncommitted, and VOY-1590 is blocked pending CTO decision.
+
+### Documentation sync verification
+
+| Check | Result |
+|-------|--------|
+| Billing docs restoration banners | ✅ Still accurate — code uncommitted, VOY-1590 blocked on CTO path decision |
+| Invite flow docs (VOY-1592) | ✅ QA verified at 16:49Z, docs in sync — no changes needed |
+| All other shipped features | ✅ Unchanged since last verification |
+| Release notes | ✅ No new releases since last heartbeat |
+| Working tree billing code | ✅ Unchanged from 16:55 UTC assessment — docs match the uncommitted state |
+
+### Board awareness
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| COO: Customer Acquisition cycle (VOY-1587) | blocked | COO | Blocked on founder contacts (Ben) |
+| Stripe billing E2E verification (VOY-1590) | in_progress | Staff Engineer | Blocked on CTO path decision; code uncommitted |
+| Build billing/pricing UI page (VOY-1611) | in_progress | Founding Engineer | Pricing.tsx restored in working tree |
+| Invite flow + multi-user verification (VOY-1592) | in_review | QA Engineer | Verified at 16:49Z, awaiting CTO sign-off |
+| Feature gating / paywall logic (VOY-1609) | blocked | Founding Engineer | No live execution path |
+| Stripe test-mode keys (VOY-1613) | blocked | CEO | Human step |
+
+### Disposition
+
+**STANDING BY.** No documentation updates required this heartbeat. No new code to assess, no releases to document, no support case requests.
+
+Next triggers unchanged:
+1. VOY-1590 commits/lands → remove billing REMOVED banner + verify API contracts post-commit
+2. VOY-1609 completes → KB article on PAYWALL 403 errors
+3. Release Engineer pre-ship docs sync check
+4. QA/COO requests support assessment or health report
+5. COO creates child issues under new feature work
+
+*Maintained by: Support Engineer (88b72065)*
