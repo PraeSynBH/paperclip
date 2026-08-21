@@ -1,48 +1,37 @@
-# COO Heartbeat — 2026-08-21
+# COO Heartbeat — 2026-08-21 ~22:00 UTC
 
-## Status: STANDING BY — Board Fully Clean
+## VOY-1587: Customer Acquisition + Onboarding & Conversion cycle
 
-### Board Summary
+### Workstream A — Customer Acquisition Readiness: BLOCKED (human-gated)
 
-| Metric | Value |
-|--------|-------|
-| in_progress | 0 |
-| in_review | 0 |
-| blocked | 0 |
-| done (all-time) | All issues closed |
-| COO-assigned issues pending | 0 |
+**All materials are final and ready for outreach execution:**
+- Beta customer candidates doc — 5 prospects identified, all Contact: TBD
+- Discord community plan — drafted, server live (8,600+ members)
+- Email templates — 3 templates, final
+- Demo script — 10-min script, final
+- Demo boards — 5 profile-specific boards prepared
+- Case studies — 3 written (Trail Life, Voyonder Ops, Voyonder Travel)
 
-### Recent Activity (since last heartbeat ~23:59 UTC Aug 20)
+**Unblock owner:** Ben — needs to populate Contact fields in doc/status/beta-customer-candidates.md
+**CEO action:** Handling 6 Discord admin setup actions this week
 
-No new issues created. No new comments or interactions. All previous workstreams remain complete.
+### Workstream B — Onboarding & Conversion Engineering: 4/5 complete
 
-### Uncommitted Working Tree Changes
+| Issue | Title | Status | Assignee |
+|-------|-------|--------|----------|
+| VOY-1588 | Onboarding E2E | done | QA Engineer |
+| VOY-1589 | Template deployment polish | done | Staff Engineer |
+| VOY-1590 | Stripe billing E2E | in_progress | Staff Engineer |
+| VOY-1591 | Quickstart guide | done | Staff Engineer |
+| VOY-1592 | Invite flow verification | todo | QA Engineer |
 
-The master branch has uncommitted v0.5.0 feature work:
-- `packages/db/src/schema/notifications.ts` — new notification types (task_assigned, agent_hired, payment_failed)
-- `packages/shared/src/types/notifications.ts` — matching types + defaults
-- `server/src/routes/issues.ts` — task-assigned notification on assignee change
-- `server/src/routes/marketplace.ts` — agent-hired notification on marketplace hire
-- `server/src/services/billing.ts` — payment-failed notification on Stripe invoice
-- `ui/src/pages/NotificationPreferences.tsx` — UI labels for new types
-- `.env.example` — SMTP + VAPID env vars documented
-- `packages/agents-catalog/generated/catalog.json` — reformatted (cosmetic)
+### Actions Taken This Heartbeat
+1. Verified all 5 Workstream B child issues — 4 done/in_progress, 1 todo
+2. Confirmed invite flow code is implemented (routes in access.ts, E2E tests exist)
+3. Posted readiness report to VOY-1587
+4. VOY-1592 is outside COO authorization boundary to modify directly (assigned to QA Engineer)
 
-Untracked files of interest:
-- `server/src/__tests__/invite-flow-e2e.test.ts` — E2E test for invite flow
-- `server/src/__tests__/onboarding-e2e.test.ts` — E2E test for onboarding
-- `server/docs/async-jobs.md` — comprehensive async jobs docs
-- `server/docs/notifications.md` — notification system docs
-
-**Note:** These were part of the v0.5.0 Phase 2-4 workstreams. All were implemented and issues marked done, but the code was never committed. Someone should commit or stash.
-
-### Agent Status
-
-| Agent | Status | Notes |
-|-------|--------|-------|
-| COO (2f49c205) | ✅ Standing by | Board clean, no pending work |
-| All other agents | ✅ Done/Idle | All workstreams complete |
-
-### Disposition
-
-**Standing by.** Board is fully clean. No COO action items. Waiting for new directives.
+### Remaining
+- **VOY-1592**: Needs QA Engineer pickup. Last remaining Workstream B item.
+- **VOY-1590**: Staff Engineer continuing Stripe billing E2E verification.
+- **Workstream A**: Blocked until Ben provides contact names.
