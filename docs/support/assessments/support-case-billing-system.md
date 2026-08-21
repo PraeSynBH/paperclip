@@ -32,7 +32,8 @@ The Billing System provides Stripe-integrated subscription management for Voyond
 |--------|----------|------|-------------|
 | `GET` | `/api/companies/:companyId/billing/tiers` | Any company member | List subscription tiers |
 | `GET` | `/api/companies/:companyId/billing/subscription` | Any company member | Get current subscription |
-| `POST` | `/api/companies/:companyId/billing/subscription` | Board user only | Create subscription (tier + billing period) |
+| `POST` | `/api/companies/:companyId/billing/subscription` | Board user only | Create subscription (tier + billing period — direct admin use) |
+| `POST` | `/api/companies/:companyId/billing/create-checkout-session` | Board user only | Create Stripe Checkout Session for card collection before subscription |
 | `PATCH` | `/api/companies/:companyId/billing/subscription` | Board user only | Update tier/billing period |
 | `POST` | `/api/companies/:companyId/billing/subscription/cancel` | Board user only | Cancel subscription |
 | `POST` | `/api/companies/:companyId/billing/subscription/reactivate` | Board user only | Reactivate cancelled subscription |
@@ -41,7 +42,15 @@ The Billing System provides Stripe-integrated subscription management for Voyond
 | `GET` | `/api/companies/:companyId/billing/invoices` | Any company member | List invoices |
 | `POST` | `/api/companies/:companyId/billing/invoices/sync` | Board user only | Sync invoices from Stripe |
 | `GET` | `/api/companies/:companyId/billing/overview` | Any company member | Consolidated billing overview |
-| `POST` | `/api/companies/:companyId/billing/webhook` | Stripe signature | Stripe webhook receiver |
+| `POST` | `/api/billing/webhook` | Stripe signature | Stripe webhook receiver |
+
+### Checkout Session flow (new)
+
+`POST /api/companies/:companyId/billing/create-checkout-session` creates a Stripe Checkout Session (`mode: subscription`) so the customer provides card details **before** the subscription is created. This is the recommended flow for new customers — it avoids `incomplete` subscriptions that result from `stripe.subscriptions.create()` without a payment method.
+
+The response returns `{ "url": "...", "sessionId": "..." }`; the client redirects the user to `url`. Stripe handles card collection, then fires `checkout.session.completed`, which creates the subscription in the database. If the user cancels checkout, they are returned to `cancelUrl` (defaults to `{PAPERCLIP_PUBLIC_URL}/pricing`) and no subscription is created.
+
+Supported request fields: `tierId` (required), `billingPeriod` (optional, defaults to `monthly`), `successUrl` and `cancelUrl` (optional URLs).
 
 ### Billing periods
 
@@ -90,7 +99,11 @@ If `STRIPE_SECRET_KEY` is not set, billing operations return an error — all en
 
 6. **"I changed my plan but the price looks wrong"** — Verify the tier's `billingPeriod` matches expectations. Tiers may have different prices for monthly vs yearly billing. Use `GET /billing/tiers` to see current pricing.
 
-7. **"Billing webhook errors in logs"** — Check that `STRIPE_WEBHOOK_SECRET` matches the endpoint secret configured in the Stripe dashboard. The webhook endpoint is mounted at `POST /api/companies/:companyId/billing/webhook`.
+7. **"Billing webhook errors in logs"** — Check that `STRIPE_WEBHOOK_SECRET` matches the endpoint secret configured in the Stripe dashboard. The webhook endpoint is mounted at `POST /api/billing/webhook`.
+
+8. **"I completed Stripe checkout but no subscription was created"** — The `checkout.session.completed` webhook creates the subscription. Verify the webhook endpoint (`POST /api/billing/webhook`) is configured in the Stripe dashboard and `STRIPE_WEBHOOK_SECRET` is correct. If the user cancelled checkout, no subscription is created — that's expected.
+
+9. **"Checkout Session URL doesn't return to where I expected"** — `successUrl` and `cancelUrl` default to `{PAPERCLIP_PUBLIC_URL}/boards/{companyId}` and `{PAPERCLIP_PUBLIC_URL}/pricing` respectively. Custom URLs must be valid absolute URLs.
 
 ## Auto-Notifications
 
@@ -102,7 +115,9 @@ See the [Notification System Support Case Assessment](support-case-notification-
 
 | Issue | Severity | Action |
 |---|---|---|
-| Subscription create/update fails with Stripe API error | Critical | Check Stripe dashboard for account status; verify `STRIPE_SECRET_KEY` is valid and has correct permissions |
+| Subscription create fails with Stripe API error | Critical | Check Stripe dashboard for account status; verify `STRIPE_SECRET_KEY` is valid and has correct permissions |
+| Checkout session creation fails | Critical | Verify `STRIPE_SECRET_KEY` is set and has `checkout.session.create` permission. Check that the requested `tierId` exists |
+| `checkout.session.completed` webhook not processed | High | Check webhook signing secret; verify Stripe dashboard webhook endpoint URL is `POST /api/billing/webhook`; check raw body availability on the request |
 | Billing webhook not processing events | High | Verify webhook signing secret; check Stripe dashboard for failed webhook deliveries |
 | Invoice sync fails or returns empty | High | Check Stripe dashboard for invoice existence; verify the Stripe customer is correctly linked |
 | Agent receives 403 on billing mutations | Low | Expected behavior — agents cannot mutate billing. Educate user that a board user must perform billing actions |

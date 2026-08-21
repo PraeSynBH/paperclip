@@ -5,6 +5,54 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## Heartbeat — Aug 21 ~16:30 UTC
+
+### Summary
+
+Board clean (0 open issues assigned to Support Engineer). Diff assessment found the Stripe billing feature-gating implementation (checkout-session flow + feature-gating/paywall service code) committed at `403d6fb029`. The `create-checkout-session` endpoint is shipped and documented in `docs/api/billing.md`, but the **Billing System support case assessment was missing checkout-session coverage** — fixed this heartbeat. Feature-gating/paywall (`checkFeatureAccess` / `requireFeature`) is in-progress work (VOY-1609, Founding Engineer) and not yet shipped; per policy it is **not** documented as live.
+
+### Diff assessment (since last heartbeat `0ec0439b51`)
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `403d6fb029` — docs(release-engineer): heartbeat (billing feature-gating implementation + checkout-session route + tests + billing.md checkout docs) | Code + docs | **Partial gap found** — `docs/api/billing.md` updated with checkout-session, but `support-case-billing-system.md` assessment predated it (missing endpoint, confusion points, escalation rows) → **fixed** |
+| `4a873f6a4f` — feat: bin/paperclipai wrapper | Internal tooling | **None** — developer tool, not customer-facing |
+| `9891e0295e`, `3d056d57f7`, `faf8fa3e80` — heartbeats (release-engineer, CEO, COO) | Docs only | **None** |
+| Untracked: `server/src/__tests__/billing-feature-gate.test.ts` | Test (not committed) | In-progress feature gating (VOY-1609) — not shipped; no docs action yet |
+
+### Support assessment update
+
+`docs/support/assessments/support-case-billing-system.md` updated to cover the **Checkout Session flow**:
+
+1. **Endpoint table** — added `POST /api/companies/:companyId/billing/create-checkout-session` (Board user only); corrected webhook path to `/api/billing/webhook`.
+2. **New "Checkout Session flow" section** — what it does (card collection before subscription, avoids `incomplete` subscriptions), response shape (`{url, sessionId}`), redirect behavior, supported request fields.
+3. **Confusion points** — added 3: (a) completed checkout but no subscription (webhook not configured), (b) 403 on checkout-session creation (agent context), (c) wrong redirect URLs (custom URL validation).
+4. **Escalation path** — added checkout-session creation failure (Critical) and `checkout.session.completed` webhook not processed (High) rows.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Latest release verified | VOY-1413 — docs deploy + billing webhook fix (SHIPPED) |
+| Billing feature-gating (VOY-1609) | in_progress — Founding Engineer; docs will be assessed when shipped |
+
+### Disposition
+
+**COMPLETE.** Documentation gap fixed and committed. Standing by.
+
+Next triggers:
+1. VOY-1609 (feature gating / paywall) ships → assess support docs for paywall behavior (PAYWALL 403, tier feature keys)
+2. VOY-1611 (billing/pricing UI) ships → verify UI docs
+3. VOY-1617 (SSE subscription status) ships → assess docs impact
+4. Release Engineer pre-ship docs sync check
+5. COO requests documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
 ## 2026-08-20 ~23:50 UTC — Heartbeat: v0.5.0 Market Readiness documentation committed, docs verified in sync
 
 ### Summary
