@@ -37,6 +37,7 @@
               "start/core-concepts",
               "start/architecture",
               "start/faq",
+              "start/roadmap",
               "releases"
             ]
           }
@@ -162,6 +163,7 @@
               "api/billing",
               "api/notifications",
               "api/marketplace",
+              "api/invites",
               "api/onboarding"
             ]
           }
