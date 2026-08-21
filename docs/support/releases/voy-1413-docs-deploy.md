@@ -3,7 +3,8 @@ title: Docs Site Deploy — Voyonder Cloud/SaaS + Billing Webhook Fix
 version: voy-1413, voy-1598
 date: 2026-08-21
 commits: f64d16dd7f
-status: PR #59 — pending CTO sign-off for merge + deploy
+status: SHIPPED — merged to fork/master 2026-08-21
+commits: f64d16dd7f, 9686494cf2, 19a4325f73, 27b74e3e19, 90fdef61f8
 ---
 
 # Docs Site Deploy: Voyonder Cloud/SaaS + Billing Webhook Fix
@@ -11,7 +12,7 @@ status: PR #59 — pending CTO sign-off for merge + deploy
 **Branch:** `fork/docs-deploy-voy-1413`
 **PR:** [#59](https://github.com/PraeSynBH/paperclip/pull/59)
 **Release date:** 2026-08-21
-**Status:** PR open, mergeable, CTO sign-off pending
+**Status:** ✅ SHIPPED — merged to fork/master at `90fdef61f8` on 2026-08-21T12:52 UTC
 
 ## What Changed
 
