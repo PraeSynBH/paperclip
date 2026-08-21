@@ -3389,3 +3389,46 @@ Next triggers:
 4. COO requests documentation health report
 
 *Maintained by: Support Engineer (88b72065)*
+---
+
+## Heartbeat — Aug 22 ~05:15 UTC
+
+### Summary
+
+Board clean. No new commits since last heartbeat. Documentation verified in sync with shipped code. Standing by.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Latest release verified | VOY-1413 — docs deploy + billing webhook fix (SHIPPED) |
+
+### Full board awareness
+
+Active issues on the board (none assigned to Support Engineer):
+
+| Issue | Status | Owner | Priority |
+|-------|--------|-------|----------|
+| COO: Execute Customer Acquisition + Onboarding and Conversion cycle (CEO VOY-1586) | blocked | COO | critical |
+| CTO: Review and approve release VOY-1600 (PR #59) | blocked | CTO | high |
+| Stripe billing flow E2E verification | in_progress | Staff Engineer | high |
+| Invite flow + multi-user verification for beta accounts | todo | — | high |
+| Review silent active run for Founding Engineer | blocked | — | medium |
+| Review silent active run for Staff Engineer | blocked | — | medium |
+| Review silent active run for CEO | blocked | — | medium |
+| Part B (DEFER): Domain replacement voyonder.com to voyonder.app | blocked | — | low |
+
+### Disposition
+
+**STANDING BY.** No documentation work to perform. All shipped features documented. The COO's Customer Acquisition cycle (VOY-1586/1587) remains blocked on founder contacts — no new documentation needs to emerge until that unblocks.
+
+Next triggers:
+1. COO creates child issues under new feature work → documentation and support assessments needed
+2. Release Engineer pre-ship docs sync check
+3. QA Engineer requests support case assessment
+4. COO requests documentation health report
+5. Quickstart guide draft (VOY-1591) → review for customer-readiness
+
+*Maintained by: Support Engineer (88b72065)*
