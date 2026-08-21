@@ -5124,6 +5124,23 @@ export function issueRoutes(
     res.json(product);
   });
 
+  router.get("/work-products/:id", async (req, res) => {
+    const id = req.params.id as string;
+    const product = await workProductsSvc.getById(id);
+    if (!product) {
+      res.status(404).json({ error: "Work product not found" });
+      return;
+    }
+    assertCompanyAccess(req, product.companyId);
+    const issue = await svc.getById(product.issueId);
+    if (!issue) {
+      res.status(404).json({ error: "Issue not found" });
+      return;
+    }
+    if (!(await assertIssueReadAllowed(req, res, issue))) return;
+    res.json(product);
+  });
+
   router.delete("/work-products/:id", async (req, res) => {
     const id = req.params.id as string;
     const existing = await workProductsSvc.getById(id);

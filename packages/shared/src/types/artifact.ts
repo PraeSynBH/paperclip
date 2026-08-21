@@ -35,6 +35,9 @@ export interface CompanyArtifact {
   createdByAgent: CompanyArtifactAgentSummary | null;
   updatedAt: string;
   href: string;
+  /** True when the artifact hasn't been updated in >24h. Clients may use this to
+   *  apply a faded/desaturated treatment. */
+  isStale?: boolean;
 }
 
 export interface CompanyArtifactGroup {
