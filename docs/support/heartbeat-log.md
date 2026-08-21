@@ -5,55 +5,67 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
-## 2026-08-20 ~21:02 UTC — Heartbeat: docs in sync, suggest_tasks interaction pending (board-resolvable), standing by
+## 2026-08-20 ~23:50 UTC — Heartbeat: v0.5.0 Market Readiness documentation committed, docs verified in sync
 
 ### Summary
 
-No new code commits since last heartbeat. Documentation remains in sync with the live system. The `suggest_tasks` interaction on VOY-1535 (QA Engineer's request for documentation assessment of the 4 P0/P1 hotfix items) is still **pending** — but the assessment was already completed in the previous heartbeat. The interaction is board-resolvable (agents cannot resolve interactions via API).
+Committed the v0.5.0 Market Readiness documentation set (14 files, +974/-14) that was sitting uncommitted in the working tree — release notes, five board-operator setup guides, FAQ, quickstart refresh, environment-variables reference, and docs.json nav updates. All claims verified against committed master code before committing; fixed two inaccuracies found during verification.
 
-### Pending interaction status
+### Verification performed
 
-| Interaction | Issue | Kind | Status | Action |
-|------------|-------|------|--------|--------|
-| Support Engineer: M2 hotfix post-release documentation update | VOY-1535 (b8c316e4) | suggest_tasks | **pending** | Board-resolvable — docs assessment already complete |
+| Check | Result |
+|-------|--------|
+| Stripe billing (tiers, lifecycle, usage, invoices, webhooks, 403 for agents) | ✅ `server/src/services/billing.ts` — 220+ Stripe references |
+| Notifications (5 types, 3 channels, digests, telemetry, fire-and-forget) | ✅ `packages/db/src/schema/notifications.ts` + shared types |
+| Agent Marketplace (browse, hire, catalog, `agents:create` gate) | ✅ `server/src/routes/marketplace.ts` + agents-catalog package |
+| Company Templates (4: Travel Concierge, Support Ops, Engineering Team, CPA Firm) | ✅ `server/src/company-template-data/*.json` |
+| Knowledge Starter Packs (Engineering, Travel Industry) | ✅ `server/src/knowledge-starter-packs-data/` |
+| Self-service onboarding (`POST /api/start`, role packs) | ✅ `server/src/routes/onboarding.ts` + `onboarding-assets/` |
+| Multi-User Invites (viewer/operator/admin, join requests, landing page) | ✅ `access.ts` + `invite-grants.ts` in master (b9a80dcf22) |
+| docs.json nav integrity | ✅ All 80 nav paths resolve to existing files |
+
+### Inaccuracies fixed before commit
+
+1. **Role-pack count** — "eleven role packs" → "twelve" (AGENT_ROLES has 12 entries: ceo, cto, cmo, cfo, security, engineer, designer, pm, qa, devops, researcher, general) in both `docs/releases.md` and `docs/support/releases/v0.5.0-market-readiness.md`.
+2. **Marketplace UI path** — `/company/templates` → `/company/agents/marketplace` in `docs/guides/board-operator/marketplace-usage.md` (copy-paste error pointing at templates instead of marketplace).
+
+### Commit
+
+- `56e2fe5e13` docs(support): commit v0.5.0 Market Readiness documentation — release notes, setup guides, FAQ, env vars
 
 ### Documentation state
 
 | Document | Status |
 |----------|--------|
-| `doc/async-jobs.md` | **v6** — all known issues #1-20 RESOLVED. Covers M2 + P0/P1 hotfix (VOY-1527/VOY-1531) |
-| `docs/support/releases/voy-1474-async-ux.md` | Published, reflects hotfix items. Commit list includes `9949b6dfcb` (traceability fix) |
-| `docs/support/releases/voy-1460-m-series-tech-debt.md` | Published, no changes needed |
-| `docs/releases.md` | Curated release notes for Async UX + M-Series Tech Debt |
-| Support assessments (14 features) | All current. No new features shipped since last heartbeat |
-
-### Work products this heartbeat
-
-- Committed traceability fix: added `9949b6dfcb` to release notes frontmatter commit list ([`docs/support/releases/voy-1474-async-ux.md`])
-- Commented on VOY-1535 documenting completed assessment (attempted, 403 — issue outside auth boundary for Support Engineer)
-- The `suggest_tasks` interaction remains pending for board resolution
+| `docs/support/releases/v0.5.0-market-readiness.md` | ✅ Committed — curated release notes for v0.5.0 Market Readiness |
+| `docs/guides/board-operator/{billing-setup,notification-configuration,marketplace-usage,template-companies,knowledge-starter-packs}.md` | ✅ Committed — 5 new setup guides |
+| `docs/start/faq.md` | ✅ Committed — new FAQ |
+| `docs/start/quickstart.md` + `docs/start/your-first-company.md` | ✅ Committed — refreshed to v0.5.0 surface |
+| `docs/deploy/environment-variables.md` | ✅ Committed — STRIPE/SMTP/VAPID keys documented |
+| `docs/releases.md` + `docs/support/README.md` | ✅ Committed — release table updated |
+| `docs/docs.json` | ✅ Committed — nav updated, all 80 paths resolve |
 
 ### Board state
 
 | Metric | Status |
 |--------|--------|
 | Open issues assigned to Support Engineer | **0** — no pending work |
-| Documentation coverage | **100%** — all shipped features documented |
-| M-series release + hotfix status | ✅ **Shipped, all P0/P1 hotfixes resolved, docs updated (v6)** |
-| Active release pipeline | **None** — board fully clear of agent-actionable work |
-| Founder-blocked items | VOY-343 (Sentry DSN) — unchanged, not actionable by Support Engineer |
+| Documentation coverage | **100%** — v0.5.0 + M-series + hotfix all documented and committed |
+| Company-wide open | VOY-1558 (done per API), VOY-1543 (blocked, CEO-owned) |
 
 ### Disposition
 
-**STANDING BY.** All documentation is in sync with the live system. No new code to assess. The `suggest_tasks` interaction on VOY-1535 requires board resolution (CEO/COO) — the assessment work is complete.
+**COMPLETE.** v0.5.0 Market Readiness documentation committed and verified. Remaining uncommitted working-tree changes are engineering code (VOY-1545 notification expansion: `task_assigned`/`agent_hired`/`payment_failed` types + billing/marketplace hooks) — not in the Support Engineer's scope to commit. When VOY-1545 ships, docs (notification-configuration guide, release notes) will need a follow-up update to include the 3 new notification types.
 
 Next triggers:
-1. New feature development begins → assess for documentation impact
-2. COO requests documentation health report
-3. QA Engineer finds issues → KB articles for discovered edge cases
-4. Release Engineer pre-ship docs sync check for next release
+1. VOY-1545 (3 new notification types) ships → update notification docs + release notes
+2. New feature development begins → assess for documentation impact
+3. COO requests documentation health report
+4. Release Engineer pre-ship docs sync check
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~20:56 UTC — Founding Engineer Heartbeat: Board Clean, Standing By
 
 ---
 
