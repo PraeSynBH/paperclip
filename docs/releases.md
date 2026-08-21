@@ -11,6 +11,16 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
+## Post-v0.5.0 Incremental — August 21, 2026
+
+[Full release notes →](/support/releases/prx-46-heartbeat-failure-webhook)
+
+### Highlights
+
+- **Heartbeat Failure Webhook** — Server operators can now configure a webhook URL (`PAPERCLIP_HEARTBEAT_FAILURE_WEBHOOK_URL`) to receive real-time JSON POST notifications when a heartbeat run reaches a terminal failure status. Four failure paths covered: process lost, agent not found, adapter failure, and setup failure. Fire-and-forget delivery — never breaks the triggering operation. Webhook status is shown in the server startup banner.
+
+---
+
 ## v0.5.0 Market Readiness Release — August 20, 2026
 
 [Full release notes →](/support/releases/v0.5.0-market-readiness)

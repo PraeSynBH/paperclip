@@ -2,9 +2,9 @@
 
 **Feature**: Multi-channel notification system with user-configurable preferences, email digests, push subscriptions, delivery status tracking, and automatic notifications for key events
 **Assessed by**: Support Engineer
-**Date**: 2026-08-18 (updated 2026-08-20 — VOY-1527 email digest ordering fix resolved and verified)
-**Related**: VOY-1342, VOY-1364, VOY-1367, VOY-1365, VOY-1402, VOY-1527, VOY-1531
-**Release**: v0.4.0-alpha (hotfix VOY-1367) + H-3 delivery telemetry (VOY-1402)
+**Date**: 2026-08-21 (updated 2026-08-21 — PRX-46 heartbeat failure webhook added)
+**Related**: VOY-1342, VOY-1364, VOY-1367, VOY-1365, VOY-1402, VOY-1527, VOY-1531, PRX-46
+**Release**: v0.4.0-alpha (hotfix VOY-1367) + H-3 delivery telemetry (VOY-1402) + PRX-46 heartbeat webhook
 
 ## Feature Overview (User Perspective)
 
@@ -244,7 +244,58 @@ If SMTP is not configured, email notifications are silently skipped (logged as w
 | Notification History UI fails to load | Low | Check browser console for errors. The component queries `GET /notifications` endpoint. If the endpoint fails, check server-side notification route health. |
 | Delivery telemetry events not appearing in PostHog | Low | Telemetry is lazy-loaded and fire-and-forget — failures are silently caught. If PostHog events are missing, check PostHog API key/host configuration and the telemetry import path. |
 
+## Heartbeat Failure Webhook (Operator Channel)
+
+In addition to the user-facing notification channels (in-app, email, web push), the server supports an **operator-facing notification channel** for heartbeat failures. This is not a user-configurable channel — it is set by the server operator via environment variable.
+
+### How it works
+
+When `PAPERCLIP_HEARTBEAT_FAILURE_WEBHOOK_URL` is set, the server POSTs a JSON payload to the configured URL each time a heartbeat run reaches a terminal failure status. The webhook is fire-and-forget: errors calling the URL are logged as warnings and never break the triggering operation.
+
+### Payload
+
+```json
+{
+  "event": "heartbeat.failed",
+  "timestamp": "2026-08-21T19:30:00.000Z",
+  "runId": "run-xxx",
+  "agentId": "agent-xxx",
+  "agentName": "Agent Name or null",
+  "companyId": "company-xxx",
+  "errorCode": "adapter_failed|process_lost|agent_not_found|setup_failed",
+  "error": "Human-readable error message",
+  "previousStatus": "running|queued"
+}
+```
+
+### When it fires
+
+The webhook is called at 4 terminal failure paths:
+
+| Failure Path | `errorCode` | Description |
+|---|---|---|
+| Process lost | `process_lost` | The reaper detected a process is lost and marked the run as failed |
+| Agent not found | `agent_not_found` | The agent referenced by the run no longer exists |
+| Adapter execution failure | `adapter_failed` | The adapter threw during execution |
+| Setup failure | `setup_failed` | Setup code (before adapter.execute) threw |
+
+### Configuration
+
+| Variable | Description |
+|---|---|
+| `PAPERCLIP_HEARTBEAT_FAILURE_WEBHOOK_URL` | A webhook URL (e.g., Discord channel webhook) that accepts JSON POST requests. When set, the server sends heartbeat failure notifications to this URL. |
+
+The server startup banner shows whether this is configured on the "HB Failure Webhook" line.
+
+### What support should know
+
+- This is an **operator channel** — board users cannot configure it; it is set at the server level.
+- The webhook URL can point to any service that accepts JSON POST (Discord, Slack, custom HTTP endpoint, PagerDuty, etc.).
+- If the webhook is not configured, heartbeat failures are still logged locally and visible in the server logs.
+- If the webhook is configured but unreachable, failures are logged as warnings but no escalation occurs — operators should monitor their webhook endpoint health separately.
+
 ## Related Documentation
 
 - [Billing System Support Case Assessment](support-case-billing-system.md)
+- [Heartbeat Failure Webhook Internal Doc](/server/docs/notifications.md#heartbeat-failure-webhook)
 - [v0.4.0-alpha Release Notes](../releases/v0.4.0-alpha-deep-planning.md)

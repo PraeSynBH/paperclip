@@ -154,12 +154,52 @@ WHERE cs.company_id = '<company-id>';
 
 The `features` column is a JSONB array of feature keys. If the required feature key is missing, the gate fires.
 
+## Live Events — Real-Time Subscription Status
+
+The billing system emits `subscription.status.updated` live events whenever a subscription's status changes. These events are delivered to the UI via WebSocket (no polling needed) and cause the subscription and billing-overview views to refresh automatically.
+
+### Events emitted
+
+| Trigger | Event Type | `status` in Payload | Source |
+|---------|-----------|---------------------|--------|
+| Invoice payment fails | `subscription.status.updated` | `past_due` | Stripe webhook `invoice.payment_failed` |
+| Subscription updated (tier/status change) | `subscription.status.updated` | Mirrors Stripe subscription status | Stripe webhook `customer.subscription.updated` |
+| Subscription deleted/canceled in Stripe | `subscription.status.updated` | `canceled` | Stripe webhook `customer.subscription.deleted` |
+| Checkout session completed | `subscription.status.updated` | Mirrors Stripe subscription status | Stripe webhook `checkout.session.completed` |
+| Board user creates subscription (admin) | `subscription.status.updated` | Mirrors Stripe subscription status | `POST /billing/subscription` |
+| Board user updates tier/billing period | `subscription.status.updated` | Mirrors Stripe subscription status | `PATCH /billing/subscription` |
+| Board user cancels subscription | `subscription.status.updated` | Current status (cancelAtPeriodEnd=true) | `POST /billing/subscription/cancel` |
+| Board user reactivates subscription | `subscription.status.updated` | Current status (cancelAtPeriodEnd=false) | `POST /billing/subscription/reactivate` |
+
+### Payload shape
+
+```json
+{
+  "id": 42,
+  "companyId": "uuid",
+  "type": "subscription.status.updated",
+  "createdAt": "2026-08-21T19:19:30.000Z",
+  "payload": {
+    "status": "active",
+    "stripeSubscriptionId": "sub_xxx",
+    "cancelAtPeriodEnd": false,
+    "tierId": "uuid-or-null"
+  }
+}
+```
+
+### What support should know
+
+- **The UI updates automatically.** If a customer reports stale billing data on the subscription or overview page, a WebSocket reconnect or page refresh forces a full re-fetch. The live event system is best-effort — if the WebSocket connection was dropped, the UI refreshes on next connect or manual refresh.
+- **No customer action required.** Status propagation is silent — users see updated subscription state without any action.
+- **Troubleshooting:** If the UI is not updating, check that WebSocket connections are established (`/api/realtime/live-events`). The live event system uses in-process EventEmitter — if the server process is healthy, events are dispatched. No additional configuration needed beyond the standard live-events WebSocket setup.
+
 ## Known Limitations (Restored Code)
 
 1. **P1: Webhook idempotency** — ✅ **FIXED** (committed `1fb17b8f18`). Migration 0228 adds `stripe_webhook_events` dedup table with `UNIQUE(stripe_event_id)`. Webhook handler inserts event ID before processing; 23505 duplicate violation → silently skip. UNIQUE indexes on `stripe_invoice_id` and `stripe_customers.company_id` also applied.
 2. **P1: Race in handleSubscriptionUpdated / handleCheckoutSessionCompleted** — ✅ **FIXED** (committed `1fb17b8f18`). Uses `INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE SET` — concurrent Stripe events are idempotent.
 3. **P2: Zero test coverage** on webhook handlers, checkout flow, cancel/reactivate, invoice sync.
-4. **P2: No real-time subscription status propagation** (SSE/websocket). ⚠️ **IMPLEMENTED in working tree** (uncommitted) — `publishLiveEvent` calls wired to all 8 subscription state transitions; UI handler invalidates subscription caches. Will be resolved when the working tree is committed.
+4. ✅ **P2: No real-time subscription status propagation** — **RESOLVED** (committed `b8732268f2`). All 8 subscription state transitions now emit `subscription.status.updated` live events via `publishLiveEvent`. The UI handler in `LiveUpdatesProvider` invalidates subscription and overview caches on receipt, so the UI updates immediately without manual refresh. See [Live Events Reference](#live-events) below.
 5. **No subscription tier seed data** in committed code — tiers must be seeded manually or via a bootstrap script.
 6. **Feature-flagged** — All billing routes are gated behind `PAPERCLIP_BILLING_ENABLED=true` (disabled by default).
 
