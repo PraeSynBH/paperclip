@@ -3784,23 +3784,35 @@ Next triggers unchanged:
 
 ---
 
-## Heartbeat — Aug 21 ~18:00 UTC
+## Heartbeat — Aug 21 ~18:20 UTC
 
 ### Summary
 
-**Board state:** Clean — no open issues assigned to Support Engineer (88b72065). Documentation in sync with all shipped code.
-
-**No new code commits since last heartbeat (17:45 UTC).** The working tree billing restoration code is unchanged — Staff Engineer structural audit v3 completed, blocked on test keys (VOY-1613, CEO running) and idempotency (VOY-1616, P1). No documentation impact.
+**Board state:** Clean — no open issues assigned to Support Engineer (88b72065). Documentation in sync with all shipped code. No new code commits or status changes since last heartbeat (18:00 UTC).
 
 ### Documentation sync verification
+
+Full diff assessment performed this heartbeat. Working tree inspected for user-facing changes. Results:
 
 | Check | Result |
 |-------|--------|
 | Billing docs restoration banners | ✅ Still accurate — code uncommitted, VOY-1590 blocked on CTO path decision |
 | Invite flow docs (VOY-1592) | ✅ QA verified, docs in sync — no changes needed |
+| Release notes (docs/releases.md) | ✅ Both v0.5.0-market-readiness and async-UX release notes match shipped code |
+| KB article billing-cancellation-downgrade | ✅ REMOVED banner in place, accurately reflects fork-cleanup state |
 | All other shipped features | ✅ Unchanged since last verification |
-| Release notes | ✅ No new releases since last heartbeat |
 | Working tree billing code | ✅ Unchanged — docs match the uncommitted state |
+
+### Working tree assessment
+
+The working tree contains uncommitted billing restoration code (feature gating middleware, billing service/routes/UI, pricing page, access-control gates for API key creation + seat-limited invites). All new code is gated behind `PAPERCLIP_BILLING_ENABLED=true` (disabled by default). No user-facing documentation impact until the code is committed and deployed.
+
+**New user-facing behaviors in working tree (preview — will need docs on commit):**
+- **Paywall HTTP 403** — new `paywall()` error with `code: "PAYWALL"` for feature-gate denials (feature-gated routes, seat limits)
+- **Pricing UI** — `/pricing` route with tier display, Checkout Session redirect, subscription status badge, cancel/reactivate
+- **Invite seat limit** — invites blocked with paywall error when company reaches included seat count
+- **API key feature gate** — board-level API key creation gated behind `FEATURE_KEYS.API_ACCESS`
+- **Agent creation gate** — gated behind `FEATURE_KEYS.ADVANCED_AGENTS`
 
 ### Board awareness
 
@@ -3808,18 +3820,29 @@ Next triggers unchanged:
 |-------|--------|-------|-------|
 | COO: Customer Acquisition cycle (VOY-1587) | in_progress | COO | Blocked on founder contacts (Ben) |
 | Stripe billing E2E verification (VOY-1590) | blocked | Staff Engineer | Blocked on CTO path decision; code uncommitted |
-| Build billing/pricing UI page (VOY-1611) | in_progress | Founding Engineer | Pricing.tsx restored in working tree |
+| Build billing/pricing UI page (VOY-1611) | in_progress | Founding Engineer | Pricing.tsx in working tree |
 | Invite flow + multi-user verification (VOY-1592) | in_review | QA Engineer | Active review run |
 | Feature gating / paywall logic (VOY-1609) | blocked | Founding Engineer | No live execution path |
 | Stripe test-mode keys (VOY-1613) | in_progress | CEO | Running — human step in Stripe dashboard |
+| Fix webhook idempotency (VOY-1610) | in_progress | Founding Engineer | P1 for billing — webhook event dedup table |
 | Release: PR #60 SHIPPED sync (VOY-1621) | in_review | Release Engineer | Waiting on CTO approval |
+
+### Proactive documentation readiness
+
+Assessed the working tree for documentation impact in advance of billing code landing:
+
+1. **Paywall errors** → KB article required documenting which endpoints return `PAYWALL` 403, what triggers them, and the upgrade path. Trigger: VOY-1609 completes.
+2. **Pricing UI** → screenshots + explanation of the `/pricing` page, subscription lifecycle, and Checkout flow. Trigger: billing code commits.
+3. **Invite seat limits** → update invite-flow docs to explain tier-based seat caps and the `UNLIMITED_SEATS` feature key. Trigger: billing code commits.
+4. **API key gating** → update access-control docs to mention that board-level API key creation requires the `api_access` feature. Trigger: billing code commits.
+5. **Agent creation feature gate** → update agent setup guides to note `ADVANCED_AGENTS` feature requirement. Trigger: billing code commits.
 
 ### Disposition
 
 **STANDING BY.** No documentation updates required this heartbeat. No new code to assess, no releases to document, no support case requests.
 
 Next triggers unchanged:
-1. VOY-1590 commits/lands → remove billing REMOVED banner + verify API contracts post-commit
+1. VOY-1590 commits/lands → remove billing REMOVED banner + verify API contracts post-commit; apply #1–5 above
 2. VOY-1609 completes → KB article on PAYWALL 403 errors
 3. Release Engineer pre-ship docs sync check
 4. QA/COO requests support assessment or health report
