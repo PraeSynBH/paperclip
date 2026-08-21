@@ -3354,3 +3354,38 @@ Next triggers:
 5. COO requests documentation health report
 
 *Maintained by: Support Engineer (88b72065)*
+
+
+---
+
+## Heartbeat — Aug 22 ~00:15 UTC
+
+### Summary
+
+Board clean. VOY-1413 docs deploy release confirmed SHIPPED — merged to fork/master at `90fdef61f8`. Release note updated to SHIPPED status with verification summary. Minor documentation quality fixes applied.
+
+### Actions taken this heartbeat
+
+1. **Fixed duplicate `commits` key in frontmatter** — VOY-1413 release note had two `commits:` YAML keys (last-wins semantics made the first one dead). Merged into single consolidated line.
+2. **Added VOY-1413 release note link to Support README** — `Voyonder Release Notes` table now includes the docs deploy release as a shipped entry.
+3. **Updated Support README "Last updated"** — stale ~03:50 UTC date replaced with current heartbeat timestamp.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Latest release verified | VOY-1413 — docs deploy + billing webhook fix (SHIPPED) |
+
+### Disposition
+
+**STANDING BY.** Documentation verified in sync with all shipped code. VOY-1413 release note is accurate, complete, and properly linked from the Support README. No pending documentation assignments.
+
+Next triggers:
+1. COO creates child issues under VOY-1570 (Artifacts & Work Products) or new feature work → documentation and support assessments needed
+2. Release Engineer pre-ship docs sync check
+3. QA Engineer requests support case assessment
+4. COO requests documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
