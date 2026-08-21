@@ -12,6 +12,7 @@ import {
 } from "@paperclipai/db";
 import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES } from "@paperclipai/shared";
 import { logger } from "../middleware/logger.js";
+import { publishLiveEvent } from "./live-events.js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
@@ -158,15 +159,30 @@ export function billingService(db: Db) {
     if (!invoice.subscription) return;
     const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
 
-    await db
+    const result = await db
       .update(companySubscriptionsTable)
       .set({
         status: "past_due",
         updatedAt: new Date(),
       })
-      .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId));
+      .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
+      .returning()
+      .then((r) => r[0] ?? null);
 
     logger.warn({ stripeSubscriptionId: subId, invoiceId: invoice.id }, "Subscription payment failed");
+
+    if (result) {
+      publishLiveEvent({
+        companyId: result.companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: "past_due",
+          stripeSubscriptionId: subId,
+          cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+          tierId: result.tierId,
+        },
+      });
+    }
   };
 
   const handleSubscriptionUpdated = async (stripeSub: Stripe.Subscription) => {
@@ -256,9 +272,22 @@ export function billingService(db: Db) {
     });
 
     logger.info({ stripeSubscriptionId: stripeSub.id, status: stripeSub.status }, "Subscription status synced from Stripe");
+
+    publishLiveEvent({
+      companyId,
+      type: "subscription.status.updated",
+      payload: {
+        status: stripeSub.status,
+        stripeSubscriptionId: stripeSub.id,
+        cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+        tierId: tierId ?? null,
+      },
+    });
   };
 
   const handleSubscriptionDeleted = async (stripeSub: Stripe.Subscription) => {
+    const companyId = stripeSub.metadata?.paperclipCompanyId;
+
     await db
       .update(companySubscriptionsTable)
       .set({
@@ -269,6 +298,19 @@ export function billingService(db: Db) {
       .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
 
     logger.info({ stripeSubscriptionId: stripeSub.id }, "Subscription canceled via Stripe");
+
+    if (companyId) {
+      publishLiveEvent({
+        companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: "canceled",
+          stripeSubscriptionId: stripeSub.id,
+          cancelAtPeriodEnd: false,
+          tierId: stripeSub.metadata?.paperclipTierId ?? null,
+        },
+      });
+    }
   };
 
   const handleCheckoutSessionCompleted = async (session: Stripe.Checkout.Session) => {
@@ -371,6 +413,17 @@ export function billingService(db: Db) {
       { companyId, tierId, stripeSubscriptionId: stripeSub.id },
       "Created subscription from Checkout Session",
     );
+
+    publishLiveEvent({
+      companyId,
+      type: "subscription.status.updated",
+      payload: {
+        status: stripeSub.status,
+        stripeSubscriptionId: stripeSub.id,
+        cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+        tierId,
+      },
+    });
   };
 
   const getSubscriptionInternal = async (companyId: string) => {
@@ -629,6 +682,17 @@ export function billingService(db: Db) {
           "Updated subscription",
         );
 
+        publishLiveEvent({
+          companyId,
+          type: "subscription.status.updated",
+          payload: {
+            status: stripeSubscription.status,
+            stripeSubscriptionId: stripeSubscription.id,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            tierId: data.tierId,
+          },
+        });
+
         return updated;
       }
 
@@ -693,6 +757,17 @@ export function billingService(db: Db) {
         "Created subscription",
       );
 
+      publishLiveEvent({
+        companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: stripeSubscription.status,
+          stripeSubscriptionId: stripeSubscription.id,
+          cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+          tierId: data.tierId,
+        },
+      });
+
       return created;
     },
 
@@ -723,6 +798,17 @@ export function billingService(db: Db) {
         .then((r) => r[0]);
 
       logger.info({ companyId, stripeSubscriptionId: subscription.stripeSubscriptionId }, "Scheduled subscription cancellation");
+
+      publishLiveEvent({
+        companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: subscription.status,
+          stripeSubscriptionId: subscription.stripeSubscriptionId,
+          cancelAtPeriodEnd: true,
+          tierId: subscription.tierId,
+        },
+      });
 
       return updated;
     },
@@ -755,6 +841,17 @@ export function billingService(db: Db) {
         .then((r) => r[0]);
 
       logger.info({ companyId }, "Reactivated subscription");
+
+      publishLiveEvent({
+        companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: subscription.status,
+          stripeSubscriptionId: subscription.stripeSubscriptionId,
+          cancelAtPeriodEnd: false,
+          tierId: subscription.tierId,
+        },
+      });
 
       return updated;
     },
@@ -899,38 +996,36 @@ export function billingService(db: Db) {
       });
 
       for (const inv of stripeInvoices.data) {
-        const existing = await db
-          .select()
-          .from(subscriptionInvoicesTable)
-          .where(eq(subscriptionInvoicesTable.stripeInvoiceId, inv.id))
-          .then((r) => r[0] ?? null);
-
-        const invoiceData = {
-          companyId,
-          subscriptionId: subscription.id,
-          stripeInvoiceId: inv.id,
-          invoiceNumber: inv.number ?? null,
-          status: inv.status ?? "unknown",
-          amountCents: inv.total,
-          amountPaidCents: inv.amount_paid,
-          amountRemainingCents: inv.amount_remaining,
-          currency: inv.currency,
-          invoicePdfUrl: inv.invoice_pdf ?? null,
-          hostedInvoiceUrl: inv.hosted_invoice_url ?? null,
-          periodStart: inv.period_start ? new Date(inv.period_start * 1000) : null,
-          periodEnd: inv.period_end ? new Date(inv.period_end * 1000) : null,
-        };
-
-        if (existing) {
-          await db
-            .update(subscriptionInvoicesTable)
-            .set({ ...invoiceData, updatedAt: new Date() })
-            .where(eq(subscriptionInvoicesTable.id, existing.id));
-        } else {
-          await db
-            .insert(subscriptionInvoicesTable)
-            .values(invoiceData);
-        }
+        // Upsert: INSERT ... ON CONFLICT (stripe_invoice_id) DO UPDATE
+        await db.execute(sql`
+          INSERT INTO "subscription_invoices"
+            ("company_id", "subscription_id", "stripe_invoice_id", "invoice_number", "status",
+             "amount_cents", "amount_paid_cents", "amount_remaining_cents", "currency",
+             "invoice_pdf_url", "hosted_invoice_url", "period_start", "period_end",
+             "created_at", "updated_at")
+          VALUES (
+            ${companyId}, ${subscription.id}, ${inv.id}, ${inv.number ?? null}, ${inv.status ?? "unknown"},
+            ${inv.total}, ${inv.amount_paid}, ${inv.amount_remaining}, ${inv.currency},
+            ${inv.invoice_pdf ?? null}, ${inv.hosted_invoice_url ?? null},
+            ${inv.period_start ? new Date(inv.period_start * 1000) : null},
+            ${inv.period_end ? new Date(inv.period_end * 1000) : null},
+            NOW(), NOW()
+          )
+          ON CONFLICT ("stripe_invoice_id") DO UPDATE SET
+            "company_id" = EXCLUDED."company_id",
+            "subscription_id" = EXCLUDED."subscription_id",
+            "invoice_number" = EXCLUDED."invoice_number",
+            "status" = EXCLUDED."status",
+            "amount_cents" = EXCLUDED."amount_cents",
+            "amount_paid_cents" = EXCLUDED."amount_paid_cents",
+            "amount_remaining_cents" = EXCLUDED."amount_remaining_cents",
+            "currency" = EXCLUDED."currency",
+            "invoice_pdf_url" = EXCLUDED."invoice_pdf_url",
+            "hosted_invoice_url" = EXCLUDED."hosted_invoice_url",
+            "period_start" = EXCLUDED."period_start",
+            "period_end" = EXCLUDED."period_end",
+            "updated_at" = NOW()
+        `);
       }
 
       return listInvoices(companyId);

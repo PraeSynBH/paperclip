@@ -1281,6 +1281,12 @@ function handleLiveEvent(
     }
     return;
   }
+
+  if (event.type === "subscription.status.updated") {
+    queryClient.invalidateQueries({ queryKey: queryKeys.billing.subscription(expectedCompanyId) });
+    queryClient.invalidateQueries({ queryKey: queryKeys.billing.overview(expectedCompanyId) });
+    return;
+  }
 }
 
 function resolveLiveCompanyId(
