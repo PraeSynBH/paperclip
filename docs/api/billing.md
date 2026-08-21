@@ -1,13 +1,12 @@
 ---
 title: Billing
-summary: [REMOVED] Stripe billing feature — code removed in fork cleanup (2026-08-21)
-version: v0.4.0
+summary: Stripe-integrated subscription management with tier plans, usage tracking, invoices, and feature gating
+version: v0.5.0
 last_updated: 2026-08-21
-status: removed
+status: active
 ---
 
-> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.**
-> The fork-specific Stripe billing code (routes, service, migrations, tests) was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). The API contracts described below document the **old fork-specific implementation** and may change in the restored version. Pending: CTO decision on final approach + VOY-1590 completion.
+> ⚠️ **Feature-flagged:** Billing endpoints are mounted only when `PAPERCLIP_BILLING_ENABLED=true` is set. Without this flag, the routes are not registered and return 404.
 
 The Billing API provides Stripe-integrated subscription management. Board users can list tiers, create/update/cancel subscriptions, report usage, sync invoices, and view a consolidated billing overview.
 
@@ -123,8 +122,29 @@ POST /api/billing/webhook
 
 This route runs **before** authentication middleware and relies on Stripe signature verification instead of bearer/auth. Requires the `stripe-signature` header and the raw request body. `STRIPE_WEBHOOK_SECRET` must match the Stripe dashboard webhook secret.
 
+## Feature Gating
+
+Billing routes are mounted only when `PAPERCLIP_BILLING_ENABLED=true`. In addition, the system enforces **feature gating** on several capabilities:
+
+| Feature Key | What it gates | Paywall 403 message |
+|---|---|---|
+| `api_access` | Board-level API key creation | "Your current plan does not include API access" |
+| `advanced_agents` | Creating certain agent types | Feature requires an upgraded plan |
+| `unlimited_seats` | Inviting additional members beyond included count | "Your current plan is limited to N active members" |
+| `custom_plugins` | Marketplace plugin installation | Feature requires an upgraded plan |
+
+Feature-gated endpoints return `403` with `code: "PAYWALL"` in the error body, which the frontend can detect to show upgrade prompts.
+
 ## Error Notes
 
-- `403 Forbidden` on any mutation when the actor is not a board user (agents are always blocked).
-- Billing operations fail if Stripe configuration is missing.
-- See the [Billing Support Case Assessment](/support/assessments/support-case-billing-system) for troubleshooting.
+| Error | HTTP Status | Cause |
+|---|---|---|
+| `403 Forbidden` | 403 | Actor is not a board user (agents always blocked on mutations) |
+| `403 code: "PAYWALL"` | 403 | Company's subscription does not include the requested feature |
+| `500` / billing operation error | 500 | Stripe configuration missing (`STRIPE_SECRET_KEY` not set) |
+
+## Related Documentation
+
+- [Billing Setup Guide](/guides/board-operator/billing-setup)
+- [Paywall Errors KB](/support/kb/paywall-errors)
+- [Billing Support Case Assessment](/support/assessments/support-case-billing-system)

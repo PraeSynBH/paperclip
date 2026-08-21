@@ -7,7 +7,9 @@ commit: 83a1cee
 
 # Support KB: Billing Downgrade-to-Free on Cancellation
 
-> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.** The fork-specific Stripe billing code was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). This KB article describes the **old fork-specific implementation** and may be stale. Pending: VOY-1590 completion.
+> ⚠️ **Feature-flagged:** Billing is gated behind `PAPERCLIP_BILLING_ENABLED=true`. Without this flag, billing routes are not registered.
+>
+> The billing system has been restored with upstream-compatible code (VOY-1611, commit `1fb17b8f18`). API contracts are unchanged from the previous fork-specific implementation.
 
 **Applies to:** Voyonder v0.2.13+
 **Tag:** `83a1cee`

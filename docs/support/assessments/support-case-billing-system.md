@@ -1,6 +1,8 @@
 # Support Case Assessment: Billing System — Subscriptions, Usage, and Invoicing
 
-> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.** The fork-specific Stripe billing code was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). This assessment describes the **old fork-specific implementation** and may be partially or fully stale depending on the restoration approach. Pending: VOY-1590 completion.
+> ⚠️ **Feature-flagged:** Billing is gated behind `PAPERCLIP_BILLING_ENABLED=true`. Without this flag, billing routes are not registered. See [Billing Setup](/guides/board-operator/billing-setup) for configuration.
+>
+> **Upstream-compatible restoration** (VOY-1611, commit `1fb17b8f18`): The billing implementation has been restored with upstream-compatible code. API contracts are unchanged from the previous fork-specific implementation. This assessment has been updated to reflect the restored code.
 
 **Feature**: Stripe-integrated billing with subscription management, usage tracking, invoice syncing, and board-user-only mutation controls
 **Assessed by**: Support Engineer
@@ -112,6 +114,54 @@ If `STRIPE_SECRET_KEY` is not set, billing operations return an error — all en
 When budget thresholds are crossed (via the budgets service), the notification system automatically sends **budget_threshold** notifications to all active human members. This covers both soft (warning) and hard limit breaches, including the dollar amounts and scope details.
 
 See the [Notification System Support Case Assessment](support-case-notification-system.md) for notification behavior details.
+
+## Feature Gating — PAYWALL Errors (New)
+
+The billing restoration (VOY-1611, commit `1fb17b8f18`) adds a **feature gating** system. Certain routes now check whether the company's subscription tier includes the required feature before allowing the operation. If the feature is not included, the endpoint returns `403` with `code: "PAYWALL"`.
+
+### Gated Features
+
+| Feature Key | Routes Gated | Trigger |
+|---|---|---|
+| `api_access` | `POST /api/companies/:id/access/keys` — board-level API key creation | Any API key creation attempt |
+| `advanced_agents` | `POST /api/companies/:id/agents` — agent creation | Agent creation via API or UI |
+| `unlimited_seats` | `POST /api/companies/:id/invites` — member invites | Inviting when seat count exceeds tier's `includedSeats` |
+| `custom_plugins` | Marketplace plugin installation | Plugin installation attempt |
+
+### Support Scenarios
+
+| Scenario | What the user sees | Root Cause | Resolution |
+|---|---|---|---|
+| "I get a PAYWALL error when creating an API key" | `403 { code: "PAYWALL", message: "Your current plan does not include API access" }` | The company's subscription tier does not include the `api_access` feature | Upgrade to a tier that includes API access |
+| "I can't invite new team members" | `403 { code: "PAYWALL", message: "Your current plan is limited to N active members" }` | Company has reached its included seat count; `unlimited_seats` feature not in tier | Upgrade to a tier with more seats or unlimited_seats |
+| "I can't create an agent" | `403 { code: "PAYWALL" }` | The company's subscription tier does not include `advanced_agents` | Upgrade to a tier that includes advanced agents |
+| "I can't install a plugin from the marketplace" | `403 { code: "PAYWALL" }` | The company's subscription tier does not include `custom_plugins` | Upgrade to a tier with plugin support |
+
+### Frontend Behavior
+
+The pricing page (`/pricing`) detects `code: "PAYWALL"` in error responses and can display upgrade prompts. The `paywall()` error function in `server/src/errors.ts` optionally accepts `featureKey`, `tierName`, and `requiredPlan` in the details object for richer upgrade messaging.
+
+### Detection
+
+Support can verify feature gate status by checking the company's subscription tier:
+
+```sql
+SELECT ct.name, ct.features, cs.status
+FROM company_subscriptions cs
+JOIN subscription_tiers ct ON ct.id = cs.tier_id
+WHERE cs.company_id = '<company-id>';
+```
+
+The `features` column is a JSONB array of feature keys. If the required feature key is missing, the gate fires.
+
+## Known Limitations (Restored Code)
+
+1. **P1: Webhook idempotency** — No event dedup table; `subscription_invoices.stripe_invoice_id` uses a non-unique index. Concurrent Stripe events can produce duplicate rows. (VOY-1610, in_progress)
+2. **P1: Race in handleSubscriptionUpdated / handleCheckoutSessionCompleted** — Concurrent Stripe events can hit UNIQUE constraint and produce 500.
+3. **P2: Zero test coverage** on webhook handlers, checkout flow, cancel/reactivate, invoice sync.
+4. **P2: No real-time subscription status propagation** (SSE/websocket).
+5. **No subscription tier seed data** in committed code — tiers must be seeded manually or via a bootstrap script.
+6. **Feature-flagged** — All billing routes are gated behind `PAPERCLIP_BILLING_ENABLED=true` (disabled by default).
 
 ## Support Escalation Path
 
