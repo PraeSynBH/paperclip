@@ -1,7 +1,7 @@
 import type { HeartbeatRunStatusPhase } from "@paperclipai/shared";
 import { redactSensitiveText } from "../redaction.js";
-import { HEARTBEAT_RUN_RUNTIME_STATUS_TTL_MS } from "../timeout-constants.js";
 
+export const HEARTBEAT_RUN_RUNTIME_STATUS_TTL_MS = 90_000;
 export const MAX_HEARTBEAT_RUN_RUNTIME_STATUS_MESSAGE_CHARS = 180;
 export const MAX_HEARTBEAT_RUN_RUNTIME_TOOL_NAME_CHARS = 80;
 export const MAX_HEARTBEAT_RUN_RUNTIME_ASSISTANT_SNIPPET_CHARS = 220;

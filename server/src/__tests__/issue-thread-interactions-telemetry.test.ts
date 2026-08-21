@@ -37,17 +37,11 @@ describeEmbeddedPostgres("issueThreadInteractionService telemetry", () => {
   let interactionsSvc!: ReturnType<typeof issueThreadInteractionService>;
   let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
 
-  // RBR-980/RBR-912: do NOT reintroduce an inline hook budget here. An inline
-  // `beforeAll(fn, ms)` argument silently overrides both the config-level
-  // `hookTimeout` and the `--hookTimeout` CLI flag, which is exactly what hid
-  // this suite behind a 20s budget while a cold embedded-Postgres boot takes
-  // ~80-95s — vitest reported the whole file as `skipped` instead of failing
-  // loudly. Hook timeout lives in server/vitest.config.ts.
   beforeAll(async () => {
     tempDb = await startEmbeddedPostgresTestDatabase("paperclip-issue-interaction-telemetry-");
     db = createDb(tempDb.connectionString);
     interactionsSvc = issueThreadInteractionService(db);
-  });
+  }, 20_000);
 
   beforeEach(() => {
     telemetryMocks.track.mockClear();

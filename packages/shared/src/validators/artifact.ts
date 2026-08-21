@@ -3,8 +3,6 @@ import { z } from "zod";
 export const COMPANY_ARTIFACTS_DEFAULT_LIMIT = 30;
 export const COMPANY_ARTIFACTS_MAX_LIMIT = 100;
 export const COMPANY_ARTIFACTS_MAX_QUERY_LENGTH = 160;
-/** An artifact is considered stale when it hasn't been updated in this many hours. */
-export const ARTIFACT_STALE_THRESHOLD_HOURS = 24;
 
 export const companyArtifactSourceSchema = z.enum(["document", "attachment", "work_product"]);
 
@@ -57,7 +55,6 @@ export const companyArtifactSchema = z.object({
   }).nullable(),
   updatedAt: z.string().datetime(),
   href: z.string().min(1),
-  isStale: z.boolean().optional(),
 });
 
 export const companyArtifactGroupSchema = z.object({

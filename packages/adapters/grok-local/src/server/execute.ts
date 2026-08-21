@@ -78,7 +78,6 @@ function renderApiAccessNote(env: Record<string, string>): string {
     "Paperclip API access note:",
     "Use shell commands with curl to make Paperclip API requests when needed.",
     "Include X-Paperclip-Run-Id on mutating requests.",
-    "Always pass --fail-with-body: without it curl exits 0 on 4xx and a rejected write reads as a success.",
     "",
     "",
   ].join("\n");
@@ -416,13 +415,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       ? ""
       : renderTemplate(promptTemplate, templateData);
     const sessionHandoffNote = asString(context.paperclipSessionHandoffMarkdown, "").trim();
-    const memoryPreambleNote = asString(context.paperclipMemoryPreamble, "").trim();
     const paperclipEnvNote = renderPaperclipEnvNote(env);
     const apiAccessNote = renderApiAccessNote(env);
     const prompt = joinPromptSections([
       wakePrompt,
       sessionHandoffNote,
-      memoryPreambleNote,
       paperclipEnvNote,
       apiAccessNote,
       renderedPrompt,
@@ -431,7 +428,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       promptChars: prompt.length,
       wakePromptChars: wakePrompt.length,
       sessionHandoffChars: sessionHandoffNote.length,
-      memoryPreambleChars: memoryPreambleNote.length,
       runtimeNoteChars: paperclipEnvNote.length + apiAccessNote.length,
       heartbeatPromptChars: renderedPrompt.length,
     };

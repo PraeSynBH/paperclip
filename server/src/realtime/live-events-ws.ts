@@ -9,7 +9,6 @@ import type { DeploymentMode } from "@paperclipai/shared";
 import type { BetterAuthSessionResult } from "../auth/better-auth.js";
 import { logger } from "../middleware/logger.js";
 import { subscribeCompanyLiveEvents } from "../services/live-events.js";
-import { WS_PING_INTERVAL_MS } from "../timeout-constants.js";
 
 interface WsSocket {
   readyState: number;
@@ -252,7 +251,7 @@ export function setupLiveEventsWebSocketServer(
       aliveByClient.set(socket, false);
       socket.ping();
     }
-  }, WS_PING_INTERVAL_MS);
+  }, 30000);
 
   wss.on("connection", (socket: WsSocket, req: IncomingMessage) => {
     const context = (req as IncomingMessageWithContext).paperclipUpgradeContext;

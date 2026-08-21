@@ -29,7 +29,6 @@ import {
 } from "./json-schema-secret-refs.js";
 import { pluginRegistryService } from "./plugin-registry.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
-import { PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS, PLUGIN_ENV_DRIVER_RPC_OVERHEAD_MS } from "../timeout-constants.js";
 
 /**
  * The worker methods a sandbox provider must advertise before the host reuses
@@ -369,7 +368,7 @@ export async function probePluginEnvironmentDriver(input: {
     companyId: input.companyId,
     environmentId: input.environmentId,
     config: input.config.driverConfig,
-  }, PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS);
+  }, 120_000);
 
   return {
     ok: result.ok,
@@ -414,7 +413,7 @@ export async function probePluginSandboxProviderDriver(input: {
     companyId: input.companyId,
     environmentId: input.environmentId,
     config: driverConfig,
-  }, PLUGIN_ENV_DRIVER_PROBE_TIMEOUT_MS);
+  }, 120_000);
 
   return {
     ok: result.ok,
@@ -620,7 +619,7 @@ export async function deletePluginEnvironmentTemplate(input: {
   }));
 }
 
-const RPC_OVERHEAD_BUFFER_MS = PLUGIN_ENV_DRIVER_RPC_OVERHEAD_MS;
+const RPC_OVERHEAD_BUFFER_MS = 30_000;
 
 export function resolvePluginExecuteRpcTimeoutMs(input: {
   requestedTimeoutMs?: number;

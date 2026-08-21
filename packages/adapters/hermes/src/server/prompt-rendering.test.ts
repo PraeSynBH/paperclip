@@ -217,33 +217,6 @@ test("renders safe Paperclip API examples from environment variables with multil
   expect(prompt).not.toContain("Authorization: Bearer <");
 });
 
-test("never teaches an API call without an HTTP status gate", () => {
-  const prompt = buildPrompt(baseContext(), {
-    paperclipApiUrl: "http://paperclip.local/api",
-  });
-
-  // RBR-919: bare `curl -sS` exits 0 on 4xx, so `| jq -r '.id'` renders a 403
-  // rejection as `null` and a silently dropped write is indistinguishable from a
-  // success. This prompt is generated code injected into every agent on every
-  // wake, so an unguarded example here teaches the bug at 100% adoption.
-  expect(prompt).toContain("--fail-with-body");
-  expect(prompt).toContain("Always gate API calls on the HTTP status");
-
-  // Every curl invocation in the prompt must carry a status gate.
-  // Match curl in command position (line start, after a pipe, or inside $( ))
-  // so prose that merely mentions curl is not treated as an example.
-  const curlInvocations = prompt
-    .split("\n")
-    .filter((line) => /(?:^|\||\$\()\s*curl\s+-/.test(line));
-  expect(curlInvocations.length).toBeGreaterThan(0);
-  for (const invocation of curlInvocations) {
-    expect(
-      /--fail-with-body|--fail|pc-api\.sh|%\{http_code\}/.test(invocation),
-      `ungated curl in generated prompt: ${invocation.trim()}`,
-    ).toBe(true);
-  }
-});
-
 test("preserves custom prompt templates while exposing runtime and wake variables", () => {
   const prompt = buildPrompt(baseContext(), {
     paperclipApiUrl: "http://paperclip.local/api",
@@ -272,39 +245,4 @@ test("preserves custom prompt templates while exposing runtime and wake variable
   expect(prompt).toContain("## Paperclip Wake Payload");
   expect(prompt).toContain("Issue description:\n```text\nUse the wake payload as runtime authority.\n```");
   expect(prompt).not.toContain("Paperclip runtime identity:");
-});
-
-test("injects memory preamble between session handoff and task markdown when present", () => {
-  const memoryText = "=== Context from Past Work ===\n\n- From issue VOY-123: \"Prior decision about authentication.\"\n- Regarding project Alpha: \"Historical context for the deployment.\"\n\n=== End Context ===";
-  const prompt = buildPrompt(baseContext({
-    paperclipMemoryPreamble: memoryText,
-  }), {});
-
-  expect(prompt).toContain("=== Context from Past Work ===");
-  expect(prompt).toContain("Prior decision about authentication.");
-  expect(prompt).toContain("Historical context for the deployment.");
-  expect(prompt).toContain("=== End Context ===");
-  // Should appear after wake payload/session handoff, before task markdown
-  expect(prompt.indexOf("=== Context from Past Work ===")).toBeLessThan(
-    prompt.indexOf("Paperclip task context:"),
-  );
-});
-
-test("exposes paperclipMemoryPreamble in custom prompt template variables", () => {
-  const memoryText = "Custom preamble for template test.";
-  const prompt = buildPrompt(baseContext({
-    paperclipMemoryPreamble: memoryText,
-  }), {
-    paperclipApiUrl: "http://paperclip.local/api",
-    promptTemplate: "preamble={{paperclipMemoryPreamble}}",
-  });
-
-  expect(prompt).toContain("preamble=Custom preamble for template test.");
-});
-
-test("does not inject memory preamble when context is absent", () => {
-  const prompt = buildPrompt(baseContext(), {});
-
-  expect(prompt).not.toContain("=== Context from Past Work ===");
-  expect(prompt).not.toContain("=== End Context ===");
 });

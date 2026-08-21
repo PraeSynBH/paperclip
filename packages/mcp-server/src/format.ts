@@ -1,4 +1,4 @@
-import { PaperclipApiAuthError, PaperclipApiError } from "./client.js";
+import { PaperclipApiError } from "./client.js";
 
 type McpTextResponse = {
   content: Array<{ type: "text"; text: string }>;
@@ -16,16 +16,6 @@ export function formatTextResponse(value: unknown): McpTextResponse {
 }
 
 export function formatErrorResponse(error: unknown): McpTextResponse {
-  if (error instanceof PaperclipApiAuthError) {
-    return formatTextResponse({
-      error: error.message,
-      errorClass: "auth_failed",
-      status: error.status,
-      method: error.method,
-      path: error.path,
-      body: error.body,
-    });
-  }
   if (error instanceof PaperclipApiError) {
     return formatTextResponse({
       error: error.message,

@@ -180,31 +180,3 @@ export function trackInteractionResolved(
     legacy_inherited_restriction: dims.legacyInheritedRestriction,
   });
 }
-
-export function trackNotificationDeliverySent(
-  client: TelemetryClient,
-  dims: {
-    channel: RawDimension<EventDimensionsMap["notification.delivery_sent"]["channel"]>;
-    notificationType: RawDimension<EventDimensionsMap["notification.delivery_sent"]["notification_type"]>;
-  },
-): void {
-  client.track("notification.delivery_sent", {
-    channel: asEventDimension(dims.channel),
-    notification_type: asEventDimension(dims.notificationType),
-  });
-}
-
-export function trackNotificationDeliveryFailed(
-  client: TelemetryClient,
-  dims: {
-    channel: RawDimension<EventDimensionsMap["notification.delivery_failed"]["channel"]>;
-    notificationType: RawDimension<EventDimensionsMap["notification.delivery_failed"]["notification_type"]>;
-    errorCode?: string;
-  },
-): void {
-  client.track("notification.delivery_failed", {
-    channel: asEventDimension(dims.channel),
-    notification_type: asEventDimension(dims.notificationType),
-    ...(dims.errorCode ? { error_code: dims.errorCode } : {}),
-  });
-}

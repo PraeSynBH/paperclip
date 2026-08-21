@@ -53,7 +53,6 @@ import { isCloudManagedInstance } from "../services/cloud-instance.js";
 import { getHiddenSettings } from "../services/settings-visibility.js";
 import { assertBoardOrgAccess, assertInstanceAdmin } from "./authz.js";
 import { BUILTIN_ADAPTER_TYPES } from "../adapters/builtin-adapter-types.js";
-import { CONFIG_SCHEMA_CACHE_TTL_MS, PLUGIN_NPM_INSTALL_TIMEOUT_MS } from "../timeout-constants.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -341,7 +340,7 @@ export function adapterRoutes() {
 
         await execFileAsync("npm", ["install", "--no-save", spec], {
           cwd: pluginsDir,
-          timeout: PLUGIN_NPM_INSTALL_TIMEOUT_MS,
+          timeout: 120_000,
         });
 
         // Read installed version from package.json
@@ -560,7 +559,7 @@ export function adapterRoutes() {
         const pluginsDir = getAdapterPluginsDir();
         await execFileAsync("npm", ["uninstall", externalRecord.packageName], {
           cwd: pluginsDir,
-          timeout: PLUGIN_NPM_INSTALL_TIMEOUT_MS,
+          timeout: 60_000,
         });
         logger.info(
           { type: adapterType, packageName: externalRecord.packageName },
@@ -676,7 +675,7 @@ export function adapterRoutes() {
 
       await execFileAsync("npm", ["install", "--no-save", record.packageName], {
         cwd: pluginsDir,
-        timeout: PLUGIN_NPM_INSTALL_TIMEOUT_MS,
+        timeout: 120_000,
       });
 
       // Reload the freshly installed adapter
@@ -719,6 +718,7 @@ export function adapterRoutes() {
     schema: AdapterConfigSchema;
     fetchedAt: number;
   }>();
+  const CONFIG_SCHEMA_TTL_MS = 30_000;
 
   router.get("/adapters/:type/config-schema", async (req, res) => {
     // Config schemas are read-only form metadata used when org members create
@@ -737,7 +737,7 @@ export function adapterRoutes() {
     }
 
     const cached = configSchemaCache.get(type);
-    if (cached && cached.adapter === adapter && Date.now() - cached.fetchedAt < CONFIG_SCHEMA_CACHE_TTL_MS) {
+    if (cached && cached.adapter === adapter && Date.now() - cached.fetchedAt < CONFIG_SCHEMA_TTL_MS) {
       res.json(cached.schema);
       return;
     }

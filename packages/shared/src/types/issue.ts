@@ -119,10 +119,6 @@ export interface IssueDocumentSummary {
 
 export interface IssueDocument extends IssueDocumentSummary {
   body: string;
-  planMetadata?: Record<string, unknown> | null;
-  /** Count of active (non-superseded) review gates on the latest revision, if known.
-   *  Only populated on plan documents when gate counts are batch-fetched. */
-  gatesCount?: number;
 }
 
 export interface DocumentRevision {
@@ -139,26 +135,6 @@ export interface DocumentRevision {
   createdByAgentId: string | null;
   createdByUserId: string | null;
   createdAt: Date;
-}
-
-/** A plan document revision as returned by GET /issues/:id/documents/plan/revisions */
-export interface PlanDocumentRevision extends DocumentRevision {
-  planMetadata?: Record<string, unknown> | null;
-}
-
-/** Line-level diff of a plan document revision body. */
-export interface PlanBodyDiffLine {
-  type: "added" | "removed" | "unchanged";
-  value: string;
-  oldLineNumber?: number;
-  newLineNumber?: number;
-}
-
-/** Response of GET /issues/:id/documents/plan/revisions/:revId/diff */
-export interface PlanRevisionDiff {
-  revision: { id: string; revisionNumber: number };
-  previousRevision: { id: string; revisionNumber: number } | null;
-  bodyDiff: PlanBodyDiffLine[];
 }
 
 export interface LegacyPlanDocument {
@@ -205,7 +181,6 @@ export interface AcceptedPlanDecomposition {
   requestFingerprint: string;
   requestedChildCount: number;
   childIssueIds: string[];
-  milestoneId: string | null;
   ownerAgentId: string | null;
   ownerUserId: string | null;
   ownerRunId: string | null;

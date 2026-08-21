@@ -3,13 +3,10 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { z } from "zod";
 import type { Db } from "@paperclipai/db";
 import type { DeploymentMode } from "@paperclipai/shared";
 import { instanceSettingsService, issueService } from "../services/index.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
-import { logger } from "../middleware/logger.js";
-import { BOARD_CHAT_TIMEOUT_MS } from "../timeout-constants.js";
 
 /**
  * Strip structured action signals (`%%ACTIONS%%{...}%%/ACTIONS%%`) from a
@@ -20,101 +17,22 @@ function stripActionSignals(response: string): string {
   return response.replace(/%%ACTIONS%%[\s\S]*?%%\/ACTIONS%%/g, "").trim();
 }
 
-// ---------------------------------------------------------------------------
-// Action signal schema — strict validation of LLM-produced action blocks
-// before they reach the SSE stream (C-1 trust boundary fix).
-// ---------------------------------------------------------------------------
-
 /**
- * Zod schema for individual action objects emitted by the board skill.
- * Only known resolution types and actions with safe URL protocols are
- * accepted. Unknown keys are stripped.
- */
-const resolutionActionSchema = z.object({
-  resolution: z
-    .object({
-      type: z.enum(["issue", "plan", "approval", "knowledge", "memory"]),
-      action: z.enum(["create", "update"]),
-      data: z
-        .object({
-          title: z.string().max(500).optional(),
-          id: z.string().max(200).optional(),
-          url: z
-            .string()
-            .url()
-            .refine((v) => /^https?:\/\//i.test(v), {
-              message: "url must use http or https protocol",
-            })
-            .optional(),
-        })
-        .passthrough()
-        .optional(),
-    })
-    .optional(),
-  decision: z
-    .object({
-      summary: z.string().max(2000).optional(),
-      rationale: z.string().max(5000).optional(),
-    })
-    .optional(),
-});
-
-/** Maximum action blocks to process per response (safety limit). */
-const MAX_ACTION_BLOCKS = 10;
-
-/** Type that matches the validated shape — maps the zod schema to a usable TS type. */
-type ValidatedAction = z.infer<typeof resolutionActionSchema>;
-
-/**
- * Parse structured action signals from a raw model response.
- * Returns an array of validated action objects, one per `%%ACTIONS%%{...}%%/ACTIONS%%`
- * block found. The board skill wraps created/updated work objects in these
- * blocks so the UI can render clickable resolution cards.
+ * Board Concierge Chat routes.
  *
- * Trust boundary: Model output is untrusted. Each extracted block is validated
- * against a strict Zod schema before being emitted to the SSE stream.
- * Malformed, oversized, or unrecognized actions are silently skipped (the
- * cleaned response still strips the raw markup from persisted comments).
+ * Implements `POST /board/chat/stream` (mounted under `/api`): a lightweight
+ * chat relay that spawns the `claude` CLI with the paperclip-board skill as
+ * its system prompt and streams the response back to the web UI via
+ * Server-Sent Events. The conversation is persisted to a standing
+ * "Board Operations" issue so it survives reloads.
+ *
+ * The SSE event protocol matches what `ui/src/pages/BoardChat.tsx` consumes:
+ *   { type: "start",  issueId }   — emitted once the issue is resolved
+ *   { type: "status", text }      — tool-use / progress indicator
+ *   { type: "chunk",  text }      — a streamed token slice
+ *   { type: "done",   issueId }   — terminal event; UI refetches comments
+ *   { type: "error",  message }   — terminal error event
  */
-function extractActionSignals(response: string): ValidatedAction[] {
-  const actions: ValidatedAction[] = [];
-  const regex = /%%ACTIONS%%\s*(\{[\s\S]*?\})\s*%%\/ACTIONS%%/g;
-  let match: RegExpExecArray | null;
-  let count = 0;
-
-  while ((match = regex.exec(response)) !== null && count < MAX_ACTION_BLOCKS) {
-    count++;
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(match[1]);
-    } catch {
-      // Malformed JSON — skip silently; the cleaned response already
-      // strips the block so the user never sees raw markup.
-      continue;
-    }
-
-    const result = resolutionActionSchema.safeParse(parsed);
-    if (!result.success) {
-      logger.warn(
-        { issues: result.error.issues },
-        "[board-chat] extractActionSignals: skipping malformed action block",
-      );
-      continue;
-    }
-
-    actions.push(result.data);
-  }
-
-  if (count >= MAX_ACTION_BLOCKS && regex.exec(response) !== null) {
-    logger.warn(
-      { maxBlocks: MAX_ACTION_BLOCKS },
-      "[board-chat] extractActionSignals: response exceeds max blocks — truncated",
-    );
-  }
-
-  return actions;
-}
-
 /**
  * Serialize a comment body as a tagged conversation turn. Bodies are
  * untrusted user content: without structure, a message containing a literal
@@ -123,7 +41,7 @@ function extractActionSignals(response: string): ValidatedAction[] {
  * inside exactly one turn no matter what it contains.
  */
 function serializeTurn(role: "user" | "assistant", body: string): string {
-  const safeBody = body.replace(/(<\/?turn\b)/gi, "&lt;$1");
+  const safeBody = body.replace(/<(\/?turn\b)/gi, "&lt;$1");
   return `<turn role="${role}">\n${safeBody}\n</turn>`;
 }
 
@@ -347,7 +265,7 @@ export function boardChatRoutes(
     const timeout = setTimeout(() => {
       killed = true;
       proc.kill("SIGTERM");
-    }, BOARD_CHAT_TIMEOUT_MS);
+    }, 120000);
 
     // If the client disconnects mid-stream, stop the subprocess rather than
     // letting it run out the remaining timeout window. `close` also fires
@@ -429,26 +347,12 @@ export function boardChatRoutes(
     });
 
     proc.stderr.on("data", (data: Buffer) => {
-      logger.error({ stderr: data.toString() }, "board/chat/stream stderr");
+      console.error("[board/chat/stream stderr]", data.toString());
     });
 
     proc.on("close", async (exitCode) => {
       clearTimeout(timeout);
       releaseSlot();
-
-      // Emit validated action signals as typed SSE events BEFORE persisting
-      // the cleaned response (which strips the raw markup). The UI uses
-      // these to render clickable resolution cards.
-      // Trust boundary: extractActionSignals validates against a strict Zod
-      // schema and rejects malformed/oversized action blocks.
-      const actions = extractActionSignals(fullResponse);
-      if (actions.length > 0 && res.writable) {
-        for (const action of actions) {
-          res.write(
-            `data: ${JSON.stringify({ type: "action", action })}\n\n`,
-          );
-        }
-      }
 
       // Persist the board's reply under the "board-concierge" sentinel so the
       // UI renders it as an assistant bubble (see BoardChat `isUser` check).
@@ -479,7 +383,7 @@ export function boardChatRoutes(
     proc.on("error", (err) => {
       clearTimeout(timeout);
       releaseSlot();
-      logger.error({ err }, "[board/chat/stream spawn error]");
+      console.error("[board/chat/stream spawn error]", err);
       if (res.writable) {
         res.write(
           `data: ${JSON.stringify({

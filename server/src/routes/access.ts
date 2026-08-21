@@ -105,11 +105,6 @@ import {
 import { claimFirstInstanceAdmin } from "../first-admin-claim.js";
 import { getStorageService } from "../storage/index.js";
 import { secretService } from "../services/secrets.js";
-import {
-  COMPANY_INVITE_TTL_MS,
-  INVITE_RESOLUTION_DNS_TIMEOUT_MS,
-  INVITE_RESOLUTION_PROBE_DEFAULT_TIMEOUT_MS,
-} from "../timeout-constants.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
@@ -123,6 +118,8 @@ const INVITE_TOKEN_PREFIX = "pcp_invite_";
 // `invites.tokenHash`; the raw value is only returned once on creation.
 const INVITE_TOKEN_ENTROPY_BYTES = 32;
 const INVITE_TOKEN_MAX_RETRIES = 5;
+const COMPANY_INVITE_TTL_MS = 72 * 60 * 60 * 1000;
+const INVITE_RESOLUTION_DNS_TIMEOUT_MS = 3_000;
 
 type MemberGrantPayload = {
   permissionKey: PermissionKey;
@@ -3624,7 +3621,7 @@ export function accessRoutes(
         : NaN;
     const timeoutMs = Number.isFinite(parsedTimeoutMs)
       ? Math.max(1000, Math.min(15000, Math.floor(parsedTimeoutMs)))
-      : INVITE_RESOLUTION_PROBE_DEFAULT_TIMEOUT_MS;
+      : 5000;
     const resolvedTarget = await resolveInviteResolutionTarget(target, routeInviteResolutionNetwork);
     const probe = await probeInviteResolutionTarget(resolvedTarget, timeoutMs, routeInviteResolutionNetwork);
     res.json({

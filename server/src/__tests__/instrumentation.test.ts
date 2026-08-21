@@ -8,18 +8,8 @@ import { createRequire } from "node:module";
  * the module must warn and settle instead of crashing the server.
  *
  * The module reads OTEL_* env vars at import time, so each test resets the
- * module registry and imports a fresh copy. The structured logger is mocked
- * so diagnostics are asserted on the logger instead of console.
+ * module registry and imports a fresh copy.
  */
-
-const { loggerWarn, loggerError } = vi.hoisted(() => ({
-  loggerWarn: vi.fn(),
-  loggerError: vi.fn(),
-}));
-
-vi.mock("../middleware/logger.js", () => ({
-  logger: { warn: loggerWarn, error: loggerError },
-}));
 
 const ENDPOINT_ENV = "OTEL_EXPORTER_OTLP_ENDPOINT";
 const PROTOCOL_ENV = "OTEL_EXPORTER_OTLP_PROTOCOL";
@@ -43,7 +33,6 @@ afterEach(() => {
   if (originalProtocol === undefined) delete process.env[PROTOCOL_ENV];
   else process.env[PROTOCOL_ENV] = originalProtocol;
   vi.restoreAllMocks();
-  vi.clearAllMocks();
 });
 
 describe("resolveProtocol", () => {
@@ -65,11 +54,14 @@ describe("resolveProtocol", () => {
 
   it("warns and falls back to grpc on an unrecognized protocol", async () => {
     process.env[PROTOCOL_ENV] = "carrier-pigeon";
+    // Spy before the import so the assertion holds even if a future change
+    // makes the warning fire at module load time instead of on the call.
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const { resolveProtocol } = await importFreshInstrumentation();
 
     expect(resolveProtocol().protocol).toBe("grpc");
-    expect(loggerWarn).toHaveBeenCalledWith(expect.stringContaining("carrier-pigeon"));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("carrier-pigeon"));
   });
 });
 
@@ -82,15 +74,16 @@ describe("instrumentationReady", () => {
 
   it("settles with a diagnostic instead of throwing when the endpoint is set but packages are missing", async () => {
     process.env[ENDPOINT_ENV] = "http://collector:4318";
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const { instrumentationReady } = await importFreshInstrumentation();
 
     // Bootstrap must absorb the failed dynamic imports — the server keeps
     // booting without tracing rather than crashing on an opt-in feature.
     await expect(instrumentationReady).resolves.toBeUndefined();
-    expect(loggerWarn).toHaveBeenCalledWith(
-      expect.objectContaining({ err: expect.anything() }),
+    expect(warn).toHaveBeenCalledWith(
       expect.stringContaining("@opentelemetry/* packages are not installed"),
+      expect.anything(),
     );
   });
 });
@@ -147,6 +140,7 @@ describe("shutdownInstrumentation", () => {
 
   it("resolves after a failed bootstrap instead of hanging", async () => {
     process.env[ENDPOINT_ENV] = "http://collector:4318";
+    vi.spyOn(console, "warn").mockImplementation(() => {});
 
     const { shutdownInstrumentation } = await importFreshInstrumentation();
 

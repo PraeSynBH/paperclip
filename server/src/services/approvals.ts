@@ -3,12 +3,10 @@ import type { Db } from "@paperclipai/db";
 import { approvalComments, approvals } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
 import { redactCurrentUserText } from "../log-redaction.js";
-import { redactSensitiveText } from "../redaction.js";
 import { agentService } from "./agents.js";
 import { budgetService } from "./budgets.js";
 import { notifyHireApproved } from "./hire-hook.js";
 import { instanceSettingsService } from "./instance-settings.js";
-import { captureMetric } from "./posthog.js";
 
 export function approvalService(db: Db) {
   const agentsSvc = agentService(db);
@@ -209,14 +207,6 @@ export function approvalService(db: Db) {
         }
       }
 
-      captureMetric("approval.approved", updated.companyId, {
-        approvalId: id,
-        approvalType: updated.type,
-        decidedByUserId,
-        applied,
-        decisionNote: decisionNote ? redactSensitiveText(decisionNote) : null,
-      });
-
       return { approval: updated, applied };
     },
 
@@ -235,14 +225,6 @@ export function approvalService(db: Db) {
           await agentsSvc.terminate(payloadAgentId);
         }
       }
-
-      captureMetric("approval.rejected", updated.companyId, {
-        approvalId: id,
-        approvalType: updated.type,
-        decidedByUserId,
-        applied,
-        decisionNote: decisionNote ? redactSensitiveText(decisionNote) : null,
-      });
 
       return { approval: updated, applied };
     },

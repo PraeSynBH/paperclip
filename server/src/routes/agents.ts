@@ -73,7 +73,6 @@ import { resolveEnvironmentExecutionTarget } from "../services/environment-execu
 import { environmentRuntimeService } from "../services/environment-runtime.js";
 import { resolvePluginSandboxProviderDriverByKey } from "../services/plugin-environment-driver.js";
 import type { AdapterExecutionTarget } from "@paperclipai/adapter-utils/execution-target";
-import { logger } from "../middleware/logger.js";
 import type {
   AdapterEnvironmentCheck,
   AdapterEnvironmentTestResult,
@@ -786,7 +785,8 @@ export function agentRoutes(
         }
       } catch (err) {
         // Cleanup failures must not mask the test result.
-        logger.warn(
+        // eslint-disable-next-line no-console
+        console.warn(
           `[adapter-test] Failed to release lease ${leaseRecord.lease.id}: ${err instanceof Error ? err.message : String(err)}`,
         );
       }
@@ -1933,7 +1933,7 @@ export function agentRoutes(
     }
 
     const files = input?.files
-      ?? await loadDefaultAgentInstructionsBundle(resolveDefaultAgentInstructionsBundleRole(agent));
+      ?? await loadDefaultAgentInstructionsBundle(resolveDefaultAgentInstructionsBundleRole(agent.role));
     const materialized = await instructions.materializeManagedBundle(
       agent,
       files,

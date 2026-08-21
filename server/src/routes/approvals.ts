@@ -16,7 +16,6 @@ import {
   heartbeatService,
   issueApprovalService,
   logActivity,
-  notificationService,
   secretService,
 } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getAccessibleResource, getActorInfo, hasCompanyAccess } from "./authz.js";
@@ -273,25 +272,6 @@ export function approvalRoutes(
       entityId: approval.id,
       details: { type: approval.type, issueIds: uniqueIssueIds },
     });
-
-    // Notify human members that an approval is waiting (VOY-1342).
-    // Fire-and-forget: notification dispatch must never fail the request.
-    notificationService(db)
-      .notifyCompanyMembers(companyId, {
-        notificationType: "approval_needed",
-        title: `Approval needed: ${approval.type.replace(/_/g, " ")}`,
-        body:
-          `A ${approval.type.replace(/_/g, " ")} request is waiting for your review.` +
-          (uniqueIssueIds.length > 0 ? ` Linked issues: ${uniqueIssueIds.length}.` : ""),
-        linkUrl: `/approvals/${approval.id}`,
-        metadata: {
-          approvalId: approval.id,
-          type: approval.type,
-          issueIds: uniqueIssueIds,
-        },
-      })
-      .catch((err) =>
-        logger.warn({ err, approvalId: approval.id, companyId }, "failed to send approval notification"));
 
     res.status(201).json(redactApprovalPayload(approval));
   });

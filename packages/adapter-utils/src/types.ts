@@ -76,15 +76,6 @@ export type AdapterExecutionErrorFamily =
 export interface AdapterExecutionResult {
   exitCode: number | null;
   signal: string | null;
-  /**
-   * The signal our own timeout/cleanup logic actually sent (SIGTERM then
-   * SIGKILL), when the adapter manages its own child-process timeout and a
-   * timeout fired. Independent of `signal`, which reflects whatever the OS
-   * reports the process died from — some CLIs re-report a different signal
-   * (e.g. SIGINT) than the one that was actually delivered, so `signal`
-   * alone is not reliable for attributing a timeout kill.
-   */
-  signalSent?: string | null;
   timedOut: boolean;
   errorMessage?: string | null;
   errorCode?: string | null;
@@ -129,34 +120,6 @@ export interface AdapterExecutionResult {
   referencedProjectStagingFailures?: Array<{ projectId: string; error: string }>;
   summary?: string | null;
   clearSession?: boolean;
-  /**
-   * The timeout the adapter itself actually armed for this run (e.g. via
-   * `runChildProcess({ timeoutSec })`), so the server can report an accurate
-   * `effectiveTimeoutSec`/`timeoutOwner` instead of guessing from
-   * `agent.adapterConfig` (which is empty unless a user explicitly set it).
-   * Adapters that manage their own child-process timeout should populate
-   * this on every run, not just timed-out ones — omit it entirely for
-   * adapters with no self-managed timeout (e.g. remote/gateway adapters
-   * with no local process to kill).
-   */
-  adapterTimeoutPolicy?: {
-    /** The timeout value actually armed, in seconds. */
-    effectiveTimeoutSec: number;
-    /** Whether this came from explicit adapterConfig vs. an adapter's own built-in default. */
-    timeoutConfigured: boolean;
-    timeoutSource: "config" | "adapter_default";
-    /** Stable identifier for who owns this timeout value, e.g. the adapter type. */
-    timeoutOwner: string;
-  } | null;
-  /**
-   * Seconds spent on workspace/session setup before the adapter's own
-   * timeout was armed and the child process was spawned. This phase is not
-   * covered by `adapterTimeoutPolicy.effectiveTimeoutSec`, so without this
-   * field the server-side wall-clock duration (`startedAt` -> `finishedAt`)
-   * is silently larger than, and varies independently of, the reported
-   * timeout budget.
-   */
-  unmeteredSetupSec?: number | null;
   question?: {
     prompt: string;
     choices: Array<{
