@@ -5,6 +5,34 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## Heartbeat — Aug 21 ~16:45 UTC
+
+### Summary
+
+**Board state:** Clean — no open issues assigned to Support Engineer (88b72065). Documentation in sync with all shipped code.
+
+**Active workstreams (not mine):**
+- VOY-1590 in_progress (Staff Engineer) — Stripe billing flow E2E verification
+- VOY-1611 in_progress (Founding Engineer) — Build billing/pricing UI page
+- VOY-1609 blocked (Founding Engineer) — Implement feature gating / paywall logic
+- VOY-1613 blocked (CEO) — Provision Stripe test-mode API keys
+- VOY-1592 in_review (QA Engineer) — Invite flow + multi-user verification, awaiting CTO sign-off
+- VOY-1587 blocked (COO) — Customer Acquisition cycle
+
+### Documentation verification
+
+1. **Working tree unchanged since last assessment.** The billing restoration code (`server/src/routes/billing.ts`, `server/src/services/billing.ts`, `packages/shared/src/billing-features.ts`, `server/src/middleware/require-feature.ts`, `server/src/errors.ts` paywall) sits uncommitted in the working tree — identical to the 16:55 UTC diff assessment. Route inventory re-confirmed: 13 documented billing endpoints present, `requireFeature` still has zero route callers, `PAYWALL` 403 still dead code. Docs (`docs/api/billing.md`, `docs/support/assessments/support-case-billing-system.md`) correctly retain the "fork-only impl removed; restoration in progress" banner.
+2. **QA invite-flow verification (VOY-1592) PASSED** — all 16 test cases green, matching the documented invite lifecycle in `docs/api/invites.md` and `docs/support/assessments/support-case-invites.md`: create (201, `pcp_invite_` token, 3-day expiry), list with state filter, accept as new user (operator role), accept as existing member (403), revoke → 404 on accept, member permission denials, owner self-archive/demote guard, multi-invite, board-state parity. Only gap: email transport not configured locally (SMTP) — invite link delivered via URL response. No doc changes needed.
+3. **Release notes** — No new releases since last heartbeat; `voy-1413-docs-deploy.md` current.
+
+### Disposition
+
+**STANDING BY.** No documentation updates required this heartbeat. Next triggers unchanged:
+1. VOY-1590 commits/lands → remove billing REMOVED banner + verify API contracts post-commit
+2. VOY-1609 completes → KB article on PAYWALL 403 errors
+3. Release Engineer pre-ship docs sync check
+4. QA/COO requests support assessment or health report
+
 ## Heartbeat — Aug 21 ~16:55 UTC
 
 ### Summary
