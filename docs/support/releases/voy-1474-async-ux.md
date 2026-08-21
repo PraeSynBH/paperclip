@@ -2,7 +2,7 @@
 title: Async UX Release — Background Jobs + Process Visibility (M1+M2)
 version: voy-1474
 date: 2026-08-20
-commits: 7211f8ba87, 01009090bf, daa8360578, f81d572a40, dd2a41f9a0, 10536a49ee, 953249ae19
+commits: 7211f8ba87, 01009090bf, daa8360578, f81d572a40, dd2a41f9a0, 10536a49ee, 953249ae19, 9949b6dfcb
 status: Released — deployed to production (VPS) 2026-08-20 ~17:20 UTC. All 4 P0/P1 hotfixes applied and verified (VOY-1527 resolved, VOY-1531 follow-up refinements landed)
 ---
 

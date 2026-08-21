@@ -11,7 +11,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
-| Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Async UX](releases/voy-1474-async-ux.md) |
+| Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Assessment](assessments/support-case-async-ux-background-jobs.md) · [Release Notes](releases/voy-1474-async-ux.md) |
 || Google OAuth & PostHog auth events + P2 fixes (ts_rank alias, DB client hardening) | voy-1420-posthog-p2-fixes (96faa13434+) | Documented, ready for release to fork/master | [Google OAuth](assessments/support-case-google-oauth.md) |
 | Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
 | Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Aug 18, 2026 (PR #48) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
@@ -34,7 +34,7 @@ This directory contains support case assessments for Paperclip features. Each do
 | Task Watchdogs | v2026.626.0 | Jun 26, 2026 | [View](task-watchdogs.md) |
 | Ask Work Mode | v2026.626.0 | Jun 26, 2026 | [View](ask-work-mode.md) |
 | Skills Store | v2026.618.0 | Jun 18, 2026 | [View](skills-store.md) |
-| Company Artifacts | v2026.609.0 | Jun 9, 2026 | [View](company-artifacts.md) |
+| Company Artifacts | v2026.609.1 (2026-08-21) | [View](company-artifacts.md) |
 
 ## Knowledge Base Articles
 
@@ -91,6 +91,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
+| v0.5.0 Market Readiness — Self-Service Onboarding + Billing + Notifications + Agent Marketplace + Async UX + Docs | [View](releases/v0.5.0-market-readiness.md) *(Released — 2026-08-20)* |
 || Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
 | Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Ready — documentation verified for release to fork/master)* |
 | PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
@@ -103,5 +104,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-20 ~19:30 UTC — Known production issues (VOY-1527) documented in release notes, support impact section expanded with hotfix guidance*
+*Last updated: 2026-08-21 ~03:50 UTC — Artifacts staleness indicators (isStale + visual cues) and GET /work-products/:id endpoint documented. v0.5.0 post-release refinement assessed.*
 *Maintained by: Support Engineer (88b72065)*

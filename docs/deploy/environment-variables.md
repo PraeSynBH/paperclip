@@ -53,6 +53,26 @@ These are set automatically by the server when invoking agents:
 | `ANTHROPIC_API_KEY` | Anthropic API key (for Claude Local adapter) |
 | `OPENAI_API_KEY` | OpenAI API key (for Codex Local adapter) |
 
+## Billing / Stripe
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `STRIPE_SECRET_KEY` | Yes (for billing) | Stripe API secret key (`sk_live_...` or `sk_test_...`). Without it, billing operations return errors. |
+| `STRIPE_WEBHOOK_SECRET` | Yes (for webhooks) | Stripe webhook signing secret (`whsec_...`). Used to verify Stripe webhook signatures. |
+
+## Notifications / SMTP & VAPID
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `SMTP_HOST` | For email | SMTP server hostname (e.g., `smtp.gmail.com`, `smtp.sendgrid.net`) |
+| `SMTP_USER` | For email | SMTP username |
+| `SMTP_PASS` | For email | SMTP password or app-specific password |
+| `VAPID_PUBLIC_KEY` | For web push | VAPID public key (base64). Generate with `npx web-push generate-vapid-keys`. |
+| `VAPID_PRIVATE_KEY` | For web push | VAPID private key (base64) |
+| `VAPID_SUBJECT` | For web push | Contact URI (e.g., `mailto:admin@example.com`) |
+
+Without SMTP configuration, email notifications are gracefully skipped — in-app delivery still works. Without VAPID keys, web push is unavailable.
+
 ## Configurable Timeouts, TTLs, and Intervals
 
 These environment variables control timeouts, TTLs, and intervals across the system. Each variable has a sensible default — override only when your deployment has specific performance or reliability requirements.

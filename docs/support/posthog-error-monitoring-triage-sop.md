@@ -2,21 +2,16 @@
 title: PostHog Monitoring — Support Engineer Triage SOP
 summary: SOP for triaging PostHog error issues and business events (VOY-999 / VOY-1420)
 status: final
-applies_to: VOY-999 / VOY-1015 / VOY-1420
+applies_to: VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / VOY-1428 / VOY-1430 / VOY-1456 (P2-1)
 ---
 
 # PostHog Monitoring — Support Engineer Triage SOP
 
-**Version:** 1.5.0
-**Date:** 2026-08-19
+**Version:** 1.6.0
+**Date:** 2026-08-20
 **Author:** Support Engineer (88b72065)
-**Status:** Final — Stack traces now preserved (VOY-1430); P1 stack-trace limitation resolved
-**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / VOY-1428 / VOY-1430
-**Version:** 1.4.5
-**Date:** 2026-08-19
-**Author:** Support Engineer (88b72065)
-**Status:** Final — Business events instrumentation landed (VOY-1420); P1 stack-trace fix applied (VOY-1430 / e63b2a1f67); decisionNote auto-redacted (VOY-1434 / d5b3510587); auth hooks hardened to fire-and-forget telemetry (96faa13434 / VOY-1447); SOP reflects all changes
-**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / e63b2a1f67 / d5b3510587 / 96faa13434 + Google OAuth auth events
+**Status:** Final — Sanitization now operates on a clone of the error (P2-1 / b6c96c2f55); original error objects are never mutated. v1.5.0's in-place-mutation description superseded.
+**Applies to:** VOY-999 / VOY-1007 / VOY-1015 / VOY-1029 / VOY-1420 / VOY-1428 / VOY-1430 / VOY-1456 (P2-1)
 
 ---
 
@@ -33,8 +28,7 @@ This SOP defines how to triage, classify, and resolve issues in both categories.
 
 ## How It Works
 
-1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — the `sanitizeErrorForTelemetry()` function mutates the original Error in place, redacting `error.message` and `error.stack` via `redactSensitiveText()`, then recursively redacts the `error.cause` chain. The original stack trace is preserved (with file paths and tokens redacted), enabling triage by throw site. (See [Stack Trace Handling](#stack-trace-handling).)
-1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — error messages and stack traces are scrubbed in-place via `sanitizeErrorForTelemetry()` (redactSensitiveText on message + stack), preserving the original throw site for triage.
+1. **Error capture:** The Voyonder frontend and backend call `trackErrorOccurred()` (lib/analytics.ts) / `trackErrorOccurredServer()` (lib/analytics-server.ts) with error details → PostHog. **PII redaction is applied server-side** before errors reach PostHog — the `sanitizeErrorForTelemetry()` function clones the error (message, stack, cause, custom properties), redacts the clone's `message` and `stack` via `redactSensitiveText()`, then recursively redacts the `cause` chain. The **original error object is never modified** — any code reading the original after the call sees the unredacted values. The stack trace is preserved (with file paths and tokens redacted), enabling triage by throw site. (See [Stack Trace Handling](#stack-trace-handling).)
 2. **Cron poll:** `scripts/posthog-error-monitor.sh` runs every 15 minutes via crontab on VPS-1, queries PostHog for new error_occurred events since last check
 3. **Issue creation:** For each unique error signature (grouped by event+component+normalized message), a Paperclip issue is created:
    - **Title:** `[PostHog] {event}: {component} — {truncated message}`
@@ -72,20 +66,23 @@ Starting with VOY-1420, error events (`captureErrorEvent`) also use `companyId` 
 
 ### Stack Trace Handling
 
-**Since VOY-1430 (fixed):** The `sanitizeErrorForTelemetry()` function now mutates the original Error in place, preserving the stack trace with PII redacted. PostHog's `captureException` auto-extracts `$exception_stack_trace` from the sanitized error, and the stack trace points at the **original throw site** — not the sanitizer code.
+**Since VOY-1456 P2-1 (b6c96c2f55):** The `sanitizeErrorForTelemetry()` function now operates on a **clone** of the error object. It creates a copy via `cloneError()` (preserving the error's prototype, message, stack, cause, and custom properties), redacts the clone's `message` and `stack`, and recursively redacts the clone's `cause` chain. The **original error object is never mutated** — any code that reads the original after the call sees the unredacted values. PostHog's `captureException` receives the redacted clone and auto-extracts `$exception_stack_trace` from it, with the stack trace pointing at the **original throw site** — not the sanitizer code.
 
 **What gets redacted:** File paths, emails, tokens, connection strings, and other sensitive patterns in both the error message and stack trace are replaced with `***REDACTED***`. The error name and error code (low-risk categorical identifiers) are preserved as-is.
 
 **Verification:** The test suite asserts `expect(sanitized.stack).toContain('posthog.test.ts')` — confirming the stack trace survives redaction and still points at the original throw site in the test file.
-### Stack Trace Preservation (resolved)
 
-**VOY-1430 / `e63b2a1f67` — Applied.** The `sanitizeErrorForTelemetry()` function now mutates the original error's `message` and `stack` properties in-place via `redactSensitiveText()` instead of creating a new `Error` object. This preserves the original throw site in `$exception_stack_trace` for PostHog's `captureException`, with file paths and tokens redacted.
+**Caller contract:** Because `sanitizeErrorForTelemetry()` returns a clone, any code that reads `error.message` or `error.stack` **after** calling this function sees the original, unredacted values. If you need the redacted version, capture it from the returned sanitized clone before it goes out of scope. (This is the inverse of the pattern in `error-handler.ts`, where the HTTP response message is snapshotted *before* calling `captureErrorEvent`.)
 
-**What changed:**
-- **Before (v1.4.1):** `sanitizeErrorForTelemetry` created `new Error(redactedMessage)` — every captured exception appeared to originate from `posthog.ts`, making stack-based triage useless.
-- **After (v1.4.2+):** The original error is redacted in-place. Stack traces point at the original throw site (e.g., a route handler or service file). Tests verify that the sanitized stack contains the original caller's filename (`posthog.test.ts`).
+**What changed over the version history:**
 
-**Triage guidance:** Stack traces can now be relied on for triage, but note that file paths and tokens in stack frames are redacted (replaced with `***REDACTED***`). The error `name` and `code` are preserved unchanged as low-risk identifiers.
+| Version | Behavior | Limitation |
+|---------|----------|------------|
+| v1.4.1 and earlier | `new Error(redactedMessage)` — stack trace points at `posthog.ts` sanitizer | Stack-based triage useless |
+| v1.4.2–v1.5.0 (VOY-1430, in-place mutation) | Original error mutated in place — stack preserved, original object modified | Side effect: any code reading the error after the call sees redacted values |
+| **v1.6.0 (VOY-1456 P2-1, cloneError)** | **Clone is redacted, original untouched** — stack preserved, original object unchanged | None — best of both worlds |
+
+**Triage guidance:** Stack traces can be relied on for triage, but note that file paths and tokens in stack frames are redacted (replaced with `***REDACTED***`). The error `name` and `code` are preserved unchanged as low-risk identifiers.
 
 ### Debugging Business Events
 
@@ -143,8 +140,7 @@ Read the issue body to determine:
 | **MEDIUM** | Non-critical failure (analytics not tracking, minor UI glitch) | 24 hours | Triage during next heartbeat. If low priority, move to backlog |
 | **LOW** | Cosmetic or edge case (rare error path, expected failure handled gracefully) | Best effort | Acknowledge and close, or keep in backlog for monitoring |
 
-**Note on PII:** Error messages arriving in PostHog are already scrubbed by the server-side `sanitizeErrorForTelemetry()` function — secrets, file paths, emails, and connection strings are redacted from both the message and stack trace before egress. If you see `***REDACTED***` in an error message or stack trace line, that is working as designed. The original error is still available in server logs (`journalctl`). For investigating PII leaks, check the server logs, not PostHog.
-**Note on PII:** Error messages and stack traces arriving in PostHog are already scrubbed by the server-side `sanitizeErrorForTelemetry()` function — secrets, file paths, emails, and connection strings are redacted in-place before egress. The original error message is still available in server logs (`journalctl`). For investigating PII leaks, check the server logs, not PostHog.
+**Note on PII:** Error messages and stack traces arriving in PostHog are already scrubbed by the server-side `sanitizeErrorForTelemetry()` function — secrets, file paths, emails, and connection strings are redacted on a **clone** of the error before egress; the original error object keeps its unredacted message and stack intact. If you see `***REDACTED***` in an error message or stack trace line, that is working as designed. The original error is still available in server logs (`journalctl`). For investigating PII leaks, check the server logs, not PostHog.
 
 ### Step 3: Root Cause Investigation
 

@@ -50,6 +50,7 @@ import {
   reconcileCloudUpstreamRunsOnStartup,
   reconcileCodexLocalManagedHomesOnStartup,
   reconcilePersistedRuntimeServicesOnStartup,
+  repairEnvironmentTableSchema,
   routineService,
 } from "./services/index.js";
 import {
@@ -537,6 +538,12 @@ export async function startServer(): Promise<StartedServer> {
   if (config.deploymentMode === "local_trusted") {
     await ensureLocalTrustedBoardPrincipal(db as any);
   }
+
+  // Repair the environments table schema if migration 0105 was not fully applied.
+  // This must run after migrations are applied but before any service that
+  // inserts into the environments table (ensureLocalEnvironment, etc.).
+  await repairEnvironmentTableSchema(db as any);
+
   const accessBackfill = await backfillPrincipalAccessCompatibility(db as any);
   if (accessBackfill.agentMembershipsInserted > 0 || accessBackfill.humanGrantsInserted > 0) {
     logger.info(accessBackfill, "Backfilled principal access compatibility records");

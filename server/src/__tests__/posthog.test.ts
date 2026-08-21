@@ -231,6 +231,25 @@ describe("captureErrorEvent", () => {
       undefined,
     );
   });
+
+  it("does not mutate the original error object (P2-1 cloneError)", async () => {
+    process.env[API_KEY_ENV] = "phc_test_key";
+    process.env[HOST_ENV] = "http://localhost:8000";
+    const { captureErrorEvent } = await importFreshPosthog();
+
+    const originalMessage = "secret-db-password=hunter2";
+    const originalStack = "Error\n    at originalSite (file.ts:42:10)";
+    const error = new Error(originalMessage);
+    error.stack = originalStack;
+
+    captureErrorEvent(error);
+
+    // The original error must retain its unredacted values — the sanitization
+    // operates on a clone.  If someone reverts to in-place mutation, this
+    // assertion fails.
+    expect(error.message).toBe(originalMessage);
+    expect(error.stack).toBe(originalStack);
+  });
 });
 
 // ---------------------------------------------------------------------------

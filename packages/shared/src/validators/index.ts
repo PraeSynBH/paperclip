@@ -402,6 +402,7 @@ export {
   COMPANY_ARTIFACTS_DEFAULT_LIMIT,
   COMPANY_ARTIFACTS_MAX_LIMIT,
   COMPANY_ARTIFACTS_MAX_QUERY_LENGTH,
+  ARTIFACT_STALE_THRESHOLD_HOURS,
   companyArtifactGroupBySchema,
   companyArtifactGroupSchema,
   companyArtifactMediaKindSchema,

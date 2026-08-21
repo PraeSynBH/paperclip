@@ -15,6 +15,7 @@ import {
   projects,
 } from "@paperclipai/db";
 import {
+  ARTIFACT_STALE_THRESHOLD_HOURS,
   attachmentArtifactWorkProductMetadataSchema,
   COMPANY_ARTIFACTS_MAX_LIMIT,
   companyArtifactsQuerySchema,
@@ -90,8 +91,8 @@ function normalizePreviewText(input: string | null | undefined) {
   const stripped = input
     .replace(/```[\s\S]*?```/g, " ")
     .replace(/`([^`]+)`/g, "$1")
-    .replace(/!\[[^\]]*]\([^)]*\)/g, " ")
-    .replace(/\[([^\]]+)]\([^)]*\)/g, "$1")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
     .replace(/[#>*_\-~|]+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
@@ -99,6 +100,11 @@ function normalizePreviewText(input: string | null | undefined) {
   return stripped.length > PREVIEW_TEXT_MAX_LENGTH
     ? `${stripped.slice(0, PREVIEW_TEXT_MAX_LENGTH - 3).trimEnd()}...`
     : stripped;
+}
+
+function isStale(updatedAt: string): boolean {
+  const age = Date.now() - Date.parse(updatedAt);
+  return age > ARTIFACT_STALE_THRESHOLD_HOURS * 60 * 60 * 1000;
 }
 
 function classifyMediaKind(contentType: string | null | undefined, fallback: CompanyArtifactMediaKind = "file") {
@@ -430,6 +436,7 @@ export function companyArtifactsService(db: Db, storage?: StorageService) {
               : null,
             updatedAt: row.updatedAt.toISOString(),
             href: buildIssueHref(company.issuePrefix, identifier, `document-${row.key}`),
+            isStale: isStale(row.updatedAt.toISOString()),
           });
         }
       }
@@ -569,6 +576,7 @@ export function companyArtifactsService(db: Db, storage?: StorageService) {
               : null,
             updatedAt: row.updatedAt.toISOString(),
             href: buildIssueHref(company.issuePrefix, identifier, `work-product-${row.workProductId}`),
+            isStale: isStale(row.updatedAt.toISOString()),
           });
         }
 
@@ -674,6 +682,7 @@ export function companyArtifactsService(db: Db, storage?: StorageService) {
               : null,
             updatedAt: row.updatedAt.toISOString(),
             href: buildIssueHref(company.issuePrefix, identifier, `attachment-${row.attachmentId}`),
+            isStale: isStale(row.updatedAt.toISOString()),
           };
         }));
 

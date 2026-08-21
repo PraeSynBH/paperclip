@@ -16,6 +16,7 @@ import {
   type UpdateEnvironment,
 } from "@paperclipai/shared";
 import { conflict } from "../errors.js";
+import { logger } from "../middleware/logger.js";
 
 type EnvironmentRow = typeof environments.$inferSelect;
 type EnvironmentLeaseRow = typeof environmentLeases.$inferSelect;
@@ -81,6 +82,21 @@ function hasConstraintName(error: unknown, constraintName: string): boolean {
   return candidate.constraint === constraintName
     || candidate.constraint_name === constraintName
     || hasConstraintName(candidate.cause, constraintName);
+}
+
+/**
+ * Detect PostgreSQL error when ON CONFLICT target does not match any
+ * unique/exclusion constraint on the table. This happens when the deployed
+ * DB schema is out of sync with the Drizzle ORM schema — e.g. migration 0105
+ * (which drops company_id and creates instance-scoped unique indexes) was not
+ * applied, so the ON CONFLICT ("driver") target does not match the old
+ * (company_id, driver) unique index.
+ */
+function isOnConflictTargetMismatch(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false;
+  const message = (error as { message?: string; detail?: string; hint?: string }).message ?? "";
+  // PostgreSQL 14+ error: "there is no unique or exclusion constraint matching the ON CONFLICT specification"
+  return message.includes("no unique or exclusion constraint matching the ON CONFLICT specification");
 }
 
 function toEnvironment(row: EnvironmentRow): Environment {
@@ -163,6 +179,75 @@ function toEnvironmentLease(row: EnvironmentLeaseRow): EnvironmentLease {
   };
 }
 
+/**
+ * Repair the environments table schema if it is in an inconsistent state
+ * where migration 0105 (instance_scoped_environments) was not fully applied.
+ *
+ * This function checks for the stale `company_id` column and missing
+ * instance-scoped unique indexes. It is safe to call on every startup —
+ * it is a no-op when the schema is already correct.
+ *
+ * Call this AFTER `applyPendingMigrations()` so the migration journal is
+ * up to date but any leftover schema drift is caught.
+ */
+export async function repairEnvironmentTableSchema(db: Db): Promise<void> {
+  // Check if company_id column still exists on the environments table.
+  // If it does, migration 0105 was not applied and we need to fix the schema.
+  const columnCheck = await db.execute<{ exists: boolean }>(
+    sql`SELECT EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'environments'
+        AND column_name = 'company_id'
+    ) AS exists`,
+  );
+  const companyIdExists = Array.isArray(columnCheck) ? Boolean(columnCheck[0]?.exists) : false;
+  if (!companyIdExists) {
+    logger.debug("Environment table schema is consistent (company_id already dropped)");
+    return;
+  }
+
+  logger.warn(
+    "Detected stale company_id column on environments table — migration 0105 was not fully applied. " +
+    "Running schema repair to drop company_id and create instance-scoped indexes.",
+  );
+
+  // Drop the FK constraint if it still exists (it was removed in migration 0105 step 1)
+  await db.execute(sql`
+    ALTER TABLE "environments" DROP CONSTRAINT IF EXISTS "environments_company_id_companies_id_fk";
+  `);
+
+  // Drop old company-scoped indexes that may still exist
+  await db.execute(sql`DROP INDEX IF EXISTS "environments_company_driver_idx";`);
+  await db.execute(sql`DROP INDEX IF EXISTS "environments_company_status_idx";`);
+  await db.execute(sql`DROP INDEX IF EXISTS "environments_company_name_idx";`);
+  await db.execute(sql`DROP INDEX IF EXISTS "environments_company_managed_sandbox_idx";`);
+
+  // Drop company_id column
+  await db.execute(sql`ALTER TABLE "environments" DROP COLUMN IF EXISTS "company_id";`);
+
+  // Create the instance-scoped indexes that migration 0105 should have created
+  // These match the Drizzle schema in packages/db/src/schema/environments.ts
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS "environments_status_idx" ON "environments" USING btree ("status");
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS "environments_local_driver_idx"
+    ON "environments" USING btree ("driver")
+    WHERE "driver" = 'local';
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS "environments_managed_sandbox_idx"
+    ON "environments" USING btree ("driver")
+    WHERE "driver" = 'sandbox' AND ("metadata" ->> 'managedByPaperclip')::boolean = true;
+  `);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS "environments_name_idx" ON "environments" USING btree ("name");
+  `);
+
+  logger.info("Environment table schema repaired: company_id dropped, instance-scoped indexes created");
+}
+
 export function environmentService(db: Db) {
   return {
     list: async (
@@ -218,7 +303,17 @@ export function environmentService(db: Db) {
           where: sql`${environments.driver} = 'local'`,
         })
         .returning()
-        .then((rows) => rows[0] ?? null);
+        .then((rows) => rows[0] ?? null)
+        .catch((error) => {
+          // If the ON CONFLICT target doesn't match any unique constraint
+          // (e.g. migration 0105 wasn't applied and the old (company_id, driver)
+          // unique index was dropped), fall back to a manual check-then-insert.
+          if (isOnConflictTargetMismatch(error)) {
+            logger.warn({ err: error }, "ON CONFLICT target mismatch in ensureLocalEnvironment; falling back to manual check-then-insert");
+            return null;
+          }
+          throw error;
+        });
       if (row) return toEnvironment(row);
 
       const existing = await db
@@ -226,10 +321,42 @@ export function environmentService(db: Db) {
         .from(environments)
         .where(eq(environments.driver, "local"))
         .then((rows) => rows[0] ?? null);
-      if (!existing) {
+      if (existing) return toEnvironment(existing);
+
+      // No existing row found and insert was skipped due to missing index;
+      // try a bare INSERT without ON CONFLICT (will succeed on first call)
+      const fallbackRow = await db
+        .insert(environments)
+        .values({
+          name: DEFAULT_LOCAL_ENVIRONMENT_NAME,
+          description: DEFAULT_LOCAL_ENVIRONMENT_DESCRIPTION,
+          driver: "local",
+          status: "active",
+          config: {},
+          envVars: {},
+          metadata: {
+            managedByPaperclip: true,
+            defaultForInstance: true,
+          },
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .then((rows) => rows[0] ?? null)
+        .catch((fallbackError) => {
+          // If the fallback insert also fails (e.g. duplicate from concurrent caller),
+          // re-read and return what the other caller inserted.
+          logger.warn({ err: fallbackError }, "Fallback insert in ensureLocalEnvironment failed; re-reading existing row");
+          return db
+            .select()
+            .from(environments)
+            .where(eq(environments.driver, "local"))
+            .then((fallbackRows) => fallbackRows[0] ?? null);
+        });
+      if (!fallbackRow) {
         throw new Error("Failed to ensure local environment");
       }
-      return toEnvironment(existing);
+      return toEnvironment(fallbackRow);
     },
 
     /**
@@ -313,6 +440,12 @@ export function environmentService(db: Db) {
             hasConstraintName(error, "environments_name_idx")
             || hasConstraintName(error, "environments_managed_sandbox_idx")
           ) {
+            return null;
+          }
+          // If the ON CONFLICT target doesn't match any unique constraint
+          // (schema drift), fall through to the manual fallback below.
+          if (isOnConflictTargetMismatch(error)) {
+            logger.warn({ err: error }, "ON CONFLICT target mismatch in ensureKubernetesEnvironment; falling back to manual insert");
             return null;
           }
           throw error;

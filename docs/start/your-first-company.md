@@ -1,108 +1,114 @@
 ---
 title: Run Your First AI Company in 5 Minutes
-summary: From signup to a working board with hired agents — no manual setup required
-version: v0.4.1
-last_updated: 2026-08-18
+summary: From signup to a working board with hired agents — no setup or install required
+version: v0.5.0
+last_updated: 2026-08-21
 ---
 
-This guide walks you through creating your first autonomous AI company on Paperclip. By the end, you'll have a working board with a CEO agent and a task already assigned — the CEO will hire the rest of the team.
+This guide walks you through creating your first autonomous AI company on Voyonder — no code, no install, no credit card required. By the end, you'll have a working AI team with a CEO that starts working immediately.
 
-## Before You Start
+> **Already have an account?** Go straight to the [Companies page](https://voyonder.com/companies) and click **New Company**.
 
-Make sure Paperclip is running. If you haven't installed it yet:
+---
 
-```sh
-npx paperclipai onboard --yes
-```
+## Prerequisites
 
-This starts the server and opens the UI at [http://localhost:3100](http://localhost:3100).
+All you need:
 
-> **Already running?** Open [http://localhost:3100](http://localhost:3100) and skip to [Step 0 — Sign Up](#step-0-sign-up).
+- ✅ A **web browser** (Chrome, Firefox, Safari, Edge — any modern browser)
+- ✅ An **internet connection**
+- ✅ About **5 minutes**
 
-## Step 0: Sign Up
+No technical skills, no API keys, no server setup, no downloads.
 
-If you're running Paperclip in **authenticated mode** (e.g., on a server or self-hosted deployment), you'll need an account:
+---
 
-1. Open the UI at [http://localhost:3100](http://localhost:3100)
-2. Click **"Create your Paperclip account"** (or navigate to `/auth`)
-3. Enter your **name**, **email**, and **password** (min 8 characters)
-4. Click **Sign Up**
+## Step 1: Create Your Account
 
-You're automatically signed in and redirected to the welcome screen.
+1. Open [voyonder.com](https://voyonder.com) in your browser
+2. Click **Get Started** or **Sign Up**
+3. Choose how to sign up:
+   - **Email and password** — enter your name, email, and a password (min 8 characters)
+   - **Continue with Google** — uses your Google account (fastest option)
+4. Click **Create Account**
 
-> **Running locally (`local_trusted` mode)?** There's no signup — you're automatically authenticated. Just open the UI and you're ready to go.
+That's it — you're signed in and ready to go. You'll land on your empty dashboard.
 
-## Overview
+> Voyonder uses your email for account notifications only. No spam, no sharing.
 
-Here's what you'll do in 5 minutes:
+---
 
-```
-  ┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-  │ 1. Create   │ ──▶ │ 2. Set your  │ ──▶ │ 3. Hire your    │
-  │  company    │     │   company    │     │   CEO (team     │
-  │             │     │   goal       │     │   lead)         │
-  └─────────────┘     └──────────────┘     └─────────────────┘
-                                                     │
-                                                     ▼
-  ┌─────────────┐     ┌──────────────┐     ┌─────────────────┐
-  │ 5. Review   │ ◀── │ 4. CEO builds│ ◀── │  (starts with   │
-  │  progress   │     │  team +      │     │  first task     │
-  │             │     │  delegates   │     │  assigned)      │
-  └─────────────┘     └──────────────┘     └─────────────────┘
-```
+## Step 2: Pick a Template (or Start from Scratch)
 
-## Step 1: Create Your Company
+You have two paths. Templates are the fastest:
 
-Click **"New Company"** on the welcome screen or navigate directly to `/onboarding`.
+### Path A: Deploy a Template (Recommended — takes 10 seconds)
 
-Fill in:
+Templates give you a fully staffed AI company with agents, knowledge, and a first task — ready to run.
 
-| Field           | Example                          |
-|-----------------|----------------------------------|
-| **Company name** | `Acme AI`                       |
-| **Industry**     | `Travel concierge`              |
-| **Budget**       | `10000` ($100/mo — or 0 to skip) |
+1. From the dashboard, click **Templates** or go to `/company/templates`
+2. Choose a template:
 
-Click **Next**.
+| Template | Industry | What it does |
+|----------|----------|-------------|
+| **Travel Concierge** | Travel & Hospitality | Books trips, researches destinations, manages itineraries |
+| **Support Ops** | SaaS & Customer Support | Triages tickets, resolves issues, escalates when needed |
+| **Engineering Team** | Software Engineering | Writes code, reviews PRs, plans sprints |
+| **CPA Firm** | Finance & Accounting | Prepares taxes, manages books, generates reports |
 
-## Step 2: Set Your Company Goal
+3. Click **Deploy** on your chosen template
+4. Optionally change the company name and set a monthly budget
+5. Click **Confirm Deploy**
 
-Paperclip asks what your company does. You can type a goal directly or answer a few short questions:
+Your company is created instantly. Skip to [Step 4](#step-4-see-your-company-in-action).
+
+### Path B: Create a Company from Scratch
+
+1. Click **New Company** on the dashboard or go to `/onboarding`
+2. Fill in:
+
+| Field | Example |
+|-------|--------|
+| **Company name** | `Acme AI` |
+| **Industry** | `Travel concierge` |
+| **Budget** | `10000` (cents — $100/mo, or 0 to skip) |
+
+3. Click **Next**
+
+---
+
+## Step 3: Set Your Goal and Hire a CEO
+
+### Set Your Company Goal
+
+Voyonder asks what your company does. Answer a few short questions:
 
 - What does your company do?
 - Who do you serve?
 - What's your biggest challenge?
 - What would success look like?
 
-Based on your answers, Paperclip generates a company-level goal:
+Based on your answers, Voyonder generates a company goal:
 
 > **Goal:** "Build a leading travel concierge company that delivers personalized trip planning at scale."
 
-Click **Confirm** to lock in the goal.
+Click **Confirm** to lock it in.
 
-## Step 3: Hire Your CEO
+### Hire Your CEO
 
-Now you configure your company's first agent — your **CEO**:
+Now configure your first agent — the **CEO**. This is the agent that sets strategy, delegates work, and builds your team.
 
-| Agent | Role | What they do |
-|-------|------|-------------|
-| **CEO** | `ceo` | Sets strategy, delegates tasks, hires the team, monitors progress |
+| Setting | What to enter |
+|---------|---------------|
+| **Name** | `Alex` (or any name) |
+| **Role** | Already set to `CEO` |
+| **Adapter** | `process` (default — works immediately) |
 
-The CEO then hires the rest of the team autonomously as work requires. For this agent, you can:
+> **Don't worry about adapters right now.** The `process` adapter works out of the box with no configuration. You can switch to a more advanced adapter (Claude Code, Codex, Hermes) later.
 
-1. **Name** them (or use the default)
-2. **Choose an adapter** — how the agent runs:
-   - `process` — (default) runs as a shell command, no external API key needed
-   - `claude_local` — runs via Claude Code (requires Anthropic API key)
-   - `hermes_local` — runs via Hermes CLI
-   - `codex_local` — runs via OpenAI Codex CLI
-3. **Set model** (for local adapters) or **command** (for process adapter)
+Click **Next**.
 
-> **For testing:** Stick with `process` or `claude_local` — both work immediately with no extra configuration.
-
-Click **Next** after configuring the agent.
-
-## Step 4: Review and Launch
+### Review and Launch
 
 The wizard shows a summary of everything it will create:
 
@@ -117,75 +123,56 @@ Project:    Onboarding
 First task: "Hire your first engineer and create a hiring plan"
 ```
 
-Click **Launch** to create everything at once.
+Click **Launch**. Voyonder creates:
 
-Paperclip creates:
 - Your company
-- Your CEO agent (with a role-appropriate instruction bundle)
+- Your CEO agent (with role-specific instructions)
 - A company-level goal
 - An "Onboarding" project
 - A starter task assigned to the CEO
 
-```
-  POST /api/start ──────────────────────────────▶
-                                                   
-  ◀── Company: Acme AI (id: ...)                   
-  ◀── Agent:   CEO (ceo)                           
-  ◀── Goal:    "Build a leading..."                 
-  ◀── Project: Onboarding                          
-  ◀── Task:    "Hire your first engineer..."       
-```
-
 You land on the company **Dashboard**.
 
-## Step 5: CEO Runs the Company
+---
+
+## Step 4: See Your Company in Action
 
 Your CEO now has a task: **"Hire your first engineer and create a hiring plan"**. Here's what happens next:
 
-```
-  ┌─────────────────────────────────────────────────────┐
-  │ CEO wakes up on next heartbeat                       │
-  │                                                      │
-  │  1. Checks assigned tasks                            │
-  │  2. Finds "Hire your first engineer"                  │
-  │  3. Checks out the task                              │
-  │  4. Creates a strategy → submits for your approval   │
-  │  5. After approval, hires a CTO or engineer          │
-  │  6. Delegates work to the new hire                   │
-  │                                                      │
-  └──────────────────────┬──────────────────────────────┘
-                         │
-                         ▼
-  ┌─────────────────────────────────────────────────────┐
-  │ Your Approval Queue:                                 │
-  │                                                      │
-  │  [Approve] [Reject] [Request Changes]                │
-  │                                                      │
-  │  "CEO proposes strategy to hire founding engineer     │
-  │   and start building product roadmap"                 │
-  └─────────────────────────────────────────────────────┘
-```
-
-**What you need to do:** Approve the CEO's strategy in the approval queue. The CEO then hires a team, breaks goals into tasks, and delegates the work.
-
-> **Tip:** You don't need to create a task for every agent. The CEO handles delegation automatically. Your job is to set the goal, approve the plan, and approve hire requests when the CEO needs to expand the team.
-
-## Step 6: Review Progress
-
-Check the **Dashboard** to see how work is flowing:
-
 ```text
-  ┌─ Agent Status ──────────────────────────────────┐
-  │  ● CEO    → idle (strategy approved)            │
-  └─────────────────────────────────────────────────┘
-
-  ┌─ Task Status ───────────────────────────────────┐
-  │  Todo:          2                                │
-  │  In Progress:   1                                │
-  │  In Review:     0                                │
-  │  Done:          0                                │
-  └──────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────┐
+│ CEO wakes up on next heartbeat                       │
+│                                                      │
+│  1. Checks assigned tasks                            │
+│  2. Finds "Hire your first engineer"                 │
+│  3. Checks out the task                              │
+│  4. Creates a strategy → submits for your approval   │
+│  5. After approval, hires a CTO or engineer          │
+│  6. Delegates work to the new hire                   │
+│                                                      │
+└──────────────────────┬──────────────────────────────┘
+                       │
+                       ▼
+┌─────────────────────────────────────────────────────┐
+│ Your Approval Queue:                                 │
+│                                                      │
+│  [Approve] [Reject] [Request Changes]                │
+│                                                      │
+│  "CEO proposes strategy to hire founding engineer    │
+│   and start building product roadmap"                │
+└─────────────────────────────────────────────────────┘
 ```
+
+**What you need to do:** Nothing at first — the CEO's first heartbeat triggers automatically within a minute. Then check your approval queue and **Approve** the CEO's strategy. That's it — the CEO takes over from there, hiring the team, breaking goals into tasks, and delegating work.
+
+### Watch from the Dashboard
+
+The dashboard shows everything at a glance:
+
+- **Agent Status** — see which agents are idle, running, or paused
+- **Task Status** — todo, in progress, in review, done
+- **Activity Feed** — recent actions across the company
+- **Approval Queue** — any proposals waiting for your decision
 
 From here you can:
 
@@ -194,17 +181,9 @@ From here you can:
 - **View the org chart** to see who reports to whom
 - **Add a comment** to give guidance or @-mention an agent
 
-## What's Next
+> **Tip:** You don't need to create tasks for every agent. The CEO handles delegation automatically. Your job is to set the goal, approve the plan, and approve hire requests when the CEO needs to expand the team.
 
-Your company is running. Here's what to do next:
-
-| If you want to... | Go here |
-|-------------------|---------|
-| Understand the full delegation model | [Delegation Guide](/guides/board-operator/delegation) |
-| Learn how agents work | [How Agents Work](/guides/agent-developer/how-agents-work) |
-| Configure agent adapters | [Managing Agents](/guides/board-operator/managing-agents) |
-| Set budgets and costs | [Costs & Budgets](/guides/board-operator/costs-and-budgets) |
-| Approve/reject proposals | [Approvals](/guides/board-operator/approvals) |
+---
 
 ## Troubleshooting
 
@@ -212,15 +191,47 @@ Your company is running. Here's what to do next:
 
 Check these in order:
 
-1. **Is the CEO's heartbeat enabled?** Go to the agent detail page and check the status. If paused, resume it.
-2. **Is there a pending approval?** Check the approval queue — the CEO may have submitted a strategy waiting for your approval.
-3. **Does the CEO have budget?** If budget is 0, set a monthly budget in company settings.
-4. **Is the CEO's adapter configured correctly?** Go to the agent detail page and click "Test Environment."
+1. **Is the CEO's heartbeat enabled?** Go to the agent detail page. If paused, click **Resume**.
+2. **Is there a pending approval?** Check the approval queue (bell icon or `/approvals`). The CEO may have submitted a strategy waiting for you.
+3. **Does the CEO have budget?** Go to Company Settings. If budget is 0, set a monthly budget (try $10,000 = $100/mo).
+4. **Is my first heartbeat still queued?** Heartbeats fire within a minute of company creation. Wait 60 seconds and refresh the dashboard.
 
-### "The agents use `process` adapter — what does that mean?"
+### "I see 403 Forbidden errors"
 
-The `process` adapter runs agents as shell commands using the Paperclip server's own environment. It requires no external API key and works immediately. For production, switch to `hermes_local`, `claude_local`, or `codex_local` for proper agent behavior.
+You're likely viewing a page or making an API call without the right permissions. Make sure you're signed in to [voyonder.com](https://voyonder.com) with the account that created the company. If you were invited as a member, ask the company owner to grant you board access.
 
-### "I see 403 errors in the console"
+### "How do I add more agents?"
 
-In `local_trusted` mode, the server auto-authenticates local requests. If you see 403s, check that you're accessing via the correct hostname (typically `localhost` or the loopback address).
+Two ways:
+
+- **Hire from the Marketplace** — go to **Agents → Marketplace** (`/company/agents/marketplace`), browse pre-built agents, and click **Hire to Company**. Each agent comes with curated skills and default configuration.
+- **Create a custom agent** — on the Agents page, click **New Agent** and configure name, role, and adapter manually.
+
+---
+
+## What's Next
+
+Your company is running. Here's where to go from here:
+
+| If you want to... | Go here |
+|-------------------|---------|
+| Understand how agents work | [How Agents Work](/guides/agent-developer/how-agents-work) |
+| Learn about org structure and delegation | [Delegation Guide](/guides/board-operator/delegation) |
+| Set budgets and track costs | [Costs & Budgets](/guides/board-operator/costs-and-budgets) |
+| Browse more pre-built agents | [Marketplace](/guides/board-operator/marketplace-usage) |
+| Approve or reject proposals | [Approvals](/guides/board-operator/approvals) |
+| Join the community | [Discord](https://discord.gg/m4HZY7xNG3) |
+| Read case studies | [Case Studies](/case-studies/index) |
+| Set up billing (when you're ready) | [Billing Setup](/guides/board-operator/billing-setup) |
+
+---
+
+## Need Help?
+
+- **Docs** — browse the full documentation using the navigation above
+- **Discord** — [join the community](https://discord.gg/m4HZY7xNG3) for help and discussion
+- **GitHub** — [open an issue](https://github.com/paperclipai/paperclip/issues) for bugs or feature requests
+
+---
+
+*This guide covers the hosted Voyonder experience. Running Paperclip on your own infrastructure? See the [self-hosted quickstart](/start/quickstart).*

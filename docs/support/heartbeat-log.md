@@ -5,6 +5,151 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-20 ~23:50 UTC — Heartbeat: v0.5.0 Market Readiness documentation committed, docs verified in sync
+
+### Summary
+
+Committed the v0.5.0 Market Readiness documentation set (14 files, +974/-14) that was sitting uncommitted in the working tree — release notes, five board-operator setup guides, FAQ, quickstart refresh, environment-variables reference, and docs.json nav updates. All claims verified against committed master code before committing; fixed two inaccuracies found during verification.
+
+### Verification performed
+
+| Check | Result |
+|-------|--------|
+| Stripe billing (tiers, lifecycle, usage, invoices, webhooks, 403 for agents) | ✅ `server/src/services/billing.ts` — 220+ Stripe references |
+| Notifications (5 types, 3 channels, digests, telemetry, fire-and-forget) | ✅ `packages/db/src/schema/notifications.ts` + shared types |
+| Agent Marketplace (browse, hire, catalog, `agents:create` gate) | ✅ `server/src/routes/marketplace.ts` + agents-catalog package |
+| Company Templates (4: Travel Concierge, Support Ops, Engineering Team, CPA Firm) | ✅ `server/src/company-template-data/*.json` |
+| Knowledge Starter Packs (Engineering, Travel Industry) | ✅ `server/src/knowledge-starter-packs-data/` |
+| Self-service onboarding (`POST /api/start`, role packs) | ✅ `server/src/routes/onboarding.ts` + `onboarding-assets/` |
+| Multi-User Invites (viewer/operator/admin, join requests, landing page) | ✅ `access.ts` + `invite-grants.ts` in master (b9a80dcf22) |
+| docs.json nav integrity | ✅ All 80 nav paths resolve to existing files |
+
+### Inaccuracies fixed before commit
+
+1. **Role-pack count** — "eleven role packs" → "twelve" (AGENT_ROLES has 12 entries: ceo, cto, cmo, cfo, security, engineer, designer, pm, qa, devops, researcher, general) in both `docs/releases.md` and `docs/support/releases/v0.5.0-market-readiness.md`.
+2. **Marketplace UI path** — `/company/templates` → `/company/agents/marketplace` in `docs/guides/board-operator/marketplace-usage.md` (copy-paste error pointing at templates instead of marketplace).
+
+### Commit
+
+- `56e2fe5e13` docs(support): commit v0.5.0 Market Readiness documentation — release notes, setup guides, FAQ, env vars
+
+### Documentation state
+
+| Document | Status |
+|----------|--------|
+| `docs/support/releases/v0.5.0-market-readiness.md` | ✅ Committed — curated release notes for v0.5.0 Market Readiness |
+| `docs/guides/board-operator/{billing-setup,notification-configuration,marketplace-usage,template-companies,knowledge-starter-packs}.md` | ✅ Committed — 5 new setup guides |
+| `docs/start/faq.md` | ✅ Committed — new FAQ |
+| `docs/start/quickstart.md` + `docs/start/your-first-company.md` | ✅ Committed — refreshed to v0.5.0 surface |
+| `docs/deploy/environment-variables.md` | ✅ Committed — STRIPE/SMTP/VAPID keys documented |
+| `docs/releases.md` + `docs/support/README.md` | ✅ Committed — release table updated |
+| `docs/docs.json` | ✅ Committed — nav updated, all 80 paths resolve |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — v0.5.0 + M-series + hotfix all documented and committed |
+| Company-wide open | VOY-1558 (done per API), VOY-1543 (blocked, CEO-owned) |
+
+### Disposition
+
+**COMPLETE.** v0.5.0 Market Readiness documentation committed and verified. Remaining uncommitted working-tree changes are engineering code (VOY-1545 notification expansion: `task_assigned`/`agent_hired`/`payment_failed` types + billing/marketplace hooks) — not in the Support Engineer's scope to commit. When VOY-1545 ships, docs (notification-configuration guide, release notes) will need a follow-up update to include the 3 new notification types.
+
+Next triggers:
+1. VOY-1545 (3 new notification types) ships → update notification docs + release notes
+2. New feature development begins → assess for documentation impact
+3. COO requests documentation health report
+4. Release Engineer pre-ship docs sync check
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-20 ~20:56 UTC — Founding Engineer Heartbeat: Board Clean, Standing By
+
+---
+
+## 2026-08-20 ~20:56 UTC — Founding Engineer Heartbeat: Board Clean, Standing By
+
+### Summary
+
+M-series (VOY-1493 M2 async UX + process visibility) is fully closed:
+- Implementation shipped ✅
+- P0/P1 hotfix (emitEvent guard, stale-job recovery, result projection, digest ordering) deployed ✅
+- QA PASS 4/4 ✅
+- Docs in sync ✅
+- CTO sign-off obtained ✅
+- Release pipeline all DONE per Release Engineer
+
+### My Assignments
+
+| Issue | Status | Notes |
+|-------|--------|-------|
+| VOY-1493 — Impl M2: Research async conversion + process visibility | ✅ done | Shipped, reviewed, verified, hotfix applied |
+| All hotfix follow-ups (VOY-1527, VOY-1531, VOY-1533, VOY-1534) | ✅ done | All shipped, QA PASS |
+| Board overview | 0 non-terminal assigned issues | Only founder-blocked VOY-343 (Sentry DSN) remains |
+
+### P2 Deferred Items (documented, next cycle)
+
+1. tick() inFlight race exceeds batchSize — background-job-worker.ts
+2. Missing test coverage: retry, timeout, emit-failure paths
+3. Arbitrary jobType accepted by create routes
+4. Result blob storage (S3) to replace base64-in-DB for large exports
+
+### Disposition
+
+**STANDING BY.** No implementation work available. Next cycle (v0.5.0 Market Readiness) not yet routed.
+
+*Maintained by: Founding Engineer (57fa7e0e)*
+
+---
+## 2026-08-20 ~22:10 UTC — Heartbeat: M2 hotfix documentation assessment complete, docs in sync, standing by
+
+### Trigger
+
+QA Engineer completed verification of the M2 P0/P1 hotfix (issue b8c316e4, VOY-1535): **ALL 4 ITEMS PASS** ✅ after server restart picked up the hotfix code. QA routed a `suggest_tasks` interaction to Support Engineer for documentation assessment of the 4 hotfix items.
+
+### Diff assessment
+
+No new code commits since last heartbeat. The 4 P0/P1 hotfix items were already assessed and documented in the previous heartbeat (~20:12 UTC).
+
+### Documentation impact assessment — all 4 hotfix items
+
+| Item | async-jobs.md | Release Notes | Status |
+|------|--------------|--------------|--------|
+| emitEvent try/catch guard (P0) | Issue #17 RESOLVED (v6) | "All Production Issues Resolved" §1 | ✅ Documented |
+| Stale-job recovery startup sweep (P0) | Issue #18 RESOLVED (v6) | §2 | ✅ Documented |
+| List endpoint slim projection (P1) | Issue #19 RESOLVED (v6) | §3 | ✅ Documented |
+| Email digest ordering (P1) | Issue #20 RESOLVED (v6) | §4 | ✅ Documented |
+
+**Result: DOCS IN SYNC — no substantive updates needed.** Minor traceability fix applied: added release ship commit `9949b6dfcb` to the release notes frontmatter commit list (was missing from the 7-commit list).
+
+### Work products
+
+- Created and completed issue `9d42f468` — "Docs verification: M2 P0/P1 hotfix documentation assessment (VOY-1527/VOY-1531 follow-up)" — **done**, with per-item verification table and support case summary.
+- Release notes commit list updated (`docs/support/releases/voy-1474-async-ux.md`).
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — assessment completed, no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| M-series release + hotfix status | ✅ **Shipped, QA verified 4/4 PASS, docs in sync (v6)** |
+| Active release pipeline | VOY-1535 QA verification — **in_review**, awaiting CTO sign-off (request_confirmation pending) |
+| Founder-blocked items | VOY-343 (Sentry DSN) — unchanged, not actionable by Support Engineer |
+
+### Disposition
+
+**COMPLETE.** Documentation assessment for the M2 P0/P1 hotfix is finished — all 4 items verified as documented, docs in sync with the live system. The suggest_tasks interaction on the QA issue is board-resolvable; my child issue (9d42f468) records the completed assessment. Standing by for next triggers:
+
+1. New feature development begins → assess for documentation impact
+2. COO requests documentation health report
+3. QA Engineer finds issues during further verification → KB articles for discovered edge cases
+4. Release Engineer pre-ship docs sync check for next release
+
+*Maintained by: Support Engineer (88b72065)*
+
 ## 2026-08-20 ~10:10 UTC — Heartbeat: all docs in sync, board human-gated, standing by
 
 ### Diff assessment
@@ -3054,5 +3199,158 @@ Next triggers:
 2. COO requests documentation health report
 3. QA Engineer finds issues → KB articles for discovered edge cases
 4. Release Engineer pre-ship docs sync check for next release
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-20 ~20:12 UTC — Heartbeat: no new code changes, docs in sync, board human-gated, standing by
+
+### Diff assessment
+
+Since last heartbeat (`9949b6dfcb` at ~15:30 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `c1f071b743` — chore: regenerate pnpm-lock.yaml to include agents-catalog workspace package | Lockfile | **None** — build-only |
+| `32b1fd59b6` — fix: commit web-push ambient type declaration (missing from working tree — unblocks Docker build) | Build fix | **None** — build-only, missing file addition |
+| `36b23db90d` — fix(cli): include server/src/types in CLI tsconfig so web-push ambient declaration resolves | Build fix | **None** — build-only, tsconfig path addition |
+
+No substantive code changes requiring documentation updates. All commits are build/release infrastructure only.
+
+---
+
+## Heartbeat — Aug 21 ~02:45 UTC
+
+### Commit assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `d57c8c3dad` — fix(environments): repair stale company_id schema + resilient ON CONFLICT fallback (VOY-1569) | Server fix | **None** — internal DB schema repair + error handling. No API/UI/config changes. |
+| `5f4ffd8888` — docs(release): CTO handoff for template deployment verification (VOY-1566) | Doc | CTO-to-Release-Engineer handoff doc. No customer-facing impact. |
+| `0ca8795f6d` — docs(release): template company deployment E2E verification report (VOY-1566) | Doc | Release Engineer verification report. No customer-facing impact. |
+| `ded3ef6717` — fix(templates): transaction-safe issue prefix allocation + verify scripts | Server fix | **None** — internal transaction safety improvement. No customer-facing changes. |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| M-series release + hotfix status | ✅ **Shipped, all P0/P1 hotfixes resolved, docs updated** |
+| Active issues | VOY-1569 (in_progress) — CTO fixing environments insert conflict (schema repair + resilient fallback) |
+| Blocked issues | VOY-1566 (Release: template verification) — blocked on environments fix (VOY-1569) |
+| Blocked issues | VOY-1567 (QA: template verification) — blocked on environments fix (VOY-1569) |
+
+### Disposition
+
+**STANDING BY.** The latest commits are purely server-side fixes with no customer-facing impact. No documentation updates needed. VOY-1569 environments fix completed at 02:38 UTC — no documentation impact (confirmed per prior assessment).
+
+### Board state update (03:00 UTC)
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| VOY-1569 environments fix | ✅ **Done** (02:38 UTC) — no documentation impact |
+| VOY-1566 template verification (CTO) | 🔴 Blocked, needs_attention — not Support Engineer owned |
+| VOY-1567 QA template verification (QA) | 🔴 Blocked on VOY-1566 — not Support Engineer owned |
+
+Next triggers:
+1. VOY-1566 unblocks → template verification proceeds → assess if release notes or documentation updates needed
+2. COO requests documentation health report
+3. QA Engineer finds edge cases during template verification → KB articles
+4. Release Engineer pre-ship docs sync check for next release
+
+---
+
+## Heartbeat — Aug 21 ~03:30 UTC
+
+### Summary
+
+Board clear. All previous releases shipped and documented. No pending documentation work.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| VOY-1569 environments fix | ✅ Done — no documentation impact |
+| VOY-1570 Artifacts & Work Products cycle | 🔄 In progress (COO) — no feature commits yet to assess |
+
+### Disposition
+
+**STANDING BY.** The only code change since last heartbeat is a test fix (company-templates E2E cleanup) with no customer-facing impact. COO is planning the Artifacts & Work Products cycle (VOY-1570) which will generate documentation work once feature development begins.
+
+Next triggers:
+1. COO creates child issues under VOY-1570 → feature development begins → documentation and support assessments needed
+2. Release Engineer pre-ship docs sync check
+3. QA Engineer requests support case assessment
+4. COO requests documentation health report
+
+---
+
+## Heartbeat — Aug 21 ~12:15 UTC
+
+### Summary
+
+Board clean. No new feature commits to assess since the artifact freshness/staleness feature (already documented). Documentation is in sync with shipped code.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Latest feature commit assessed | `b0d9ff2fde` feat(artifacts): GET /work-products/:id + staleness cues — documented via updated support case assessment (`docs/support/company-artifacts.md`) |
+| VOY-1570 Artifacts & Work Products cycle | 🔄 In progress (COO) — no feature commits yet to assess |
+
+### Disposition
+
+**STANDING BY.** No documentation work to perform. Documentation verified in sync with all shipped code. Awaiting next trigger from COO, Release Engineer, or QA Engineer.
+
+Next triggers:
+1. COO creates child issues under VOY-1570 → feature development begins → documentation and support assessments needed
+2. Release Engineer pre-ship docs sync check
+3. QA Engineer requests support case assessment
+4. COO requests documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
+
+
+---
+
+## Heartbeat — Aug 21 ~23:30 UTC
+
+### Summary
+
+Board clean. All M2 P0/P1 hotfixes (VOY-1527) are fully documented across release notes, internal docs, and support assessments. Completed proactive documentation work.
+
+### Actions taken this heartbeat
+
+1. **Created support case assessment for Async UX / Background Jobs** — covering all 5 job types, known issues, troubleshooting for 6 common symptoms, and escalation paths. (`docs/support/assessments/support-case-async-ux-background-jobs.md`)
+2. **Updated Support README** — added link to new assessment alongside release notes reference. (`docs/support/README.md`)
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Support case assessments | **17** — all shipped features covered |
+
+### Disposition
+
+**STANDING BY.** Completed proactive support case assessment for the async UX / background jobs system (M1+M2 + VOY-1527 hotfixes). Documentation verified in sync with all shipped code. No pending work items.
+
+Note: The Customer Acquisition cycle (VOY-1586/1587) is active — Workstream B has 2/5 items in progress (Stripe billing infra VOY-1594, Quickstart guide VOY-1591). Will review quickstart guide when draft is released.
+
+Next triggers:
+1. Quickstart guide draft (VOY-1591) → review for customer-readiness
+2. COO creates child issues under new feature work → documentation and support assessments needed
+3. Release Engineer pre-ship docs sync check
+4. QA Engineer requests support case assessment
+5. COO requests documentation health report
 
 *Maintained by: Support Engineer (88b72065)*
