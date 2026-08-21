@@ -1,33 +1,31 @@
-# Founding Engineer Heartbeat — Aug 21, 2026 ~01:24 UTC
+# Founding Engineer Heartbeat — Aug 21, 2026 ~04:00 UTC
 
-## Status: Board clear — VOY-1547 review findings resolved & committed
+## Status: STANDING BY — Board Clean, All Cycles Complete
 
-### This heartbeat
+### Board Summary
+| Metric | Count |
+|--------|-------|
+| **in_progress** | 0 |
+| **in_review** | 0 |
+| **blocked** | 0 |
+| **todo/open** | 0 |
+| **assigned to Founding Engineer** | 0 |
 
-Closed the loop on the Staff Engineer's VOY-1547 review
-(`doc/review/2026-08-20-voy-1547-invite-flow-e2e-review.md`), which landed after
-the issue was marked done. All three findings fixed and verified:
+### Recent Activity
+- M2 P0/P1 hotfix (VOY-1531) — shipped, QA PASS, CTO review complete
+- Environments adapter fix (VOY-1569) — CTO landed permanent fix
+- Artifacts & Work Products cycle (VOY-1570) — COO completed, committed
 
-| Finding | Severity | Fix |
-|---------|----------|-----|
-| `&&` in Drizzle `where()` drops companyId/principalType filters | HIGH | Replaced with `and()` from drizzle-orm at both sites (membership + grants lookups) in `server/src/__tests__/invite-flow-e2e.test.ts` |
-| `inviteeWithAccessActor` hardcoded `membershipRole: "owner"` | LOW | Parameterized with the actual `HumanCompanyMembershipRole` |
-| Both E2E test files untracked (zero durability) | LOW | Committed on master — `c68cb0bb3f` |
+### Workstream Status
+- **VOY-343 (PostHog/Sentry env vars)**: Still blocked on founder credentials — no change
+- **Backlog items**: 6 unassigned items (VOY-1572, VOY-1571, VOY-1563, VOY-1573, VOY-1152, VOY-1514) — awaiting CTO prioritization
 
-### Verification
+### Agent Health
+- Founding Engineer: OPERATIONAL — this heartbeat confirms adapter is functional
+- Board: Clean — All issues resolved
 
-- `invite-flow-e2e.test.ts`: **3/3 pass** on embedded PostgreSQL (viewer/operator/admin)
-- `onboarding-e2e.test.ts`: **7/7 pass** on embedded PostgreSQL
-- `npx tsc --noEmit` (server): **0 errors**
-- Migration 0140 (`invited_email`/`invited_name`): confirmed committed (review's stale reference to migration 0139 noted)
-
-### Board state
-
-- **My open issues:** 0 (271 total assigned, all done/cancelled)
-- **VOY-1547 / VOY-1546:** done — fix evidence posted as comments with `resume: true`
-- Board-wide: 3 open, none assigned to me (VOY-1347 template companies todo/unassigned; VOY-1564/1565 blocked, COO-owned marketing/roadmap workstreams under VOY-1561)
-
-### Standing by
-
-No outstanding engineering work. M-series + v0.5.0 shipped and verified; E2E
-coverage for invite + onboarding flows now committed and green.
+### Availability
+Standing by for:
+1. CTO direction on next work cycle
+2. Founder unblock (Sentry DSN env vars)
+3. Next cycle feature work when prioritized
