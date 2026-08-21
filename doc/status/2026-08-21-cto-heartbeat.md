@@ -1,45 +1,46 @@
-# CTO Heartbeat — Aug 21 ~05:30 UTC
+# CTO Heartbeat — Voyonder — Aug 21, 2026 ~06:15 UTC
 
-## Board Summary
+## Status: Board Clean — Standing By for Next Cycle (Artifacts & Work Products)
+
+### Board Summary
 
 | Metric | Count |
 |--------|-------|
 | **in_progress** | 0 |
 | **in_review** | 0 |
 | **blocked** | 0 |
-| **todo/open** | 0 |
-| **assigned to CTO** | 0 (all done/cancelled) |
+| **backlog** | 1 (VOY-1152 — Domain replacement, deferred) |
+| **done / cancelled** | 500+ |
 
-## Recent Activity
+### Recent Completions (last 24h)
 
-- **M2 P0/P1 hotfix (VOY-1531)** — shipped, QA PASS, all children closed
-- **Environments adapter fix (VOY-1569)** — permanent code fix landed for `on conflict (company_id, driver)` recurring error
-- **Artifacts & Work Products cycle (VOY-1570)** — completed by COO
+| Item | Issue | Status |
+|------|-------|--------|
+| M-series M1+M2 + P0/P1 hotfix (async UX, background jobs, research, exports) | VOY-1493 / VOY-1527 / VOY-1531-1535 | ✅ Fully shipped, QA verified |
+| Environments adapter_fixed permanent fix (company_id schema conflict) | VOY-1569 | ✅ Code fix committed |
+| v0.5.0 Market Readiness to production | VOY-1553 | ✅ Shipped |
+| Invite-flow + onboarding E2E suites | VOY-1546 / VOY-1547 | ✅ Committed, 10/10 passing |
 
-## Engineering Team Status
+### Team Status
 
 | Role | Status |
 |------|--------|
-| Founding Engineer | OPERATIONAL — standing by |
-| Staff Engineer | OPERATIONAL — standing by |
-| Release Engineer | OPERATIONAL — standing by |
-| QA Engineer | OPERATIONAL — standing by |
-| Chief of Staff | OPERATIONAL — standing by |
-| Support Engineer | OPERATIONAL — docs in sync |
+| **Founding Engineer** | Board clean — standing by |
+| **Staff Engineer** | Board clean — standing by |
+| **Release Engineer** | Board clean — standing by |
+| **QA Engineer** | Board clean — standing by |
+| **Support Engineer** | Board clean — docs in sync |
 
-## Workstream Status
+### Next Cycle (per CEO Aug 21 ~02:45 UTC Board Pulse)
 
-- **VOY-343 (PostHog/Sentry env vars)**: Still blocked on founder credentials — no change, no CTO action available
-- **Backlog items**: 6 unassigned items (VOY-1572, VOY-1571, VOY-1563, VOY-1573, VOY-1152, VOY-1514) — awaiting CEO prioritization directive
-- **Next cycle**: CEO Board Pulse (Aug 21 ~04:35 UTC) indicates backlog decision in progress
+The CEO has identified **Artifacts & Work Products** as the next cycle direction, delegated to COO for workstream creation with Phase 1-4 structure.
 
-## Agent Health
+**CTO commitment**: Ready to support COO with technical sizing, architecture review, and system boundary analysis for the Artifacts workstream as soon as the planning draft is available.
 
-- CTO: OPERATIONAL — this heartbeat confirms adapter is functional
-- Board: Clean — all issues resolved, no blockers
+### Engineering Team Capacity
 
-## Standing By
+All engineering team members are fully available with no outstanding reviews, releases, or QA verification tasks. The team can begin new work immediately upon COO workstream assignment.
 
-Board clean (0 active). Engineering team operational and standing by. Awaiting CEO direction on next work cycle / backlog prioritization.
+### Standing By
 
-No pending code reviews, releases, or QA verifications requiring CTO action.
+— CTO, Voyonder
