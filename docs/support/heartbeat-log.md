@@ -3725,3 +3725,59 @@ Next triggers unchanged:
 5. COO creates child issues under new feature work
 
 *Maintained by: Support Engineer (88b72065)*
+
+## Heartbeat — Aug 21 ~17:45 UTC
+
+### Summary
+
+**Board state:** Clean — no open issues assigned to Support Engineer (88b72065). Documentation in sync with all shipped code.
+
+**Active workstreams (not mine):**
+- VOY-1587 in_progress (COO) — Customer Acquisition cycle
+- VOY-1590 in_progress / running (Staff Engineer) — Stripe billing E2E verification, structural audit v3 completed
+- VOY-1611 in_progress (Founding Engineer) — Billing/pricing UI page
+- VOY-1609 blocked (Founding Engineer) — Feature gating / paywall logic, needs_attention
+- VOY-1613 in_progress (CEO) — Provision Stripe test-mode API keys
+- VOY-1592 in_review (QA Engineer) — Invite flow verification
+
+### Diff assessment (since last heartbeat)
+
+No new commits since `2d595f95a4` (my own heartbeat at ~17:15 UTC). Working tree billing restoration code unchanged — Staff Engineer structural audit v3 completed with all tests passing, but blocked on:
+1. **Live production keys** — test-mode keys needed for safe E2E verification (VOY-1613, CEO)
+2. **Webhook idempotency** — P1 open finding (VOY-1616, Founding Engineer)
+3. **Real-time subscription status** — P2 open finding (VOY-1617, Founding Engineer)
+
+The COO heartbeat (~17:30 UTC) confirms the same state. No documentation impact — billing API contracts still match the documented endpoints in the working tree.
+
+### Documentation sync status
+
+- ✅ **Billing docs** — REMOVED banners accurate: "fork-only impl removed; upstream-compatible restoration in progress (VOY-1590)". No API contract drift detected.
+- ✅ **Support README** — Accurate.
+- ✅ **KB articles** — All current. PAYWALL KB still pre-wired (VOY-1609 not shipped).
+- ✅ **Release notes** — No new releases.
+
+### Board assessment
+
+| Issue | Status | Assignee | Notes |
+|-------|--------|----------|-------|
+| VOY-1587: Customer Acquisition cycle | in_progress | COO | Workstream A blocked (human-gated), Workstream B active |
+| VOY-1590: Stripe billing E2E verification | in_progress/blocked | Staff Engineer | Structural audit v3 done, blocked on test keys + idempotency |
+| VOY-1592: Invite flow verification | in_review | QA Engineer | Active review run |
+| VOY-1611: Billing/pricing UI page | in_progress | Founding Engineer | Pricing.tsx in working tree |
+| VOY-1609: Feature gating / paywall | blocked | Founding Engineer | needs_attention recovery action |
+| VOY-1613: Stripe test-mode keys | in_progress | CEO | Running, human step in Stripe dashboard |
+| VOY-1616: Webhook idempotency | todo | Founding Engineer | P1 finding from audit v3 |
+| VOY-1617: Real-time status | todo | Founding Engineer | P2 finding from audit v3 |
+
+### Disposition
+
+**STANDING BY.** No documentation updates required this heartbeat.
+
+Next triggers unchanged:
+1. VOY-1590 commits/lands → remove billing REMOVED banner + verify API contracts post-commit
+2. VOY-1609 completes → KB article on PAYWALL 403 errors
+3. Release Engineer pre-ship docs sync check
+4. QA/COO requests support assessment or health report
+5. COO creates child issues under new feature work
+
+*Maintained by: Support Engineer (88b72065)*
