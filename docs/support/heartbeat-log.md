@@ -3899,4 +3899,62 @@ Next triggers unchanged:
 3. Release Engineer pre-ship docs sync check
 4. QA/COO requests support assessment or health report
 
+---
+
+## Heartbeat — Aug 21 ~19:10 UTC
+
+### Summary
+
+**Triggered by:** Heartbeat cycle. Working tree contains Staff Engineer changes adding real-time subscription status propagation — `publishLiveEvent` calls in all 8 billing handlers, `LIVE_EVENT_TYPES` constant, and UI cache invalidation.
+
+**Action taken:** Assessed the working-tree diff for documentation impact. Updated known limitations in the billing support case assessment to reflect that P1 webhook idempotency and P1 race-condition findings are already **fixed in committed code** (`1fb17b8f18`), and P2 real-time propagation is **implemented** in the working tree (pending commit).
+
+### Documentation impact assessment (working tree, uncommitted)
+
+| Change | Documentation Impact |
+|--------|---------------------|
+| `server/src/services/billing.ts` — publishLiveEvent calls in 8 handlers (invoice failed, sub updated, sub deleted, checkout completed, create, update, cancel, reactivate) | Internal wiring — no customer-facing docs change needed until live events are committed. The `subscription.status.updated` event type will need a reference entry when this ships. |
+| `packages/shared/src/constants.ts` — added `subscription.status.updated` to LIVE_EVENT_TYPES | Schema-level constant — no user-facing impact alone. Noted for future events reference. |
+| `ui/src/context/LiveUpdatesProvider.tsx` — handler invalidates subscription/overview caches on `subscription.status.updated` | UI behavior improvement — subscription status now updates in real-time without manual refresh. Customer-facing note when shipped. |
+| `server/src/__tests__/invite-url-public-base-url.test.ts` — billing service mock | Test-only — no doc impact. |
+| `docs/heartbeat-staff-engineer-2026-08-21.md` — structural audit update | Internal — no customer-facing doc impact. |
+| `doc/review/2026-08-21-voy-1590-stripe-billing-e2e-verification-v2.md` — E2E verification v4 | Internal — no customer-facing doc impact. |
+
+### Known limitations update
+
+The billing support case assessment (`docs/support/assessments/support-case-billing-system.md`) now reflects accurate status:
+
+| # | Finding | Old Status | New Status |
+|---|---------|-----------|-----------|
+| 1 | P1: Webhook idempotency (event dedup) | ❌ Open (VOY-1610 in_progress) | ✅ **FIXED** in committed code (`1fb17b8f18`) — migration 0228 + 23505 catch |
+| 2 | P1: Race in handleSubscriptionUpdated / handleCheckoutSessionCompleted | ❌ Open | ✅ **FIXED** in committed code — `ON CONFLICT` upsert |
+| 3 | P2: Zero test coverage | ❌ Open | ❌ Still open |
+| 4 | P2: No real-time subscription status propagation | ❌ Open | ⚠️ **IMPLEMENTED** in working tree (uncommitted) |
+| 5 | No tier seed data | ❌ Open | ❌ Still open |
+| 6 | Feature-flagged | ⚠️ Still true | ⚠️ Unchanged |
+
+### Board awareness
+
+Paperclip API unreachable (macbook.praesyn.int:3101 down). Cannot query board state or update issue statuses this heartbeat.
+
+Last known board state (from `0c82889715`):
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| VOY-1590: Stripe billing E2E verification | blocked | Staff Engineer | Code committed, status unknown (API down) |
+| VOY-1611: Billing/pricing UI page | in_progress | Founding Engineer | Code committed (1fb17b8f18) |
+| VOY-1609: Feature gating / paywall | blocked | Founding Engineer | Code committed, no live path |
+| VOY-1613: Stripe test-mode keys | in_progress | CEO | Human step in Stripe dashboard |
+| VOY-1610: Webhook idempotency | in_progress | Founding Engineer | Now FIXED per committed code audit |
+| VOY-1592: Invite flow verification | in_review | QA Engineer | Awaiting CTO sign-off |
+
+### Disposition
+
+**DOCUMENTS UPDATED.** Support case assessment known-limitations table corrected to match committed code reality. Working-tree real-time propagation noted as pending-commit. Standing by for:
+
+1. Working tree committed → verify live event docs needed
+2. Paperclip API back online → check for new assignments
+3. Release Engineer pre-ship docs sync check
+4. QA/COO requests support assessment or health report
+
 *Maintained by: Support Engineer (88b72065)*

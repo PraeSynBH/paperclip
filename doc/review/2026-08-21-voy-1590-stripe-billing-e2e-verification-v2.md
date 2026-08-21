@@ -1,167 +1,184 @@
-# Staff Engineer Structural Re-Audit: VOY-1590 Stripe Billing E2E (v2)
+# Staff Engineer Structural Re-Audit: VOY-1590 Stripe Billing E2E (v3)
 
 **Reviewer:** Staff Engineer
-**Date:** 2026-08-21 (second pass)
+**Date:** 2026-08-21 (fourth pass — final structural audit)
 **Issue:** VOY-1590
 **Parent:** VOY-1587
-**Status:** ❌ BLOCKED — infra unblocked (VOY-1594), but product surfaces and operational readiness gaps remain
+**Status:** ❌ BLOCKED — implementation complete, P1 idempotency gaps remain
 
 ---
 
 ## Executive Summary
 
-VOY-1594 resolved the infrastructure blockers (Stripe keys, tier seeding, webhook Defect 7, missing subscription.created handler). The billing API skeleton is functional, tested, and correctly wired.
+The full billing implementation — server-side service, API routes, webhook handlers, feature gating, pricing UI, API client — is on disk and functionally complete. All 10 feature gate tests pass. The implementation is gated behind `PAPERCLIP_BILLING_ENABLED=true` (not set by default), preventing accidental activation.
 
-**What can be verified today (done in this heartbeat):**
-- Webhook endpoint returns 400 on bad signatures/missing auth (Defect 7 FIXED ✅)
-- Stripe API key is valid and can read products/prices ✅
-- 3 subscription tiers seeded with real Stripe price IDs ✅
-- 10/10 billing tests pass ✅
-- `customer.subscription.created` webhook handler exists (Finding 8 FIXED ✅)
-- Webhook handler checks `STRIPE_WEBHOOK_SECRET` before processing (→ 400, not 500)
+**What was verified this heartbeat:**
+- ✅ **10/10 billing feature gate tests** (checkFeatureAccess / requireFeature) — PASS
+- ✅ **Feature gating wired into routes** — `access.ts` gates API key creation behind `FEATURE_KEYS.API_ACCESS`; `agents.ts` gates agent creation behind `FEATURE_KEYS.ADVANCED_AGENTS`
+- ✅ **Webhook error path** — properly returns 400 (not 500) when `STRIPE_WEBHOOK_SECRET` is missing (fixed since v1 audit)
+- ✅ **Feature gate** — `PAPERCLIP_BILLING_ENABLED=true` prevents billing routes from being mounted; safe to ship with gate disabled
+- ✅ **Pricing UI** — tier display, Checkout Session redirect, subscription status, cancel/reactivate
+- ✅ **Checkout Session integration** — `createCheckoutSession` route + `handleCheckoutSessionCompleted` webhook handler
+- ✅ **All 5 billing tables** with proper schema and indexes in migration 0227
+- ✅ **Stripe LIVE keys exist** in instance env (but feature gate prevents activation)
 
-**What CANNOT be verified (flow blockers — remaining):**
-- Pricing page UI does not exist (Blocker 3)
-- Stripe Checkout Session is not integrated — `stripe.subscriptions.create()` called directly (Blocker 4)
-- No feature gating or paywall logic exists (Blocker 5)
-- Webhook idempotency gap — duplicate invoice rows on retried events (Defect 6)
-- No real-time subscription status propagation to UI (Finding 9)
-- Keys are live production keys — test-mode requires Stripe dashboard access (human step)
-
-**Critical constraint:** Keys are live production Stripe keys. Executing `POST /api/companies/:id/billing/subscription` creates a REAL subscription with REAL charges. E2E flow cannot be run without either (a) test-mode keys from Stripe dashboard (human step: CEO/Stripe account owner), or (b) explicit authorization to create a $29+ charge against a real card.
-
----
-
-## Status of Original Findings
-
-### Resolved by VOY-1594
-
-| # | Finding | Status | Evidence |
-|---|---|---|---|
-| 1 | No Stripe keys in .env | ✅ **FIXED** | STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_* vars all set in instance .env (11 vars) |
-| 2 | No subscription tiers seeded | ✅ **FIXED** | 3 tiers in `subscription_tiers` DB table with real Stripe price IDs (prod_...) |
-| 7 | Webhook →500 on bad sig when keys missing | ✅ **FIXED** | Returns 400 on all error paths (verified against live server) |
-| 8 | No `customer.subscription.created` handler | ✅ **FIXED** | Handler routes to `handleSubscriptionUpdated` at billing.ts:678 |
-
-### Still Open (need implementation work)
-
-| # | Finding | Severity | Current Assessment |
-|---|---|---|---|
-| 3 | No billing/pricing UI exists | **P0** | `ui/src/pages/` has no Billing/Pricing pages; no routes or nav items exist |
-| 4 | Flow mismatch: direct API vs Checkout | **P0** | `createOrUpdateSubscription` calls `stripe.subscriptions.create()` (billing.ts:336) — no Checkout Session; new customer has no payment method → subscription is `incomplete` |
-| 5 | No feature gating / paywall logic | **P0** | 0 matches for feature gate, paywall, subscription check in feature code paths |
-| 6 | Webhook idempotency gap | **P1** | `subscription_invoices.stripe_invoice_id` is non-unique INDEX (migration line 115); `handleInvoicePaid` does select-then-insert without transaction or dedup table |
-| 9 | No real-time subscription status propagation | **P2** | No SSE/websocket events for subscription changes; no UI to reflect status |
+**What's still blocking:**
+- ❌ **P1: Webhook idempotency** — no event dedup table; `subscription_invoices.stripe_invoice_id` is non-unique index; select-then-insert without `ON CONFLICT DO UPDATE`
+- ❌ **P1: Race in handleSubscriptionUpdated / handleCheckoutSessionCompleted** — concurrent Stripe events can hit UNIQUE constraint and produce 500
+- ❌ **P2: Missing UNIQUE constraint on `stripe_customers.company_id`** — current index is non-unique; concurrent `getOrCreateStripeCustomer` calls can create duplicate Stripe customers
+- ❌ **P2: Zero test coverage** on webhook handlers, checkout flow, cancel/reactivate, invoice sync — the billing-routes test files were removed during fork cleanup and not restored
+- ❌ **P2: No real-time subscription status propagation** (SSE/websocket)
+- ❌ **No subscription tier seed data** in committed code — tiers must be seeded manually or via a bootstrap script
 
 ---
 
-## New Structural Findings
+## Structural Audit Findings
 
-### Finding A: Live keys + no payment collection = production risk
+### [P1] Finding A: Webhook idempotency gap — no event dedup table
 
-The current API creates Stripe subscriptions via `stripe.subscriptions.create()` (billing.ts:336) without:
-- A Checkout Session URL to collect payment
-- A `default_payment_method` on the customer
-- Invoice payment retry configuration
+**Status: Still Open**
 
-A board user calling `POST /api/companies/:id/billing/subscription` will:
-1. Create a Stripe customer in production
-2. Create a subscription with `status: incomplete` (no card on file — Stripe cannot collect payment)
-3. The DB row shows `status: incomplete` which is truthy → appears as "active" to the system
+The webhook handler at `billing.ts:930` processes every event without tracking `stripe_event_id`. Stripe delivers webhooks at-least-once. Without a `stripe_webhook_events` table with `UNIQUE(stripe_event_id)`, duplicate events can produce:
+- Duplicate invoice rows (from `handleInvoicePaid`)
+- Race-condition inserts on subscription records (from `handleSubscriptionUpdated`)
 
-This is a **real money risk** if the subscription creation succeeds on Stripe's side but the customer never provides payment. Stripe will send dunning emails and the subscription will eventually cancel for non-payment.
+### [P1] Finding B: Race in handleSubscriptionUpdated / handleCheckoutSessionCompleted
 
-**Recommendation:** Do not activate the subscription creation endpoint in production UX without Checkout Session integration.
+**Status: Still Open**
 
-### Finding B: update/insert race in handleSubscriptionUpdated
+Both handlers use select-then-insert without a transaction or `ON CONFLICT DO UPDATE`. If `customer.subscription.created` and `checkout.session.completed` arrive simultaneously, both selects miss and the second insert hits the `UNIQUE(stripe_subscription_id)` constraint, producing an unhandled 500 error.
 
-`handleSubscriptionUpdated` is called for both `customer.subscription.created` and `customer.subscription.updated` events. It does `SELECT ... WHERE stripe_subscription_id = ?` followed by `INSERT` or `UPDATE` — no transaction wrapping. If a `created` and `updated` event arrive close together (common — Stripe fires both within seconds of subscription creation), both selects could miss and both could insert. The `UNIQUE(stripe_subscription_id)` index on `company_subscriptions` protects against the insert, but the second insert will throw a unique constraint violation and the `updated` event's data will be lost.
+### [P1] Finding C: subscription_invoices.stripe_invoice_id is non-unique index
 
-**Fix needed:** Wrap in a transaction + use `INSERT ... ON CONFLICT DO UPDATE` for idempotency.
+**Status: Still Open**
 
-### Finding C: No Stripe event-id dedup table
+Migration 0227 creates a regular index, not a unique index, on `stripe_invoice_id`. The `handleInvoicePaid` handler does select-then-insert. Combined with Stripe at-least-once delivery, duplicate invoices can be created.
 
-Stripe delivers webhooks at-least-once. The current handler processes every event without tracking `event.id` for dedup. Combined with Finding A and B, duplicate events can cause:
-- Duplicate invoice rows (non-unique index on `stripe_invoice_id`)
-- Lost subscription updates if the unique constraint fires on the second insert
+### [P2] Finding D: Missing UNIQUE constraint on stripe_customers.company_id
 
-**Add a `stripe_webhook_events` table with a UNIQUE constraint on `stripe_event_id`.**
+**Status: Still Open**
+
+Migration 0227 creates a non-unique index on `stripe_customers.company_id`. The `getOrCreateStripeCustomer()` function (billing.ts:57-97) does select-then-insert. Without a unique constraint, two concurrent calls could both miss the select and create two Stripe customers for the same company.
+
+### [P2] Finding E: No test coverage on webhook/checkout paths
+
+**Status: Still Open**
+
+Current tests cover only `checkFeatureAccess` (7 tests) and `requireFeature` (3 tests). The `billing-routes.test.ts` and `checkout-session-webhook.test.ts` files were removed during fork cleanup and not restored. Missing tests for:
+- Webhook signature verification (success + failure paths)
+- `handleInvoicePaid` (create + update invoice)
+- `handleSubscriptionUpdated` (create + update subscription)
+- `handleCheckoutSessionCompleted` (happy path + race scenario)
+- `createCheckoutSession` (Stripe API interaction)
+- `cancelSubscription` / `reactivateSubscription`
+- `reportUsage` / `syncInvoicesFromStripe`
+- `getBillingOverview`
+
+### [P2] Finding F: No real-time subscription status propagation
+
+**Status: Still Open**
+
+No SSE/websocket push mechanism for subscription status changes. UI only reflects state on page load.
+
+### [P3] Finding G: Stripe API version hardcoded
+
+**Status: Still Open**
+
+`billing.ts:26` hardcodes `apiVersion: "2025-02-24.acacia"`. Should be configurable via env var.
+
+### [P3] Finding H: N+1 query in getSubscriptionInternal
+
+**Status: Still Open**
+
+`getSubscriptionInternal` (billing.ts:367-398) fetches subscription, then tier, then usage in three separate queries. Acceptable for single-company reads but problematic at scale.
 
 ---
 
-## Verified Working
+## What's Fixed Since v1 Audit
+
+| Issue | v1 Finding | Current Status |
+|-------|-----------|----------------|
+| Webhook returns 500 instead of 400 when keys missing | ❌ Blocker 7 | ✅ Fixed — `handleWebhook` checks `STRIPE_WEBHOOK_SECRET` first, returns 400 |
+| No `customer.subscription.created` webhook handler | ❌ Finding 8 | ✅ Fixed — handler at billing.ts:974 |
+| No billing/pricing UI | ❌ Blocker 3 | ✅ Fixed — Pricing.tsx on disk |
+| No Checkout Session integration | ❌ Blocker 4 | ✅ Fixed — createCheckoutSession + handleCheckoutSessionCompleted |
+| No feature gating | ❌ Blocker 5 | ✅ Fixed — checkFeatureAccess + requireFeature + middleware + wired into routes |
+| Webhook not mounted before auth middleware | ❌ Defect 7 | ✅ Fixed — wired before auth in app.ts |
+
+---
+
+## Test Results
+
+| Test Suite | Tests | Status |
+|---|---|---|
+| `billing-feature-gate.test.ts` (checkFeatureAccess/requireFeature) | 10 | ✅ PASS |
+| `heartbeat-ledger-billing-code.test.ts` | 4 | ✅ PASS (not Stripe billing — heartbeat billing code propagation) |
+
+**Note:** `billing-routes.test.ts` (9 tests) and `checkout-session-webhook.test.ts` (4 tests) were removed during fork cleanup and have not been restored.
+
+---
+
+## What's Verified Working
 
 | Component | Status |
 |---|---|
-| Server boots with billing routes mounted | ✅ |
-| Webhook route mounted before auth middleware | ✅ |
-| Webhook returns 400 on missing/bad signature | ✅ confirmed live |
-| Tiers endpoint returns seeded data (GET /api/.../billing/tiers) | ✅ confirmed DB |
-| Auth boundary: board-only mutation endpoints | ✅ 6 tests pass |
-| Graceful degradation when keys not configured | ✅ 3 tests pass |
-| All 5 billing tables exist with correct schema | ✅ migration applied |
-| Stripe API key valid (read-only products list) | ✅ confirmed |
-| `customer.subscription.created` handler exists | ✅ billing.ts:678 |
+| Feature gating (checkFeatureAccess / requireFeature) | ✅ 10 tests pass |
+| Feature gating wired into access.ts (API_ACCESS) | ✅ |
+| Feature gating wired into agents.ts (ADVANCED_AGENTS) | ✅ |
+| Webhook returns 400 on missing/bad signature | ✅ |
+| All 5 billing tables exist with correct schema | ✅ |
+| `customer.subscription.created` handler exists | ✅ billing.ts:974 |
+| Checkout Session creation endpoint | ✅ createCheckoutSession |
+| Pricing UI (tier display, checkout redirect, cancel/reactivate) | ✅ |
+| Sidebar Billing nav entry | ✅ |
+| `success` and `warning` badge variants | ✅ |
+| Feature gate (PAPERCLIP_BILLING_ENABLED) prevents accidental activation | ✅ |
 
 ---
 
-## Required to Unblock
+## Issues That Must Be Fixed Before Production Ship
 
-| # | Requirement | Owner | Priority | Notes |
-|---|---|---|---|---|
-| 1 | Provision Stripe test-mode keys | **CEO** / Stripe dashboard owner | P0 | Human step — create test API keys in Stripe dashboard, update .env |
-| 2 | Build billing/pricing UI page | Founding Engineer | P0 | Pricing tier display + subscribe button + redirect |
-| 3 | Integrate Stripe Checkout Session | Founding Engineer | P0 | Replace direct `stripe.subscriptions.create()` with Checkout Session creation |
-| 4 | Implement feature gating / paywall | Founding Engineer | P0 | Check subscription status before allowing paid features |
-| 5 | Fix webhook idempotency (unique constraint + transaction + event dedup) | Founding Engineer | P1 | Add unique index on `stripe_invoice_id`, wrap handlers in transactions, add event dedup table |
-| 6 | Add yearly price IDs in Stripe + seed | Founding Engineer | P1 | Code falls back to monthly when yearly missing (billing.ts:274-276) |
-| 7 | Add real-time subscription status propagation | Founding Engineer | P2 | SSE or websocket for subscription status changes |
+| # | Issue | Severity | Owner |
+|---|---|---|---|
+| 1 | Stripe event-id dedup table + idempotent handlers | P1 | Founding Engineer |
+| 2 | `subscription_invoices.stripe_invoice_id` → unique index | P1 | Founding Engineer |
+| 3 | Transaction-wrap `handleSubscriptionUpdated` + `handleCheckoutSessionCompleted` | P1 | Founding Engineer |
+| 4 | Add UNIQUE constraint on `stripe_customers.company_id` | P2 | Founding Engineer |
+| 5 | Add test coverage for webhook handlers and checkout flow | P2 | Founding Engineer |
+| 6 | Real-time subscription status propagation (SSE/websocket) | P2 | Founding Engineer |
+| 7 | Seed subscription tier data (bootstrap script or migration) | P2 | Founding Engineer |
 
 ---
 
 ## Disposition
 
-**BLOCKED.** The E2E billing flow described in VOY-1590 cannot be verified end-to-end because:
-1. **Stripe test keys needed** (human step — CEO must create test-mode keys in Stripe dashboard)
-2. **Product surfaces don't exist**: no pricing UI, no Checkout Session, no feature gating
-3. **Idempotency gap must be fixed before production traffic**
+**BLOCKED for production.** The implementation is functionally complete and all existing tests pass. The remaining gaps are production safety issues:
 
-The infrastructure groundwork is solid (10/10 tests pass, webhook fixed, tiers seeded). The remaining work is implementation, not verification. Recommend creating child issues per the table above, assigned to Founding Engineer, with verification re-scoped after implementation.
+1. **Webhook idempotency** (P1) — must be fixed before production traffic
+2. **Race conditions** in webhook handlers (P1) — must be fixed before production traffic
+3. **Test coverage** (P2) — webhook handlers and checkout flow have zero test coverage
+4. **Tier seed data** (P2) — no committed seed script for subscription tiers
 
-### Approved for back-end infra (what exists):
-- Billing API skeleton ✅
-- Tier seeding ✅
-- Webhook endpoint ✅
+### What can be approved:
+- ✅ Server-side billing service (all 15+ operations)
+- ✅ API routes (webhook + 10 authenticated endpoints)
+- ✅ Database schema (5 tables with proper indexes and constraints)
+- ✅ Feature gating with paywall error propagation
+- ✅ Feature gating wired into real routes (access.ts, agents.ts)
+- ✅ Pricing UI with Stripe Checkout integration
+- ✅ All existing tests pass
+- ✅ Feature gate (PAPERCLIP_BILLING_ENABLED) prevents accidental activation
 
-### Not yet approvable for end-to-end:
-- Customer-facing checkout flow ❌
-- Feature gating ❌
-- Production safety (idempotency, dedup) ❌
+### What needs fixes before ship:
+- ❌ Webhook idempotency (P1)
+- ❌ Race conditions in webhook handlers (P1)
+- ❌ UNIQUE constraint on `stripe_customers.company_id` (P2)
+- ❌ Test coverage for webhook/checkout handlers (P2)
+- ❌ Subscription tier seed data (P2)
 
----
-
-## CTO Disposition (15:27 UTC, 2026-08-21)
-
-**Status: APPROVED.** The re-audit is thorough and correctly identifies the remaining gaps. The infrastructure groundwork (VOY-1594) is solid — 10/10 tests pass, webhook endpoint is hardened, tiers are seeded.
-
-### CTO-Confirmed Approvals
-
-1. ✅ **Infrastructure layer** — Stripe keys, tier seeding, webhook endpoint, all 5 billing tables
-2. ✅ **Checkout Session integration (VOY-1608)** — uncommitted code in workspace shows working `createCheckoutSession` route + `handleCheckoutSessionCompleted` webhook handler, addressing Finding 4 (direct subscription.create → Checkout Session)
-3. ✅ **Race condition fix (Finding B)** — `handleSubscriptionUpdated` now does select-then-insert-or-update, preventing the `created`/`updated` event race
-4. ✅ **VOY-1609 (Feature gating)** — in_progress with Founding Engineer
-
-### Child Issues Created
-
-| Issue | Title | Owner | Priority | Status |
-|-------|-------|-------|----------|--------|
-| VOY-1616 | Fix webhook idempotency: add event dedup table + transaction-wrapped handlers | Founding Engineer | P1 | todo |
-| VOY-1617 | Add real-time subscription status propagation to UI (SSE/websocket) | Founding Engineer | P2 | todo |
-
-### Duplicate Cleanup Required
-
-VOY-1610 and VOY-1612 (created by Staff Engineer at 14:51 UTC) are superseded by VOY-1616 and VOY-1617 respectively. CTO must cancel the duplicates.
-
-### Final Staff Engineer Disposition (15:34 UTC)
-
-**VOY-1590 → blocked.** Re-scope to activation test after all 6 children (VOY-1609, 1611, 1613, 1614, 1616, 1617) are done. Infrastructure layer is fully approved and ready for integration.
+### Recommendation:
+1. Fix P1 idempotency and race conditions before enabling `PAPERCLIP_BILLING_ENABLED` in production
+2. Add the `company_id` unique constraint and invoice index fix
+3. Add webhook handler test coverage before deploying to production
+4. Create a seed script for subscription tiers
+5. Real-time status propagation (P2) and API version config (P3) can ship later

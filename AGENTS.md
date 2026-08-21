@@ -63,7 +63,50 @@ rm -rf data/pglite
 pnpm dev
 ```
 
-## 5. Core Engineering Rules
+## 5. Agent Roster
+
+This section documents the agent workforce in the **Praxis M&A (GStack)** company.
+
+| # | Agent | Title | Role | Reports To | Budget/mo | Budget/yr | Status | Permissions |
+|---|-------|-------|------|------------|-----------|-----------|--------|-------------|
+| 1 | **CEO** | Chief Executive Officer | agent | — (top) | $0 | $0 | running | assignTasks, createAgents, createSkills |
+| 2 | **CTO** | Chief Technology Officer | agent | CEO | $1,000 | $12,000 | running | createSkills |
+| 3 | **Staff Engineer** | Staff Engineer | agent | CEO | $300 | $3,600 | idle | createSkills |
+| 4 | **Release Engineer** | Release Engineer | agent | CEO | $200 | $2,400 | idle | createSkills |
+| 5 | **QA Engineer** | QA Engineer | agent | CEO | $500 | $6,000 | running | createSkills |
+| 6 | **CSO** | Chief Security Officer | general | CTO | $500 | $6,000 | running | assignTasks, createAgents, createSkills |
+| 7 | **Design Agent** | UX/UI Designer | designer | CTO | $300 | $3,600 | idle | assignTasks, createSkills |
+
+### Reporting Hierarchy
+
+```
+CEO
+├── CTO
+│   ├── CSO
+│   └── Design Agent
+├── Staff Engineer
+├── Release Engineer
+└── QA Engineer
+```
+
+### Skill Wiring Status
+
+No skills are currently explicitly wired to any agent (all `attachedAgentCount: 0` across 32 company skills). Skills listed in individual agent instruction files are embedded as narrative context rather than attached via the skill-binding API. The 32 skills available in the company catalog are listed in `packages/skills-catalog/` and the GitHub source at `garrytan/gstack`. See the company's `/api/companies/{companyId}/skills` endpoint for the full catalog.
+
+### Adapter Configuration
+
+All 7 agents use adapter type `hermes_local` (Hermes Agent local process adapter). No non-default adapter configs or runtime configs are set. No default environments are assigned.
+
+### Budget Summary
+
+| Metric | Amount |
+|--------|--------|
+| Total monthly budget | $2,800 |
+| Total yearly budget | $33,600 |
+| Company-level budget | $0 (unlimited) |
+| Spent to date (current month) | $0 |
+
+## 6. Core Engineering Rules
 
 1. Keep changes company-scoped.
 Every domain entity should be scoped to a company and company boundaries must be enforced in routes/services.
@@ -91,7 +134,7 @@ When you are creating a plan file in the repository itself, new plan documents b
 6. Attach inspectable generated artifacts.
 When your task produces a user-inspectable deliverable file, follow the Paperclip skill's "Generated Artifacts and Work Products" workflow before final disposition. In this repo, prefer the self-contained skill helper at `skills/paperclip/scripts/paperclip-upload-artifact.sh` so the file is available through the Paperclip API, create/update an artifact work product when the file is the deliverable, link the uploaded artifact in the final issue comment, and then set status. Do not rely on local filesystem paths as the only access path. If an important file intentionally remains workspace-only, create/update a work product with `metadata.resourceRef.kind: "workspace_file"` and a workspace-relative path, then name that work product and path in the final comment. Treat browse/search as a fallback for recovering workspace files, not the preferred deliverable path. See `doc/AGENT-ARTIFACTS.md` for details and `.mp4`/`.webm` examples.
 
-## 6. Database Change Workflow
+## 7. Database Change Workflow
 
 When changing data model:
 
@@ -113,7 +156,7 @@ Notes:
 - `packages/db/drizzle.config.ts` reads compiled schema from `dist/schema/*.js`
 - `pnpm db:generate` compiles `packages/db` first
 
-## 7. Verification Before Hand-off
+## 8. Verification Before Hand-off
 
 Default local/agent test path:
 
@@ -142,7 +185,7 @@ pnpm build
 
 If anything cannot be run, explicitly report what was not run and why.
 
-## 8. API and Auth Expectations
+## 9. API and Auth Expectations
 
 - Base path: `/api`
 - Board access is treated as full-control operator context
@@ -156,13 +199,13 @@ When adding endpoints:
 - write activity log entries for mutations
 - return consistent HTTP errors (`400/401/403/404/409/422/500`)
 
-## 9. UI Expectations
+## 10. UI Expectations
 
 - Keep routes and nav aligned with available API surface
 - Use company selection context for company-scoped pages
 - Surface failures clearly; do not silently ignore API errors
 
-## 10. Pull Request Requirements
+## 11. Pull Request Requirements
 
 When creating a pull request (via `gh pr create` or any other method), you **must** read and fill in every section of [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md). Do not craft ad-hoc PR bodies — use the template as the structure for your PR description. Required sections:
 
@@ -173,7 +216,7 @@ When creating a pull request (via `gh pr create` or any other method), you **mus
 - **Model Used** — the AI model that produced or assisted with the change (provider, exact model ID, context window, capabilities). Write "None — human-authored" if no AI was used.
 - **Checklist** — all items checked
 
-## 11. Definition of Done
+## 12. Definition of Done
 
 A change is done when all are true:
 
@@ -183,7 +226,7 @@ A change is done when all are true:
 4. Docs updated when behavior or commands change
 5. PR description follows the [PR template](.github/PULL_REQUEST_TEMPLATE.md) with all sections filled in (including Model Used)
 
-## 12. Fork & Upstream Merge Policy
+## 13. Fork & Upstream Merge Policy
 
 This is a fork of `paperclipai/paperclip`. We maintain a `custom` branch with
 our changes and periodically merge upstream updates. **When merging upstream,

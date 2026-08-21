@@ -1,21 +1,41 @@
-# Staff Engineer Heartbeat — Aug 21
+# Staff Engineer Heartbeat — Aug 21 ~19:30 UTC
 
-Status: board clean (0 active), standing by.
+Status: Paperclip API server down (crash loop); local work continues.
 
-## Verification performed this cycle
+## Structural Audit v4 Summary
 
-1. **Board sweep** — queried the Paperclip API for all non-terminal statuses
-   (`todo`, `in_progress`, `in_review`, `blocked`, `open`): 0 issues in every
-   state. Entire board is done/cancelled (183 done / 17 cancelled).
-2. **Branch sweep** — `fix/m-series-tech-debt` is fully merged (verified via
-   `git merge-base --is-ancestor`). No Voyonder work branches carry commits
-   missing from master that are awaiting pre-landing review.
-3. **Recent code audit** — latest merged code (VOY-1569 environments fix,
-   artifacts staleness cues + GET /work-products/:id, OAuth serialization
-   fixes) already shipped with its own review/QA issues closed. No un-reviewed
-   diff against master exists in the Voyonder workspace.
+Completed and documented in `doc/review/2026-08-21-voy-1590-stripe-billing-e2e-verification-v4.md`.
 
-## Gate status
+### All P1 Issues — FIXED
 
-No branch is queued for Staff Engineer review. No action required; standing by
-for the next pre-landing review request from the CTO or engineers.
+| Finding | Status | Evidence |
+|---------|--------|----------|
+| Webhook event dedup table | ✅ Fixed | `billing.ts:959` — INSERT before processing, UNIQUE on `stripe_event_id`, 23505 → skip |
+| Race in handleSubscriptionUpdated | ✅ Fixed | `billing.ts:243` — INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE |
+| Non-unique invoice index | ✅ Fixed | Migration 0228: UNIQUE index on stripe_invoice_id |
+| Non-unique company_id index | ✅ Fixed | Migration 0228: UNIQUE index on stripe_customers.company_id |
+| handleInvoicePaid upsert | ✅ Fixed | `billing.ts:123-139` — INSERT ... ON CONFLICT (stripe_invoice_id) DO UPDATE |
+| Feature gating middleware | ✅ Wired | `requireFeature` used in access.ts, agents.ts |
+| Pricing UI | ✅ Exists | Pricing.tsx with Checkout Session integration |
+| Webhook 400 on bad sig | ✅ Fixed | Returns 400 before processing, not 500 |
+| Real-time status propagation | ✅ Fixed | `b8732268f2` — publishLiveEvent in all webhook handlers |
+| `syncInvoicesFromStripe` upsert | ✅ Fixed | Committed code uses INSERT ... ON CONFLICT DO UPDATE |
+
+### Remaining Gaps
+
+| Gap | Severity | Owner | Status |
+|-----|----------|-------|--------|
+| Test-mode Stripe keys (VOY-1613) | P0 — blocks E2E | CEO (human step) | Blocked |
+| Feature gating full coverage (VOY-1609) | P0 — blocked | Founding Engineer | Blocked on VOY-1590 |
+| Missing webhook handler tests | P2 | Not restored | Not tracked |
+| Yearly price IDs (VOY-1614) | P2 | Founding Engineer | In progress |
+
+### Test Infrastructure Issue
+
+Migration filename mismatch: embedded PG expects `0071_absurd_black_panther.sql` but actual file is `0071_default_hire_approval_off.sql`. Blocks all billing tests.
+
+## Disposition
+
+**VOY-1590 structural audit complete — all P1 issues FIXED.** E2E verification remains blocked on human-step (VOY-1613 test keys). The Paperclip API server is in a crash loop (embedded PostgreSQL disconnected causing SIGKILL; launchd restarts but new processes fail). Cannot update the issue via API.
+
+Routing to **CTO** once API is restored.

@@ -156,10 +156,10 @@ The `features` column is a JSONB array of feature keys. If the required feature 
 
 ## Known Limitations (Restored Code)
 
-1. **P1: Webhook idempotency** — No event dedup table; `subscription_invoices.stripe_invoice_id` uses a non-unique index. Concurrent Stripe events can produce duplicate rows. (VOY-1610, in_progress)
-2. **P1: Race in handleSubscriptionUpdated / handleCheckoutSessionCompleted** — Concurrent Stripe events can hit UNIQUE constraint and produce 500.
+1. **P1: Webhook idempotency** — ✅ **FIXED** (committed `1fb17b8f18`). Migration 0228 adds `stripe_webhook_events` dedup table with `UNIQUE(stripe_event_id)`. Webhook handler inserts event ID before processing; 23505 duplicate violation → silently skip. UNIQUE indexes on `stripe_invoice_id` and `stripe_customers.company_id` also applied.
+2. **P1: Race in handleSubscriptionUpdated / handleCheckoutSessionCompleted** — ✅ **FIXED** (committed `1fb17b8f18`). Uses `INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE SET` — concurrent Stripe events are idempotent.
 3. **P2: Zero test coverage** on webhook handlers, checkout flow, cancel/reactivate, invoice sync.
-4. **P2: No real-time subscription status propagation** (SSE/websocket).
+4. **P2: No real-time subscription status propagation** (SSE/websocket). ⚠️ **IMPLEMENTED in working tree** (uncommitted) — `publishLiveEvent` calls wired to all 8 subscription state transitions; UI handler invalidates subscription caches. Will be resolved when the working tree is committed.
 5. **No subscription tier seed data** in committed code — tiers must be seeded manually or via a bootstrap script.
 6. **Feature-flagged** — All billing routes are gated behind `PAPERCLIP_BILLING_ENABLED=true` (disabled by default).
 
