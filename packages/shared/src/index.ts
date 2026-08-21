@@ -1790,12 +1790,22 @@ export {
 
 export {
   createSubscriptionSchema,
+  createCheckoutSessionSchema,
   updateSubscriptionSchema,
   reportUsageSchema,
   type CreateSubscription,
+  type CreateCheckoutSession,
   type UpdateSubscription,
   type ReportUsage,
 } from "./validators/billing.js";
+
+export {
+  FEATURE_KEYS,
+  FREE_FEATURES,
+  ACTIVE_SUBSCRIPTION_STATUSES,
+  type FeatureKey,
+  type ActiveSubscriptionStatus,
+} from "./billing-features.js";
 
 export type {
   MarketplaceAgentResponse,

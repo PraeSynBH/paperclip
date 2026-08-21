@@ -126,6 +126,34 @@ describeEmbeddedPostgres("billing routes auth boundary", () => {
     expect(res.status).toBe(403);
   });
 
+  it("rejects agent API key on billing create-checkout-session", async () => {
+    const companyId = (globalThis as unknown as Record<string, string>).__billingTestCompanyId;
+    const agentId = (globalThis as unknown as Record<string, string>).__billingTestAgentId;
+    const app = createApp(db, agentActor(companyId, agentId));
+
+    const res = await request(app)
+      .post(`/api/companies/${companyId}/billing/create-checkout-session`)
+      .send({
+        tierId: randomUUID(),
+        billingPeriod: "monthly",
+      });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("rejects create-checkout-session with invalid tierId (schema validation)", async () => {
+    const companyId = (globalThis as unknown as Record<string, string>).__billingTestCompanyId;
+    const app = createApp(db, boardActor(companyId));
+
+    const res = await request(app)
+      .post(`/api/companies/${companyId}/billing/create-checkout-session`)
+      .send({
+        tierId: "not-a-uuid",
+      });
+
+    expect(res.status).toBe(400);
+  });
+
   it("rejects agent API key on billing subscription update (PATCH)", async () => {
     const companyId = (globalThis as unknown as Record<string, string>).__billingTestCompanyId;
     const agentId = (globalThis as unknown as Record<string, string>).__billingTestAgentId;

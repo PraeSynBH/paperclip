@@ -12,7 +12,7 @@ The Billing API provides Stripe-integrated subscription management. Board users 
 | Access Level | What they can do |
 |---|---|
 | **All company members** | Read endpoints: tiers, subscription, usage, invoices, overview |
-| **Board users only** | All mutations: create/update/cancel/reactivate subscription, report usage, sync invoices |
+| **Board users only** | All mutations: create/update/cancel/reactivate subscription, create checkout session, report usage, sync invoices |
 | **Agents** | Read-only — all billing mutations return `403` for agents |
 
 Every endpoint requires company access (`assertCompanyAccess`). Mutation endpoints additionally require a board-user context — agents are explicitly blocked with `403 Forbidden`.
@@ -27,8 +27,9 @@ Requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` environment variables. 
 |---|---|---|---|
 | `GET` | `/api/companies/{companyId}/billing/tiers` | List available subscription tiers | All members |
 | `GET` | `/api/companies/{companyId}/billing/subscription` | View current subscription | All members |
-| `POST` | `/api/companies/{companyId}/billing/subscription` | Create a new subscription | Board user only |
+| `POST` | `/api/companies/{companyId}/billing/subscription` | Create a new subscription (direct — admin use) | Board user only |
 | `PATCH` | `/api/companies/{companyId}/billing/subscription` | Update tier or billing period | Board user only |
+| `POST` | `/api/companies/{companyId}/billing/create-checkout-session` | Create Stripe Checkout Session for card collection | Board user only |
 | `POST` | `/api/companies/{companyId}/billing/subscription/cancel` | Cancel subscription (at period end) | Board user only |
 | `POST` | `/api/companies/{companyId}/billing/subscription/reactivate` | Reactivate a subscription scheduled for cancellation | Board user only |
 | `GET` | `/api/companies/{companyId}/billing/usage` | View billing-period usage | All members |
@@ -54,6 +55,36 @@ POST /api/companies/{companyId}/billing/subscription
 ### Response
 
 `201 Created` with the subscription object.
+
+## Create Checkout Session
+
+```text
+POST /api/companies/{companyId}/billing/create-checkout-session
+```
+
+Creates a Stripe Checkout Session (`mode: subscription`) so the customer can provide card details before the subscription is created. This is the recommended flow for new customers — it avoids `incomplete` subscriptions created by `stripe.subscriptions.create()` without a payment method.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `tierId` | `string` (uuid) | yes | The tier to subscribe to |
+| `billingPeriod` | `string` | no | `monthly` (default) or `yearly` |
+| `successUrl` | `string` (url) | no | Redirect after successful checkout. Defaults to `{PAPERCLIP_PUBLIC_URL}/boards/{companyId}` |
+| `cancelUrl` | `string` (url) | no | Redirect when checkout is cancelled. Defaults to `{PAPERCLIP_PUBLIC_URL}/pricing` |
+
+### Response
+
+`200 OK` with the Checkout Session URL:
+
+```json
+{
+  "url": "https://checkout.stripe.com/c/pay/cs_test_...",
+  "sessionId": "cs_test_..."
+}
+```
+
+The client should redirect the user to `url`. Stripe handles card collection, then fires the `checkout.session.completed` webhook, which creates the subscription in the database. If the user cancels checkout, they are returned to `cancelUrl` and no subscription is created.
 
 ## Update Subscription
 

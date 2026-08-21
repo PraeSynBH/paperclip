@@ -9,7 +9,8 @@ import {
   subscriptionUsage as subscriptionUsageTable,
   subscriptionInvoices as subscriptionInvoicesTable,
 } from "@paperclipai/db";
-import { badRequest, notFound, unprocessable } from "../errors.js";
+import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES } from "@paperclipai/shared";
+import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
@@ -168,31 +169,85 @@ export function billingService(db: Db) {
   };
 
   const handleSubscriptionUpdated = async (stripeSub: Stripe.Subscription) => {
-    const companyId = stripeSub.metadata?.paperclipCompanyId;
-    if (!companyId) {
-      logger.warn({ stripeSubscriptionId: stripeSub.id }, "No paperclipCompanyId in subscription metadata");
-      return;
-    }
+        const companyId = stripeSub.metadata?.paperclipCompanyId;
+        if (!companyId) {
+          logger.warn({ stripeSubscriptionId: stripeSub.id }, "No paperclipCompanyId in subscription metadata");
+          return;
+        }
 
-    const updateData: Record<string, unknown> = {
-      status: stripeSub.status,
-      currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-      currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
-      cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
-      updatedAt: new Date(),
+        const existing = await db
+          .select()
+          .from(companySubscriptionsTable)
+          .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id))
+          .then((r) => r[0] ?? null);
+
+        const updateData: Record<string, unknown> = {
+          status: stripeSub.status,
+          currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+          currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+          cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+          updatedAt: new Date(),
+        };
+
+        if (stripeSub.canceled_at) {
+          updateData.canceledAt = new Date(stripeSub.canceled_at * 1000);
+        }
+
+        if (existing) {
+          await db
+            .update(companySubscriptionsTable)
+            .set(updateData)
+            .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
+        } else {
+          // Subscription was created outside our normal flow (e.g. via Checkout Session)
+          // but the checkout.session.completed handler may not have fired yet.
+          // Create a minimal record to avoid data loss on race conditions.
+          const tierId = stripeSub.metadata?.paperclipTierId;
+          if (!tierId) {
+            logger.warn(
+              { stripeSubscriptionId: stripeSub.id, companyId },
+              "Cannot create subscription record — no paperclipTierId in metadata",
+            );
+            return;
+          }
+
+          const cust = await db
+            .select()
+            .from(stripeCustomersTable)
+            .where(eq(stripeCustomersTable.companyId, companyId))
+            .then((r) => r[0] ?? null);
+          if (!cust) {
+            logger.warn(
+              { stripeSubscriptionId: stripeSub.id, companyId },
+              "Cannot create subscription record — no Stripe customer record",
+            );
+            return;
+          }
+
+          const stripeSubItemId = stripeSub.items.data[0]?.id ?? null;
+
+          await db.insert(companySubscriptionsTable).values({
+            companyId,
+            tierId,
+            stripeCustomerId: cust.id,
+            status: stripeSub.status,
+            billingPeriod: stripeSub.metadata?.billingPeriod ?? "monthly",
+            currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+            currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+            stripeSubscriptionId: stripeSub.id,
+            stripeSubscriptionItemId: stripeSubItemId,
+            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+            trialEnd: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
+          });
+
+          logger.info(
+            { stripeSubscriptionId: stripeSub.id, companyId, tierId },
+            "Created subscription record from Stripe webhook (fallback)",
+          );
+        }
+
+        logger.info({ stripeSubscriptionId: stripeSub.id, status: stripeSub.status }, "Subscription status synced from Stripe");
     };
-
-    if (stripeSub.canceled_at) {
-      updateData.canceledAt = new Date(stripeSub.canceled_at * 1000);
-    }
-
-    await db
-      .update(companySubscriptionsTable)
-      .set(updateData)
-      .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
-
-    logger.info({ stripeSubscriptionId: stripeSub.id, status: stripeSub.status }, "Subscription status synced from Stripe");
-  };
 
   const handleSubscriptionDeleted = async (stripeSub: Stripe.Subscription) => {
     await db
@@ -205,6 +260,108 @@ export function billingService(db: Db) {
       .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
 
     logger.info({ stripeSubscriptionId: stripeSub.id }, "Subscription canceled via Stripe");
+  };
+
+  const handleCheckoutSessionCompleted = async (session: Stripe.Checkout.Session) => {
+    if (session.mode !== "subscription") return;
+    const subId = session.subscription
+      ? (typeof session.subscription === "string" ? session.subscription : session.subscription.id)
+      : null;
+    if (!subId) {
+      logger.warn({ sessionId: session.id }, "Checkout session completed without subscription");
+      return;
+    }
+
+    const companyId = session.metadata?.paperclipCompanyId;
+    const tierId = session.metadata?.paperclipTierId;
+    const billingPeriod = (session.metadata?.billingPeriod ?? "monthly") as "monthly" | "yearly";
+
+    if (!companyId || !tierId) {
+      logger.warn(
+        { sessionId: session.id, metadata: session.metadata },
+        "Missing required metadata (paperclipCompanyId or paperclipTierId) in checkout session",
+      );
+      return;
+    }
+
+    const existing = await db
+      .select()
+      .from(companySubscriptionsTable)
+      .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
+      .then((r) => r[0] ?? null);
+
+    if (existing) {
+      logger.info({ stripeSubscriptionId: subId }, "Subscription already exists — skipping checkout.session.completed");
+      return;
+    }
+
+    const stripe = getStripeClient();
+    const stripeSub = await stripe.subscriptions.retrieve(subId);
+
+    const sessionCustomerId = session.customer
+      ? (typeof session.customer === "string" ? session.customer : session.customer.id)
+      : null;
+    const stripeCustomerId = sessionCustomerId ?? stripeSub.customer as string;
+
+    const cust = await db
+      .select()
+      .from(stripeCustomersTable)
+      .where(eq(stripeCustomersTable.stripeCustomerId, stripeCustomerId as string))
+      .then((r) => r[0] ?? null);
+
+    if (!cust) {
+      logger.warn(
+        { stripeCustomerId, companyId },
+        "No local Stripe customer record found — cannot create subscription",
+      );
+      return;
+    }
+
+    const tier = await getTier(tierId);
+    const stripeSubItemId = stripeSub.items.data[0]?.id ?? null;
+
+    const created = await db
+      .insert(companySubscriptionsTable)
+      .values({
+        companyId,
+        tierId,
+        stripeCustomerId: cust.id,
+        status: stripeSub.status,
+        billingPeriod,
+        currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+        currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+        stripeSubscriptionId: stripeSub.id,
+        stripeSubscriptionItemId: stripeSubItemId,
+        cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+        trialEnd: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
+      })
+      .returning()
+      .then((r) => r[0]);
+
+    const usageMetrics: Array<{ metric: string; included: number }> = [
+      { metric: "seats", included: tier.includedSeats },
+      { metric: "agent_runs", included: tier.includedAgentRuns },
+      { metric: "storage_gb", included: tier.includedStorageGb },
+    ];
+
+    for (const m of usageMetrics) {
+      await db.insert(subscriptionUsageTable).values({
+        companyId,
+        subscriptionId: created.id,
+        metric: m.metric,
+        usage: 0,
+        included: m.included,
+        overage: 0,
+        overageCents: 0,
+        periodStart: created.currentPeriodStart,
+        periodEnd: created.currentPeriodEnd,
+      });
+    }
+
+    logger.info(
+      { companyId, tierId, stripeSubscriptionId: stripeSub.id },
+      "Created subscription from Checkout Session",
+    );
   };
 
   const getSubscriptionInternal = async (companyId: string) => {
@@ -240,6 +397,103 @@ export function billingService(db: Db) {
     };
   };
 
+  /**
+   * Evaluate whether the company's current subscription grants access to a
+   * feature key. Pure check — never throws; callers decide how to react.
+   *
+   * Rules:
+   * 1. Free features (FREE_FEATURES) are always allowed.
+   * 2. A paid feature requires an active/trialing subscription.
+   * 3. If the subscription is scheduled to cancel (cancelAtPeriodEnd) and the
+   *    current period has already ended, the company is degraded: paid
+   *    features are denied (Stripe keeps the sub "active" until period end).
+   * 4. The tier's `features` array must include the requested key.
+   */
+  const checkFeatureAccess = async (
+    companyId: string,
+    featureKey: string,
+  ) => {
+    const subscription = await db
+      .select()
+      .from(companySubscriptionsTable)
+      .where(eq(companySubscriptionsTable.companyId, companyId))
+      .then((r) => r[0] ?? null);
+
+    const isFreeFeature = FREE_FEATURES.includes(featureKey as (typeof FREE_FEATURES)[number]);
+
+    if (!subscription) {
+      return {
+        allowed: isFreeFeature,
+        reason: isFreeFeature ? "free_feature" : "no_subscription",
+        subscription: null,
+        tier: null,
+      } as const;
+    }
+
+    const tier = await db
+      .select()
+      .from(subscriptionTiersTable)
+      .where(eq(subscriptionTiersTable.id, subscription.tierId))
+      .then((r) => r[0] ?? null);
+
+    if (!tier) {
+      return {
+        allowed: isFreeFeature,
+        reason: isFreeFeature ? "free_feature" : "feature_not_in_tier",
+        subscription,
+        tier: null,
+      } as const;
+    }
+
+    if (isFreeFeature) {
+      return { allowed: true, reason: "free_feature", subscription, tier } as const;
+    }
+
+    if (!ACTIVE_SUBSCRIPTION_STATUSES.includes(subscription.status as (typeof ACTIVE_SUBSCRIPTION_STATUSES)[number])) {
+      return { allowed: false, reason: "subscription_inactive", subscription, tier } as const;
+    }
+
+    // Degradation: cancellation takes effect at period end. Once the paid
+    // period has elapsed, paid features are denied even though Stripe may
+    // still report the subscription as "active" until it finally cancels.
+    if (subscription.cancelAtPeriodEnd && subscription.currentPeriodEnd) {
+      const now = new Date();
+      if (subscription.currentPeriodEnd.getTime() <= now.getTime()) {
+        return { allowed: false, reason: "canceled_at_period_end", subscription, tier } as const;
+      }
+    }
+
+    const tierFeatures = Array.isArray(tier.features) ? tier.features : [];
+    if (tierFeatures.includes(featureKey)) {
+      return { allowed: true, reason: "tier_includes_feature", subscription, tier } as const;
+    }
+
+    return { allowed: false, reason: "feature_not_in_tier", subscription, tier } as const;
+  };
+
+  /**
+   * Require feature access for a company, throwing a 403 Paywall error when
+   * the feature is not available under the company's current subscription.
+   * This is the primary API for route/service-level gating.
+   */
+  const requireFeature = async (companyId: string, featureKey: string) => {
+    const result = await checkFeatureAccess(companyId, featureKey);
+    if (result.allowed) return result;
+
+    const tierName = result.tier?.name ?? null;
+    const messageByReason: Record<string, string> = {
+      no_subscription: "This feature requires an active subscription.",
+      subscription_inactive: "Your subscription is not active. Reactivate it to use this feature.",
+      canceled_at_period_end: "Your subscription has ended. Renew to keep using this feature.",
+      feature_not_in_tier: `This feature is not included in your current plan${tierName ? ` (${tierName})` : ""}.`,
+    };
+
+    throw paywall(messageByReason[result.reason ?? "feature_not_in_tier"], {
+      featureKey,
+      tierName: tierName ?? undefined,
+    });
+  };
+
   return {
     listTiers: async () => {
       return db
@@ -254,6 +508,48 @@ export function billingService(db: Db) {
     getOrCreateStripeCustomer,
 
     getSubscription: getSubscriptionInternal,
+
+    checkFeatureAccess,
+    requireFeature,
+
+    createCheckoutSession: async (
+      companyId: string,
+      data: { tierId: string; billingPeriod: "monthly" | "yearly"; successUrl?: string; cancelUrl?: string },
+    ) => {
+      const stripe = getStripeClient();
+      const tier = await getTier(data.tierId);
+
+      const stripePriceId = data.billingPeriod === "yearly"
+        ? (tier.stripePriceYearlyId ?? tier.stripePriceMonthlyId)
+        : (tier.stripePriceMonthlyId ?? tier.stripePriceYearlyId);
+
+      if (!stripePriceId) {
+        throw unprocessable("Selected tier does not have a Stripe price configured");
+      }
+
+      const { stripeCustomerId } = await getOrCreateStripeCustomer(companyId);
+
+      const publicUrl = process.env.PAPERCLIP_PUBLIC_URL ?? "http://localhost:5173";
+      const successUrl = data.successUrl ?? `${publicUrl}/boards/${companyId}`;
+      const cancelUrl = data.cancelUrl ?? `${publicUrl}/pricing`;
+
+      const session = await stripe.checkout.sessions.create({
+        mode: "subscription",
+        customer: stripeCustomerId,
+        line_items: [{ price: stripePriceId, quantity: 1 }],
+        metadata: {
+          paperclipCompanyId: companyId,
+          paperclipTierId: data.tierId,
+          billingPeriod: data.billingPeriod,
+        },
+        success_url: successUrl,
+        cancel_url: cancelUrl,
+      });
+
+      logger.info({ companyId, sessionId: session.id }, "Created Checkout Session");
+
+      return { url: session.url, sessionId: session.id };
+    },
 
     createOrUpdateSubscription: async (
       companyId: string,
@@ -680,6 +976,11 @@ export function billingService(db: Db) {
           await handleSubscriptionUpdated(createdSub);
           break;
         }
+        case "checkout.session.completed": {
+          const session = event.data.object as Stripe.Checkout.Session;
+          await handleCheckoutSessionCompleted(session);
+          break;
+        }
         case "customer.subscription.trial_will_end":
           break;
         default:
@@ -693,6 +994,7 @@ export function billingService(db: Db) {
     handleInvoicePaymentFailed,
     handleSubscriptionUpdated,
     handleSubscriptionDeleted,
+    handleCheckoutSessionCompleted,
 
     getBillingOverview: async (companyId: string) => {
       const subscription = await getSubscriptionInternal(companyId);

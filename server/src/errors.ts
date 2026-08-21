@@ -21,6 +21,22 @@ export function forbidden(message = "Forbidden") {
   return new HttpError(403, message);
 }
 
+/**
+ * 403 Paywall error — returned when the company's subscription tier
+ * does not include a required feature.
+ *
+ * The `code` field distinguishes paywall denials from generic 403s
+ * so the frontend can show upgrade prompts.
+ */
+export function paywall(
+  message: string,
+  details?: { featureKey?: string; tierName?: string; requiredPlan?: string },
+) {
+  const err = new HttpError(403, message, details);
+  (err as unknown as Record<string, unknown>).code = "PAYWALL";
+  return err;
+}
+
 export function notFound(message = "Not found") {
   return new HttpError(404, message);
 }
