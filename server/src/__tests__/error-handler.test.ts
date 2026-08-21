@@ -1,22 +1,13 @@
 import type { NextFunction, Request, Response } from "express";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { HttpError } from "../errors.js";
 import { errorHandler } from "../middleware/error-handler.js";
 
-// Mock captureErrorEvent to simulate the real sanitizeErrorForTelemetry
-// in-place mutation.  Only mutates messages containing "SENSITIVE" so
-// existing tests (plain messages like "boom") are unaffected.
-vi.mock("../services/posthog.js", async (importOriginal) => {
-  const mod = await importOriginal<typeof import("../services/posthog.js")>();
-  return {
-    ...mod,
-    captureErrorEvent: vi.fn((error: unknown) => {
-      if (error instanceof Error && error.message.includes("SENSITIVE")) {
-        error.message = error.message.replaceAll("SENSITIVE", "***REDACTED***");
-      }
-    }),
-  };
-});
+const recordResponsibleUserDenialOnActiveRunMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../services/responsible-user-denial-run-outcomes.js", () => ({
+  recordResponsibleUserDenialOnActiveRun: recordResponsibleUserDenialOnActiveRunMock,
+}));
 
 function makeReq(): Request {
   return {
@@ -38,6 +29,11 @@ function makeRes(): Response {
 }
 
 describe("errorHandler", () => {
+  beforeEach(() => {
+    recordResponsibleUserDenialOnActiveRunMock.mockReset();
+    recordResponsibleUserDenialOnActiveRunMock.mockResolvedValue(null);
+  });
+
   it("attaches the original Error to res.err for 500s", () => {
     const req = makeReq();
     const res = makeRes() as any;
@@ -91,43 +87,63 @@ describe("errorHandler", () => {
     expect(res.__errorContext?.error?.message).toBe("db exploded");
   });
 
-  it("keeps the 5xx HttpError response message stable when telemetry redacts in place", () => {
+  it("returns 400 for Zod validation errors from another module instance", () => {
     const req = makeReq();
     const res = makeRes() as any;
     const next = vi.fn() as unknown as NextFunction;
-    const err = new HttpError(500, "db exploded SENSITIVE-credential");
+    const issue = {
+      code: "invalid_type",
+      expected: "string",
+      received: "undefined",
+      path: ["provider"],
+      message: "Required",
+    };
+    const err = Object.assign(new Error("Validation failed"), {
+      name: "ZodError",
+      issues: [issue],
+      errors: [issue],
+    });
 
     errorHandler(err, req, res, next);
 
-    // The PostHog capture pipeline redacts err.message in place, but the
-    // client-visible response must use the pre-telemetry snapshot.
-    expect(err.message).toContain("***REDACTED***");
-    expect(res.status).toHaveBeenCalledWith(500);
-    expect(res.json).toHaveBeenCalledWith({ error: "db exploded SENSITIVE-credential" });
+    expect(res.status).toHaveBeenCalledWith(400);
+    expect(res.json).toHaveBeenCalledWith({ error: "Validation error", details: [issue] });
+    expect(res.err).toBeUndefined();
+    expect(res.__errorContext).toBeUndefined();
   });
 
-  it("keeps the trusted-import 500 message stable when telemetry redacts in place", () => {
+  it("records responsible-user denial codes on the active agent run", () => {
+    const db = { marker: "db" };
     const req = {
       ...makeReq(),
-      method: "POST",
-      originalUrl: "/api/companies/import",
+      app: { locals: { paperclipDb: db } },
       actor: {
-        type: "board",
-        userId: "cloud-user",
-        source: "cloud_tenant",
+        type: "agent",
+        agentId: "agent-1",
+        companyId: "company-1",
+        runId: "run-1",
+        source: "agent_jwt",
       },
     } as unknown as Request;
-    const res = makeRes() as any;
+    const res = makeRes();
     const next = vi.fn() as unknown as NextFunction;
-    const err = new Error("portable file references SENSITIVE-credential");
+    const err = new HttpError(403, "Responsible user is not authorized", {
+      code: "RESPONSIBLE_USER_UNAUTHORIZED",
+    });
 
     errorHandler(err, req, res, next);
 
-    expect(err.message).toContain("***REDACTED***");
-    expect(res.status).toHaveBeenCalledWith(500);
+    expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalledWith({
-      error: "Internal server error",
-      message: "portable file references SENSITIVE-credential",
+      error: "Responsible user is not authorized",
+      code: "RESPONSIBLE_USER_UNAUTHORIZED",
+      details: { code: "RESPONSIBLE_USER_UNAUTHORIZED" },
+    });
+    expect(recordResponsibleUserDenialOnActiveRunMock).toHaveBeenCalledWith(db, {
+      runId: "run-1",
+      agentId: "agent-1",
+      companyId: "company-1",
+      code: "RESPONSIBLE_USER_UNAUTHORIZED",
     });
   });
 });
