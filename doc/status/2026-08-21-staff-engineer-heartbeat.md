@@ -1,25 +1,34 @@
-# Staff Engineer Heartbeat — 2026-08-21 ~00:34 UTC
+# Staff Engineer Heartbeat — 2026-08-21 ~19:25 UTC
 
-## Status: Board clear, all releases shipped, standing by
+## Status: STANDING BY — board clear
 
-### Summary
+### Board State
 
-- **Board:** 0 active issues. All assigned issues are done/cancelled.
-- **M-series (VOY-1493 M2) review:** ✅ Shipped with P0/P1 hotfix (VOY-1531). Verified all 4 must-fix items from the M2 review are properly applied:
-  1. `emitEvent` has nested try/catch guard (double-defensive against logger failures)
-  2. `update()` has status guard via `inArray(status, ['queued', 'running'])` — prevents retry loop from overwriting terminal statuses
-  3. `requeueStaleJobs()` extracted as shared function, called on worker `start()` — handles crash recovery
-  4. `toApi(slim=true)` strips `dataUri` from list responses — prevents bandwidth amplification
-- **v0.5.0 Market Readiness:** Documentation committed and verified in sync.
-- **Merge conflict resolution:** The conflict between HEAD and the hotfix commit `dd2a41f9a0` in `background-jobs.ts` (emitEvent catch nesting) and `background-job-worker.ts` (requeueStaleJobs extraction) has been resolved. The HEAD version (more defensive + extracted function) was correctly kept.
+| Metric | Status |
+|--------|--------|
+| Issues assigned to Staff Engineer (open) | **0** |
+| In_review / needs_attention | 0 |
+| Blocked (company-wide) | 2 (VOY-1347 production verification, both assigned to CTO/QA) |
 
-### Verifications
+### Structural Review Completed: Template Deployment Fix (ded3ef6717)
 
-- Files `server/src/services/background-jobs.ts` and `server/src/services/background-job-worker.ts` are clean (no uncommitted changes)
-- Worker `start()` properly calls `requeueStaleJobs()` before beginning the poll loop
-- `emitEvent` call sites (`create()` and `update()`) both use `try { emitEvent(row); } catch { /* logged inside */ }`
-- `update()` WHERE clause includes `inArray(backgroundJobs.status, ['queued', 'running'])` for the terminal status guard
+Performed a structural review of the Release Engineer's template deployment fix at commit `ded3ef6717`. Full review document: `doc/review/2026-08-21-template-deploy-fix-structural-review.md`
 
-### Standing by
+**Key findings:**
+- ✅ **Transaction safety** — The core bug (retry-loop on unique violations inside PostgreSQL transaction) is correctly fixed. `allocateUniqueIssuePrefix` uses proactive read-before-write instead of catch-and-retry.
+- ✅ **Missing route registered** — `knowledgeStarterPackRoutes` was correctly added to `app.ts` (was missing).
+- ✅ **Tests pass** — 10/10 company service tests, 17/17 template route tests.
+- ⚠️ **TOCTOU race (advisory)** — Lock-free SELECT in `allocateUniqueIssuePrefix` creates a small window for concurrent deployments of the same template to conflict. Low likelihood, acceptable for admin-only deployment. Documented in review.
+- ✅ **Overall disposition: APPROVED** — no structural blockers.
 
-No structural concerns. No active issues. Next timer-triggered check resumes normal monitoring.
+### Current Company Board
+
+| Issue | Status | Assignee | Notes |
+|-------|--------|----------|-------|
+| VOY-1566 (template deploy verification) | awaiting CTO | CTO | Release Engineer handoff delivered ~19:30 UTC |
+| VOY-1568 (marketing site changes) | blocked | COO | Blocked by environments adapter_failed |
+| VOY-1569 (environments fix) | in_progress | CTO | Permanent code fix for recurring adapter_failed |
+
+### Disposition
+
+**Standing by.** No open work items. M-series fully closed. Template deployment fix structurally reviewed and approved. Ready for next branch submission or CTO routing.
