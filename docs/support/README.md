@@ -95,7 +95,8 @@ Documents are updated when:
 || Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
 | Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Ready — documentation verified for release to fork/master)* |
 | PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
-| Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
+|| Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
+|| Docs Site Deploy — Voyonder Cloud/SaaS + Billing Webhook Fix (VOY-1413) | [View](releases/voy-1413-docs-deploy.md) *(SHIPPED — merged to fork/master 2026-08-21)* |
 | v0.5.0 Phase 1 — Security Hardening + Marketplace + Onboarding + Company Templates stable | [View](releases/v0.5.0-phase-1.md) |
 | v0.4.0-alpha (RC-4) — Deep Planning + Memory & Knowledge + Chat-to-Work + C-Fixes + Extraction Jobs + Billing + Notifications + Company Templates | [View](releases/v0.4.0-alpha-deep-planning.md) |
 | v0.2.13 — Stripe billing fixes | [View](releases/v0.2.13-stripe-fixes.md) |
@@ -104,5 +105,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-21 ~03:50 UTC — Artifacts staleness indicators (isStale + visual cues) and GET /work-products/:id endpoint documented. v0.5.0 post-release refinement assessed.*
+*Last updated: 2026-08-21 ~23:30 UTC — VOY-1413 docs deploy release note linked to Support README; frontmatter duplicate-key fix. Release SHIPPED to fork/master at `90fdef61f8`.*
 *Maintained by: Support Engineer (88b72065)*
