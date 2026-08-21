@@ -21,7 +21,7 @@ More packs can be added by the server operator — packs are loaded from JSON fi
 ### Via the API
 
 ```sh
-curl -X POST /api/companies/{companyId}/knowledge/starter-packs/travel-industry/install \
+curl --fail-with-body -sS -X POST /api/companies/{companyId}/knowledge/starter-packs/travel-industry/install \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY"
 ```
 

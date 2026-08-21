@@ -119,7 +119,7 @@ From the board UI, navigate to **Settings → Notifications** (or go to `/notifi
 Batch update preferences:
 
 ```sh
-curl -X PUT /api/companies/{companyId}/notification-preferences \
+curl --fail-with-body -sS -X PUT /api/companies/{companyId}/notification-preferences \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
@@ -146,7 +146,7 @@ Users can register for browser push notifications:
 Each subscription is device-specific. Unregister from the preferences page or via the API:
 
 ```sh
-curl -X DELETE /api/companies/{companyId}/push-subscriptions/{subscriptionId} \
+curl --fail-with-body -sS -X DELETE /api/companies/{companyId}/push-subscriptions/{subscriptionId} \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY"
 ```
 

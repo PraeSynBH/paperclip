@@ -72,8 +72,8 @@ Once Stripe is connected and tiers are configured, a board user can create a sub
 Or via the API:
 
 ```sh
-curl -X POST /api/companies/{companyId}/billing/subscription \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+curl --fail-with-body -sS -X POST /api/companies/{companyId}/billing/subscription \
+  -H "Authorization: Bearer $PAPER..._KEY" \
   -H "Content-Type: application/json" \
   -d '{"tierId": "tier-uuid", "billingPeriod": "monthly"}'
 ```
@@ -85,8 +85,8 @@ curl -X POST /api/companies/{companyId}/billing/subscription \
 Upgrade or downgrade at any time. Changes take effect immediately with prorated billing.
 
 ```sh
-curl -X PATCH /api/companies/{companyId}/billing/subscription \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
+curl --fail-with-body -sS -X PATCH /api/companies/{companyId}/billing/subscription \
+  -H "Authorization: Bearer $PAPER..._KEY" \
   -H "Content-Type: application/json" \
   -d '{"tierId": "new-tier-uuid"}'
 ```
@@ -96,8 +96,8 @@ curl -X PATCH /api/companies/{companyId}/billing/subscription \
 Cancellation takes effect at the end of the current billing period. You retain access until then.
 
 ```sh
-curl -X POST /api/companies/{companyId}/billing/subscription/cancel \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+curl --fail-with-body -sS -X POST /api/companies/{companyId}/billing/subscription/cancel \
+  -H "Authorization: Bearer ***"
 ```
 
 ### Reactivate Subscription
@@ -105,8 +105,8 @@ curl -X POST /api/companies/{companyId}/billing/subscription/cancel \
 Reactivate a subscription that's scheduled for cancellation before the period ends.
 
 ```sh
-curl -X POST /api/companies/{companyId}/billing/subscription/reactivate \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+curl --fail-with-body -sS -X POST /api/companies/{companyId}/billing/subscription/reactivate \
+  -H "Authorization: Bearer ***"
 ```
 
 ### View Usage
@@ -135,8 +135,8 @@ GET /api/companies/{companyId}/billing/invoices
 Sync invoices from Stripe manually:
 
 ```sh
-curl -X POST /api/companies/{companyId}/billing/invoices/sync \
-  -H "Authorization: Bearer $PAPERCLIP_API_KEY"
+curl --fail-with-body -sS -X POST /api/companies/{companyId}/billing/invoices/sync \
+  -H "Authorization: Bearer ***"
 ```
 
 ## Security Notes

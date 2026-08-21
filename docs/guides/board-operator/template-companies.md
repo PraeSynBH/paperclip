@@ -41,7 +41,7 @@ Each template ships with:
 ### Via the API
 
 ```sh
-curl -X POST /api/company-templates/travel-concierge/deploy \
+curl --fail-with-body -sS -X POST /api/company-templates/travel-concierge/deploy \
   -H "Authorization: Bearer $PAPERCLIP_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
