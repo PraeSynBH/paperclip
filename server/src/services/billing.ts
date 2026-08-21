@@ -632,7 +632,16 @@ export function billingService(db: Db) {
     },
 
     handleWebhook: async (rawBody: string, signature: string) => {
-      const stripe = getStripeClient();
+      if (!STRIPE_WEBHOOK_SECRET) {
+        throw badRequest(
+          "STRIPE_WEBHOOK_SECRET is not configured. Webhook signature verification is unavailable.",
+        );
+      }
+      // Create a minimal Stripe client for signature verification only.
+      // constructEvent() does not need the secret API key, only the webhook secret.
+      const stripe = new Stripe("sk_placeholder_for_webhook_verification_only", {
+        apiVersion: "2025-02-24.acacia",
+      });
       let event: Stripe.Event;
 
       try {
@@ -664,6 +673,11 @@ export function billingService(db: Db) {
         case "customer.subscription.deleted": {
           const deletedSub = event.data.object as Stripe.Subscription;
           await handleSubscriptionDeleted(deletedSub);
+          break;
+        }
+        case "customer.subscription.created": {
+          const createdSub = event.data.object as Stripe.Subscription;
+          await handleSubscriptionUpdated(createdSub);
           break;
         }
         case "customer.subscription.trial_will_end":

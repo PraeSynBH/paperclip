@@ -2,7 +2,7 @@
 title: FAQ
 summary: Frequently asked questions about Paperclip setup, billing, notifications, and operation
 version: v0.5.0
-last_updated: 2026-08-20
+last_updated: 2026-08-21
 ---
 
 # Frequently Asked Questions
@@ -11,11 +11,10 @@ last_updated: 2026-08-20
 
 ### "How do I get Paperclip running?"
 
-```sh
-npx paperclipai onboard --yes
-```
+Two options:
 
-This walks you through setup, configures your environment, and starts the server. See the [Quickstart](/start/quickstart) guide for details.
+- **Voyonder Cloud (SaaS):** Go to [voyonder.com](https://voyonder.com), sign up, and create a company in your browser. See the [Run Your First AI Company](/start/your-first-company) guide.
+- **Self-Hosted:** Run `npx paperclipai onboard --yes` in your terminal. See the [Quickstart](/start/quickstart) guide.
 
 ### "What's the fastest way to see Paperclip in action?"
 
@@ -135,8 +134,8 @@ The docs are Mintlify-based. Run `npx mintlify dev` from the `docs/` directory t
 
 ## Related
 
-- [Quickstart](/start/quickstart) — get started in 5 minutes
-- [Run Your First AI Company](/start/your-first-company) — step-by-step walkthrough
+- **[Run Your First AI Company](/start/your-first-company)** — SaaS quickstart (just a browser)
+- [Quickstart](/start/quickstart) — self-hosted setup guide
 - [Billing Setup Guide](/guides/board-operator/billing-setup) — Stripe configuration
 - [Notification Configuration](/guides/board-operator/notification-configuration) — SMTP and VAPID setup
 - [Environment Variables Reference](/deploy/environment-variables) — full configuration reference

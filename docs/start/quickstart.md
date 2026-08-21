@@ -2,18 +2,25 @@
 title: Quickstart
 summary: Get Paperclip running in minutes
 version: v0.5.0
-last_updated: 2026-08-20
+last_updated: 2026-08-21
 ---
 
-Get Paperclip running locally in under 5 minutes.
+There are two ways to use Paperclip. Pick the one that fits:
 
-## Quick Start (Recommended)
+| | **Voyonder Cloud (SaaS)** | **Self-Hosted** |
+|-|---------------------------|-----------------|
+| Setup | Just a browser | Terminal + Node.js |
+| Time | ~2 minutes | ~5 minutes |
+| Best for | Trying it out, SMB owners | Developers, custom deployments |
+| **Start here** | → **[Run Your First AI Company](/start/your-first-company)** | → **Continue below** |
+
+## Self-Hosted Quick Start (Recommended for Developers)
 
 ```sh
 npx paperclipai onboard --yes
 ```
 
-> **Want to see it in action first?** Deploy a free template company from the [Templates](/company/templates) page — no setup required, just one click.
+> **Want to see it in action first?** Use the hosted version at [voyonder.com](https://voyonder.com) — no setup required, just sign up and deploy a template company in one click.
 
 This walks you through setup, configures your environment, and gets Paperclip running.
 
