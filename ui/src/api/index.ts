@@ -12,6 +12,7 @@ export { goalsApi } from "./goals";
 export { approvalsApi } from "./approvals";
 export { decisionsApi } from "./decisions";
 export { costsApi } from "./costs";
+export { billingApi } from "./billing";
 export { activityApi } from "./activity";
 export { dashboardApi } from "./dashboard";
 export { heartbeatsApi } from "./heartbeats";

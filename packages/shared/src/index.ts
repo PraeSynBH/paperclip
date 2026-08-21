@@ -379,6 +379,7 @@ export {
   SECRET_SCOPES,
   STORAGE_PROVIDERS,
   BILLING_TYPES,
+  BILLING_PERIODS,
   FINANCE_EVENT_KINDS,
   FINANCE_DIRECTIONS,
   FINANCE_UNITS,
@@ -2553,3 +2554,22 @@ export {
   isPaperclipDevRunnerCommand,
   rewriteUrlHostToLoopback,
 } from "./runtime-exposure/loopback-bind.js";
+
+export {
+  FEATURE_KEYS,
+  FREE_FEATURES,
+  ACTIVE_SUBSCRIPTION_STATUSES,
+  type FeatureKey,
+  type ActiveSubscriptionStatus,
+} from "./billing-features.js";
+
+export {
+  createSubscriptionSchema,
+  createCheckoutSessionSchema,
+  updateSubscriptionSchema,
+  reportUsageSchema,
+  type CreateSubscription,
+  type CreateCheckoutSession,
+  type UpdateSubscription,
+  type ReportUsage,
+} from "./validators/billing.js";
