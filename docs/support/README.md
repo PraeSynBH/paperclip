@@ -34,7 +34,7 @@ This directory contains support case assessments for Paperclip features. Each do
 | Task Watchdogs | v2026.626.0 | Jun 26, 2026 | [View](task-watchdogs.md) |
 | Ask Work Mode | v2026.626.0 | Jun 26, 2026 | [View](ask-work-mode.md) |
 | Skills Store | v2026.618.0 | Jun 18, 2026 | [View](skills-store.md) |
-| Company Artifacts | v2026.609.0 | Jun 9, 2026 | [View](company-artifacts.md) |
+| Company Artifacts | v2026.609.1 (2026-08-21) | [View](company-artifacts.md) |
 
 ## Knowledge Base Articles
 
@@ -104,5 +104,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-20 ~21:30 UTC — VOY-1527 P0/P1 hotfixes resolved and verified. All 4 production issues fixed: emitEvent guard, stale-job recovery, list slim projection, email digest ordering.*
+*Last updated: 2026-08-21 ~03:50 UTC — Artifacts staleness indicators (isStale + visual cues) and GET /work-products/:id endpoint documented. v0.5.0 post-release refinement assessed.*
 *Maintained by: Support Engineer (88b72065)*
