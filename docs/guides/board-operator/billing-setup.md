@@ -1,9 +1,13 @@
 ---
 title: Billing Setup
-summary: Connect Stripe, configure subscription tiers, and manage your billing
+summary: [REMOVED] Stripe billing feature — code removed in fork cleanup (2026-08-21)
 version: v0.5.0
-last_updated: 2026-08-20
+last_updated: 2026-08-21
+status: removed
 ---
+
+> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.**
+> The fork-specific Stripe billing code was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). The setup steps below document the **old fork-specific implementation** and may change. Pending: VOY-1590 completion + restored documentation.
 
 Paperclip integrates with Stripe for subscription management. This guide walks you through connecting Stripe, understanding the available tiers, and managing your subscription.
 

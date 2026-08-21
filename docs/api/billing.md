@@ -1,9 +1,13 @@
 ---
 title: Billing
-summary: Stripe-integrated subscription management — tiers, usage, invoices, and webhooks
+summary: [REMOVED] Stripe billing feature — code removed in fork cleanup (2026-08-21)
 version: v0.4.0
-last_updated: 2026-08-18
+last_updated: 2026-08-21
+status: removed
 ---
+
+> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.**
+> The fork-specific Stripe billing code (routes, service, migrations, tests) was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). The API contracts described below document the **old fork-specific implementation** and may change in the restored version. Pending: CTO decision on final approach + VOY-1590 completion.
 
 The Billing API provides Stripe-integrated subscription management. Board users can list tiers, create/update/cancel subscriptions, report usage, sync invoices, and view a consolidated billing overview.
 

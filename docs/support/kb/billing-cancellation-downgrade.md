@@ -7,6 +7,8 @@ commit: 83a1cee
 
 # Support KB: Billing Downgrade-to-Free on Cancellation
 
+> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.** The fork-specific Stripe billing code was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). This KB article describes the **old fork-specific implementation** and may be stale. Pending: VOY-1590 completion.
+
 **Applies to:** Voyonder v0.2.13+
 **Tag:** `83a1cee`
 **Related:** VOY-944, VOY-1218, VOY-1227

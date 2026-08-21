@@ -5,7 +5,60 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
-## Heartbeat — Aug 21 ~16:30 UTC
+## Heartbeat — Aug 21 ~16:45 UTC
+
+### Summary
+
+Diff assessment of the fork-cleanup commits (`06e3863b47`, `009da5082d`, `9c948f65a0`, `de8529fc03`) found a **documentation sync gap**: the fork-specific Stripe billing code was removed from the codebase, but customer-facing docs still presented billing as a live feature.
+
+**Initial action:** Added REMOVED-FEATURE notices to billing docs.
+
+**Correction after board re-check:** The API came back online mid-heartbeat. Board state shows VOY-1590 (Stripe billing E2E) is **in_progress** with the Staff Engineer, and a billing/pricing UI page is being built (VOY-1611-type work, in_progress with Founding Engineer). The billing feature is being **restored with upstream-compatible code**, not permanently removed. Updated all banners to reflect "fork-only impl removed; upstream-compatible restoration in progress (VOY-1590)".
+
+### Diff assessment (since last heartbeat)
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `06e3863b47`, `009da5082d` — fork-only server/shared files removed (billing routes, service, tests, migrations) | Code removal | **Gap found** — billing docs described removed fork-only code as live → **fixed this heartbeat** |
+| `9c948f65a0` — remove orphaned billing-debug.test.ts | Test cleanup | None |
+| `de8529fc03` — merge fallout: fork files removed, orphaned rows cleaned | Code removal | Commit message captured intent; billing removal confirmed |
+| `d92f6bedd7` — COO heartbeat (API down, fork cleanup completed) | Docs only | COO confirmed billing removal; but restoration is now in progress |
+
+### Documentation sync fix (this heartbeat)
+
+Files updated with "fork-only impl removed; upstream-compatible restoration in progress" banners (all retain full content for post-restoration update):
+
+1. `docs/api/billing.md` — frontmatter `status: removed`, restoration banner
+2. `docs/guides/board-operator/billing-setup.md` — restoration banner
+3. `docs/support/assessments/support-case-billing-system.md` — restoration banner
+4. `docs/support/assessments/support-case-stripe-billing-fixes.md` — restoration banner
+5. `docs/support/assessments/support-case-stripe-tier-sync.md` — restoration banner
+6. `docs/support/kb/billing-cancellation-downgrade.md` — restoration banner
+7. `docs/start/faq.md` — billing FAQ section banner
+8. `docs/start/quickstart.md` — billing step banner
+9. `docs/start/your-first-company.md` — billing link flagged
+10. `docs/api/overview.md` — billing row flagged
+11. `docs/guides/board-operator/template-companies.md` — billing step flagged
+12. `docs/support/README.md` — Billing System row + KB row updated
+
+**Left as historical (no change):** release notes (`docs/releases.md`, `docs/support/releases/*`) — they record what shipped at release time.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** (no pending work) |
+| Documentation coverage | **Fixed** — billing docs flagged as fork-specific impl removed, restoration in progress |
+| API availability | **UP** (localhost:3100) — restored mid-heartbeat |
+
+### Action needed when VOY-1590 completes
+
+When the Staff Engineer ships the upstream-compatible billing restoration, the billing docs need to be:
+1. De-bannered (remove the "fork-only removed" notices)
+2. Reviewed for accuracy against the new implementation
+3. Updated if the API contracts changed during restoration
+
+
 
 ### Summary
 

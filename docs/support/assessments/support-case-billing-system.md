@@ -1,5 +1,7 @@
 # Support Case Assessment: Billing System — Subscriptions, Usage, and Invoicing
 
+> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.** The fork-specific Stripe billing code was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). This assessment describes the **old fork-specific implementation** and may be partially or fully stale depending on the restoration approach. Pending: VOY-1590 completion.
+
 **Feature**: Stripe-integrated billing with subscription management, usage tracking, invoice syncing, and board-user-only mutation controls
 **Assessed by**: Support Engineer
 **Date**: 2026-08-18
