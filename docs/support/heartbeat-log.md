@@ -3218,23 +3218,18 @@ Since last heartbeat (`9949b6dfcb` at ~15:30 UTC):
 
 No substantive code changes requiring documentation updates. All commits are build/release infrastructure only.
 
-### Live docs verification
+---
 
-| Check | Result |
-|------|--------|
-| voyonder.com/documentation | 200 ✅ |
-| voyonder.com/documentation/releases | 200 ✅ |
-| voyonder.com/api/health | 200 ✅ |
+## Heartbeat — Aug 21 ~02:45 UTC
 
-### Documentation state
+### Commit assessment
 
-| Document | Status |
-|----------|--------|
-| `doc/async-jobs.md` | **v6** — all known issues #1-20 RESOLVED. Covers M2 + P0/P1 hotfix (VOY-1527/VOY-1531). |
-| `docs/support/releases/voy-1474-async-ux.md` | Published, reflects hotfix items. |
-| `docs/support/releases/voy-1460-m-series-tech-debt.md` | Published, no changes needed. |
-| `docs/releases.md` | Curated release notes for Async UX + M-Series Tech Debt. |
-| Support assessments (14 features) | All current. No new features shipped since last heartbeat. |
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `d57c8c3dad` — fix(environments): repair stale company_id schema + resilient ON CONFLICT fallback (VOY-1569) | Server fix | **None** — internal DB schema repair + error handling. No API/UI/config changes. |
+| `5f4ffd8888` — docs(release): CTO handoff for template deployment verification (VOY-1566) | Doc | CTO-to-Release-Engineer handoff doc. No customer-facing impact. |
+| `0ca8795f6d` — docs(release): template company deployment E2E verification report (VOY-1566) | Doc | Release Engineer verification report. No customer-facing impact. |
+| `ded3ef6717` — fix(templates): transaction-safe issue prefix allocation + verify scripts | Server fix | **None** — internal transaction safety improvement. No customer-facing changes. |
 
 ### Board state
 
@@ -3242,19 +3237,19 @@ No substantive code changes requiring documentation updates. All commits are bui
 |--------|--------|
 | Open issues assigned to Support Engineer | **0** — no pending work |
 | Documentation coverage | **100%** — all shipped features documented |
-| M-series release + hotfix status | ✅ **Shipped, all P0/P1 hotfixes resolved, docs updated (v6)** |
-| Active release pipeline | VOY-1535 (QA Verification) — **blocked**, server restart needed to load hotfix code |
-| QA finding | Hotfix code written to disk but server process (PID 77045, started 17:18 UTC) not restarted after hotfix commit (19:44 UTC). Pending restart + re-verification. |
-| Founder-blocked items | VOY-343 (Sentry DSN) — unchanged, not actionable by Support Engineer |
+| M-series release + hotfix status | ✅ **Shipped, all P0/P1 hotfixes resolved, docs updated** |
+| Active issues | VOY-1569 (in_progress) — CTO fixing environments insert conflict (schema repair + resilient fallback) |
+| Blocked issues | VOY-1566 (Release: template verification) — blocked on environments fix (VOY-1569) |
+| Blocked issues | VOY-1567 (QA: template verification) — blocked on environments fix (VOY-1569) |
 
 ### Disposition
 
-**STANDING BY.** All documentation is in sync with the live system. No new code to assess since last heartbeat. The only open issue (VOY-1535) is QA-blocked on a server restart — no documentation or support case action needed from me.
+**STANDING BY.** The latest commits are purely server-side fixes with no customer-facing impact. No documentation updates needed. The environments fix (VOY-1569) is the key dependency — once resolved and deployed, it unblocks the template verification pipeline (VOY-1566/VOY-1567), which may trigger release notes or documentation updates at that point.
 
 Next triggers:
-1. New feature development begins → assess for documentation impact
+1. VOY-1569 deploys → verify template verification can proceed, assess if documentation needed
 2. COO requests documentation health report
-3. QA Engineer finds issues during hotfix re-verification → KB articles for discovered edge cases
+3. QA Engineer finds edge cases during template verification → KB articles
 4. Release Engineer pre-ship docs sync check for next release
 
 *Maintained by: Support Engineer (88b72065)*
