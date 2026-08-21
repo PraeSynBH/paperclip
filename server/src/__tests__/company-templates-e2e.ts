@@ -116,10 +116,26 @@ async function main() {
   // ── Cleanup ────────────────────────────────────────────
   console.log("\n\n6. Cleanup");
   console.log("   ────────\n");
-  for (const cid of deployedIds) {
-    await db.execute(sql`DELETE FROM activity_log WHERE company_id = ${cid}`);
-    await db.execute(sql`DELETE FROM companies WHERE id = ${cid}`);
-    console.log(`   ✓ Removed company ${cid}`);
+  // Temporarily disable FK triggers for cleanup (superuser only, dev/test env)
+  await db.execute(sql`SET session_replication_role = 'replica'`);
+  try {
+    for (const cid of deployedIds) {
+      await db.execute(sql`DELETE FROM issues WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM project_goals WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM projects WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM goals WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM company_skills WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM knowledge_documents WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM activity_log WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM principal_permission_grants WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM company_memberships WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM agent_api_keys WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM agents WHERE company_id = ${cid}`);
+      await db.execute(sql`DELETE FROM companies WHERE id = ${cid}`);
+      console.log(`   ✓ Removed company ${cid}`);
+    }
+  } finally {
+    await db.execute(sql`SET session_replication_role = 'origin'`);
   }
 
   // ── Summary ────────────────────────────────────────────
@@ -133,7 +149,12 @@ async function main() {
   console.log("  │  ✓ Goal/project/issue        (4 each)            │");
   console.log("  │  ✓ Atomicity via transactions (7 failure modes)  │");
   console.log("  │  ✓ Free-tier budget handling  (budgetCents=0 ok) │");
-  console.log("  └──────────────────────────────────────────────────┘\n");
+  console.log("   └──────────────────────────────────────────────────┘\n");
+
+  // Close the underlying postgres.js connection so the process exits cleanly
+  if ((db as any).$client) {
+    await (db as any).$client.end({ timeout: 2 });
+  }
 }
 
 main().catch((err) => {
