@@ -183,6 +183,33 @@ A change is done when all are true:
 4. Docs updated when behavior or commands change
 5. PR description follows the [PR template](.github/PULL_REQUEST_TEMPLATE.md) with all sections filled in (including Model Used)
 
+## 12. Fork & Upstream Merge Policy
+
+This is a fork of `paperclipai/paperclip`. We maintain a `custom` branch with
+our changes and periodically merge upstream updates. **When merging upstream,
+prefer upstream code for any feature/behavior that upstream has since solved.**
+
+The full merge workflow — including the three-bucket evaluation (superseded /
+still needed / uncertain), the decision rule, and conflict-resolution commands
+— is documented in the `git-fork-upstream-workflow` skill:
+
+```
+hermes skill view git-fork-upstream-workflow
+```
+
+Key rules for any agent performing an upstream merge:
+
+1. **Evaluate before merging** — enumerate every custom-only commit
+   (`git log --oneline --no-merges main..custom`) and classify each change.
+2. **Prefer upstream** — if upstream has since solved the same problem, take
+   upstream's version. The custom change was a stopgap; keeping it after
+   upstream absorbs the feature is technical debt.
+3. **Resolve by bucket, not by hand-editing** — for superseded files, use
+   `git checkout --theirs`; for still-needed files, use `git checkout --ours`.
+4. **Never commit directly to `main`** — it mirrors `upstream/master`.
+5. **Restart the server after merging** — the server runs from source
+   (`launchctl kickstart -k gui/$(id -u)/com.praesyn.paperclip`).
+
 ## Design system
 
 `DESIGN.md` at the repo root is the source of truth for UI design decisions. The token-only rule applies to all `ui/` changes: every color, spacing, radius, type, shadow, and motion value in `ui/src/components/**` and `ui/src/pages/**` comes from the token layer in `ui/src/index.css` — no hex, raw px, arbitrary Tailwind bracket values, or raw `font-size`/`fontSize` declarations in components, outside the documented allowlist in `ui/src/index.css`. Run `pnpm check:token-gates` (`scripts/check-token-gates.mjs`) before committing UI changes — it fails on any violation not covered by that allowlist.
