@@ -3,15 +3,15 @@ title: P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Eliminat
 version: voy-1669
 date: 2026-08-22
 commit: b840497fab + 151f0a2066
-status: All gates clear — PR #63 awaiting merge
+status: SHIPPED — merged to main via VOY-1682 (2026-08-22)
 ---
 
 # P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 
-**Release:** VOY-1669 / VOY-1673
+**Release:** VOY-1669 / VOY-1673 / VOY-1682
 **Commits:** `b840497fab`, `cd74f15ca8`, `151f0a2066`
 **Date:** 2026-08-22
-**Status:** All gates clear — PR #63 awaiting merge
+**Status:** SHIPPED — merged and deployed via VOY-1682 (2026-08-22)
 **Related issues:** VOY-1669, VOY-1671, VOY-1687, VOY-1673
 
 ## Summary

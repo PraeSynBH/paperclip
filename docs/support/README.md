@@ -11,6 +11,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
+| TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | voy-1669/1671 | Aug 22, 2026 (SHIPPED via VOY-1682) | [Release Notes](releases/voy-1669-toctou-billing-fix.md) |
 | Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Assessment](assessments/support-case-async-ux-background-jobs.md) · [Release Notes](releases/voy-1474-async-ux.md) |
 || Google OAuth & PostHog auth events + P2 fixes (ts_rank alias, DB client hardening) | voy-1420-posthog-p2-fixes (96faa13434+) | Documented, ready for release to fork/master | [Google OAuth](assessments/support-case-google-oauth.md) |
 | Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
@@ -91,12 +92,13 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
+| TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | [View](releases/voy-1669-toctou-billing-fix.md) *(SHIPPED — merged to main via VOY-1682 2026-08-22)* |
 | v0.5.0 Market Readiness — Self-Service Onboarding + Billing + Notifications + Agent Marketplace + Async UX + Docs | [View](releases/v0.5.0-market-readiness.md) *(Released — 2026-08-20)* |
-|| Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
+| Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
 | Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Ready — documentation verified for release to fork/master)* |
 | PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
-|| Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
-|| Docs Site Deploy — Voyonder Cloud/SaaS + Billing Webhook Fix (VOY-1413) | [View](releases/voy-1413-docs-deploy.md) *(SHIPPED — merged to fork/master 2026-08-21)* |
+| Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
+| Docs Site Deploy — Voyonder Cloud/SaaS + Billing Webhook Fix (VOY-1413) | [View](releases/voy-1413-docs-deploy.md) *(SHIPPED — merged to fork/master 2026-08-21)* |
 | v0.5.0 Phase 1 — Security Hardening + Marketplace + Onboarding + Company Templates stable | [View](releases/v0.5.0-phase-1.md) |
 | v0.4.0-alpha (RC-4) — Deep Planning + Memory & Knowledge + Chat-to-Work + C-Fixes + Extraction Jobs + Billing + Notifications + Company Templates | [View](releases/v0.4.0-alpha-deep-planning.md) |
 | v0.2.13 — Stripe billing fixes | [View](releases/v0.2.13-stripe-fixes.md) |
@@ -105,5 +107,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-22 ~07:30 UTC — Billing structural fix (VOY-1669) approved by Staff Engineer + CTO, docs in sync. Partial agent escalation feature noted for upcoming assessment.*
+*Last updated: 2026-08-22 ~07:55 UTC — VOY-1684 docs review complete: release note status updated to SHIPPED, support case assessment items 6-10 updated for P2-1 transaction wrapping, idempotency key, and concurrency test coverage. TOCTOU billing fix entry added to release notes table.*
 *Maintained by: Support Engineer (88b72065)*
