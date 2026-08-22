@@ -67,17 +67,20 @@ pnpm dev
 
 This section documents the agent workforce in the **Praxis M&A (GStack)** company.
 
-| # | Agent | Title | Role | Reports To | Target Budget/mo | Target Budget/yr | Status | Permissions |
-|---|-------|-------|------|------------|-----------------|-----------------|--------|-------------|
-|| 1 | **CEO** | Chief Executive Officer | agent | — (top) | $0 | $0 | running | assignTasks, createAgents, createSkills |
-|| 2 | **CTO** | Chief Technology Officer | agent | CEO | $1,000 | $12,000 | running | createSkills |
-|| 3 | **Staff Engineer** | Staff Engineer | agent | CEO | $300 | $3,600 | running | createSkills |
-|| 4 | **Release Engineer** | Release Engineer | agent | CEO | $200 | $2,400 | idle | createSkills |
-|| 5 | **QA Engineer** | QA Engineer | agent | CEO | $500 | $6,000 | running | createSkills |
-|| 6 | **CSO** | Chief Security Officer | general | CTO | $500 | $6,000 | idle | assignTasks, createAgents, createSkills |
-|| 7 | **Design Agent** | UX/UI Designer | designer | CTO | $300 | $3,600 | idle | assignTasks, createSkills |
+| # | Agent | Title | Role | Reports To | Target Budget/mo | Target Budget/yr | API Budget/mo | Status | Permissions |
+|---|-------|-------|------|------------|-----------------|-----------------|---------------|--------|-------------|
+|| 1 | **CEO** | Chief Executive Officer | agent | — (top) | $0 (governance) | $0 | $2,000 | running | assignTasks, createAgents, createSkills |
+|| 2 | **CTO** | Chief Technology Officer | agent | CEO | $1,000 | $12,000 | $1,000 | running | createSkills |
+|| 3 | **Staff Engineer** | Staff Engineer | agent | CEO | $300 | $3,600 | $300 | idle | createSkills |
+|| 4 | **Release Engineer** | Release Engineer | agent | CEO | $200 | $2,400 | $200 | running | createSkills |
+|| 5 | **QA Engineer** | QA Engineer | agent | CEO | $500 | $6,000 | $500 | idle | createSkills |
+|| 6 | **CSO** | Chief Security Officer | agent | CTO | $500 | $6,000 | $500 | idle | assignTasks, createAgents, createSkills |
+|| 7 | **Design Agent** | UX/UI Designer | designer | CTO | $300 | $3,600 | $300 | idle | assignTasks, createSkills |
 
-> **Note**: Budgets above are planned target allocations. The API currently reports `null` for all agent-level budgets — these are not yet wired as system-enforced limits. The reporting hierarchy reflects the intended org structure; `managerAgentId` is not yet set in the database (all agents currently show `null`).
+> **Notes**: 
+> - The "API Budget/mo" column reflects live values from `GET /api/companies/{companyId}/agents`. Report-to (managerAgentId) is still `null` in the database — the hierarchy above is the intended org structure.
+> - The **Release Engineer** serves as the Ship Agent role, covering `ship` and `land-and-deploy` skills. No separate Ship Agent identity is needed.
+> - The **CSO** role was previously `general` and has been corrected to `agent` (PRX-31/PRX-67).
 
 ### Reporting Hierarchy
 
@@ -86,27 +89,26 @@ CEO (running)
 ├── CTO (running)
 │   ├── CSO (idle)
 │   └── Design Agent (idle)
-├── Staff Engineer (running)
-├── Release Engineer (idle)
-└── QA Engineer (running)
+├── Staff Engineer (idle)
+├── Release Engineer (running)
+└── QA Engineer (idle)
 ```
 
-### Skill Wiring Status
+### Skill Wiring Status (Phase 2 Complete — 2026-08-22)
 
-8 of 32 company skills now have one agent attached each (all other skills show `attachedAgentCount: 0`). The attached skills are:
+All 7 agents are now wired with their assigned GStack skills via `POST /api/agents/{id}/skills/sync`. All skills use the `garrytan/gstack/` key prefix.
 
-| Skill | Key | Attached Agents |
-|-------|-----|-----------------|
-| **investigate** | `garrytan/gstack/investigate` | 1 |
-| **land-and-deploy** | `garrytan/gstack/land-and-deploy` | 1 |
-| **office-hours** | `garrytan/gstack/office-hours` | 1 |
-| **plan-ceo-review** | `garrytan/gstack/plan-ceo-review` | 1 |
-| **qa** | `garrytan/gstack/qa` | 1 |
-| **qa-only** | `garrytan/gstack/qa-only` | 1 |
-| **review** | `garrytan/gstack/review` | 1 |
-| **ship** | `garrytan/gstack/ship` | 1 |
+| Agent | Skills Configured |
+|-------|-------------------|
+| **CEO** | office-hours, plan-ceo-review, context-save, context-restore |
+| **CTO** | plan-eng-review, spec, investigate, context-save, context-restore |
+| **CSO** | qa, investigate, context-save, context-restore |
+| **Design Agent** | design-consultation, design-review, design-html, context-save, context-restore |
+| **QA Engineer** | qa, qa-only, review, context-save, context-restore |
+| **Release Engineer** | ship, land-and-deploy, context-save, context-restore |
+| **Staff Engineer** | investigate, spec, context-save, context-restore |
 
-These are GStack pipeline skills sourced from the `garrytan/gstack` GitHub repository. The remaining 24 company skills have zero attached agents. See the company's `/api/companies/{companyId}/skills` endpoint for the full catalog sorted by attached agent count.
+The `context-save` and `context-restore` skills are now imported at the company level and configured for all 7 agents. Child issues PRX-57 through PRX-62 are all marked `done`. See the company's `/api/companies/{companyId}/skills` endpoint for the full catalog.
 
 ### Phase 1 Status
 
@@ -118,14 +120,14 @@ All 7 agents use adapter type `hermes_local` (Hermes Agent local process adapter
 
 ### Budget Summary
 
-> **Note**: Budget figures are planned target allocations. The API currently records `null` for all per-agent budgets — these are aspirational targets, not system-enforced limits.
+> **Note**: "Target" figures are planned aspirational allocations from the PRX-1 plan. "API" figures are live values from `GET /api/companies/{companyId}/agents`. Both are soft limits — not system-enforced caps today.
 
-| Metric | Amount |
-|--------|--------|
-| Total monthly target budget | $2,800 |
-| Total yearly target budget | $33,600 |
-| Company-level budget | $0 (unlimited) |
-| Spent to date (current month) | $0 |
+| Metric | Target Amount | API Amount |
+|--------|-------------|-----------|
+| Total monthly target budget | $2,800 | $4,800 |
+| Total yearly target budget | $33,600 | $57,600 |
+| Company-level budget | $0 (unlimited) | $0 (unlimited) |
+| Spent to date (current month) | $0 | $0 |
 
 ## 6. Board Directive — VOY-1668: Hard Stop Paperclip Feature Development
 
