@@ -739,13 +739,13 @@ export function billingService(db: Db) {
         if (existingSub?.stripeSubscriptionId) {
           // ── Update path ──────────────────────────────────────────────
           const sub = await withStripeRetry(
-            () => stripe.subscriptions.retrieve(existingSub.stripeSubscriptionId),
+            () => stripe.subscriptions.retrieve(existingSub.stripeSubscriptionId!),
             "createOrUpdateSubscription:subscriptions.retrieve",
           );
           const subscriptionItemId = sub.items.data[0]?.id;
 
           stripeSubscription = await withStripeRetry(
-            () => stripe.subscriptions.update(existingSub.stripeSubscriptionId, {
+            () => stripe.subscriptions.update(existingSub.stripeSubscriptionId!, {
               items: subscriptionItemId
                 ? [{ id: subscriptionItemId, price: stripePriceId! }]
                 : [{ price: stripePriceId! }],
@@ -901,7 +901,7 @@ export function billingService(db: Db) {
       if (!subscription.stripeSubscriptionId) throw unprocessable("No Stripe subscription to cancel");
 
       await withStripeRetry(
-        () => stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+        () => stripe.subscriptions.update(subscription.stripeSubscriptionId!, {
         cancel_at_period_end: true,
       }),
         "cancelSubscription:subscriptions.update",
@@ -947,7 +947,7 @@ export function billingService(db: Db) {
       if (!subscription.cancelAtPeriodEnd) throw unprocessable("Subscription is not scheduled for cancellation");
 
       await withStripeRetry(
-        () => stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+        () => stripe.subscriptions.update(subscription.stripeSubscriptionId!, {
         cancel_at_period_end: false,
       }),
         "reactivateSubscription:subscriptions.update",
@@ -1051,7 +1051,7 @@ export function billingService(db: Db) {
           const stripe = getStripeClient();
           await withStripeRetry(
             () => stripe.subscriptionItems.createUsageRecord(
-              subscription.stripeSubscriptionItemId,
+              subscription.stripeSubscriptionItemId!,
               {
                 quantity: data.quantity,
                 timestamp: Math.floor(Date.now() / 1000),
@@ -1108,7 +1108,7 @@ export function billingService(db: Db) {
 
       const stripeInvoices = await withStripeRetry(
         () => stripe.invoices.list({
-        subscription: subscription.stripeSubscriptionId,
+        subscription: subscription.stripeSubscriptionId!,
         limit: 100,
       }),
         "syncInvoicesFromStripe:invoices.list",
