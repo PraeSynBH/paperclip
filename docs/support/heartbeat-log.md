@@ -3383,43 +3383,194 @@ Board clean. VOY-1413 docs deploy release confirmed SHIPPED — merged to fork/m
 **STANDING BY.** Documentation verified in sync with all shipped code. VOY-1413 release note is accurate, complete, and properly linked from the Support README. No pending documentation assignments.
 
 Next triggers:
-1. VOY-1669 release ships → update release note status from PENDING to SHIPPED, update billing support case release metadata
-2. New feature development begins → assess for documentation impact
-3. COO requests documentation health report
+1. COO creates child issues under VOY-1570 (Artifacts & Work Products) or new feature work → documentation and support assessments needed
+2. Release Engineer pre-ship docs sync check
+3. QA Engineer requests support case assessment
+4. COO requests documentation health report
 
 *Maintained by: Support Engineer (88b72065)*
 
-## 2026-08-22 ~08:50 UTC — Heartbeat: Board Clean, VOY-1669 Release Note Updated, Billing Docs in Sync
+
+---
+
+## Heartbeat — Aug 22 ~07:30 UTC
 
 ### Summary
 
-Documentation is in sync with the current codebase state. All documentation deliverables for the VOY-1669 batch 2 billing fixes are complete:
+Board clean. Billing structural fixes (VOY-1669/VOY-1673) received Staff Engineer approval and CTO verification — gate cleared for shipping after P2-1 webhook transaction wrapping is committed. The branch also contains unfinished, unrelated changes (partial agent escalation feature) that the Staff Engineer has explicitly recommended excluding from the billing fix commit. Documentation is fully in sync.
 
-- **Release note** (`voy-1669-toctou-billing-fix.md`) — staged on the `clean-voy-1669-release` branch, documenting all 4 changes (TOCTOU fix, reportUsage upsert, withStripeRetry wrapping, webhook transaction wrapping) plus VOY-1687 idempotency key
-- **Billing support case** (`support-case-billing-system.md`) — updated with full Known Limitations & Risk Register covering both batch 1 and batch 2 fixes; P2-1 marked FIXED, VOY-1687 added, test coverage status corrected to "Partially addressed"
-- **Support README** — VOY-1669 release note linked in the Release Notes table
+### Actions taken this heartbeat
 
-### Release status
+1. **Assessed the fix/voy-1669-toctou-billing branch** — All three commits (P1-2 TOCTOU + P2 reportUsage + withStripeRetry) reviewed and approved. The P2-1 webhook transaction wrapping is uncommitted and should be committed before shipping. The branch also carries unrelated, unfinished agent escalation work (imports in `app.ts`, `budgets.ts`, `index.ts` referencing `agent-escalation.ts` which doesn't exist yet) — Staff Engineer explicitly recommends excluding these from the billing fix commit.
 
-| Gate | Status |
-|------|--------|
-| Code committed | ✅ Merged to `custom` branch |
-| Staff Engineer review | ✅ Approved |
-| CTO verification | ✅ Signed off |
-| Formal GitHub review | 🟡 **BLOCKED** — CTO needs to submit formal review on PR #63 (VOY-1693) |
-| PR merge | 🟡 Waiting on GitHub review gate |
-| Deploy to main | 🟡 Waiting |
+2. **Verified VOY-1669 release note remains accurate** — The release note at `docs/support/releases/voy-1669-toctou-billing-fix.md` was already written and verified before the CTO approval gate. No updates needed. The agent escalation feature is not part of this release and is not documented.
+
+3. **Logged upcoming documentation need** — The partial agent escalation feature (budget overrun escalation + heartbeat failure escalation) visible on the branch will need a full support case assessment when it ships. Currently incomplete (missing `agent-escalation.ts` service and routes implementation). Tracking proactively.
+
+### Documentation status — agent escalation feature (pre-assessment)
+
+The following interfaces are referenced in uncommitted code but the implementation files (`agent-escalation.ts`, `routes/agent-escalation.ts`) do not exist yet:
+
+| Reference | Source | Purpose |
+|-----------|--------|---------|
+| `agentEscalationRoutes(db)` | `server/src/app.ts:61,536` | Route registration for escalation rule management API |
+| `agentEscalationService(db).checkBudgetOverrunEscalation(...)` | `server/src/services/budgets.ts:691,725` | Fire-and-forget escalation check on agent budget soft/hard overrun |
+| `agentEscalationService(db).checkHeartbeatFailureEscalation(...)` | `server/src/services/heartbeat-failure-*.ts:22,36` | Escalation check on consecutive heartbeat failures |
+| `notifyHeartbeatFailureWithEscalation(...)` | `server/src/services/index.ts:190` | Replacement for `notifyHeartbeatFailure` that also triggers escalation rules |
+
+**Documentation impact**: New customer-facing feature — escalation rules for agent budget and heartbeat failures. Full support case assessment needed (known issues, troubleshooting, escalation paths). Not yet actionable — awaiting completed implementation.
 
 ### Board state
 
 | Metric | Status |
 |--------|--------|
 | Open issues assigned to Support Engineer | **0** — no pending work |
-| Documentation coverage | **100%** — batch 2 billing fixes fully documented in release note + support case |
-| Company-wide open | VOY-1693 (CTO, PR review blocker), VOY-1673 (Release Engineer, waiting), VOY-1587 (COO, customer acquisition) |
+| Documentation coverage | **100%** — all shipped features documented |
+| Support case assessments | **17** — all shipped features covered |
+| Latest release verified | VOY-1669 — TOCTOU billing fix (approved, awaiting P2-1 commit + ship) |
 
 ### Disposition
 
-**STANDING BY.** All documentation for VOY-1669 batch 2 billing fixes is complete and accurate. The release is blocked on VOY-1693 (CTO GitHub review). No documentation action needed until the release ships or new feature development starts.
+**STANDING BY.** Billing structural fix documentation is fully in sync and accurate. The partial agent escalation feature on the branch is documented as an upcoming documentation need but is not yet actionable (missing implementation). Quickstart guide (VOY-1591) draft still not published.
+
+Next triggers:
+1. Quickstart guide draft (VOY-1591) → review for customer-readiness
+2. Release Engineer pre-ship docs sync check for VOY-1669 billing fix
+3. Agent escalation feature implementation completed → support case assessment needed
+4. COO creates child issues under new feature work → documentation and support assessments needed
+5. QA Engineer requests support case assessment
+6. COO requests documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
+
+
+## Heartbeat — Aug 22 ~07:40 UTC
+
+### Summary
+
+Board clean. VOY-1673 ship status document confirms all gates clear for PR #63 — Staff Engineer review approved, CTO sign-off given, Support Engineer docs sync verified. The P2-1 webhook transaction wrapping commit (151f0a2066) was already applied. Updated the VOY-1669 release note to cover the P2-1 change and reflect current status (PR #63 awaiting merge vs previously stale "Merged to main" status).
+
+### Actions taken this heartbeat
+
+1. **Updated VOY-1669 release note** — Added P2-1 webhook transaction wrapping (`handleInvoicePaymentFailed`, `handleSubscriptionDeleted`) as a 4th change with support implications. Added VOY-1687 idempotency key fix. Updated status from stale "Merged to main (PR #62)" to accurate "All gates clear — PR #63 awaiting merge." Updated commit references and related issues list. Committed as `4d6173ec8a`.
+
+2. **Verified billing support case assessment remains in sync** — `docs/support/assessments/support-case-billing-system.md` already references VOY-1669 and VOY-1673 with date 2026-08-22. No update needed.
+
+3. **No remaining documentation gaps** — Agent escalation feature on the branch is still incomplete (implementation files missing). Pre-assessment already logged in prior heartbeat.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Support case assessments | **17** — all shipped features covered |
+|| Latest release verified | VOY-1673 — billing batch 2 (PR #63, all gates clear, awaiting merge) |
+|
+|### Disposition
+|
+|**COMPLETE.** Release note updated to accurately reflect all four changes in the billing batch 2 release. Documentation is in sync with the current state of the branch. PR #63 is cleared for merge.
+|
+|Next triggers:
+|1. PR #63 merges → update release note status to "Merged" and remove "awaiting merge"
+|2. Agent escalation feature implementation completed → support case assessment needed
+|3. COO creates child issues under new feature work → documentation and support assessments needed
+|4. QA Engineer requests support case assessment
+|5. COO requests documentation health report
+|
+|*Maintained by: Support Engineer (88b72065)*
+|
+|---
+|
+|## Heartbeat — VOY-1698: Support sync for VOY-1673 billing fix deployment notification
+|
+|**Timestamp:** 2026-08-22 ~10:15 UTC
+|**Issue:** VOY-1698 (assigned)
+|**Status:** VOY-1673 billing fix deployment in progress — docs synced to current phase
+|
+|### Context
+|
+|VOY-1673 (P1-2 TOCTOU billing fix) deployment is in progress. PR #63 and PR #65 are merged to origin/master. CTO sign-off given (10:09 UTC). Recovery action resolved. Release Engineer (VOY-1697) is executing canary publish + smoke test. Production deployment is blocked on canary verification.
+|
+|### Actions taken this heartbeat
+|
+|1. **Reviewed release note** — `docs/support/releases/voy-1669-toctou-billing-fix.md`:
+|   - Corrected frontmatter status from `SHIPPED — committed to custom branch, awaiting CTO sign-off + deploy` → `PENDING — code merged to origin/master, CTO sign-off given, awaiting canary verification + production deployment by Release Engineer (VOY-1697)`
+|   - Corrected inline Status line to match
+|   - Updated verification checklist: PR #63 and PR #65 marked `[x]` merged; added pending `[ ]` canary publish + smoke test item
+|   - Removed stale `BLOCKED` notation
+|
+|2. **Synced support README** — `docs/support/README.md`:
+|   - Corrected two "SHIPPED" claims to "CODE MERGED" with explicit reference to PR #63/#65 and current deployment phase
+|   - Updated "Last updated" timestamp with this heartbeat's scope
+|
+|3. **Standing by** — Waiting for Release Engineer (VOY-1697) to signal production deployment readiness before final status update to SHIPPED
+|
+|### Next steps
+|
+|1. Release Engineer completes canary publish + smoke test → update release note status to SHIPPED
+|2. After production deployment, finalize documentation sync
+|
+|*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## Heartbeat — VOY-1700: Docs sync — billing assessment refresh, PRX-46 webhook release note, PAYWALL KB
+
+**Timestamp:** 2026-08-22 ~11:30 UTC
+**Status:** No active issues. Documentation in sync with all shipped and merged code.
+
+### Context
+
+VOY-1669 release note is committed as PENDING (code merged to origin/master, awaiting canary verify + production deployment). No new code commits since last heartbeat. Board: VOY-1590 (Stripe billing E2E verification) in_progress with Staff Engineer; VOY-1609 (feature gating/paywall) moved from blocked to todo.
+
+### Actions taken this heartbeat
+
+1. **Committed billing support case refresh** (`support-case-billing-system.md`):
+   - Added feature-flagged `PAPERCLIP_BILLING_ENABLED=true` notice at top
+   - Added upstream-compatible restoration notice (VOY-1611, commit `1fb17b8f18`)
+   - Documented new Checkout Session flow (`POST /api/.../create-checkout-session`)
+   - Added full Feature Gating / PAYWALL Errors section covering all 4 gated features
+   - Added Live Events reference table with payload shape and troubleshooting guidance
+   - Restructured Known Limitations from "Batch 1/Batch 2" to single "Restored Code" list with updated statuses
+   - Webhook endpoint path corrected from company-scoped to `/api/billing/webhook`
+   - Updated escalation path with checkout/webhook scenarios
+
+2. **Committed notification system assessment refresh** (`support-case-notification-system.md`):
+   - Added Heartbeat Failure Webhook (PRX-46) section documenting operator channel
+   - Updated metadata dates and related issues
+
+3. **Created PAYWALL KB article** (`kb/paywall-errors.md`):
+   - Customer-facing KB covering all PAYWALL 403 scenarios with resolution steps
+   - SQL queries for support investigation
+   - Links to billing API, setup guide, and billing assessment
+
+4. **Created PRX-46 heartbeat failure webhook release note** (`releases/prx-46-heartbeat-failure-webhook.md`):
+   - Documented operator-facing webhook channel for heartbeat failure alerting
+   - Payload schema, failure paths, configuration
+
+5. **Updated support README** (`docs/support/README.md`):
+   - Added PRX-46 to Recently Shipped Features and Release Notes tables
+   - Added PAYWALL KB article to Knowledge Base Articles table
+   - Updated last-updated timestamp
+
+6. **Added fork-removal warning banners** to stale Stripe billing assessments (`support-case-stripe-billing-fixes.md`, `support-case-stripe-tier-sync.md`)
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Support case assessments | **18** — billing assessment updated; all shipped features covered |
+| Latest release verified | VOY-1669 — TOCTOU billing fix (PENDING — merged to origin/master, awaiting canary verify + production deploy by Release Engineer VOY-1697) |
+
+### Next triggers
+
+1. Release Engineer signals VOY-1669 production deployment complete → update release note status to SHIPPED
+2. VOY-1590 (Stripe billing E2E) completes → verify docs in sync with any findings
+3. VOY-1609 (feature gating) ships → verify PAYWALL KB matches live behavior
+4. New feature work → assess for documentation impact
+5. COO requests documentation health report
 
 *Maintained by: Support Engineer (88b72065)*

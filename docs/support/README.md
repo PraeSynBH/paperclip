@@ -11,6 +11,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
+| Heartbeat Failure Webhook — Operator Notification Channel | prx-46 | Aug 21, 2026 (committed) | [Release Notes](releases/prx-46-heartbeat-failure-webhook.md) |
 | TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | voy-1669/1671 | Aug 22, 2026 (CODE MERGED to origin/master via PR #63/#65, CTO sign-off given; awaiting canary verification + production deployment by Release Engineer VOY-1697) | [Release Notes](releases/voy-1669-toctou-billing-fix.md) |
 | Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Assessment](assessments/support-case-async-ux-background-jobs.md) · [Release Notes](releases/voy-1474-async-ux.md) |
 || Google OAuth & PostHog auth events + P2 fixes (ts_rank alias, DB client hardening) | voy-1420-posthog-p2-fixes (96faa13434+) | Documented, ready for release to fork/master | [Google OAuth](assessments/support-case-google-oauth.md) |
@@ -41,6 +42,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Article | Covers | Commit | Issue |
 |---|---|---|---|
+| [PAYWALL 403 Errors — Feature Gating](kb/paywall-errors.md) | Resolving 403 PAYWALL errors when features are restricted by subscription tier | `1fb17b8f18` | VOY-1611 |
 | [Search Safety — plainto_tsquery](kb/search-safety-plainto-tsquery.md) | Knowledge search + memory warm-up handle special characters safely | `75c6c27a41` | C-3 / VOY-1299 |
 | [SLA Monitor Alert Dedup Safety Net](kb/sla-monitor-dedup-safety-net.md) | Post-insert duplicate verification prevents concurrent duplicate SLA alerts | `75c6c27a41` | C-2 / VOY-1298 |
 | [Environment Driver Corruption — readEnum()](kb/environment-readenum-corrupt-driver.md) | `readEnum()` returns `null` instead of throwing on corrupt driver values | `32ccc16229` | PRA-577 |
@@ -92,6 +94,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
+| Heartbeat Failure Webhook — Operator Notification Channel | [View](releases/prx-46-heartbeat-failure-webhook.md) *(Committed — available when `PAPERCLIP_HEARTBEAT_FAILURE_WEBHOOK_URL` is set)* |
 | TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | [View](releases/voy-1669-toctou-billing-fix.md) *(CODE MERGED to origin/master via PR #63/#65 2026-08-22; production deployment pending — canary verification by Release Engineer VOY-1697)* |
 | v0.5.0 Market Readiness — Self-Service Onboarding + Billing + Notifications + Agent Marketplace + Async UX + Docs | [View](releases/v0.5.0-market-readiness.md) *(Released — 2026-08-20)* |
 | Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
@@ -107,5 +110,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-22 ~10:15 UTC — VOY-1698: release note status corrected to PENDING (code merged to origin/master, awaiting canary verification + production deployment). README "SHIPPED" claims corrected to "CODE MERGED" reflecting current deployment phase.*
+*Last updated: 2026-08-22 ~11:30 UTC — Added PRX-46 heartbeat failure webhook release note and PAYWALL KB article to README. Updated billing system support assessment with Checkout Session flow, feature gating/Paywall errors, and live events documentation. Added heartbeat failure webhook section to notification system assessment. Added fork-removal banners to stale Stripe billing assessments.*
 *Maintained by: Support Engineer (88b72065)*

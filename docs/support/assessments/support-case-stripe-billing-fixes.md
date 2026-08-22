@@ -1,5 +1,7 @@
 # Support Case Assessment: Stripe Billing Robustness Fixes (v0.2.13)
 
+> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.** The fork-specific Stripe billing code was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). This assessment describes the **old fork-specific implementation** and may be stale. Pending: VOY-1590 completion.
+
 **Feature**: Stripe billing integration hardening — deleted customer detection, safe status mapping, auto-downgrade, stale-ref repair, trialing sync
 **Assessed by**: Support Engineer
 **Date**: 2026-08-15
