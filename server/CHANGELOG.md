@@ -7,6 +7,7 @@
 - Bound full-tree workspace Git scans with process-wide concurrency, queue, timeout, cancellation, coalescing, and short-lived changed-file caching. Saturated or timed-out changed-file requests now return a retryable degraded response, and hidden file-browser panels no longer initiate scans.
 - **VOY-1669/VOY-1671**: Fix TOCTOU race in `createOrUpdateSubscription` — use `INSERT ... ON CONFLICT (company_id) DO NOTHING` with orphan Stripe cancellation on race loss, and `FOR UPDATE` row lock inside `db.transaction()` for serialised concurrent access.
 - **VOY-1671**: Fix `reportUsage` read-then-write race — convert SELECT-then-INSERT/UPDATE to atomic `INSERT ... ON CONFLICT DO UPDATE` upsert on unique constraint `(subscription_id, metric, period_start, period_end)`.
+- **VOY-1645**: Fix TOCTOU race between `handleSubscriptionUpdated` and `handleCheckoutSessionCompleted` — extract shared `seedSubscriptionUsageRows` helper with `ON CONFLICT DO NOTHING`, call from both webhook handlers so usage rows are always seeded regardless of execution order.
 - Wrap 7 additional Stripe API calls with `withStripeRetry` exponential-backoff resilience (cancelSubscription, reactivateSubscription, syncInvoicesFromStripe, reportUsage, createOrUpdateSubscription create/update paths).
 - Add concurrent billing concurrency test suite (7 tests covering FOR UPDATE serialisation, ON CONFLICT upsert, ON CONFLICT DO NOTHING, 5-concurrent usage upserts, unique constraint safety net).
 
