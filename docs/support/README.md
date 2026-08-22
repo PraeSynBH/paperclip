@@ -91,8 +91,9 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
-|| v0.5.0 Market Readiness — Self-Service Onboarding + Billing + Notifications + Agent Marketplace + Async UX + Docs | [View](releases/v0.5.0-market-readiness.md) *(Released — 2026-08-20)* |\n||| VOY-1669 — TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination | [View](releases/voy-1669-toctou-billing-fix.md) *(PENDING — awaiting PR #63 merge via VOY-1673)* |
-|| Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
+|| v0.5.0 Market Readiness — Self-Service Onboarding + Billing + Notifications + Agent Marketplace + Async UX + Docs | [View](releases/v0.5.0-market-readiness.md) *(Released — 2026-08-20)* |
+||| VOY-1669 — TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination | [View](releases/voy-1669-toctou-billing-fix.md) *(PENDING — awaiting PR #63 merge via VOY-1673)* |
+||| Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
 | Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Ready — documentation verified for release to fork/master)* |
 | PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
 || Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
@@ -105,5 +106,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-21 ~23:30 UTC — VOY-1413 docs deploy release note linked to Support README; frontmatter duplicate-key fix. Release SHIPPED to fork/master at `90fdef61f8`.*
+*Last updated: 2026-08-22 ~08:50 UTC — VOY-1669 TOCTOU billing fix release note added to Support README; billing support case updated with batch 2 Known Limitations; all docs in sync.*
 *Maintained by: Support Engineer (88b72065)*
