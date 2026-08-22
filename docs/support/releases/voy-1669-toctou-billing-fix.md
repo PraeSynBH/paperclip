@@ -2,16 +2,16 @@
 title: P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 version: voy-1669
 date: 2026-08-22
-commit: b840497fab + 151f0a2066
-status: PENDING — merged to custom branch, awaiting PR merge via VOY-1673
+commit: b840497fab + 151f0a2066 + b4a0fb76f5 + 71fbcf9763 + 6327d3d99f
+status: PENDING — code merged to origin/master, CTO sign-off given, awaiting canary verification + production deployment by Release Engineer (VOY-1697)
 ---
 
 # P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 
 **Release:** VOY-1669 / VOY-1673
-**Commits:** `b840497fab`, `cd74f15ca8`, `151f0a2066`
+**Commits:** `b840497fab`, `cd74f15ca8`, `151f0a2066`, `71fbcf9763`, `6327d3d99f`
 **Date:** 2026-08-22
-**Status:** PENDING — merged to custom branch, awaiting PR merge via VOY-1673
+**Status:** PENDING — code merged to origin/master, CTO sign-off given, awaiting canary verification + production deployment by Release Engineer (VOY-1697)
 **Related issues:** VOY-1669, VOY-1671, VOY-1687, VOY-1673, VOY-1682
 
 ## Summary
@@ -38,18 +38,20 @@ The `POST /api/companies/:companyId/billing/subscription` endpoint had a classic
 - If a customer reports they were charged twice, this fix prevents it going forward. Historical duplicates would be visible on the Stripe dashboard — contact Stripe support for refunds on any orphan subscriptions
 - No customer action needed. No manual intervention needed from support.
 
-### 2. `reportUsage` read-then-write race (P2)
+### 2. `reportUsage` read-then-write race + period boundary mismatch (P2)
 
 The `POST /api/companies/:companyId/billing/usage` endpoint had a similar race: it SELECTed for an existing usage record and then either UPDATE or INSERT based on the result. Two concurrent requests for the same metric and billing period could both see "no record exists" and both INSERT.
 
 **The fix:**
 - The entire SELECT-then-INSERT/UPDATE pattern is replaced with a single `INSERT ... ON CONFLICT DO UPDATE` (upsert) on the unique constraint `(subscription_id, metric, period_start, period_end)`
 - The `stripe.subscriptionItems.createUsageRecord()` call is now wrapped in `withStripeRetry`
+- Additionally, `reportUsage` was computing period boundaries from the current UTC date (calendar month) instead of the subscription's actual `currentPeriodStart`/`currentPeriodEnd`. This caused mid-cycle subscriptions to get usage records with wrong period boundaries, making them invisible to `getUsage`. **Fixed:** period boundaries now use the subscription's stored `currentPeriodStart` and `currentPeriodEnd`. The dead `currentPeriodRange()` function was removed. (Staff Engineer review Finding #1, commit `6327d3d99f`)
 
 **What this means for support:**
 - Completely invisible to customers — no API change, no UI change, no configuration change
 - Concurrent usage reports for the same metric and period are now handled safely — the last write wins, which is the correct semantics for usage reporting
 - If a customer previously saw duplicate usage records (doubled seat counts, doubled agent run counts) after rapid usage reporting calls, this fix prevents it
+- Mid-cycle subscriptions no longer have invisible usage records — usage queries now correctly find records created by `reportUsage`
 
 ### 3. Additional `withStripeRetry` wrapping
 
@@ -95,7 +97,10 @@ No new configuration options. Existing `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_S
 - [x] `handleInvoicePaymentFailed` and `handleSubscriptionDeleted` wrapped in `db.transaction()`
 - [x] VOY-1687: Idempotency key on `stripe.subscriptions.create()`
 - [x] Code reviewed by Staff Engineer, CTO approval gate
-- [ ] Merged to main via PR #63 (VOY-1673) — **BLOCKED** (CI infrastructure failures + missing formal GitHub reviews)
+- [x] Merged to main via PR #63 (VOY-1673) — merged e7668eb5a4 to origin/master at 08:57 UTC
+- [x] PR #65 (TS compile fix) — merged 3847928db6 to origin/master
+- [x] `reportUsage` period boundaries now use `subscription.currentPeriodStart`/`currentPeriodEnd` instead of calendar month (commit `6327d3d99f`)
+- [ ] Canary publish + smoke test — Release Engineer (VOY-1697)
 
 ## Support Escalation Path
 
@@ -103,4 +108,5 @@ No new configuration options. Existing `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_S
 |---|---|---|
 | Customer reports double charge for subscription | Low (prevented going forward) | If it occurred before this release, check Stripe dashboard for duplicate subscriptions; contact Stripe support for refund. Going forward this fix prevents it. |
 | Customer reports doubled usage metrics | Low (prevented going forward) | If it occurred before this release, verify usage records via Stripe dashboard. Going forward the upsert pattern prevents duplicates. |
+| Customer reports usage data missing for mid-cycle subscription | Low (prevented going forward) | If it occurred before this release, usage records may have been created with calendar-month periods instead of subscription periods. Going forward, usage records use the subscription's actual period boundaries. |
 | Transient Stripe API failure still occurs | Low | All 10 Stripe API call sites now have retry. If a failure still propagates to the user, check Stripe dashboard for account health and escalate to CTO. |
