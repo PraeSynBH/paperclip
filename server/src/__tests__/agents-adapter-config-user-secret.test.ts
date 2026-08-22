@@ -87,6 +87,15 @@ vi.mock("../services/instance-settings.js", () => ({
   instanceSettingsService: () => mockInstanceSettingsService,
 }));
 
+vi.mock("../services/billing.js", () => ({
+  billingService: () => ({
+    requireFeature: vi.fn().mockResolvedValue({ allowed: true }),
+    checkFeatureAccess: vi.fn().mockResolvedValue({ allowed: true, reason: "free_feature" }),
+  }),
+}));
+
+const mockRunClaudeLogin = vi.hoisted(() => vi.fn(async () => ({ ok: true })));
+
 vi.mock("@paperclipai/adapter-claude-local/server", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@paperclipai/adapter-claude-local/server")>();
   return {

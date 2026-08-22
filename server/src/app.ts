@@ -19,6 +19,7 @@ import {
 } from "./services/company-import-transfers.js";
 import { companyTransferRunService } from "./services/company-transfer-runs.js";
 import { healthRoutes } from "./routes/health.js";
+import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { cloudRoutes } from "./routes/cloud.js";
 import { companyRoutes } from "./routes/companies.js";
 import { companySkillRoutes } from "./routes/company-skills.js";
@@ -354,6 +355,12 @@ export async function createApp(
       bindHost: opts.bindHost,
     }),
   );
+  // Stripe webhook receiver runs before auth middleware — it relies on the
+  // Stripe signature header for verification instead of a bearer token.
+  // Gated behind PAPERCLIP_BILLING_ENABLED to prevent accidental live charges.
+  if (process.env.PAPERCLIP_BILLING_ENABLED === "true") {
+    app.use("/api/billing", billingWebhookRoute(db));
+  }
   app.use(
     actorMiddleware(db, {
       deploymentMode: opts.deploymentMode,
@@ -527,6 +534,10 @@ export async function createApp(
     ?? process.env.PAPERCLIP_TOOL_RUNTIME_TRUSTED_HOST
     ?? null;
   api.use(costRoutes(db, { pluginWorkerManager: workerManager }));
+  // Gated behind PAPERCLIP_BILLING_ENABLED to prevent accidental live charges.
+  if (process.env.PAPERCLIP_BILLING_ENABLED === "true") {
+    api.use(billingRoutes(db));
+  }
   api.use(activityRoutes(db));
   api.use(dashboardRoutes(db));
   api.use(attentionRoutes(db));

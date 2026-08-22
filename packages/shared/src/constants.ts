@@ -58,6 +58,7 @@ export const AGENT_ROLES = [
   "devops",
   "researcher",
   "general",
+  "agent",
 ] as const;
 export type AgentRole = (typeof AGENT_ROLES)[number];
 
@@ -74,6 +75,7 @@ export const AGENT_ROLE_LABELS: Record<AgentRole, string> = {
   devops: "DevOps",
   researcher: "Researcher",
   general: "General",
+  agent: "Agent",
 };
 
 export const AGENT_DEFAULT_MAX_CONCURRENT_RUNS = 20;
@@ -832,6 +834,9 @@ export const BILLING_TYPES = [
 ] as const;
 export type BillingType = (typeof BILLING_TYPES)[number];
 
+export const BILLING_PERIODS = ["monthly", "yearly"] as const;
+export type BillingPeriod = (typeof BILLING_PERIODS)[number];
+
 export const COST_STATUSES = ["reported", "unpriced"] as const;
 export type CostStatus = (typeof COST_STATUSES)[number];
 
@@ -950,6 +955,7 @@ export const LIVE_EVENT_TYPES = [
   "plugin.ui.updated",
   "plugin.worker.crashed",
   "plugin.worker.restarted",
+  "subscription.status.updated",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
 
