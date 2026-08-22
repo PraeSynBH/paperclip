@@ -10,21 +10,22 @@ applies_to: All deployments after 2026-08-20
 
 ## Feature Overview
 
-The async UX release converted long-running operations from synchronous blocking calls to fire-and-forget background jobs. Five job types are registered:
+The async UX release converted long-running operations from synchronous blocking calls to fire-and-forget background jobs. Four job types are currently registered:
 
 | Job Type | What it does | Trigger |
 |----------|-------------|---------|
-| `research.activity_search` | Keyword search over issues, documents, and activity | `POST /api/research/search` |
-| `research.semantic_search` | Semantic re-ranking of keyword results (embedding-based) | Automatic after keyword search, via SSE |
-| `research.auto_assess` | AI assessment of research items (freshness, completeness, relevance) | `POST /api/research/autoAssess` |
-| `export.pdf` | PDF generation via PDFKit — base64 dataUri result | `POST /api/exports/pdf` |
-| `export.ics` | iCalendar v2.0 generation — calendar text result | `POST /api/exports/ics` |
+| `research.semantic_search` | Semantic re-ranking of keyword search results (embedding-based) | Automatic after keyword search with `semanticUpgrade: true`, via SSE |
+| `research.auto_assess` | AI assessment of research items (freshness, completeness, relevance) | `POST /api/companies/:companyId/research/auto-assess` |
+| `export.pdf` | PDF generation via PDFKit — base64 dataUri result | `POST /api/companies/:companyId/research/export/pdf` |
+| `export.ics` | iCalendar v2.0 generation — calendar text result | `POST /api/companies/:companyId/research/export/ics` |
+
+> **Note**: `research.activity_search` was removed in the Voyonder code separation (Phase 1). Keyword search now runs synchronously and immediately returns results. The `research.semantic_search` job runs asynchronously only when the client requests semantic upgrade.
 
 Jobs follow a lifecycle: `queued → running → succeeded | failed`
 
 ## User-Facing Behaviour
 
-- **Activity search** — User sees "Search queued — results will appear shortly" while the job runs.
+- **Activity search** — Keyword search runs synchronously and returns results immediately. If the client requests semantic upgrade (`semanticUpgrade: true`), a `research.semantic_search` background job is created and the response includes a `semanticJobId`. The search panel subscribes to SSE for the upgraded results.
 - **Exports** — PDF/ICS requests return immediately with a job ID. The download must be constructed client-side from the job result.
 - **Research auto-assessment** — Fire-and-forget; results appear asynchronously with freshness/staleness indicators (green ≤7 days, amber ≤30 days, grey >30 days).
 - **BackgroundProcessTray** — Consolidated sidebar tray shows all jobs for the company. Running jobs sort to top with progress bars. Tray only renders when jobs exist.
@@ -65,9 +66,9 @@ Jobs follow a lifecycle: `queued → running → succeeded | failed`
 
 ### Symptom: Search returns keyword results but semantic upgrade never arrives
 
-**Cause**: `PAPERCLIP_EMBEDDING_API_KEY` is not set, or the embedding provider is unreachable.
+**Cause**: `PAPERCLIP_EMBEDDING_API_KEY` is not set, or the embedding provider is unreachable. Also occurs if `semanticUpgrade` was not set to `true` in the search request.
 
-**Fix**: Set the environment variable and restart the server. Without it, the semantic search falls back to keyword ranking — results are still functional, just not upgraded.
+**Fix**: Set the environment variable and restart the server. Verify the search request includes `semanticUpgrade: true`. Without it, semantic search is not enqueued — results are still functional, just not upgraded.
 
 ---
 
@@ -113,6 +114,7 @@ Jobs follow a lifecycle: `queued → running → succeeded | failed`
 | Persistent SSE disconnections | CTO / Staff Engineer | May require backend infrastructure review |
 | Data integrity (job status corruption) | CTO (P0) | Fixed in hotfix — escalate if seen on patched deployments |
 | UI tray not reflecting job status | Frontend team | Check SSE subscription and polling fallback |
+| Search returns no semantic upgrade | Frontend / Support | Verify `semanticUpgrade: true` in request; check embedding provider |
 
 ## Related Documentation
 
@@ -121,5 +123,5 @@ Jobs follow a lifecycle: `queued → running → succeeded | failed`
 - [Research API Reference](/api/research) — API docs for search, auto-assess
 - [Exports API Reference](/api/exports) — API docs for PDF/ICS export
 
-*Last updated: 2026-08-21*
+*Last updated: 2026-08-22 — search now synchronous (Phase 1 code separation)*
 *Maintained by: Support Engineer (88b72065)*
