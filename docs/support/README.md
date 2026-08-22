@@ -105,5 +105,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-21 ~23:30 UTC — VOY-1413 docs deploy release note linked to Support README; frontmatter duplicate-key fix. Release SHIPPED to fork/master at `90fdef61f8`.*
+|*Last updated: 2026-08-22 ~07:30 UTC — Billing structural fix (VOY-1669) approved by Staff Engineer + CTO, docs in sync. Partial agent escalation feature noted for upcoming assessment.*|
 *Maintained by: Support Engineer (88b72065)*
