@@ -31,14 +31,15 @@ test("passes on the real tree with the shipped baseline", () => {
   assert.match(output, /OK — \d+ migration file\(s\) match \d+ journal entry\/entries/);
 });
 
-test("reports no defects on this fork's clean journal (RBR-1033 fork-retarget)", () => {
+test("reports expected defects on this fork's journal (RBR-1033 fork-retarget)", () => {
   // RBR-968 pinned upstream/paperclipai/paperclip's known defects (duplicate idx 178,
-  // gaps at 126/130/177). This fork's journal diverged before those defects existed on
-  // this line of history, so it has neither: no duplicate-idx or idx-gap warnings.
+  // gaps at 126/130/177). This fork's journal has been synced with upstream/main and
+  // inherited the gaps at 126 and 130. The guard still passes (gaps are warnings, not
+  // errors) — this test asserts the known state so any unexpected new defects surface.
   const { status, output } = runGuard();
   assert.equal(status, 0, output);
   assert.doesNotMatch(output, /WARN Duplicate journal idx/);
-  assert.doesNotMatch(output, /WARN Gaps in journal idx sequence/);
+  assert.match(output, /WARN Gaps in journal idx sequence: 126, 130/);
 });
 
 test("--strict also passes cleanly on this fork's journal", () => {
@@ -134,9 +135,10 @@ test("agrees with the TS source of truth on the real tree (anti-drift)", () => {
     "mjs and ts guards disagree on whether the tree passes under --strict",
   );
 
-  // Both must see the same defects, by number. This fork's journal is clean.
+  // Both must see the same defects, by number. This fork's journal has known
+  // gaps at idx 126 and 130 inherited from upstream/main.
   assert.deepEqual(tsVerdict.duplicateIdx, []);
-  assert.deepEqual(tsVerdict.idxGaps, []);
+  assert.deepEqual(tsVerdict.idxGaps, [126, 130]);
   assert.match(relaxed.output, new RegExp(`match ${tsVerdict.files} journal entry`));
   if (tsVerdict.relaxedWarnings > 0) {
     assert.match(
