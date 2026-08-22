@@ -4546,3 +4546,51 @@ No new documentation triggers since the billing structural fixes review (VOY-164
 No new documentation triggers. All shipped code has documentation in sync. Standing by.
 
 *Maintained by: Support Engineer (88b72065)*
+
+## Heartbeat — Aug 22 ~06:50 UTC
+
+**Status:** Documentation in sync. Standing by. Batch 2 billing fixes pre-reviewed.
+
+### Board State
+
+| Issue | Status | Assignee | Notes |
+|-------|--------|----------|-------|
+| 9e85fa17 — Customer Acquisition + Onboarding & Conversion cycle | in_progress (blocked) | COO / SE | Waiting on founder for beta prospect names; all child issues done |
+| 002788ae — Docs Review: Billing structural fixes batch 2 (VOY-1669, 1671) | **blocked** | Support Engineer (me) | Blocked on deployment (VOY-1682); docs pre-verified and ready |
+| 46020a9e — Release: Ship billing structural fixes batch 2 | in_progress | RE | Pipeline active |
+| 79d63214 — QA Verification: Billing structural fixes batch 2 | in_review | QA | |
+| f9038c60 — Fix P2-1: Transaction wrapping for webhook handlers | in_progress | FE | |
+| f6d2a0ca — Fix P2: reportUsage read-then-write race | todo | FE | |
+
+### Recent Commits Assessed (since ~03:25 UTC)
+
+| Commit | Documentation Impact |
+|--------|---------------------|
+| b840497fab — P1-2 TOCTOU guard in createOrUpdateSubscription (VOY-1669) | **None** — covered by committed release note |
+| 1b901f8a8d — add transaction + FOR UPDATE to createOrUpdateSubscription | **None** — hardening of same fix, same release |
+| e5a8217f8e — concurrency test for VOY-1669/1671 | **None** — test-only |
+| 45a89a344a — release note + concurrency test for VOY-1669 TOCTOU billing fix | **Release note committed** — customer-facing, support escalation path included |
+| 7f00845bd9 — Staff Engineer finalise VOY-1669 disposition APPROVED | **None** — internal disposition doc |
+
+### Documentation Coverage
+
+| Asset | Status |
+|-------|--------|
+| Release note (`docs/support/releases/voy-1669-toctou-billing-fix.md`) | ✅ Committed — covers TOCTOU fix, usage race fix, retry wrapping, escalation path |
+| Main releases page (`docs/releases.md`) | ✅ Updated with VOY-1669 highlights and link |
+| Billing support assessment | ✅ Current — fixes are internal, no API/config changes |
+| All prior release notes | ✅ Present and accurate |
+
+### Actions
+
+- [x] 5 new commits assessed — zero documentation impact beyond already-committed release note
+- [x] Release note voy-1669-toctou-billing-fix.md verified — accurate, customer-facing, support escalation included
+- [x] Main releases.md verified — VOY-1669 entry present
+- [x] Blocked docs review issue (002788ae) pre-verified; awaiting deployment to close
+- [x] Billing batch 2 pipeline monitored — release still in_progress, docs review blocked as designed
+
+### Summary
+
+All shipped code since last heartbeat is documented. The batch 2 billing fixes have a committed release note. My blocked docs review issue (002788ae) is genuinely blocked on deployment — docs are pre-verified and ready for closure once deployment completes. No new documentation triggers outstanding.
+
+*Maintained by: Support Engineer (88b72065)*
