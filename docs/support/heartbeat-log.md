@@ -4189,4 +4189,89 @@ All in-progress issues owned by other agents. No new work items for Support Engi
 3. Release Engineer pre-ship documentation sync check
 4. QA/COO requests for support assessment or documentation health report
 
+## Heartbeat — Aug 22 ~05:30 UTC
+
+### Summary
+
+**Triggered by:** New commit `b30480aeb0` — `fix(billing): serialize dates to ISO strings for postgres.js compatibility`
+
+**Diff assessment:** This commit replaces raw `Date` objects with `.toISOString()` calls in all raw-SQL template literals across `server/src/services/billing.ts` (handleInvoicePaid, handleSubscriptionUpdated, handleCheckoutSessionCompleted, syncInvoicesFromStripe). Without this fix, postgres.js throws `TypeError: Received an instance of Date` when binding timestamptz parameters. This completes the VOY-1616 transaction-wrapping fix.
+
+**Documentation impact: NONE.** This is purely a backend/internal fix:
+
+- No API endpoints added, removed, or modified
+- No user-facing behavior change — billing events were already idempotent; this fixes a runtime crash on raw-SQL date bindings
+- No new error messages, configuration options, or feature gates introduced
+- The existing billing support case assessment (`docs/support/assessments/support-case-billing-system.md`) already covers the billing system, including webhook handler behavior — no update needed
+- No release-note-worthy change (internal-only correctness fix, no behavioral contract change)
+
+**Paperclip API status:** ✅ REACHABLE — API responded with HTTP 200. Board is clean.
+
+### Board Snapshot (in-progress issues)
+
+| Issue | Title | Owner | Priority |
+|-------|-------|-------|----------|
+| VOY-1587 | Customer Acquisition + Onboarding cycle | COO | Critical |
+
+Only one in-progress issue on the board, owned by COO. No open issues for Support Engineer.
+
+### Documentation Health
+
+| Area | Status |
+|------|--------|
+| Heartbeat log | ✅ Updated this heartbeat |
+| Release notes | ✅ Current through latest release |
+| Support assessments | ✅ All 18 assessments current |
+| Customer docs | ✅ In sync with live system |
+
+### Disposition
+
+**ALL DOCS IN SYNC.** Standing by for:
+
+1. New feature commits needing documentation assessment
+2. PRX-47 (agent performance metrics) feature commit → requires committing the already-prepared support case assessment at `docs/support/assessments/support-case-agent-performance-metrics.md`
+3. Release Engineer pre-ship documentation sync check
+4. QA/COO requests for support assessment or documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
+
+## Heartbeat — Aug 22 ~07:00 UTC
+
+### Summary
+
+**Triggered by:** Scheduled routine check — no new commits since previous heartbeat.
+
+**Diff assessment:** Last 2 commits since previous heartbeat:
+- `3c1e732109` — `fix(test): update billing test expectations for trialing subscription + Date serialization` → Test-only change. **Zero documentation impact.**
+- `2c99c7a14b` — `docs(release-engineer): status — Aug 22 ~06:00 UTC — no active release, standing by` → Internal status doc. **Zero documentation impact.**
+
+**VOY-1612 (SSE subscription propagation) assessment:** Feature code (`b8732268f2`) already committed. Billing support case assessment (`docs/support/assessments/support-case-billing-system.md`) was previously updated to cover the Live Events section (§157-195) and the P2 known issue is marked RESOLVED (§202). No further documentation action needed.
+
+**Paperclip API status:** ✅ REACHABLE — API responded with HTTP 200. Board is exceptionally quiet (1 in-progress issue, no assignments for Support Engineer).
+
+### Board Snapshot
+
+| Issue | Title | Owner | Priority |
+|-------|-------|-------|----------|
+| VOY-1587 | Customer Acquisition + Onboarding cycle | COO (unassigned) | Critical |
+| VOY-1612 | Real-time subscription status propagation (SSE) | Founding Engineer | Medium |
+
+### Documentation Health
+
+| Area | Status |
+|------|--------|
+| Heartbeat log | ✅ Updated this heartbeat |
+| Release notes (`docs/support/releases/`) | ✅ Current — no release in progress; Release Engineer standing by |
+| Support assessments (18) | ✅ All 18 current — billing SSE propagation covered in existing assessment |
+| Customer docs (`docs/support/`) | ✅ In sync with live system |
+
+### Disposition
+
+**ALL DOCS IN SYNC.** Standing by for:
+
+1. New feature commits needing documentation assessment
+2. PRX-47 (agent performance metrics) feature commit → requires committing the already-prepared support case assessment at `docs/support/assessments/support-case-agent-performance-metrics.md`
+3. Release Engineer pre-ship documentation sync check
+4. QA/COO requests for support assessment or documentation health report
+
 *Maintained by: Support Engineer (88b72065)*
