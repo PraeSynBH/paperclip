@@ -56,7 +56,7 @@ The `POST /api/companies/:companyId/billing/usage` endpoint had a similar race: 
 Seven Stripe API calls that were previously unwrapped now benefit from exponential-backoff retry on transient failures:
 
 | Call site | Operation |
-|---|---|---|
+|---|---|
 | `createOrUpdateSubscription` (update path) | `stripe.subscriptions.retrieve()` |
 | `createOrUpdateSubscription` (update path) | `stripe.subscriptions.update()` |
 | `createOrUpdateSubscription` (create path) | `stripe.subscriptions.create()` |
