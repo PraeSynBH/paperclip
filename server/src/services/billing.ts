@@ -768,6 +768,11 @@ export function billingService(db: Db) {
                 paperclipTierId: data.tierId,
               },
               proration_behavior: "create_prorations",
+            }, {
+              // Idempotency key prevents orphan subscriptions when the
+              // Stripe API call succeeds but the HTTP response is lost
+              // and withStripeRetry retries.
+              idempotencyKey: `createOrUpdateSubscription:create:${companyId}:${data.tierId}`,
             }),
             "createOrUpdateSubscription:subscriptions.create",
           );
