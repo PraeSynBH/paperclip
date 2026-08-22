@@ -2,12 +2,27 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-20
+last_updated: 2026-08-22
 ---
 
 # Release Notes
 
 Paperclip ships continuously. This page documents each release to the main branch with curated, customer-facing notes.
+
+---
+
+## P1-2 TOCTOU Billing Fix — August 22, 2026
+
+[Full release notes →](/support/releases/voy-1669-toctou-billing-fix)
+
+### Highlights
+
+- **TOCTOU Race Fix in Subscription Creation** — Two concurrent subscription creation requests can no longer produce duplicate subscriptions. The INSERT now uses `ON CONFLICT` — if the race is lost, the orphan Stripe subscription is cancelled and the winner's record is returned. No more double-billing risk from rapid button clicks or race conditions.
+- **Usage Report Race Fix** — Concurrent usage reports for the same metric and billing period are now handled safely via `INSERT ... ON CONFLICT DO UPDATE` (upsert). No more duplicate usage records.
+- **Seven More Stripe Calls Gain Retry** — `subscriptions.retrieve()`, `subscriptions.update()`, `subscriptions.create()`, `subscriptionItems.createUsageRecord()`, and `invoices.list()` are now wrapped in `withStripeRetry` for automatic exponential-backoff retry on transient Stripe failures. All 10 Stripe API call sites in the billing service are now protected.
+- **Zero Downtime/API Impact** — No endpoint changes, no request/response changes, no new environment variables, no configuration changes. All fixes are server-side.
+
+[Full release notes →](/support/releases/voy-1669-toctou-billing-fix)
 
 ---
 
