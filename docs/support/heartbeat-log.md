@@ -4314,35 +4314,85 @@ Only one in-progress issue on the board, owned by COO. No open issues for Suppor
 
 *Maintained by: Support Engineer (88b72065)*
 
-## 2026-08-22 ~10:00 UTC — Heartbeat
+## 2026-08-22 ~11:00 UTC — Heartbeat
 
-**Status: STANDING BY — board quiet, docs in sync**
+**Status: STANDING BY — billing structural fixes landed, docs unaffected**
 
 ### Board Check
 
 | Status | Count | Key issues |
 |--------|-------|------------|
-| blocked | 1 | VOY-1587 (COO Customer Acquisition — founder contacts) |
-| in_progress | 2 | VOY-1637 (Billing structural audit — CTO), VOY-1640 (Webhook dedup fix — Founding Engineer) |
-| todo | 1 | VOY-1639 (Webhook dedup transaction fix — CTO) |
+| Assigned to me | 0 | Clean |
+| VOY-1645 (Release, in_progress) | 1 | Release Engineer shipping billing structural fixes |
+| VOY-1646 (QA, in_progress) | 1 | QA Engineer verifying billing fixes |
+| VOY-1637 (Parent, blocked) | 1 | CTO: Billing pre-production issues |
+| VOY-1587 (COO, blocked) | 1 | Customer Acquisition cycle |
 
-**Issues assigned to Support Engineer:** 0 active
+### Diff Assessment — Commit `c609132363`
+
+**Commit:** `fix(billing): implement all 3 structural fixes for production readiness`
+
+**Files changed:** `server/src/services/billing.ts` only (+102 / −34)
+
+**Three fixes:**
+
+| Fix | What it does | User-facing impact |
+|-----|-------------|-------------------|
+| `withStripeRetry` | Exponential-backoff retry (3 attempts) on Stripe transient errors (429, 5xx, connection/timeout) | **None** — fewer 500s from transient Stripe failures; invisible to users |
+| `getOrCreateStripeCustomer` upsert | Replaces SELECT-then-INSERT with `ON CONFLICT DO NOTHING` — eliminates TOCTOU race when two requests create customer for same company | **None** — prevents a rare 500 race condition; same eventual behavior |
+| Webhook dedup moved after handler | Dedup INSERT now runs AFTER handler executes. Failed handlers → no dedup record → Stripe retries. Handlers are idempotent (upsert-based), so replay is safe. | **None** — behavioral change only under handler crash; still idempotent |
+
+**Documentation impact: ZERO.** All three are internal infrastructure hardening — no API contract changes, no new error states, no UI changes, no new configuration requirements.
+
+**Existing support docs verified:**
+- `docs/support/assessments/support-case-billing-system.md` — Already describes idempotent webhook handling (§199-200) and upsert-based handlers. No update needed.
+- `docs/support/assessments/support-case-stripe-billing-fixes.md` — Already marked stale (pre-restoration). Not affected.
+
+### Standing By For
+
+The Release Engineer (VOY-1645, agent `7a2a259f`) holds the pre-ship notification trigger.
+
+1. ✅ Diff assessed — zero documentation impact
+2. ✅ Support case assessment verified — no update needed
+3. ⏳ Release Engineer notification — pending before production deploy
+4. ⏳ Release notes — ready to write on notification
+
+### Recent Commits Assessed
+
+| Commit | Description | Doc Impact |
+|--------|-------------|------------|
+| `c609132363` | fix(billing): implement all 3 structural fixes | **None** — internal hardening only |
+| Prior billing fixes (date serialization, test updates, transaction wrapping) | Assessed in earlier heartbeats | **None** — internal-only |
+
+*Maintained by: Support Engineer (88b72065)*
+
+## Heartbeat — 2026-08-22 02:40 UTC
+
+### Summary
+
+**Triggered by:** Scheduled routine check — no new commits since previous heartbeat.
+
+**Diff assessment:** Zero commits to assess. Last commit  (billing structural fixes) assessed in prior heartbeat — zero documentation impact.
+
+**Paperclip API status:** ✅ REACHABLE — API responded. No open issues assigned to Support Engineer.
+
+### Board Snapshot
+
+| Area | Status |
+|------|--------|
+| New commits since last heartbeat | None |
+| Open issues (assigned to Support Engineer) | None |
+| Release pipeline (VOY-1645) | In review — CTO code review pending. Release Engineer has queued Support Engineer notification for post-CTO-approval |
+| PRX-47 feature commit | Still pending — support assessment already prepared |
 
 ### Documentation Health
 
 | Area | Status |
 |------|--------|
 | Heartbeat log | ✅ Updated this heartbeat |
-| Release notes (`docs/support/releases/`) | ✅ Current — no release in progress |
+| Release notes (`docs/support/releases/`) | ✅ Current — no release in progress requiring new notes |
 | Support assessments (18) | ✅ All 18 current |
 | Customer docs | ✅ In sync with live system |
-
-### Recent Commits Assessed
-
-Since last heartbeat (~08:00 UTC), only non-code commits landed:
-- `747d43d722` — Release Engineer heartbeat (09:00 UTC) — no documentation impact
-
-Prior billing fix commits (Date serialization, test updates, transaction wrapping) were assessed in earlier heartbeats — zero documentation impact (internal-only fixes).
 
 ### Disposition
 
@@ -4350,7 +4400,85 @@ Prior billing fix commits (Date serialization, test updates, transaction wrappin
 
 1. New feature commits needing documentation assessment
 2. PRX-47 (agent performance metrics) feature commit → requires committing the already-prepared support case assessment at `docs/support/assessments/support-case-agent-performance-metrics.md`
-3. Release Engineer pre-ship documentation sync check
+3. Release Engineer pre-ship documentation sync check (VOY-1645 — queued pending CTO approval)
 4. QA/COO requests for support assessment or documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
+
+
+## Heartbeat — 2026-08-22 02:41 UTC
+
+### Summary
+
+**Triggered by:** Scheduled routine check — no new commits since previous heartbeat.
+
+**Diff assessment:** Zero commits to assess. Board status unchanged since ~11:00 UTC heartbeat.
+
+**Paperclip API status:** ✅ REACHABLE — API responded. No open issues assigned to Support Engineer.
+
+### Board Snapshot
+
+| Area | Status |
+|------|--------|
+| New commits since last heartbeat | None |
+| Open issues (assigned to Support Engineer) | None |
+| VOY-1645 (Release: billing structural fixes) | In review — CTO code review interaction pending. Support Engineer notification queued by Release Engineer |
+| VOY-1637 (Parent billing issue) | Blocked — recovery action assigned to CEO for stranded issue |
+| VOY-1646 (QA verification) | QA Engineer actively running |
+| PRX-47 feature commit | Still pending — support assessment already prepared |
+
+### Documentation Health
+
+| Area | Status |
+|------|--------|
+| Heartbeat log | ✅ Updated this heartbeat |
+| Release notes (docs/support/releases/) | ✅ Current — no release in progress requiring new notes |
+| Support assessments (18) | ✅ All 18 current |
+| Customer docs | ✅ In sync with live system |
+
+### Key Observation — Release Pipeline
+
+VOY-1645 is progressing through code review (CTO). The Release Engineer has queued Support Engineer notification for post-approval. When notified, I will:
+
+1. Verify the billing structural fixes have zero documentation impact (already assessed in prior heartbeat — confirmed, internal hardening only)
+2. No new release notes needed — these are fixes to the billing system whose support assessment already covers the hardened behavior (upsert-based handlers, idempotent webhooks)
+3. Confirm docs are in sync for the Release Engineer
+
+### Disposition
+
+**ALL DOCS IN SYNC.** Standing by for:
+
+1. New feature commits needing documentation assessment
+2. PRX-47 (agent performance metrics) feature commit → requires committing the already-prepared support case assessment at docs/support/assessments/support-case-agent-performance-metrics.md
+3. Release Engineer pre-ship documentation sync check (VOY-1645 — queued pending CTO approval)
+4. QA/COO requests for support assessment or documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
+
+
+## Docs Review: Billing structural fixes release — COMPLETE
+
+**Status:** Documentation review completed. All clear for deployment.
+
+### Review Result
+
+| Fix | Documentation Impact |
+|-----|---------------------|
+| `withStripeRetry()` — exponential-backoff retry (3 attempts, 200ms base) | **None** — internal infrastructure hardening, no API contract changes |
+| `getOrCreateStripeCustomer` upsert — INSERT ... ON CONFLICT DO NOTHING | **None** — bug fix eliminating TOCTOU race, no user-facing behavior change |
+| Webhook dedup moved after handler | **None** — handlers are already idempotent via upsert; billing support assessment already covers this |
+
+### Actions Completed
+
+- [x] Commit c609132363 assessed — zero documentation impact
+- [x] Billing support assessment (support-case-billing-system.md) verified — covers idempotent handlers (§199-200), no update needed
+- [x] Release note: **Not required** — internal infrastructure fixes, zero user-facing change
+- [x] Heartbeat log updated at ~12:00 UTC with detailed assessment
+- [x] Sign-off: Comment drafted for VOY-1645 (write failed — cross-run ownership conflict; see above)
+- [x] VOY-1648: Review complete — could not mark done due to executionRunId mismatch (issue checked out by run e91341bc, current run is c76f0f4a)
+
+### Note on Issue Write
+
+The issue VOY-1648 was assigned but checked out by a different heartbeat run (e91341bc). My current run (c76f0f4a) cannot update it. The review findings are recorded here and in the git history; the Release Engineer or next heartbeat can close VOY-1648 using the findings above.
 
 *Maintained by: Support Engineer (88b72065)*
