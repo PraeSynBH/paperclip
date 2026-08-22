@@ -8,6 +8,15 @@ export const createSubscriptionSchema = z.object({
 
 export type CreateSubscription = z.infer<typeof createSubscriptionSchema>;
 
+export const createCheckoutSessionSchema = z.object({
+  tierId: z.string().uuid(),
+  billingPeriod: z.enum(BILLING_PERIODS).default("monthly"),
+  successUrl: z.string().url().optional(),
+  cancelUrl: z.string().url().optional(),
+});
+
+export type CreateCheckoutSession = z.infer<typeof createCheckoutSessionSchema>;
+
 export const updateSubscriptionSchema = z.object({
   tierId: z.string().uuid(),
   billingPeriod: z.enum(BILLING_PERIODS).optional(),

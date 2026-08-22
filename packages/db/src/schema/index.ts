@@ -119,6 +119,7 @@ export {
 export { notificationPreferences, notifications, pushSubscriptions } from "./notifications.js";
 export { subscriptionTiers } from "./subscription_tiers.js";
 export { stripeCustomers } from "./stripe_customers.js";
+export { stripeWebhookEvents } from "./stripe_webhook_events.js";
 export { companySubscriptions } from "./company_subscriptions.js";
 export { subscriptionUsage } from "./subscription_usage.js";
 export { subscriptionInvoices } from "./subscription_invoices.js";

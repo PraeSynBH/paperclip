@@ -1797,6 +1797,11 @@ export {
   type ReportUsage,
 } from "./validators/billing.js";
 
+export {
+  FREE_FEATURES,
+  ACTIVE_SUBSCRIPTION_STATUSES,
+} from "./billing-features.js";
+
 export type {
   MarketplaceAgentResponse,
   MarketplaceAgentInstallResponse,

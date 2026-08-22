@@ -3,8 +3,8 @@
 **Feature**: Stripe-integrated billing with subscription management, usage tracking, invoice syncing, and board-user-only mutation controls
 **Assessed by**: Support Engineer
 **Date**: 2026-08-18
-**Related**: VOY-1364, VOY-1367, VOY-944, VOY-896, VOY-905
-**Release**: v0.4.0-alpha (hotfix VOY-1367)
+**Related**: VOY-1364, VOY-1367, VOY-944, VOY-896, VOY-905, VOY-1669, VOY-1671, VOY-1687
+**Release**: v0.4.0-alpha (hotfix VOY-1367) + VOY-1669 batch 2 fixes (pending release)
 
 ## Feature Overview (User Perspective)
 
@@ -98,6 +98,32 @@ When budget thresholds are crossed (via the budgets service), the notification s
 
 See the [Notification System Support Case Assessment](support-case-notification-system.md) for notification behavior details.
 
+## Known Limitations & Risk Register
+
+### Batch 1 (v0.4.0 / VOY-1367)
+
+1. **P1: Webhook idempotency** — ✅ **FIXED** (committed `1fb17b8f18`). Migration 0228 adds `stripe_webhook_events` dedup table with `UNIQUE(stripe_event_id)`. Webhook handler inserts event ID before processing; 23505 duplicate violation → silently skip. UNIQUE indexes on `stripe_invoice_id` and `stripe_customers.company_id` also applied.
+
+2. **P1: Race in handleSubscriptionUpdated / handleCheckoutSessionCompleted** — ✅ **FIXED** (committed `1fb17b8f18`). Uses `INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE SET` — concurrent Stripe events are idempotent.
+
+3. ✅ **P1-2: TOCTOU in createOrUpdateSubscription** — **FIXED** (committed `b840497fab`, VOY-1669). The SELECT-then-INSERT race window in `createOrUpdateSubscription` is eliminated. The INSERT now uses `ON CONFLICT (company_id) DO NOTHING`; if the race is lost, the orphan Stripe subscription is cancelled and the winner's record is returned. The UPDATE path now uses `companyId` for the WHERE clause instead of a potentially stale `existingSub.id`. Both Stripe create and update paths are wrapped in `withStripeRetry` for resilience against transient Stripe API failures.
+
+4. ✅ **P2: reportUsage read-then-write race** — **FIXED** (committed `b840497fab`, VOY-1669). The `reportUsage` endpoint no longer does a separate SELECT-then-INSERT/UPDATE. It uses `INSERT ... ON CONFLICT DO UPDATE` (upsert) on the unique constraint `(subscription_id, metric, period_start, period_end)`, making concurrent usage reports safe. The `stripe.subscriptionItems.createUsageRecord()` call is now wrapped in `withStripeRetry`.
+
+5. ✅ **P2: No real-time subscription status propagation** — **RESOLVED** (committed `b8732268f2`). All 8 subscription state transitions now emit `subscription.status.updated` live events via `publishLiveEvent`. The UI handler in `LiveUpdatesProvider` invalidates subscription and overview caches on receipt, so the UI updates immediately without manual refresh.
+
+6. **P2: Zero test coverage** on webhook handlers, checkout flow, cancel/reactivate, invoice sync. 🟡 **Partially addressed** by concurrent billing concurrency test suite (commit `e5a8217f8e`, 7 tests covering FOR UPDATE serialisation, ON CONFLICT upsert, ON CONFLICT DO NOTHING, 5-concurrent usage upserts, unique constraint safety net). Webhook/checkout/invoice-sync handlers still lack dedicated tests.
+
+### Batch 2 (VOY-1669 / VOY-1673 — pending release)
+
+7. **P2-1: Transaction wrapping for webhook handlers** — ✅ **FIXED** (committed `151f0a2066`, VOY-1669). `handleInvoicePaymentFailed` and `handleSubscriptionDeleted` are now wrapped in `db.transaction()`. The UPDATE + live-event publish are now atomic. This matches the pattern already used by `handleInvoicePaid` and `handleSubscriptionUpdated`.
+
+8. ✅ **VOY-1687: Idempotency key on stripe.subscriptions.create()** — **FIXED** (committed `cd74f15ca8`). The `stripe.subscriptions.create()` call in `createOrUpdateSubscription` now passes an idempotency key (`createOrUpdateSubscription:create:{companyId}:{tierId}`). This prevents orphan subscriptions when the Stripe API call succeeds but the HTTP response is lost and `withStripeRetry` retries.
+
+9. **No subscription tier seed data** in committed code — tiers must be seeded manually or via a bootstrap script.
+
+10. **Feature-flagged** — All billing routes are gated behind `PAPERCLIP_BILLING_ENABLED=true` (disabled by default).
+
 ## Support Escalation Path
 
 | Issue | Severity | Action |
@@ -115,3 +141,4 @@ See the [Notification System Support Case Assessment](support-case-notification-
 - [Stripe Billing Robustness Fixes Support Case Assessment](support-case-stripe-billing-fixes.md)
 - [Stripe Tier Sync Hardening Support Case Assessment](support-case-stripe-tier-sync.md)
 - [v0.4.0-alpha Release Notes](../releases/v0.4.0-alpha-deep-planning.md)
+- [VOY-1669 TOCTOU Billing Fix Release Notes](../releases/voy-1669-toctou-billing-fix.md)
