@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { issueRecoveryActions } from "@paperclipai/db";
 import type {
@@ -35,12 +35,16 @@ export type UpsertIssueRecoveryActionInput = {
   maxAttempts?: number | null;
   timeoutAt?: Date | null;
   lastAttemptAt?: Date | null;
+  attemptCount?: number;
 };
 
 export type ResolveIssueRecoveryActionInput = {
   companyId: string;
   sourceIssueId: string;
   actionId?: string | null;
+  kind?: IssueRecoveryActionKind | null;
+  cause?: string | null;
+  fingerprint?: string | null;
   status: Extract<IssueRecoveryActionStatus, "resolved" | "cancelled">;
   outcome: IssueRecoveryActionOutcome;
   resolutionNote?: string | null;
@@ -120,8 +124,12 @@ export function issueRecoveryActionService(db: Db) {
     }
   }
 
-  async function getActiveForIssue(companyId: string, sourceIssueId: string): Promise<IssueRecoveryAction | null> {
-    const row = await db
+  async function getActiveForIssue(
+    companyId: string,
+    sourceIssueId: string,
+    dbOrTx: DbOrTransaction = db,
+  ): Promise<IssueRecoveryAction | null> {
+    const row = await dbOrTx
       .select()
       .from(issueRecoveryActions)
       .where(
@@ -196,7 +204,7 @@ export function issueRecoveryActionService(db: Db) {
           nextAction: input.nextAction,
           wakePolicy: input.wakePolicy ?? null,
           monitorPolicy: input.monitorPolicy ?? null,
-          attemptCount: existing.attemptCount + 1,
+          attemptCount: input.attemptCount ?? existing.attemptCount + 1,
           maxAttempts: input.maxAttempts ?? null,
           timeoutAt: input.timeoutAt ?? null,
           lastAttemptAt: input.lastAttemptAt ?? now,
@@ -238,7 +246,7 @@ export function issueRecoveryActionService(db: Db) {
           nextAction: input.nextAction,
           wakePolicy: input.wakePolicy ?? null,
           monitorPolicy: input.monitorPolicy ?? null,
-          attemptCount: 1,
+          attemptCount: input.attemptCount ?? 1,
           maxAttempts: input.maxAttempts ?? null,
           timeoutAt: input.timeoutAt ?? null,
           lastAttemptAt: input.lastAttemptAt ?? now,
@@ -257,37 +265,6 @@ export function issueRecoveryActionService(db: Db) {
     return runExclusiveUpsert(input, () => upsertSourceScopedUnlocked(input));
   }
 
-  // RBR-922 (AC4): fingerprint idempotency — a stale-cancelled cause must not
-  // re-park the same issue. When source revalidation (AC3) cancels a recovery
-  // action, it moves out of the `active`/`escalated` partial unique index, so
-  // the next sweep's `upsertSourceScoped` sees no active action and creates a
-  // fresh one — re-parking the issue. This method checks whether a
-  // previously-cancelled/resolved action exists with the same fingerprint, so
-  // the caller can skip the upsert and prevent the re-park.
-  async function getCancelledForFingerprint(
-    companyId: string,
-    sourceIssueId: string,
-    cause: string,
-    fingerprint: string,
-  ): Promise<IssueRecoveryAction | null> {
-    const row = await db
-      .select()
-      .from(issueRecoveryActions)
-      .where(
-        and(
-          eq(issueRecoveryActions.companyId, companyId),
-          eq(issueRecoveryActions.sourceIssueId, sourceIssueId),
-          eq(issueRecoveryActions.cause, cause),
-          eq(issueRecoveryActions.fingerprint, fingerprint),
-          sql`${issueRecoveryActions.status} not in ('active', 'escalated')`,
-        ),
-      )
-      .orderBy(desc(issueRecoveryActions.resolvedAt))
-      .limit(1)
-      .then((rows) => rows[0] ?? null);
-    return row ? toReadModel(row) : null;
-  }
-
   async function resolveActiveForIssue(
     input: ResolveIssueRecoveryActionInput,
     dbOrTx: DbOrTransaction = db,
@@ -300,6 +277,15 @@ export function issueRecoveryActionService(db: Db) {
     ];
     if (input.actionId) {
       predicates.push(eq(issueRecoveryActions.id, input.actionId));
+    }
+    if (input.kind) {
+      predicates.push(eq(issueRecoveryActions.kind, input.kind));
+    }
+    if (input.cause) {
+      predicates.push(eq(issueRecoveryActions.cause, input.cause));
+    }
+    if (input.fingerprint) {
+      predicates.push(eq(issueRecoveryActions.fingerprint, input.fingerprint));
     }
 
     const [updated] = await dbOrTx
@@ -319,7 +305,6 @@ export function issueRecoveryActionService(db: Db) {
 
   return {
     getActiveForIssue,
-    getCancelledForFingerprint,
     listActiveForIssues,
     resolveActiveForIssue,
     upsertSourceScoped,

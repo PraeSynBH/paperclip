@@ -3,6 +3,7 @@ import { ApiAuthError, ApiConnectionError, ApiRequestError, PaperclipApiClient }
 
 describe("PaperclipApiClient", () => {
   afterEach(() => {
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
@@ -78,7 +79,7 @@ describe("PaperclipApiClient", () => {
       /curl http:\/\/localhost:3100\/api\/health/,
     );
     await expect(client.post("/api/companies/import/preview", {})).rejects.toThrow(
-      /pnpm dev|pnpm paperclipai run/,
+      /pnpm dev|npx paperclipai run/,
     );
   });
 

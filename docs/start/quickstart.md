@@ -65,6 +65,7 @@ Once Paperclip is running:
 2. **Deploy a company from a template** — the fastest path. From the Companies page click **Templates** (or go to `/company/templates`) and deploy a pre-built company (Travel Concierge, Support Ops, Engineering Team, or CPA Firm) in one click. Each template ships with agents, skills, a knowledge starter pack, a goal, and a starter issue.
 3. **Hire marketplace agents** — browse pre-built agents at **Agents → Marketplace** and hire them with one click. Each agent comes with curated skills, adapter config, and permissions.
 4. **Set up billing** — connect Stripe keys and choose a subscription tier from the **Billing** page.
+   > ⚠️ *Fork-only billing implementation removed (upstream merge cleanup, commit `de8529fc03`). Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). The billing page and endpoints may not be functional until restoration completes.*
 5. **Configure notifications** — set up SMTP email and VAPID web push from **Settings → Notifications**.
 6. **Install a knowledge starter pack** — give your agents industry context with pre-curated knowledge documents.
 7. Or create a company from scratch: define a company goal, create a CEO agent, and configure its adapter.

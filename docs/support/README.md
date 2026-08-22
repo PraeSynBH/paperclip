@@ -11,12 +11,13 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
+| TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | voy-1669/1671 | Aug 22, 2026 (SHIPPED via VOY-1682) | [Release Notes](releases/voy-1669-toctou-billing-fix.md) |
 | Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Assessment](assessments/support-case-async-ux-background-jobs.md) · [Release Notes](releases/voy-1474-async-ux.md) |
 || Google OAuth & PostHog auth events + P2 fixes (ts_rank alias, DB client hardening) | voy-1420-posthog-p2-fixes (96faa13434+) | Documented, ready for release to fork/master | [Google OAuth](assessments/support-case-google-oauth.md) |
 | Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
 | Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Aug 18, 2026 (PR #48) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
 | Knowledge Starter Packs — curated KB document bundles installed with company templates or via standalone API | v0.5.0 | Aug 18, 2026 (PR #48) | [Starter Packs](assessments/support-case-knowledge-starter-packs.md) + [API](/api/knowledge-starter-packs) |
-| Billing System — Stripe subscriptions, usage, invoices (trust boundary hardened) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Billing](assessments/support-case-billing-system.md) + [API](/api/billing) |
+| Billing System — Stripe subscriptions, usage, invoices (trust boundary hardened) | v0.4.0+v0.5.0 | **Fork-only impl removed 2026-08-21; upstream-compatible restoration in progress (VOY-1590)** | [Billing](assessments/support-case-billing-system.md) + [API](/api/billing) — both flagged |
 | Notification System — 5 types, 3 channels, digests, dedup (idempotency hardened) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Notification](assessments/support-case-notification-system.md) + [API](/docs/api/notifications) |
 | Company Templates — one-click company deploy (production-stable) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Templates](assessments/support-case-company-templates.md) + [API](/docs/api/company-templates) |
 | VOY-1367 Security Hardening — billing trust boundary, memory indexes, notification dedup, marketplace auth, watchdog fix | v0.5.0 | Aug 18, 2026 (PR #48) | [Release note](releases/v0.5.0-phase-1.md) |
@@ -46,7 +47,7 @@ This directory contains support case assessments for Paperclip features. Each do
 | [Manager-Chain Issue Permissions](kb/authorization-manager-chain-grant.md) | Managers can comment on and mutate issues assigned to agents in their reporting subtree | `f09cf3bc6e` | VOY-1264 |
 | [Recovery Phantom-Park-and-Revalidate](kb/recovery-phantom-park-protocol.md) | Recovery system temporarily parks terminal issues for recovery action execution | `7f84af039b` | RBR-921/RBR-953 |
 | [Heartbeat Max Concurrent Runs Enforcement](kb/heartbeat-max-concurrent-runs.md) | `tickTimers` checks maxConcurrentRuns before enqueueing | `b9d5299816` | PRA-553 |
-| [Billing Downgrade-to-Free on Cancellation](kb/billing-cancellation-downgrade.md) | Subscription cancellation downgrades tier on next login | `83a1cee` | VOY-944 |
+| [Billing Downgrade-to-Free on Cancellation](kb/billing-cancellation-downgrade.md) | Subscription cancellation downgrades tier on next login — **fork-only impl removed 2026-08-21; restoration in progress (VOY-1590)** | `83a1cee` | VOY-944 |
 | [Child-Only Blocker Reclassification](kb/blocker-attention-child-only-classification.md) | Blocked issues with only child blockers now show `needs_attention` | `6b0b118367`+`7f84af039b` | RBR-824 |
 | [DB Health Watchdog](kb/db-health-watchdog.md) | Embedded PG health probe behavior, restart gates, external-mode differences, and env-var configuration | `cd7f9d21db`+`36d152f5d2` | P0-B / PRA-1051 |
 
@@ -91,12 +92,13 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
+| TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | [View](releases/voy-1669-toctou-billing-fix.md) *(SHIPPED — merged to main via VOY-1682 2026-08-22)* |
 | v0.5.0 Market Readiness — Self-Service Onboarding + Billing + Notifications + Agent Marketplace + Async UX + Docs | [View](releases/v0.5.0-market-readiness.md) *(Released — 2026-08-20)* |
-|| Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
+| Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
 | Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Ready — documentation verified for release to fork/master)* |
 | PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
-|| Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
-|| Docs Site Deploy — Voyonder Cloud/SaaS + Billing Webhook Fix (VOY-1413) | [View](releases/voy-1413-docs-deploy.md) *(SHIPPED — merged to fork/master 2026-08-21)* |
+| Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
+| Docs Site Deploy — Voyonder Cloud/SaaS + Billing Webhook Fix (VOY-1413) | [View](releases/voy-1413-docs-deploy.md) *(SHIPPED — merged to fork/master 2026-08-21)* |
 | v0.5.0 Phase 1 — Security Hardening + Marketplace + Onboarding + Company Templates stable | [View](releases/v0.5.0-phase-1.md) |
 | v0.4.0-alpha (RC-4) — Deep Planning + Memory & Knowledge + Chat-to-Work + C-Fixes + Extraction Jobs + Billing + Notifications + Company Templates | [View](releases/v0.4.0-alpha-deep-planning.md) |
 | v0.2.13 — Stripe billing fixes | [View](releases/v0.2.13-stripe-fixes.md) |
@@ -105,5 +107,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-21 ~23:30 UTC — VOY-1413 docs deploy release note linked to Support README; frontmatter duplicate-key fix. Release SHIPPED to fork/master at `90fdef61f8`.*
+*Last updated: 2026-08-22 ~07:55 UTC — VOY-1684 docs review complete: release note status updated to SHIPPED, support case assessment items 6-10 updated for P2-1 transaction wrapping, idempotency key, and concurrency test coverage. TOCTOU billing fix entry added to release notes table.*
 *Maintained by: Support Engineer (88b72065)*

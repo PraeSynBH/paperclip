@@ -46,6 +46,7 @@ import {
   updateUserCompanyAccessSchema,
   PERMISSION_KEYS,
   isUuidLike,
+  FEATURE_KEYS,
 } from "@paperclipai/shared";
 import type { DeploymentExposure, DeploymentMode, HumanCompanyMembershipRole, PermissionKey } from "@paperclipai/shared";
 import {
@@ -53,8 +54,30 @@ import {
   conflict,
   notFound,
   unauthorized,
-  badRequest
+  badRequest,
+  tooManyRequests,
+  paywall,
 } from "../errors.js";
+import { getHiddenSettings } from "../services/settings-visibility.js";
+
+/**
+ * Floor: when the hosting operator hides the Instance Access surface
+ * (`instance.access` in PAPERCLIP_HIDDEN_SETTINGS), instance-admin user
+ * management is rejected alongside it — user administration then belongs to
+ * the operator's own control plane. Applies to the Access page's reads too;
+ * invite and company-membership routes are company-scoped and stay open.
+ */
+function assertAccessAdminVisible() {
+  if (getHiddenSettings().has("instance.access")) {
+    throw forbidden("Instance user administration is managed by the hosting operator on this instance", {
+      code: "settings_operator_managed",
+    });
+  }
+}
+import {
+  createInviteRateLimiter,
+  type InviteRateLimiter,
+} from "../services/invite-rate-limit.js";
 import { logger } from "../middleware/logger.js";
 import { validate } from "../middleware/validate.js";
 import { collectReachableInterfaceHosts } from "../runtime-api.js";
@@ -66,6 +89,7 @@ import {
   logActivity,
   notifyHireApproved
 } from "../services/index.js";
+import { billingService } from "../services/billing.js";
 import {
   grantsForHumanRole,
   normalizeHumanRole,
@@ -84,32 +108,29 @@ import {
 import { claimFirstInstanceAdmin } from "../first-admin-claim.js";
 import { getStorageService } from "../storage/index.js";
 import { secretService } from "../services/secrets.js";
-import {
-  COMPANY_INVITE_TTL_MS,
-  INVITE_RESOLUTION_DNS_TIMEOUT_MS,
-  INVITE_RESOLUTION_PROBE_DEFAULT_TIMEOUT_MS,
-} from "../timeout-constants.js";
 
 function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
 }
 
 const INVITE_TOKEN_PREFIX = "pcp_invite_";
-const INVITE_TOKEN_ALPHABET = "abcdefghijklmnopqrstuvwxyz0123456789";
-const INVITE_TOKEN_SUFFIX_LENGTH = 8;
+// 32 random bytes = 256 bits of entropy, base64url-encoded (43 chars). The
+// invite token is public (anyone with the link can GET/accept the invite), so
+// it must not be brute-forceable. The previous 8-char base36 suffix carried only
+// ~41 bits, which is online-enumerable. The token is stored hashed (sha256) in
+// `invites.tokenHash`; the raw value is only returned once on creation.
+const INVITE_TOKEN_ENTROPY_BYTES = 32;
 const INVITE_TOKEN_MAX_RETRIES = 5;
+const COMPANY_INVITE_TTL_MS = 72 * 60 * 60 * 1000;
+const INVITE_RESOLUTION_DNS_TIMEOUT_MS = 3_000;
 
 type MemberGrantPayload = {
   permissionKey: PermissionKey;
   scope?: Record<string, unknown> | null;
 };
 
-function createInviteToken() {
-  const bytes = randomBytes(INVITE_TOKEN_SUFFIX_LENGTH);
-  let suffix = "";
-  for (let idx = 0; idx < INVITE_TOKEN_SUFFIX_LENGTH; idx += 1) {
-    suffix += INVITE_TOKEN_ALPHABET[bytes[idx]! % INVITE_TOKEN_ALPHABET.length];
-  }
+export function createInviteToken() {
+  const suffix = randomBytes(INVITE_TOKEN_ENTROPY_BYTES).toString("base64url");
   return `${INVITE_TOKEN_PREFIX}${suffix}`;
 }
 
@@ -137,6 +158,11 @@ function requestBaseUrl(req: Request) {
     req.header("x-forwarded-host")?.split(",")[0]?.trim() || req.header("host");
   if (!host) return "";
   return `${proto}://${host}`;
+}
+
+function resolveBaseUrl(req: Request, authPublicBaseUrl?: string): string {
+  if (authPublicBaseUrl) return authPublicBaseUrl.replace(/\/+$/, "");
+  return requestBaseUrl(req);
 }
 
 function buildCliAuthApprovalPath(challengeId: string, token: string) {
@@ -1076,12 +1102,13 @@ function toInviteSummaryResponse(
       brandColor: string | null;
       logoUrl: string | null;
     }
-    | null = null
+    | null = null,
+  authPublicBaseUrl?: string
 ) {
   const companyInfo = typeof company === "string"
     ? { name: company, brandColor: null, logoUrl: null }
     : company;
-  const baseUrl = requestBaseUrl(req);
+  const baseUrl = resolveBaseUrl(req, authPublicBaseUrl);
   const invitePath = `/invite/${token}`;
   const onboardingPath = `/api/invites/${token}/onboarding`;
   const onboardingTextPath = `/api/invites/${token}/onboarding.txt`;
@@ -1634,7 +1661,13 @@ function buildOnboardingDiscoveryDiagnostics(input: {
       code: "openclaw_onboarding_private_host_not_allowed",
       level: "warn",
       message: `Onboarding host "${apiHost}" is not in allowed hostnames for authenticated/private mode.`,
-      hint: `Run pnpm paperclipai allowed-hostname ${apiHost}`
+      // `apiHost` comes from the request base URL, so a requester controls it.
+      // Never put that value into the guidance command. An operator or an agent
+      // can paste the command into a shell, and that outer shell evaluates a
+      // metacharacter span in the host before any CLI receives argv. A
+      // direct-exec form such as `npx` does not stop the outer shell. Emit
+      // a static `<host>` placeholder and keep the raw host in the message only.
+      hint: `Run npx paperclipai allowed-hostname <host>`
     });
   }
 
@@ -1696,9 +1729,10 @@ function buildInviteOnboardingManifest(
     deploymentExposure: DeploymentExposure;
     bindHost: string;
     allowedHostnames: string[];
+    authPublicBaseUrl?: string;
   }
 ) {
-  const baseUrl = requestBaseUrl(req);
+  const baseUrl = resolveBaseUrl(req, opts.authPublicBaseUrl);
   const skillPath = `/api/invites/${token}/skills/paperclip`;
   const skillUrl = baseUrl ? `${baseUrl}${skillPath}` : skillPath;
   const registrationEndpointPath = `/api/invites/${token}/accept`;
@@ -1727,7 +1761,8 @@ function buildInviteOnboardingManifest(
       req,
       token,
       invite,
-      opts.companyName ?? null
+      opts.companyName ?? null,
+      opts.authPublicBaseUrl
     ),
     onboarding: {
       instructions:
@@ -1766,7 +1801,7 @@ function buildInviteOnboardingManifest(
         guidance:
           opts.deploymentMode === "authenticated" &&
           opts.deploymentExposure === "private"
-            ? "If OpenClaw runs on another machine, ensure the Paperclip hostname is reachable and allowed via `pnpm paperclipai allowed-hostname <host>`."
+            ? "If OpenClaw runs on another machine, ensure the Paperclip hostname is reachable and allowed via `npx paperclipai allowed-hostname <host>`."
             : "Ensure OpenClaw can reach this Paperclip API base URL for invite, claim, and skill bootstrap calls."
       },
       textInstructions: {
@@ -1794,6 +1829,7 @@ export function buildInviteOnboardingTextDocument(
     deploymentExposure: DeploymentExposure;
     bindHost: string;
     allowedHostnames: string[];
+    authPublicBaseUrl?: string;
   }
 ) {
   const manifest = buildInviteOnboardingManifest(req, token, invite, opts);
@@ -1988,7 +2024,7 @@ export function buildInviteOnboardingTextDocument(
 
       If none are reachable: ask your human operator for a reachable hostname/address and help them update network configuration.
       For authenticated/private mode, they may need:
-      - pnpm paperclipai allowed-hostname <host>
+      - npx paperclipai allowed-hostname <host>
       - then restart Paperclip and retry onboarding.
     `);
   }
@@ -2601,6 +2637,8 @@ export function accessRoutes(
     bindHost: string;
     allowedHostnames: string[];
     inviteResolutionNetwork?: Partial<InviteResolutionNetwork>;
+    inviteRateLimiter?: InviteRateLimiter;
+    authPublicBaseUrl?: string;
   }
 ) {
   const router = Router();
@@ -2610,6 +2648,37 @@ export function accessRoutes(
   const routeInviteResolutionNetwork = opts.inviteResolutionNetwork
     ? { ...defaultInviteResolutionNetwork, ...opts.inviteResolutionNetwork }
     : inviteResolutionNetwork;
+
+  // Per-IP rate limit for the public, unauthenticated invite-token endpoints
+  // (`/invites/:token*`). The token is looked up by hash, so without a limit the
+  // token space would be online-enumerable. Applied as a router-level middleware
+  // so every current and future `/invites/:token` sub-route is covered.
+  //
+  // The key is deliberately NOT `requestIp()`: that helper prefers the
+  // client-supplied `X-Forwarded-For` header (fine for log/audit fields,
+  // but trivially spoofable as a rate-limit key — rotating fake XFF values
+  // would mint a fresh budget per request). `req.ip` honors Express's
+  // `trust proxy` setting (configured from TRUST_PROXY in app.ts, default:
+  // trust nothing), so it is the socket's remote address unless the
+  // operator explicitly trusts a proxy — an unforgeable key either way.
+  const inviteRateLimiter = opts.inviteRateLimiter ?? createInviteRateLimiter();
+  router.use("/invites/:token", (req, res, next) => {
+    const result = inviteRateLimiter.consume(
+      req.ip || req.socket?.remoteAddress || "unknown",
+    );
+    res.setHeader("X-RateLimit-Limit", String(result.limit));
+    res.setHeader("X-RateLimit-Remaining", String(result.remaining));
+    if (!result.allowed) {
+      res.setHeader("Retry-After", String(result.retryAfterSeconds));
+      next(
+        tooManyRequests("Too many invite requests", {
+          retryAfterSeconds: result.retryAfterSeconds,
+        }),
+      );
+      return;
+    }
+    next();
+  });
 
   async function assertInstanceAdmin(req: Request) {
     if (req.actor.type !== "board") throw unauthorized();
@@ -2842,6 +2911,8 @@ export function accessRoutes(
 
       if (req.body.requestedCompanyId) {
         assertCompanyAccess(req, req.body.requestedCompanyId);
+        // Gate board-level API key creation behind the api_access feature.
+        await billingService(db).requireFeature(req.body.requestedCompanyId, FEATURE_KEYS.API_ACCESS);
       }
 
       const key = await boardAuth.createNamedBoardApiKey({
@@ -3250,6 +3321,40 @@ export function accessRoutes(
     async (req, res) => {
       const companyId = req.params.companyId as string;
       await assertCompanyPermission(req, companyId, "users:invite");
+
+      // Gate invites: check unlimited_seats tier feature and seat limit.
+      const billing = billingService(db);
+      const accessResult = await billing.checkFeatureAccess(companyId, FEATURE_KEYS.UNLIMITED_SEATS);
+      if (!accessResult.allowed) {
+        // Feature not in tier — check the included seat count.
+        const tier = accessResult.tier;
+        const includedSeats = tier?.includedSeats ?? 0;
+        if (includedSeats > 0) {
+          const currentMemberCount = await db
+            .select({ count: sql<number>`count(*)::int` })
+            .from(companyMemberships)
+            .where(
+              and(
+                eq(companyMemberships.companyId, companyId),
+                eq(companyMemberships.status, "active"),
+              ),
+            )
+            .then((rows) => rows[0]?.count ?? 0);
+          if (currentMemberCount >= includedSeats) {
+            throw paywall(
+              `Your current plan (${tier?.name ?? "unknown"}) is limited to ${includedSeats} active members. Upgrade to invite more.`,
+              { featureKey: FEATURE_KEYS.UNLIMITED_SEATS, tierName: tier?.name ?? undefined },
+            );
+          }
+        } else {
+          // No included seats AND no unlimited_seats feature — reject outright.
+          throw paywall(
+            "Your current plan does not support inviting additional members.",
+            { featureKey: FEATURE_KEYS.UNLIMITED_SEATS, tierName: tier?.name ?? undefined },
+          );
+        }
+      }
+
       const { token, created, normalizedAgentMessage } =
         await createCompanyInviteForCompany({
           req,
@@ -3284,7 +3389,8 @@ export function accessRoutes(
         req,
         token,
         created,
-        companyBranding
+        companyBranding,
+        opts.authPublicBaseUrl
       );
       res.status(201).json({
         ...created,
@@ -3338,7 +3444,8 @@ export function accessRoutes(
         req,
         token,
         created,
-        companyBranding
+        companyBranding,
+        opts.authPublicBaseUrl
       );
       res.status(201).json({
         ...created,
@@ -3378,7 +3485,7 @@ export function accessRoutes(
         )
       : null;
     res.json({
-      ...toInviteSummaryResponse(req, token, invite, companyBranding),
+      ...toInviteSummaryResponse(req, token, invite, companyBranding, opts.authPublicBaseUrl),
       invitedByUserName: inviterName,
       joinRequestStatus: inviteJoinRequest?.status ?? null,
       joinRequestType: inviteJoinRequest?.requestType ?? null,
@@ -3553,7 +3660,7 @@ export function accessRoutes(
         : NaN;
     const timeoutMs = Number.isFinite(parsedTimeoutMs)
       ? Math.max(1000, Math.min(15000, Math.floor(parsedTimeoutMs)))
-      : INVITE_RESOLUTION_PROBE_DEFAULT_TIMEOUT_MS;
+      : 5000;
     const resolvedTarget = await resolveInviteResolutionTarget(target, routeInviteResolutionNetwork);
     const probe = await probeInviteResolutionTarget(resolvedTarget, timeoutMs, routeInviteResolutionNetwork);
     res.json({
@@ -4369,7 +4476,9 @@ export function accessRoutes(
 
       const created = await agents.createApiKey(
         joinRequest.createdAgentId,
-        "initial-join-key"
+        "initial-join-key",
+        { kind: "standard" },
+        { responsibleUserId: joinRequest.approvedByUserId ?? joinRequest.requestingUserId ?? null },
       );
 
       await logActivity(db, {
@@ -4381,8 +4490,9 @@ export function accessRoutes(
         entityId: created.id,
         details: {
           agentId: joinRequest.createdAgentId,
-          joinRequestId: requestId
-        }
+          joinRequestId: requestId,
+          responsibleUserId: created.responsibleUserId,
+        },
       });
 
       res.status(201).json({
@@ -4719,6 +4829,7 @@ export function accessRoutes(
     "/admin/users/:userId/promote-instance-admin",
     async (req, res) => {
       await assertInstanceAdmin(req);
+      assertAccessAdminVisible();
       const userId = req.params.userId as string;
       const result = await access.promoteInstanceAdmin(userId);
       res.status(201).json(result);
@@ -4727,6 +4838,7 @@ export function accessRoutes(
 
   router.get("/admin/users", async (req, res) => {
     await assertInstanceAdmin(req);
+    assertAccessAdminVisible();
     const query = searchAdminUsersQuerySchema.parse(req.query);
     const needle = query.query.trim().toLowerCase();
     const users = await db
@@ -4789,6 +4901,7 @@ export function accessRoutes(
     "/admin/users/:userId/demote-instance-admin",
     async (req, res) => {
       await assertInstanceAdmin(req);
+      assertAccessAdminVisible();
       const userId = req.params.userId as string;
       const removed = await access.demoteInstanceAdmin(userId);
       if (!removed) throw notFound("Instance admin role not found");
@@ -4798,6 +4911,7 @@ export function accessRoutes(
 
   router.get("/admin/users/:userId/company-access", async (req, res) => {
     await assertInstanceAdmin(req);
+    assertAccessAdminVisible();
     const userId = req.params.userId as string;
     res.json(await loadUserCompanyAccessResponse(db, access, userId));
   });
@@ -4807,6 +4921,7 @@ export function accessRoutes(
     validate(updateUserCompanyAccessSchema),
     async (req, res) => {
       await assertInstanceAdmin(req);
+      assertAccessAdminVisible();
       const userId = req.params.userId as string;
       await access.setUserCompanyAccess(
         userId,

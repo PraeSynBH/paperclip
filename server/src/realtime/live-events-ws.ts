@@ -9,7 +9,6 @@ import type { DeploymentMode } from "@paperclipai/shared";
 import type { BetterAuthSessionResult } from "../auth/better-auth.js";
 import { logger } from "../middleware/logger.js";
 import { subscribeCompanyLiveEvents } from "../services/live-events.js";
-import { WS_PING_INTERVAL_MS } from "../timeout-constants.js";
 
 interface WsSocket {
   readyState: number;
@@ -47,7 +46,15 @@ interface UpgradeContext {
   actorId: string;
 }
 
+/** Cloud-proxied browser identity resolved from trusted x-paperclip-cloud-* headers. */
+export interface CloudUpgradeActor {
+  userId: string;
+  /** Companies this actor may subscribe to (primary stack company + real memberships). */
+  companyIds: string[];
+}
+
 interface IncomingMessageWithContext extends IncomingMessage {
+  paperclipWebSocketHandled?: boolean;
   paperclipUpgradeContext?: UpgradeContext;
 }
 
@@ -122,6 +129,7 @@ async function authorizeUpgrade(
   opts: {
     deploymentMode: DeploymentMode;
     resolveSessionFromHeaders?: (headers: Headers) => Promise<BetterAuthSessionResult | null>;
+    resolveCloudActor?: (req: IncomingMessage) => Promise<CloudUpgradeActor | null>;
   },
 ): Promise<UpgradeContext | null> {
   const queryToken = url.searchParams.get("token")?.trim() ?? "";
@@ -136,6 +144,25 @@ async function authorizeUpgrade(
         actorType: "board",
         actorId: "board",
       };
+    }
+
+    // Cloud-managed deployments authenticate proxied browsers with trusted
+    // x-paperclip-cloud-* headers, never a local Better Auth session — the
+    // session fallback below can only 403 them, which left the live-events
+    // socket permanently unreachable behind the Cloud front door. A resolved
+    // cloud actor is authoritative: authorize against its membership scope.
+    // Absent/invalid cloud headers fall through to the session path, so
+    // self-hosted behavior is unchanged.
+    if (opts.resolveCloudActor) {
+      const cloudActor = await opts.resolveCloudActor(req);
+      if (cloudActor) {
+        if (!cloudActor.companyIds.includes(companyId)) return null;
+        return {
+          companyId,
+          actorType: "board",
+          actorId: cloudActor.userId,
+        };
+      }
     }
 
     if (opts.deploymentMode !== "authenticated" || !opts.resolveSessionFromHeaders) {
@@ -203,6 +230,12 @@ export function setupLiveEventsWebSocketServer(
   opts: {
     deploymentMode: DeploymentMode;
     resolveSessionFromHeaders?: (headers: Headers) => Promise<BetterAuthSessionResult | null>;
+    /**
+     * Resolves a Cloud-proxied browser's identity from the trusted
+     * x-paperclip-cloud-* headers on the upgrade request. Wired by managed
+     * deployments; self-hosted instances leave it unset.
+     */
+    resolveCloudActor?: (req: IncomingMessage) => Promise<CloudUpgradeActor | null>;
   },
 ) {
   const wss = new WebSocketServer({ noServer: true });
@@ -218,7 +251,7 @@ export function setupLiveEventsWebSocketServer(
       aliveByClient.set(socket, false);
       socket.ping();
     }
-  }, WS_PING_INTERVAL_MS);
+  }, 30000);
 
   wss.on("connection", (socket: WsSocket, req: IncomingMessage) => {
     const context = (req as IncomingMessageWithContext).paperclipUpgradeContext;
@@ -256,6 +289,10 @@ export function setupLiveEventsWebSocketServer(
   });
 
   server.on("upgrade", (req, socket, head) => {
+    if ((req as IncomingMessageWithContext).paperclipWebSocketHandled) {
+      return;
+    }
+
     const onRawSocketError = (err: Error) => {
       logger.warn({ err, path: req.url }, "live websocket upgrade socket error");
     };
@@ -282,6 +319,7 @@ export function setupLiveEventsWebSocketServer(
     void authorizeUpgrade(db, req, companyId, url, {
       deploymentMode: opts.deploymentMode,
       resolveSessionFromHeaders: opts.resolveSessionFromHeaders,
+      resolveCloudActor: opts.resolveCloudActor,
     })
       .then((context) => {
         if (!context) {

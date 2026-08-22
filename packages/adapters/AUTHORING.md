@@ -38,6 +38,18 @@ How to apply:
   `workspace_finalize=failed` on the execution workspace, which gates
   dependent issue wakes until the next successful finalize. Do not swallow
   restore errors.
+- A transported workspace copy *may* carry the local workspace's `origin`
+  remote URL so that branches in the copy stay publishable by the agent or an
+  operator who holds credentials — the transport helpers copy the URL as
+  metadata only. The copy is allowlist-based and fails closed
+  (`sanitizeGitRemoteUrl`): http(s) URLs are stripped of userinfo, query, and
+  fragment; `ssh:`/`git:` scheme URLs are stripped of password and query;
+  scp-like `user@host:path` passes through (the syntax has no password slot);
+  every other shape — filesystem paths, unknown schemes — is dropped rather
+  than risk persisting an embedded secret. This does not weaken the contract:
+  sync-back through the local cwd remains the only cross-run persistence
+  path, the helpers never fetch from or push to that remote, and a workspace
+  without an `origin` transports exactly as before.
 
 The invariant is pinned by the `no-remote-git contract` case in
 [`packages/adapter-utils/src/ssh-fixture.test.ts`](../adapter-utils/src/ssh-fixture.test.ts),
@@ -56,24 +68,3 @@ above) so the opt-in shows up in code review.
 
 For the architecture-level write-up of cross-run persistence, see
 [`docs/guides/board-operator/execution-workspaces-and-runtime-services.md`](../../docs/guides/board-operator/execution-workspaces-and-runtime-services.md#cross-run-persistence-no-remote-git-contract).
-
-## No status-blind `curl` mutations of the Paperclip API
-
-Agent-facing text must never hand an agent a `curl` that mutates the Paperclip
-API without observing the HTTP status. `curl -sS -X POST ... | jq` exits `0` on
-a 4xx/5xx, and the API's auth-denial envelope is success-shaped, so a dropped
-write is indistinguishable from a landed one (RBR-882). RBR-919 made the safe
-path mandatory for generated prompts; this check stops the old idiom being
-copied back in.
-
-[`scripts/check-curl-status-gate.mjs`](../../scripts/check-curl-status-gate.mjs)
-scans `skills/`, `docs/`, and `packages/adapters/*/src/server/` and fails the
-`policy` CI job when a changed file adds a mutating `curl`
-(`-X POST|PATCH|PUT|DELETE`) against a Paperclip API path with no status gate —
-none of `--fail-with-body`, `--fail`/`-f`, `-w '%{http_code}'`, or the blessed
-`pc-api.sh` helper. Run it locally with `pnpm check:curl-status-gate` (changed
-files) or `--all` (full audit). If a site must stay status-blind — e.g. a doc
-example deliberately demonstrating the failure mode — add
-`paperclip:allow-bare-curl: <reason>` on the invocation or within three lines
-above it; the reason is required and an unjustified marker fails too.
-

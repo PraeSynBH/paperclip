@@ -41,17 +41,16 @@ import type { PluginJobStore } from "./plugin-job-store.js";
 import type { PluginWorkerManager } from "./plugin-worker-manager.js";
 import { parseCron, nextCronTick, validateCron } from "./cron.js";
 import { logger } from "../middleware/logger.js";
-import { PLUGIN_JOB_SCHEDULER_TICK_INTERVAL_MS, PLUGIN_JOB_RPC_TIMEOUT_MS } from "../timeout-constants.js";
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
 /** Default interval between scheduler ticks (30 seconds). */
-const DEFAULT_TICK_INTERVAL_MS = PLUGIN_JOB_SCHEDULER_TICK_INTERVAL_MS;
+const DEFAULT_TICK_INTERVAL_MS = 30_000;
 
 /** Default timeout for a runJob RPC call (5 minutes). */
-const DEFAULT_JOB_TIMEOUT_MS = PLUGIN_JOB_RPC_TIMEOUT_MS;
+const DEFAULT_JOB_TIMEOUT_MS = 5 * 60 * 1_000;
 
 /** Maximum number of concurrent job executions across all plugins. */
 const DEFAULT_MAX_CONCURRENT_JOBS = 10;

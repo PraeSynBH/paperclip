@@ -9,6 +9,7 @@ describe("agent local JWT", () => {
   const issuerEnv = "PAPERCLIP_AGENT_JWT_ISSUER";
   const audienceEnv = "PAPERCLIP_AGENT_JWT_AUDIENCE";
   const disableLegacyFallbackEnv = "PAPERCLIP_AGENT_JWT_DISABLE_LEGACY_FALLBACK";
+  const instanceIdEnv = "PAPERCLIP_INSTANCE_ID";
 
   const originalEnv = {
     secret: process.env[secretEnv],
@@ -17,6 +18,7 @@ describe("agent local JWT", () => {
     issuer: process.env[issuerEnv],
     audience: process.env[audienceEnv],
     disableLegacyFallback: process.env[disableLegacyFallbackEnv],
+    instanceId: process.env[instanceIdEnv],
   };
 
   beforeEach(() => {
@@ -26,6 +28,7 @@ describe("agent local JWT", () => {
     delete process.env[issuerEnv];
     delete process.env[audienceEnv];
     delete process.env[disableLegacyFallbackEnv];
+    delete process.env[instanceIdEnv];
     vi.useFakeTimers();
   });
 
@@ -43,11 +46,13 @@ describe("agent local JWT", () => {
     else process.env[audienceEnv] = originalEnv.audience;
     if (originalEnv.disableLegacyFallback === undefined) delete process.env[disableLegacyFallbackEnv];
     else process.env[disableLegacyFallbackEnv] = originalEnv.disableLegacyFallback;
+    if (originalEnv.instanceId === undefined) delete process.env[instanceIdEnv];
+    else process.env[instanceIdEnv] = originalEnv.instanceId;
   });
 
   it("creates and verifies a token", () => {
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-    const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
+    const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1", "user-1");
     expect(typeof token).toBe("string");
 
     const claims = verifyLocalAgentJwt(token!);
@@ -56,9 +61,22 @@ describe("agent local JWT", () => {
       company_id: "company-1",
       adapter_type: "claude_local",
       run_id: "run-1",
+      responsible_user_id: "user-1",
       iss: "paperclip",
       aud: "paperclip-api",
     });
+  });
+
+  it("round-trips a skill_test run scope", () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const issueId = "11111111-1111-4111-8111-111111111111";
+    const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1", "user-1", {
+      kind: "skill_test",
+      issueId,
+    });
+
+    const claims = verifyLocalAgentJwt(token!);
+    expect(claims?.key_scope).toEqual({ kind: "skill_test", issueId });
   });
 
   it("returns null when secret is missing", () => {
@@ -159,13 +177,93 @@ describe("agent local JWT", () => {
     });
   });
 
-  it("defaults TTL to 1h when PAPERCLIP_AGENT_JWT_TTL_SECONDS is unset", () => {
+  // --- Instance isolation (PAP-12899) ---------------------------------------
+  // A worktree/fork control-plane instance runs under a distinct
+  // PAPERCLIP_INSTANCE_ID but deliberately shares PAPERCLIP_AGENT_JWT_SECRET
+  // with its source instance (provisioning copies the secret). Before this
+  // change, a fork-minted run JWT validated successfully against the live plane
+  // (reads worked; writes then failed on missing heartbeat_runs FK rows). These
+  // tests pin the boundary that keeps fork tokens out of the live plane.
+
+  it("stamps the minting instance id into the token claims", () => {
+    process.env[instanceIdEnv] = "default";
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
+    const claims = verifyLocalAgentJwt(token!);
+    expect(claims?.instance_id).toBe("default");
+  });
+
+  it("rejects a fork/worktree-minted token on the live control plane", () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    // Mint on a worktree/fork instance (distinct instance id, SAME secret).
+    process.env[instanceIdEnv] = "pap-12899-worktree";
+    const forkToken = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
+    expect(forkToken).not.toBeNull();
+    // Sanity: it verifies on the instance that minted it.
+    expect(verifyLocalAgentJwt(forkToken!)?.company_id).toBe("company-1");
+
+    // Now switch to the live control plane (same shared secret, "default"
+    // instance) and confirm the fork token no longer authenticates — neither
+    // its instance-scoped signature nor the legacy master-secret fallback
+    // matches, so reads and writes are both refused.
+    process.env[instanceIdEnv] = "default";
+    expect(verifyLocalAgentJwt(forkToken!)).toBeNull();
+  });
+
+  it("keeps live-plane heartbeat tokens authenticating across mint/verify", () => {
+    process.env[instanceIdEnv] = "default";
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1", "user-1");
+    const claims = verifyLocalAgentJwt(token!);
+    expect(claims).toMatchObject({
+      sub: "agent-1",
+      company_id: "company-1",
+      run_id: "run-1",
+      instance_id: "default",
+    });
+  });
+
+  it("rejects a token whose instance_id claim is forged to match the live plane", () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+
+    // Mint a fork token, then tamper the instance_id claim to impersonate the
+    // live "default" instance. The signature was bound to the fork instance's
+    // derived key, so re-encoding the claim cannot make it validate on the
+    // live plane — the claim check is defense-in-depth, the key is the boundary.
+    process.env[instanceIdEnv] = "pap-12899-worktree";
+    const forkToken = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
+    const [headerB64, claimsB64, signature] = forkToken!.split(".");
+    const claims = JSON.parse(Buffer.from(claimsB64, "base64url").toString("utf8"));
+    claims.instance_id = "default";
+    const tamperedClaimsB64 = Buffer.from(JSON.stringify(claims), "utf8").toString("base64url");
+    const tampered = `${headerB64}.${tamperedClaimsB64}.${signature}`;
+
+    process.env[instanceIdEnv] = "default";
+    expect(verifyLocalAgentJwt(tampered)).toBeNull();
+  });
+
+  it("still rejects the master-secret legacy fallback once it is disabled (full instance isolation)", () => {
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    process.env[disableLegacyFallbackEnv] = "true";
+    process.env[instanceIdEnv] = "default";
+    // The legacy fallback signs with the raw shared secret and is therefore
+    // instance-agnostic; disabling it closes that residual cross-instance hole.
+    const legacyToken = craftLegacyMasterSecretToken(process.env[secretEnv]!, "company-1");
+    expect(verifyLocalAgentJwt(legacyToken)).toBeNull();
+  });
+
+  it("defaults TTL to 48h when PAPERCLIP_AGENT_JWT_TTL_SECONDS is unset", () => {
+    // Must match DEFAULT_AGENT_JWT_TTL_SECONDS in cli/src/commands/env.ts. Run
+    // tokens are minted once at adapter spawn, and a suspended host (laptop lid
+    // closed) can delay first execution past a short TTL, making the injected
+    // PAPERCLIP_API_KEY dead on arrival.
     delete process.env[ttlEnv];
     vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
     const token = createLocalAgentJwt("agent-1", "company-1", "claude_local", "run-1");
     const claims = verifyLocalAgentJwt(token!);
     expect(claims).not.toBeNull();
-    expect(claims!.exp - claims!.iat).toBe(60 * 60);
+    expect(claims!.exp - claims!.iat).toBe(60 * 60 * 48);
   });
 
   // Helper: hand-craft a token signed with the raw master secret (legacy path).
@@ -216,123 +314,6 @@ describe("agent local JWT", () => {
       company_id: "company-1",
       adapter_type: "claude_local",
       run_id: "run-1",
-    });
-  });
-
-  // RBR-1035 AC1 + AC4 regression test: the JWT TTL must be sized to the
-  // run's own configured max wall clock (+ margin, computed by the caller
-  // in heartbeat.ts) instead of always trusting the flat instance-wide
-  // default. This is the fix for RBR-1014: a hard 1h default TTL that agent
-  // runs routinely outlive. Note this is distinct from RBR-1036's AC4
-  // (which tests the client's fail-fast-on-401 behavior, not TTL sizing) —
-  // this suite only asserts token-minting/expiry behavior. `minTtlSeconds`
-  // is the 5th positional arg on this fork/master signature (no
-  // responsibleUserId/keyScope params here yet).
-  describe("run-derived TTL (RBR-1035 AC1)", () => {
-    it("mints a token whose exp covers a long-budget run when minTtlSeconds exceeds the default TTL", () => {
-      process.env[ttlEnv] = "3600"; // instance-wide default: 1h
-      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-
-      // Simulate a run configured with a wall-clock budget well beyond the
-      // 1h default (e.g. timeoutSec 21600 + a 300s margin, as computed by
-      // resolveHeartbeatRunTimeoutPolicy + AGENT_JWT_RUN_TIMEOUT_MARGIN_SECONDS
-      // in heartbeat.ts) and assert the minted token's lifetime is sized to
-      // that run budget, not clamped to the shorter instance default.
-      const runBudgetSeconds = 21600 + 300; // 6h05m
-      const token = createLocalAgentJwt(
-        "agent-1",
-        "company-1",
-        "claude_local",
-        "run-long",
-        runBudgetSeconds,
-      );
-      expect(token).not.toBeNull();
-
-      const claims = verifyLocalAgentJwt(token!);
-      expect(claims).not.toBeNull();
-      // exp - iat must equal the run's budget, not the 3600s instance default.
-      expect(claims!.exp - claims!.iat).toBe(runBudgetSeconds);
-      expect(claims!.exp - claims!.iat).toBeGreaterThan(3600);
-
-      // Prove the token is actually alive at the moment the flat 1h default
-      // would have already expired it — this is the exact RBR-1014 failure
-      // mode (401 mid-run masquerading as a timeout) that this fix closes.
-      vi.setSystemTime(new Date("2026-01-01T01:30:00.000Z")); // +90 minutes
-      expect(verifyLocalAgentJwt(token!)).not.toBeNull();
-    });
-
-    it("keeps the tighter instance default TTL for a short-budget run (does not raise the floor for every run)", () => {
-      process.env[ttlEnv] = "3600";
-      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-
-      // A short-budget run (e.g. timeoutSec 60 + margin = 360s) must NOT
-      // widen the token lifetime beyond the instance default — only runs
-      // whose own budget exceeds the default should get a longer-lived
-      // token.
-      const shortRunBudgetSeconds = 360;
-      const token = createLocalAgentJwt(
-        "agent-1",
-        "company-1",
-        "claude_local",
-        "run-short",
-        shortRunBudgetSeconds,
-      );
-      expect(token).not.toBeNull();
-
-      const claims = verifyLocalAgentJwt(token!);
-      expect(claims).not.toBeNull();
-      expect(claims!.exp - claims!.iat).toBe(3600);
-    });
-
-    it("expires a short-budget-run token sooner than a long-budget-run token minted at the same instant", () => {
-      process.env[ttlEnv] = "3600";
-      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-
-      const longToken = createLocalAgentJwt(
-        "agent-1",
-        "company-1",
-        "claude_local",
-        "run-long",
-        14400,
-      );
-      const shortToken = createLocalAgentJwt(
-        "agent-1",
-        "company-1",
-        "claude_local",
-        "run-short",
-        300,
-      );
-
-      const longClaims = verifyLocalAgentJwt(longToken!);
-      const shortClaims = verifyLocalAgentJwt(shortToken!);
-      expect(longClaims).not.toBeNull();
-      expect(shortClaims).not.toBeNull();
-      expect(longClaims!.exp).toBeGreaterThan(shortClaims!.exp);
-
-      // Advance past the short run's ceiling (3600s default, since 300 <
-      // default) but well before the long run's 14400s budget elapses: the
-      // short-budget token must be dead while the long-budget token is
-      // still alive.
-      vi.setSystemTime(new Date("2026-01-01T02:00:00.000Z")); // +2h
-      expect(verifyLocalAgentJwt(shortToken!)).toBeNull();
-      expect(verifyLocalAgentJwt(longToken!)).not.toBeNull();
-    });
-
-    it("ignores a non-finite or non-positive minTtlSeconds and falls back to the instance default", () => {
-      process.env[ttlEnv] = "3600";
-      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
-
-      for (const invalid of [NaN, -100, 0]) {
-        const token = createLocalAgentJwt(
-          "agent-1",
-          "company-1",
-          "claude_local",
-          "run-1",
-          invalid,
-        );
-        const claims = verifyLocalAgentJwt(token!);
-        expect(claims!.exp - claims!.iat).toBe(3600);
-      }
     });
   });
 });

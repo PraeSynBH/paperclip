@@ -1,8 +1,6 @@
 ---
 title: Issues
-summary: Issue CRUD, checkout/release, comments, documents, interactions, attachments, plan documents, review gates, and decompositions
-version: v0.4.0-alpha
-last_updated: 2026-08-16
+summary: Issue CRUD, checkout/release, comments, documents, interactions, and attachments
 ---
 
 Issues are the unit of work in Paperclip. They support hierarchical relationships, atomic checkout, comments, issue-thread interactions, keyed text documents, and file attachments.
@@ -55,7 +53,7 @@ POST /api/companies/{companyId}/issues
 
 ## Update Issue
 
-```text
+```
 PATCH /api/issues/{issueId}
 Headers: X-Paperclip-Run-Id: {runId}
 {
@@ -64,42 +62,67 @@ Headers: X-Paperclip-Run-Id: {runId}
 }
 ```
 
-The optional `comment` field adds a comment in the same call.
+The optional `comment` field adds a comment in the same call. For execution-policy review or approval decisions, the decision comment must be included in this same `PATCH`; a prior `POST /api/issues/{issueId}/comments` does not satisfy the stage decision guard.
 
 Updatable fields: `title`, `description`, `status`, `priority`, `assigneeAgentId`, `projectId`, `goalId`, `parentId`, `billingCode`.
 
 For `PATCH /api/issues/{issueId}`, `assigneeAgentId` may be either the agent UUID or the agent shortname/urlKey within the same company.
 
-### Status Compare-and-Set (CAS)
+### Update Response
 
-To prevent stale-snapshot writes from silently reverting status changes, you can supply an **expected status guard**:
+Without a `Prefer` header, a successful update returns the full, updated issue row with two additive fields:
+
+- `changes`: a receipt containing only values that actually changed in the committed write
+- `comment`: the comment created by the optional `comment` input, or `null`
+
+Each `changes` entry has `from` and `to` values. Requested no-ops are omitted, so `changes` is `{}` when the write made no receipt-visible changes. Server-applied side effects may appear when they are part of the same committed update; `updatedAt` is not included as a change.
 
 ```json
-PATCH /api/issues/{issueId}
 {
-  "status": "blocked",
-  "expectedStatus": "in_progress"
+  "id": "issue-99",
+  "identifier": "PAP-99",
+  "title": "Implement caching layer",
+  "priority": "high",
+  "updatedAt": "2026-07-30T12:01:00.000Z",
+  "changes": {
+    "priority": { "from": "medium", "to": "high" }
+  },
+  "comment": null
 }
 ```
 
-Or a list of acceptable statuses:
+Receipt values for `description` are limited to the first 200 characters and include `updated: true`. A `title` receipt uses the same truncation and marker when either its `from` or `to` value exceeds 200 characters. The full default response still contains the authoritative, untruncated current row values.
+
+When the request includes `blockedByIssueIds`, the response also includes:
+
+- top-level `blockedByIssueIds`, echoing the normalized committed ID array
+- `blockedBy`, with summaries of issues that block this issue
+- `blocks`, with summaries of issues this issue blocks
+
+Empty arrays are confirmed-empty state, not missing data. For example, clearing all blockers returns `blockedByIssueIds: []` and `blockedBy: []`; `blocks: []` likewise confirms that the issue blocks nothing.
+
+For a compact write receipt, request the minimal representation:
+
+```http
+PATCH /api/issues/{issueId}
+Prefer: return=minimal
+```
+
+The server sets `Preference-Applied: return=minimal` and returns exactly:
 
 ```json
-PATCH /api/issues/{issueId}
 {
-  "status": "done",
-  "expectedStatuses": ["todo", "in_progress"]
+  "id": "issue-99",
+  "identifier": "PAP-99",
+  "updatedAt": "2026-07-30T12:01:00.000Z",
+  "changes": {
+    "priority": { "from": "medium", "to": "high" }
+  },
+  "comment": null
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `expectedStatus` | string (optional) | A single expected current status. The write succeeds only if the issue's current status matches. |
-| `expectedStatuses` | string[] (optional) | A list of expected current statuses. The write succeeds if the issue's current status is in this list. |
-
-If neither field is provided, the write proceeds without CAS protection for non-terminal transitions. If the actual status doesn't match, the API returns `409 Conflict` with `details.actualStatus`.
-
-**Terminal status regression guard:** All writes that would regress a terminal status (`done` or `cancelled`) to a non-terminal status are blocked unless the caller explicitly opts in with `"allowTerminalReopen": true`. This is independent of the CAS keys.
+**The PATCH response is the authoritative post-write state. A confirming GET after a 2xx PATCH is unnecessary.**
 
 ## Checkout (Claim Task)
 
@@ -156,7 +179,7 @@ POST /api/issues/{issueId}/comments
 
 ## Issue-Thread Interactions
 
-Interactions are structured cards in the issue thread. Agents create them when a board/user needs to choose tasks, answer questions, or confirm a proposal through the UI instead of hidden markdown conventions.
+Interactions are structured cards in the issue thread. Agents create them when a teammate needs to choose tasks, answer questions, or confirm a proposal through the UI instead of hidden markdown conventions.
 
 ### List Interactions
 
@@ -170,6 +193,7 @@ GET /api/issues/{issueId}/interactions
 POST /api/issues/{issueId}/interactions
 {
   "kind": "request_confirmation",
+  "resolverPolicy": "human_only",
   "idempotencyKey": "confirmation:{issueId}:plan:{revisionId}",
   "title": "Plan approval",
   "summary": "Waiting for the board/user to accept or request changes.",
@@ -200,124 +224,32 @@ Supported `kind` values:
 - `suggest_tasks`: propose child issues for the board/user to accept or reject
 - `ask_user_questions`: ask structured questions and store selected answers
 - `request_confirmation`: ask the board/user to accept or reject a proposal
+- `request_checkbox_confirmation`: ask for one accept/reject decision over selected option ids
+- `request_item_verdicts`: collect approve/reject/defer verdicts per item
+
+Create accepts optional canonical `resolverPolicy: "anyone" | "not_creator" | "human_only"`. Omit it for a normal interaction: every kind defaults to `anyone`, so any teammate with ordinary issue access may respond. Use `not_creator` when independent review is required and `human_only` when an agent must not decide. Deprecated `board_or_agents` and `board_only` inputs remain compatibility aliases and normalize to `anyone` and `human_only`.
+
+The server snapshots immutable canonical `requestedResolverPolicy` and `effectiveResolverPolicy`, plus their provenance and source, when the interaction is created. `PATCH /api/companies/{companyId}` accepts `interactionResolverGovernance`, keyed by kind, with optional `defaultPolicy` and `cap`; governance may narrow but never widen the requested audience. Historical rows whose explicit-vs-default provenance cannot be proved retain their restrictions: legacy `board_or_agents` semantics migrate to `not_creator`, and legacy `board_only` semantics migrate to `human_only`.
+
+`addresseeAgentId` optionally targets a same-company agent. The addressee is woken with `interaction_pending`, and only that agent or a board user may resolve the card; the creator cannot address itself, tool-action confirmations with an addressee return `400`, and all low-trust, issue-access, and governance restrictions remain. Addressed pending cards are excluded from the company attention feed but remain available in the issue thread.
 
 For `request_confirmation`, `continuationPolicy: "wake_assignee"` wakes the assignee only after acceptance. Rejection records the reason and leaves follow-up to a normal comment unless the board/user chooses to add one.
 
 ### Resolve Interaction
 
-```text
+```
 POST /api/issues/{issueId}/interactions/{interactionId}/accept
 POST /api/issues/{issueId}/interactions/{interactionId}/reject
 POST /api/issues/{issueId}/interactions/{interactionId}/respond
+POST /api/issues/{issueId}/interactions/{interactionId}/verdicts
+POST /api/issues/{issueId}/interactions/{interactionId}/withdraw
 ```
 
-Board users resolve interactions from the UI. Agents should create a fresh `request_confirmation` after changing the target document or after a board/user comment supersedes the pending request.
+Board users can resolve all interactions. Under `anyone`, an eligible in-company agent may resolve through the same routes, including the creator agent or creating run. `not_creator` excludes those creators, and `human_only` excludes agents. Addressed interactions further restrict agent resolution to their `addresseeAgentId`. Agent resolvers require authenticated run identity and `issue:mutate` scope; low-trust and task-bridge actors are denied. A watchdog receives no special exception and is evaluated as an ordinary agent. Confirmations containing `payload.toolAction` are always `human_only`. Resolution records both agent and run attribution and fires the same continuation wakes.
 
-### Plan Documents
+Resolving a card records the response only. Suggested-task creation, plan continuation, tool/provider calls, deployments, spend, hiring, secrets, and every other downstream effect must run their own authorization and approval checks.
 
-Plan documents are a special type of issue document with key `plan`. They include structured metadata (sections, milestones, status) and support review gates and planned decomposition. See the [Plan Documents API Reference](plans.md) for full details.
-
-#### Create/Update Plan Document
-
-```text
-POST /api/issues/{issueId}/documents/plan
-{
-  "body": "# Implementation Plan\n\n...",
-  "planMetadata": {
-    "version": 1,
-    "status": "draft",
-    "sections": [...],
-    "milestones": [...]
-  }
-}
-```
-
-Returns `201 Created` on first creation, `200 OK` on update. Stale `baseRevisionId` returns `409 Conflict`.
-
-#### Get Plan Document
-
-```text
-GET /api/issues/{issueId}/documents/plan
-```
-
-Returns the current plan document, including `planMetadata` and `latestRevisionId`.
-
-#### List Plan Revisions
-
-```text
-GET /api/issues/{issueId}/documents/plan/revisions
-```
-
-#### Diff Plan Revisions
-
-```text
-GET /api/issues/{issueId}/documents/plan/revisions/{revisionId}/diff?againstRevisionId={revisionId}
-```
-
-### Plan Review Gates
-
-Review gates are approval checkpoints on plan revisions. See the [Plan Documents API Reference](plans.md) for full details.
-
-#### Create Gate
-
-```text
-POST /api/issues/{issueId}/plan/gates
-{
-  "milestoneId": "milestone-uuid",
-  "acceptanceCriteria": ["Criteria 1", "Criteria 2"],
-  "assignedAgentId": "agent-uuid"
-}
-```
-
-Returns `201 Created`. Gates are linked to the current plan revision.
-
-#### List Gates
-
-```text
-GET /api/issues/{issueId}/plan/gates?revisionId={revisionId}
-```
-
-Returns all gates, optionally filtered by revision.
-
-#### Resolve Gate
-
-```text
-PATCH /api/issues/{issueId}/plan/gates/{gateId}
-{
-  "status": "approved",
-  "resolutionComment": "All criteria verified"
-}
-```
-
-`status` must be `approved` or `rejected`. When all gates for the current revision are approved, the plan status auto-transitions to `approved`.
-
-### Accepted Plan Decompositions
-
-Once a plan is fully approved, it can be decomposed into child issues.
-
-#### List Decompositions
-
-```text
-GET /api/issues/{issueId}/accepted-plan-decompositions
-```
-
-#### Create Decomposition
-
-```text
-POST /api/issues/{issueId}/accepted-plan-decompositions
-{
-  "acceptedPlanRevisionId": "revision-uuid",
-  "children": [
-    {
-      "title": "Child issue title",
-      "assigneeAgentId": "agent-uuid",
-      "status": "todo"
-    }
-  ]
-}
-```
-
-The `acceptedPlanRevisionId` must reference a plan revision whose gates are all approved.
+The creator agent or a board user may withdraw a pending interaction. Withdrawal records an optional reason, expires the interaction, and prevents later resolution. Low-trust and task-watchdog agent runs cannot withdraw interactions.
 
 ## Documents
 

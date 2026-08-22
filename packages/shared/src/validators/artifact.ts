@@ -3,8 +3,6 @@ import { z } from "zod";
 export const COMPANY_ARTIFACTS_DEFAULT_LIMIT = 30;
 export const COMPANY_ARTIFACTS_MAX_LIMIT = 100;
 export const COMPANY_ARTIFACTS_MAX_QUERY_LENGTH = 160;
-/** An artifact is considered stale when it hasn't been updated in this many hours. */
-export const ARTIFACT_STALE_THRESHOLD_HOURS = 24;
 
 export const companyArtifactSourceSchema = z.enum(["document", "attachment", "work_product"]);
 
@@ -14,10 +12,14 @@ export const companyArtifactGroupBySchema = z.enum(["none", "task", "parent_task
 
 export const companyArtifactsQuerySchema = z.object({
   kind: z.enum(["image", "video", "text", "document", "file", "all"]).optional().default("all"),
-  projectId: z.string().uuid().optional(),
+  projectId: z.string().guid().optional(),
   q: z.string().trim().max(COMPANY_ARTIFACTS_MAX_QUERY_LENGTH).optional(),
   groupBy: companyArtifactGroupBySchema.optional().default("none"),
-  groupIssueId: z.string().uuid().optional(),
+  groupIssueId: z.string().guid().optional(),
+  starred: z.preprocess(
+    (value) => value === "true" ? true : value === "false" ? false : value,
+    z.boolean(),
+  ).optional().default(false),
   limit: z.coerce
     .number()
     .int()
@@ -39,28 +41,27 @@ export const companyArtifactSchema = z.object({
   openPath: z.string().nullable(),
   downloadPath: z.string().nullable(),
   issue: z.object({
-    id: z.string().uuid(),
+    id: z.string().guid(),
     identifier: z.string(),
     title: z.string(),
   }),
   project: z.object({
-    id: z.string().uuid(),
+    id: z.string().guid(),
     name: z.string(),
   }).nullable(),
   createdByAgent: z.object({
-    id: z.string().uuid(),
+    id: z.string().guid(),
     name: z.string(),
   }).nullable(),
   updatedAt: z.string().datetime(),
   href: z.string().min(1),
-  isStale: z.boolean().optional(),
 });
 
 export const companyArtifactGroupSchema = z.object({
   id: z.string().min(1),
   groupBy: companyArtifactGroupBySchema.exclude(["none"]),
   issue: z.object({
-    id: z.string().uuid(),
+    id: z.string().guid(),
     identifier: z.string(),
     title: z.string(),
   }),

@@ -41,13 +41,50 @@ import {
 } from "../services/adapter-plugin-store.js";
 import type { AdapterPluginRecord } from "../services/adapter-plugin-store.js";
 import type { ServerAdapterModule, AdapterConfigSchema } from "../adapters/types.js";
+import type {
+  AdapterLoginPanelMode,
+  AdapterLoginSandboxTransport,
+  AdapterLoginTimeoutPolicy,
+} from "@paperclipai/adapter-utils";
 import { loadExternalAdapterPackage, getUiParserSource, getOrExtractUiParserSource, reloadExternalAdapter } from "../adapters/plugin-loader.js";
 import { logger } from "../middleware/logger.js";
+import { forbidden } from "../errors.js";
+import { isCloudManagedInstance } from "../services/cloud-instance.js";
+import { getHiddenSettings } from "../services/settings-visibility.js";
 import { assertBoardOrgAccess, assertInstanceAdmin } from "./authz.js";
 import { BUILTIN_ADAPTER_TYPES } from "../adapters/builtin-adapter-types.js";
-import { CONFIG_SCHEMA_CACHE_TTL_MS, PLUGIN_NPM_INSTALL_TIMEOUT_MS } from "../timeout-constants.js";
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Floor: on cloud-managed instances adapter code is bundled into the platform
+ * image; fetching and loading external adapter packages at runtime stays off
+ * for every actor, including instance admins. Adapter code executes in the
+ * server process, so a runtime install would let an instance admin read the
+ * platform trust anchors from the process environment (mirrors the
+ * bundled-only plugin install floor in plugin-install-guard.ts).
+ */
+function assertAdapterCodeInstallAllowed() {
+  if (isCloudManagedInstance()) {
+    throw forbidden("Adapter installation is platform-managed on cloud-managed instances", {
+      code: "adapter_install_platform_managed",
+    });
+  }
+}
+
+/**
+ * Floor: when the hosting operator hides the Adapters settings surface
+ * (`instance.adapters` in PAPERCLIP_HIDDEN_SETTINGS), adapter management
+ * writes are rejected alongside it. Reads stay open — adapter metadata is
+ * consumed by agent-creation UIs outside the hidden page.
+ */
+function assertAdapterManagementVisible() {
+  if (getHiddenSettings().has("instance.adapters")) {
+    throw forbidden("Adapter management is managed by the hosting operator on this instance", {
+      code: "settings_operator_managed",
+    });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Request / Response types
@@ -62,12 +99,30 @@ interface AdapterInstallRequest {
   version?: string;
 }
 
+/**
+ * The safe scalar login fields the adapter listing projects to the client. It
+ * carries only the panel mode, the sandbox transport, and the timeout policy.
+ * It carries no function member and no secret. The user interface reads it to
+ * pick the login flow and the login panel.
+ */
+interface AdapterLoginProjection {
+  panelMode: AdapterLoginPanelMode;
+  sandboxTransport: AdapterLoginSandboxTransport;
+  timeoutPolicy: AdapterLoginTimeoutPolicy;
+}
+
 interface AdapterCapabilities {
   supportsInstructionsBundle: boolean;
   supportsSkills: boolean;
   supportsLocalAgentJwt: boolean;
   requiresMaterializedRuntimeSkills: boolean;
   supportsModelProfiles: boolean;
+  supportsAcp: boolean;
+  /**
+   * The projected login capability. It is present only when the adapter
+   * declares an interactive login capability. It is absent otherwise.
+   */
+  login?: AdapterLoginProjection;
 }
 
 interface AdapterInfo {
@@ -78,6 +133,7 @@ interface AdapterInfo {
   loaded: boolean;
   disabled: boolean;
   capabilities: AdapterCapabilities;
+  acp?: ServerAdapterModule["acp"];
   /** True when an external plugin has replaced a built-in adapter of the same type. */
   overriddenBuiltin?: boolean;
   /** True when the external override for a builtin type is currently paused. */
@@ -115,13 +171,29 @@ function readAdapterPackageVersionFromDisk(record: AdapterPluginRecord): string 
   }
 }
 
-function buildAdapterCapabilities(adapter: ServerAdapterModule): AdapterCapabilities {
+/**
+ * Build the client capability view for one adapter. The login projection carries
+ * only the safe scalar fields; it drops the function members and the completion
+ * claim, so the response holds no secret and no code.
+ */
+export function buildAdapterCapabilities(adapter: ServerAdapterModule): AdapterCapabilities {
+  const login = adapter.loginCapability;
   return {
     supportsInstructionsBundle: adapter.supportsInstructionsBundle ?? false,
     supportsSkills: Boolean(adapter.listSkills || adapter.syncSkills),
     supportsLocalAgentJwt: adapter.supportsLocalAgentJwt ?? false,
     requiresMaterializedRuntimeSkills: adapter.requiresMaterializedRuntimeSkills ?? false,
     supportsModelProfiles: Boolean(adapter.modelProfiles?.length || adapter.listModelProfiles),
+    supportsAcp: Boolean(adapter.acp),
+    ...(login
+      ? {
+          login: {
+            panelMode: login.panelMode,
+            sandboxTransport: login.sandboxTransport,
+            timeoutPolicy: login.timeoutPolicy,
+          },
+        }
+      : {}),
   };
 }
 
@@ -135,6 +207,7 @@ function buildAdapterInfo(adapter: ServerAdapterModule, externalRecord: AdapterP
     loaded: true, // If it's in the registry, it's loaded
     disabled: disabledSet.has(adapter.type),
     capabilities: buildAdapterCapabilities(adapter),
+    ...(adapter.acp ? { acp: adapter.acp } : {}),
     overriddenBuiltin: externalRecord ? BUILTIN_ADAPTER_TYPES.has(adapter.type) : undefined,
     overridePaused: BUILTIN_ADAPTER_TYPES.has(adapter.type) ? isOverridePaused(adapter.type) : undefined,
     // Prefer on-disk package.json so the UI reflects bumps without relying on store-only fields.
@@ -229,6 +302,8 @@ export function adapterRoutes() {
    */
   router.post("/adapters/install", async (req, res) => {
     assertInstanceAdmin(req);
+    assertAdapterCodeInstallAllowed();
+    assertAdapterManagementVisible();
 
     const { packageName, isLocalPath = false, version } = req.body as AdapterInstallRequest;
 
@@ -265,7 +340,7 @@ export function adapterRoutes() {
 
         await execFileAsync("npm", ["install", "--no-save", spec], {
           cwd: pluginsDir,
-          timeout: PLUGIN_NPM_INSTALL_TIMEOUT_MS,
+          timeout: 120_000,
         });
 
         // Read installed version from package.json
@@ -376,6 +451,8 @@ export function adapterRoutes() {
   router.patch("/adapters/:type", async (req, res) => {
     assertInstanceAdmin(req);
 
+    assertAdapterManagementVisible();
+
     const adapterType = req.params.type;
     const { disabled } = req.body as { disabled?: boolean };
 
@@ -411,6 +488,8 @@ export function adapterRoutes() {
   router.patch("/adapters/:type/override", async (req, res) => {
     assertInstanceAdmin(req);
 
+    assertAdapterManagementVisible();
+
     const adapterType = req.params.type;
     const { paused } = req.body as { paused?: boolean };
 
@@ -438,6 +517,7 @@ export function adapterRoutes() {
    */
   router.delete("/adapters/:type", async (req, res) => {
     assertInstanceAdmin(req);
+    assertAdapterManagementVisible();
 
     const adapterType = req.params.type;
 
@@ -479,7 +559,7 @@ export function adapterRoutes() {
         const pluginsDir = getAdapterPluginsDir();
         await execFileAsync("npm", ["uninstall", externalRecord.packageName], {
           cwd: pluginsDir,
-          timeout: PLUGIN_NPM_INSTALL_TIMEOUT_MS,
+          timeout: 60_000,
         });
         logger.info(
           { type: adapterType, packageName: externalRecord.packageName },
@@ -514,6 +594,7 @@ export function adapterRoutes() {
    */
   router.post("/adapters/:type/reload", async (req, res) => {
     assertInstanceAdmin(req);
+    assertAdapterManagementVisible();
 
     const type = req.params.type;
 
@@ -566,6 +647,8 @@ export function adapterRoutes() {
   // package name, but without the risk of losing the store record.
   router.post("/adapters/:type/reinstall", async (req, res) => {
     assertInstanceAdmin(req);
+    assertAdapterCodeInstallAllowed();
+    assertAdapterManagementVisible();
 
     const type = req.params.type;
 
@@ -592,7 +675,7 @@ export function adapterRoutes() {
 
       await execFileAsync("npm", ["install", "--no-save", record.packageName], {
         cwd: pluginsDir,
-        timeout: PLUGIN_NPM_INSTALL_TIMEOUT_MS,
+        timeout: 120_000,
       });
 
       // Reload the freshly installed adapter
@@ -635,6 +718,7 @@ export function adapterRoutes() {
     schema: AdapterConfigSchema;
     fetchedAt: number;
   }>();
+  const CONFIG_SCHEMA_TTL_MS = 30_000;
 
   router.get("/adapters/:type/config-schema", async (req, res) => {
     // Config schemas are read-only form metadata used when org members create
@@ -653,7 +737,7 @@ export function adapterRoutes() {
     }
 
     const cached = configSchemaCache.get(type);
-    if (cached && cached.adapter === adapter && Date.now() - cached.fetchedAt < CONFIG_SCHEMA_CACHE_TTL_MS) {
+    if (cached && cached.adapter === adapter && Date.now() - cached.fetchedAt < CONFIG_SCHEMA_TTL_MS) {
       res.json(cached.schema);
       return;
     }

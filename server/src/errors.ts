@@ -17,18 +17,46 @@ export function unauthorized(message = "Unauthorized") {
   return new HttpError(401, message);
 }
 
-export function forbidden(message = "Forbidden") {
-  return new HttpError(403, message);
+export function forbidden(message = "Forbidden", details?: unknown) {
+  return new HttpError(403, message, details);
 }
 
-export function notFound(message = "Not found") {
-  return new HttpError(404, message);
+/**
+ * 403 Paywall error — returned when the company's subscription tier
+ * does not include a required feature.
+ *
+ * The `code` field distinguishes paywall denials from generic 403s
+ * so the frontend can show upgrade prompts.
+ */
+export function paywall(
+  message: string,
+  details?: { featureKey?: string; tierName?: string; requiredPlan?: string },
+) {
+  const err = new HttpError(403, message, details);
+  Object.defineProperty(err, "code", { value: "PAYWALL", enumerable: true });
+  return err;
+}
+
+export function notFound(message = "Not found", details?: unknown) {
+  return new HttpError(404, message, details);
 }
 
 export function conflict(message: string, details?: unknown) {
   return new HttpError(409, message, details);
 }
 
+export function payloadTooLarge(message: string, details?: unknown) {
+  return new HttpError(413, message, details);
+}
+
+export function unsupportedMediaType(message: string, details?: unknown) {
+  return new HttpError(415, message, details);
+}
+
 export function unprocessable(message: string, details?: unknown) {
   return new HttpError(422, message, details);
+}
+
+export function tooManyRequests(message = "Too many requests", details?: unknown) {
+  return new HttpError(429, message, details);
 }

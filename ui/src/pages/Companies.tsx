@@ -3,12 +3,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "../context/CompanyContext";
 import { useDialogActions } from "../context/DialogContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
-import { useNavigate } from "@/lib/router";
+import { useCloudInstance } from "../hooks/useCloudInstance";
 import { companiesApi } from "../api/companies";
 import { queryKeys } from "../lib/queryKeys";
 import { formatCents, relativeTime } from "../lib/utils";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,6 +17,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
 import {
   Pencil,
   Check,
@@ -27,7 +29,7 @@ import {
   CircleDot,
   DollarSign,
   Calendar,
-  LayoutTemplate,
+  ArchiveRestore,
 } from "lucide-react";
 
 export function Companies() {
@@ -39,9 +41,11 @@ export function Companies() {
     error,
   } = useCompany();
   const { openOnboarding } = useDialogActions();
-  const navigate = useNavigate();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
+  // A cloud stack holds exactly one company; creating another is a 403 floor
+  // server-side, so the wizard entry point is hidden rather than dead-ending.
+  const isCloud = Boolean(useCloudInstance());
 
   const { data: stats } = useQuery({
     queryKey: queryKeys.companies.stats,
@@ -71,6 +75,19 @@ export function Companies() {
     },
   });
 
+  // Unarchiving previously had no UI at all: archiving happens in company
+  // settings, but an archived company disappears from the sidebar switcher,
+  // so its settings page — and with it any way back — was only reachable by
+  // hand-typed URL. This list is the one place that still shows archived
+  // companies, so restoration lives here.
+  const unarchiveMutation = useMutation({
+    mutationFn: (id: string) => companiesApi.update(id, { status: "active" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.companies.all });
+      queryClient.invalidateQueries({ queryKey: queryKeys.companies.stats });
+    },
+  });
+
   useEffect(() => {
     setBreadcrumbs([{ label: "Companies" }]);
   }, [setBreadcrumbs]);
@@ -92,15 +109,13 @@ export function Companies() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-end gap-2">
-        <Button size="sm" variant="outline" onClick={() => navigate("/company/templates")}>
-          <LayoutTemplate className="h-3.5 w-3.5 mr-1.5" />
-          Templates
-        </Button>
-        <Button size="sm" onClick={() => openOnboarding()}>
-          <Plus className="h-3.5 w-3.5 mr-1.5" />
-          New Company
-        </Button>
+      <div className="flex items-center justify-end">
+        {isCloud ? null : (
+          <Button size="sm" onClick={() => openOnboarding()}>
+            <Plus className="h-3.5 w-3.5 mr-1.5" />
+            New Company
+          </Button>
+        )}
       </div>
 
       <div className="h-6">
@@ -124,7 +139,7 @@ export function Companies() {
               : 0;
 
           return (
-            <div
+            <Card
               key={company.id}
               role="button"
               tabIndex={0}
@@ -135,10 +150,9 @@ export function Companies() {
                   setSelectedCompanyId(company.id);
                 }
               }}
-              className={`group text-left bg-card border rounded-lg p-5 transition-colors cursor-pointer ${
-                selected
-                  ? "border-primary ring-1 ring-primary"
-                  : "border-border hover:border-muted-foreground/30"
+              interactive
+              className={`block group text-left p-5 ${
+                selected ? "border-primary ring-1 ring-primary hover:border-primary" : ""
               }`}
             >
               {/* Header row: name + menu */}
@@ -174,8 +188,8 @@ export function Companies() {
                   ) : (
                     <div className="flex items-center gap-2">
                       <h3 className="font-semibold text-base">{company.name}</h3>
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      <Badge variant="ghost"
+                        className={`text-(length:--text-micro) ${
                           company.status === "active"
                             ? "bg-green-500/10 text-green-600 dark:text-green-400"
                             : company.status === "paused"
@@ -184,7 +198,7 @@ export function Companies() {
                         }`}
                       >
                         {company.status}
-                      </span>
+                      </Badge>
                       <Button
                         variant="ghost"
                         size="icon-xs"
@@ -224,6 +238,15 @@ export function Companies() {
                         <Pencil className="h-3.5 w-3.5" />
                         Rename
                       </DropdownMenuItem>
+                      {company.status === "archived" && (
+                        <DropdownMenuItem
+                          disabled={unarchiveMutation.isPending}
+                          onClick={() => unarchiveMutation.mutate(company.id)}
+                        >
+                          <ArchiveRestore className="h-3.5 w-3.5" />
+                          Unarchive
+                        </DropdownMenuItem>
+                      )}
                       <DropdownMenuSeparator />
                       <DropdownMenuItem
                         variant="destructive"
@@ -295,7 +318,7 @@ export function Companies() {
                   </div>
                 </div>
               )}
-            </div>
+            </Card>
           );
         })}
       </div>

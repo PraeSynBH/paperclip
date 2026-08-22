@@ -3,12 +3,10 @@ import type { Db } from "@paperclipai/db";
 import { approvalComments, approvals } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
 import { redactCurrentUserText } from "../log-redaction.js";
-import { redactSensitiveText } from "../redaction.js";
 import { agentService } from "./agents.js";
 import { budgetService } from "./budgets.js";
 import { notifyHireApproved } from "./hire-hook.js";
 import { instanceSettingsService } from "./instance-settings.js";
-import { captureMetric } from "./posthog.js";
 
 export function approvalService(db: Db) {
   const agentsSvc = agentService(db);
@@ -24,6 +22,13 @@ export function approvalService(db: Db) {
       ...comment,
       body: redactCurrentUserText(comment.body, { enabled: censorUsernameInLogs }),
     };
+  }
+
+  async function reconcileApprovedBuiltInAgent(companyId: string, payload: Record<string, unknown>) {
+    const sourceBuiltInAgentKey = typeof payload.sourceBuiltInAgentKey === "string" ? payload.sourceBuiltInAgentKey : null;
+    if (!sourceBuiltInAgentKey) return;
+    const { builtInAgentService } = await import("./built-in-agents.js");
+    await builtInAgentService(db).ensure(companyId, sourceBuiltInAgentKey);
   }
 
   async function getExistingApproval(id: string) {
@@ -116,6 +121,25 @@ export function approvalService(db: Db) {
         .returning()
         .then((rows) => rows[0]),
 
+    // Cancel an open (pending/revision_requested) approval without a board
+    // decision — e.g. when its paired agent is terminated during duplicate
+    // cleanup. Idempotent: a no-op on already-resolved approvals.
+    cancel: async (id: string, reason?: string | null) => {
+      const now = new Date();
+      const updated = await db
+        .update(approvals)
+        .set({
+          status: "cancelled",
+          decisionNote: reason ?? null,
+          decidedAt: now,
+          updatedAt: now,
+        })
+        .where(and(eq(approvals.id, id), inArray(approvals.status, resolvableStatuses)))
+        .returning()
+        .then((rows) => rows[0] ?? null);
+      return updated;
+    },
+
     approve: async (id: string, decidedByUserId: string, decisionNote?: string | null) => {
       const { approval: updated, applied } = await resolveApproval(
         id,
@@ -130,7 +154,8 @@ export function approvalService(db: Db) {
         const payload = updated.payload as Record<string, unknown>;
         const payloadAgentId = typeof payload.agentId === "string" ? payload.agentId : null;
         if (payloadAgentId) {
-          await agentsSvc.activatePendingApproval(payloadAgentId);
+          await agentsSvc.activatePendingApproval(payloadAgentId, payload);
+          await reconcileApprovedBuiltInAgent(updated.companyId, payload);
           hireApprovedAgentId = payloadAgentId;
         } else {
           const created = await agentsSvc.create(updated.companyId, {
@@ -182,14 +207,6 @@ export function approvalService(db: Db) {
         }
       }
 
-      captureMetric("approval.approved", updated.companyId, {
-        approvalId: id,
-        approvalType: updated.type,
-        decidedByUserId,
-        applied,
-        decisionNote: decisionNote ? redactSensitiveText(decisionNote) : null,
-      });
-
       return { approval: updated, applied };
     },
 
@@ -208,14 +225,6 @@ export function approvalService(db: Db) {
           await agentsSvc.terminate(payloadAgentId);
         }
       }
-
-      captureMetric("approval.rejected", updated.companyId, {
-        approvalId: id,
-        approvalType: updated.type,
-        decidedByUserId,
-        applied,
-        decisionNote: decisionNote ? redactSensitiveText(decisionNote) : null,
-      });
 
       return { approval: updated, applied };
     },

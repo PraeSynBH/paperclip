@@ -1,6 +1,6 @@
 import type { Request, RequestHandler } from "express";
 import type { IncomingHttpHeaders } from "node:http";
-import { betterAuth, type Auth, type BetterAuthOptions } from "better-auth";
+import { betterAuth, type Auth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { toNodeHandler } from "better-auth/node";
 import type { Db } from "@paperclipai/db";
@@ -12,8 +12,16 @@ import {
 } from "@paperclipai/db";
 import type { Config } from "../config.js";
 import { resolvePaperclipInstanceId } from "../home-paths.js";
-import { captureMetric } from "../services/posthog.js";
-import { logger } from "../middleware/logger.js";
+import {
+  workspaceLoginHandoffPlugin,
+  type WorkspaceHandoffExpectedIdentity,
+} from "./workspace-login-handoff-plugin.js";
+import {
+  normalizeWorkspaceHandoffOrigin,
+  resolveWorkspaceHandoffLocalCompanyId,
+  resolveWorkspaceHandoffLocalKey,
+  resolveWorkspaceHandoffLocalWorkspaceId,
+} from "./workspace-login-handoff.js";
 
 export type BetterAuthSessionUser = {
   id: string;
@@ -53,6 +61,28 @@ export function buildBetterAuthAdvancedOptions(input: { disableSecureCookies: bo
   return {
     cookiePrefix: deriveAuthCookiePrefix(),
     ...(input.disableSecureCookies ? { useSecureCookies: false } : {}),
+  };
+}
+
+export function shouldEnableAuthRateLimit(input: {
+  deploymentMode: Config["deploymentMode"];
+  deploymentExposure?: Config["deploymentExposure"];
+  override?: string | undefined;
+}): boolean {
+  const override = input.override?.trim().toLowerCase();
+  if (override === "true") return true;
+  if (override === "false") return false;
+
+  return input.deploymentMode === "authenticated";
+}
+
+export function buildBetterAuthRateLimitOptions(input: {
+  deploymentMode: Config["deploymentMode"];
+  deploymentExposure?: Config["deploymentExposure"];
+  override?: string | undefined;
+}) {
+  return {
+    enabled: shouldEnableAuthRateLimit(input),
   };
 }
 
@@ -125,34 +155,31 @@ export function deriveAuthTrustedOrigins(config: Config, opts?: { listenPort?: n
 }
 
 /**
- * Determine the auth method that triggered a database-hook callback by
- * inspecting the current request URL from the better-auth context.
- *
- * Hook context is `null` for internal / non-request-driven operations.
- * Context carries the request that triggered the database write, so we can
- * distinguish email signup (/sign-up/email), email sign-in (/sign-in/email),
- * and Google OAuth callback (/callback/google).
- *
- * Uses the URL pathname (stripping query string) to avoid false matches
- * from substring-includes on the raw URL.
+ * Identity a managed workspace instance compares an inbound handoff ticket
+ * against. Every field comes from persisted configuration or injected runtime
+ * identity — never from request headers — so a spoofed `X-Forwarded-Host` or
+ * Tailscale identity header cannot retarget a ticket. Returns null when this
+ * process was not started as a managed workspace, which leaves the exchange
+ * endpoint unregistered.
  */
-function resolveLoginMethod(
-  ctx: { request?: Request | { url?: string } } | null,
-): string {
-  if (!ctx?.request?.url) return "unknown";
-  // Use URL constructor to safely extract the pathname regardless of
-  // whether the request.url is a relative path or absolute URL (e.g.
-  // behind a proxy that rewrites it).
-  let pathname: string;
-  try {
-    pathname = new URL(ctx.request.url, "http://localhost").pathname;
-  } catch {
-    return "unknown";
-  }
-  if (pathname === "/callback/google") return "google";
-  if (pathname === "/sign-in/email" || pathname === "/sign-up/email")
-    return "email";
-  return "unknown";
+export function resolveWorkspaceHandoffIdentity(
+  config: Config,
+  env: NodeJS.ProcessEnv = process.env,
+): WorkspaceHandoffExpectedIdentity | null {
+  const key = resolveWorkspaceHandoffLocalKey(env);
+  if (!key) return null;
+  const configuredOrigin =
+    normalizeWorkspaceHandoffOrigin(env.PAPERCLIP_PUBLIC_URL)
+    ?? (config.authBaseUrlMode === "explicit"
+      ? normalizeWorkspaceHandoffOrigin(config.authPublicBaseUrl)
+      : null);
+  return {
+    key,
+    instanceId: resolvePaperclipInstanceId(),
+    executionWorkspaceId: resolveWorkspaceHandoffLocalWorkspaceId(env),
+    companyId: resolveWorkspaceHandoffLocalCompanyId(env),
+    origin: configuredOrigin,
+  };
 }
 
 export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins: string[]): BetterAuthInstance {
@@ -173,7 +200,7 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins:
     publicUrl,
   });
 
-  const authConfig: BetterAuthOptions = {
+  const authConfig = {
     baseURL: baseUrl,
     secret,
     trustedOrigins,
@@ -191,67 +218,38 @@ export function createBetterAuthInstance(db: Db, config: Config, trustedOrigins:
       requireEmailVerification: false,
       disableSignUp: config.authDisableSignUp,
     },
+    rateLimit: buildBetterAuthRateLimitOptions({
+      deploymentMode: config.deploymentMode,
+      deploymentExposure: config.deploymentExposure,
+      override: process.env.PAPERCLIP_AUTH_RATE_LIMIT_ENABLED,
+    }),
     advanced: buildBetterAuthAdvancedOptions({ disableSecureCookies }),
-  };
-
-  const googleClientId = process.env.GOOGLE_CLIENT_ID?.trim();
-  const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
-  if (googleClientId && googleClientSecret) {
-    authConfig.socialProviders = {
-      google: {
-        clientId: googleClientId,
-        clientSecret: googleClientSecret,
-      },
-    };
-  } else if (googleClientId || googleClientSecret) {
-    logger.warn(
-      "[auth] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET is set but not both; Google OAuth will not be activated",
-    );
-  }
-
-  // Wire PostHog business events for auth lifecycle.
-  // These fire only when PostHog is configured (POSTHOG_API_KEY + POSTHOG_HOST).
-  // Hooks are async to satisfy the better-auth type contract but do not await
-  // captureMetric — PostHog failures must never block the auth response path.
-  authConfig.databaseHooks = {
-    user: {
-      create: {
-        after: async (user, ctx) => {
-          const loginMethod = resolveLoginMethod(ctx);
-          try {
-            captureMetric("auth.signup_completed", user.id, {
-              login_method: loginMethod,
-            });
-          } catch (err) {
-            logger.warn(
-              { err },
-              "[auth] PostHog hook failed for user.create; continuing auth flow",
-            );
-          }
-        },
-      },
-    },
-    session: {
-      create: {
-        after: async (session, ctx) => {
-          const loginMethod = resolveLoginMethod(ctx);
-          try {
-            captureMetric("auth.session_started", session.userId, {
-              login_method: loginMethod,
-            });
-          } catch (err) {
-            logger.warn(
-              { err },
-              "[auth] PostHog hook failed for session.create; continuing auth flow",
-            );
-          }
-        },
-      },
-    },
+    // Registered only for a managed workspace instance: the plugin is what makes
+    // `Open workspace` password-independent, and a control-plane instance that
+    // was never handed a workspace key must not expose the exchange at all.
+    ...(resolveWorkspaceHandoffIdentity(config)
+      ? {
+          plugins: [
+            workspaceLoginHandoffPlugin({
+              db,
+              // Re-resolved per exchange so a hot restart cannot keep validating
+              // against an origin the control plane has since republished.
+              resolveExpectedIdentity: () =>
+                resolveWorkspaceHandoffIdentity(config) ?? {
+                  key: null,
+                  instanceId: null,
+                  executionWorkspaceId: null,
+                  companyId: null,
+                  origin: null,
+                },
+            }),
+          ],
+        }
+      : {}),
   };
 
   if (!baseUrl) {
-    delete authConfig.baseURL;
+    delete (authConfig as { baseURL?: string }).baseURL;
   }
 
   return betterAuth(authConfig);

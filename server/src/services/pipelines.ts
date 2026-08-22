@@ -2,10 +2,6 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import {
-  PIPELINE_DEFAULT_LEASE_MS,
-  PIPELINE_MAX_LEASE_MS,
-} from "../timeout-constants.js";
 import type { Db } from "@paperclipai/db";
 import {
   agents,
@@ -53,14 +49,16 @@ import type { IssueAssignmentWakeupDeps } from "./issue-assignment-wakeup.js";
 import { logActivity } from "./activity-log.js";
 import { assertAssignableAgent } from "./agent-assignability.js";
 import { authorizationService } from "./authorization.js";
+import { visibleIssueCondition } from "./issue-visibility.js";
+import { finalizeSummarySlotsForTerminalIssue } from "./summary-slot-finalization.js";
 import {
   formatPipelineCaseOutputContextMarkdown,
   pipelineCaseOutputsService,
   summarizePipelineCaseOutputsForContext,
 } from "./pipeline-case-outputs.js";
 
-export { PIPELINE_AUTOMATION_DEFAULT_TITLE_TEMPLATE };
-
+const DEFAULT_LEASE_MS = 15 * 60 * 1000;
+const MAX_LEASE_MS = 24 * 60 * 60 * 1000;
 const MAX_CASE_KEY_LENGTH = 1024;
 const MAX_BATCH_INGEST = 200;
 const MAX_FIELDS_BYTES = 64 * 1024;
@@ -70,6 +68,7 @@ const PIPELINE_CASE_BODY_DOCUMENT_TITLE = "Item body document";
 export const PIPELINE_CASE_EVENTS_DEFAULT_LIMIT = 50;
 export const PIPELINE_CASE_EVENTS_MAX_LIMIT = 100;
 export const PIPELINE_CONTEXT_PACK_EVENT_LIMIT = 20;
+export { PIPELINE_AUTOMATION_DEFAULT_TITLE_TEMPLATE };
 
 function legacyPipelineAutomationTitle(stageName: string) {
   return `${stageName} automation`;
@@ -362,7 +361,7 @@ async function getUsableConversationIssue(db: PipelineDb, companyId: string, iss
     .where(and(
       eq(issues.companyId, companyId),
       eq(issues.id, issueId),
-      isNull(issues.hiddenAt),
+      visibleIssueCondition(),
       isNull(issues.cancelledAt),
       ne(issues.status, "cancelled"),
     ))
@@ -411,7 +410,7 @@ async function resolveLatestCaseIssueLink(
       eq(pipelineCaseIssueLinks.caseId, input.caseId),
       inArray(pipelineCaseIssueLinks.role, input.roles),
       eq(issues.companyId, input.companyId),
-      isNull(issues.hiddenAt),
+      visibleIssueCondition(),
       isNull(issues.cancelledAt),
       ne(issues.status, "cancelled"),
     ))
@@ -1176,10 +1175,13 @@ function routineRevisionSnapshotRoutine(routine: typeof routines.$inferSelect): 
     status: routine.status as RoutineRevisionSnapshotV1["routine"]["status"],
     concurrencyPolicy: routine.concurrencyPolicy as RoutineRevisionSnapshotV1["routine"]["concurrencyPolicy"],
     catchUpPolicy: routine.catchUpPolicy as RoutineRevisionSnapshotV1["routine"]["catchUpPolicy"],
+    activityGatePolicy: routine.activityGatePolicy as RoutineRevisionSnapshotV1["routine"]["activityGatePolicy"],
+    activityGateScope: routine.activityGateScope as RoutineRevisionSnapshotV1["routine"]["activityGateScope"],
     originKind: routine.originKind,
     originId: routine.originId,
     variables: routine.variables ?? [],
     env: routine.env ?? null,
+    responsibleUserId: routine.responsibleUserId ?? null,
   };
 }
 
@@ -1926,7 +1928,7 @@ async function postSystemCommentOnLinkedIssues(
       inArray(pipelineCaseIssueLinks.role, input.roles),
       ne(issues.status, "done"),
       ne(issues.status, "cancelled"),
-      isNull(issues.hiddenAt),
+      visibleIssueCondition(),
     ));
 
   for (const row of rows) {
@@ -2024,7 +2026,7 @@ async function notifyDependentWorkIssuesOfUpstreamContentChange(
       eq(issues.companyId, input.companyId),
       ne(issues.status, "done"),
       ne(issues.status, "cancelled"),
-      isNull(issues.hiddenAt),
+      visibleIssueCondition(),
     ));
   const issueIdsByCase = new Map<string, string[]>();
   for (const row of linkRows) {
@@ -4371,7 +4373,7 @@ export function pipelineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeu
         if (hasValidLease(current) && !actorOwnsLease(current, input.actor, null)) {
           throw conflict("Pipeline case lease is held", { code: "lease_held", lease: leaseOwner(current) });
         }
-        const leaseMs = Math.min(Math.max(input.leaseMs ?? PIPELINE_DEFAULT_LEASE_MS, 1_000), PIPELINE_MAX_LEASE_MS);
+        const leaseMs = Math.min(Math.max(input.leaseMs ?? DEFAULT_LEASE_MS, 1_000), MAX_LEASE_MS);
         const token = randomUUID();
         const expiresAt = new Date(Date.now() + leaseMs);
         const [updated] = await tx
@@ -4611,14 +4613,27 @@ export function pipelineService(db: Db, deps: { heartbeat?: IssueAssignmentWakeu
           ? effects.linkedAutomationIssueIds
           : [];
         if (issueIdsToCancel.length > 0) {
-          await tx
+          const cancelledIssues = await tx
             .update(issues)
             .set({ status: "cancelled", updatedAt: now })
             .where(and(
               eq(issues.companyId, input.companyId),
               inArray(issues.id, issueIdsToCancel),
               ne(issues.status, "done"),
-            ));
+            ))
+            .returning({
+              id: issues.id,
+              companyId: issues.companyId,
+              identifier: issues.identifier,
+              title: issues.title,
+              status: issues.status,
+            });
+          for (const issue of cancelledIssues) {
+            await finalizeSummarySlotsForTerminalIssue(tx, {
+              ...issue,
+              status: "cancelled",
+            });
+          }
           await tx
             .update(pipelineCaseIssueLinks)
             .set({

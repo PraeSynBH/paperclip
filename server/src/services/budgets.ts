@@ -23,9 +23,7 @@ import type {
   BudgetWindowKind,
 } from "@paperclipai/shared";
 import { notFound, unprocessable } from "../errors.js";
-import { logger } from "../middleware/logger.js";
 import { logActivity } from "./activity-log.js";
-import { notificationService } from "./notifications.js";
 
 type ScopeRecord = {
   companyId: string;
@@ -367,7 +365,7 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
         ),
       )
       .then((rows) => rows[0] ?? null);
-    if (existing) return existing;
+    if (existing) return { incident: existing, created: false };
 
     const scope = await resolveScopeRecord(db, policy.scopeType as BudgetScopeType, policy.scopeId);
     const payload = buildApprovalPayload({
@@ -394,7 +392,7 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
         .then((rows) => rows[0] ?? null)
       : null;
 
-    return db
+    const incident = await db
       .insert(budgetIncidents)
       .values({
         companyId: policy.companyId,
@@ -412,45 +410,8 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
         approvalId: approval?.id ?? null,
       })
       .returning()
-      .then((rows) => rows[0] ?? null)
-      .then(async (incident) => {
-        if (incident) {
-          // Notify human members that a budget threshold was crossed (VOY-1342).
-          // Fire-and-forget: notification dispatch must never fail budget enforcement.
-          const scopeLabel = normalizeScopeName(policy.scopeType as BudgetScopeType, scope.name);
-          const thresholdLabel = thresholdType === "soft" ? "warning threshold" : "hard limit";
-          const company = await db
-            .select({ name: companies.name })
-            .from(companies)
-            .where(eq(companies.id, policy.companyId))
-            .then((rows) => rows[0] ?? null);
-
-          notificationService(db)
-            .notifyCompanyMembers(policy.companyId, {
-              notificationType: "budget_threshold",
-              title: `Budget ${thresholdLabel} reached: ${scopeLabel}`,
-              body:
-                `${scopeLabel} has crossed its ${thresholdLabel} ($${(amountObserved / 100).toFixed(2)} ` +
-                `of $${(policy.amount / 100).toFixed(2)}).` +
-                (approval?.id ? " An override approval is required to continue." : ""),
-              linkUrl: "/costs",
-              metadata: {
-                incidentId: incident.id,
-                policyId: policy.id,
-                scopeType: policy.scopeType,
-                scopeId: policy.scopeId,
-                thresholdType,
-                amountObserved,
-                amountLimit: policy.amount,
-                approvalId: approval?.id ?? null,
-              },
-              companyName: company?.name ?? undefined,
-            })
-            .catch((err) =>
-              logger.warn({ err, incidentId: incident.id }, "failed to send budget threshold notification"));
-        }
-        return incident;
-      });
+      .then((rows) => rows[0] ?? null);
+    return incident ? { incident, created: true } : null;
   }
 
   async function resolveOpenSoftIncidents(policyId: string) {
@@ -711,14 +672,14 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
 
         if (policy.notifyEnabled && observedAmount >= softThreshold) {
           const softIncident = await createIncidentIfNeeded(policy, "soft", observedAmount);
-          if (softIncident) {
+          if (softIncident?.created) {
             await logActivity(db, {
               companyId: policy.companyId,
               actorType: "system",
               actorId: "budget_service",
               action: "budget.soft_threshold_crossed",
               entityType: "budget_incident",
-              entityId: softIncident.id,
+              entityId: softIncident.incident.id,
               details: {
                 scopeType: policy.scopeType,
                 scopeId: policy.scopeId,
@@ -733,20 +694,20 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
           await resolveOpenSoftIncidents(policy.id);
           const hardIncident = await createIncidentIfNeeded(policy, "hard", observedAmount);
           await pauseAndCancelScopeForBudget(policy);
-          if (hardIncident) {
+          if (hardIncident?.created) {
             await logActivity(db, {
               companyId: policy.companyId,
               actorType: "system",
               actorId: "budget_service",
               action: "budget.hard_threshold_crossed",
               entityType: "budget_incident",
-              entityId: hardIncident.id,
+              entityId: hardIncident.incident.id,
               details: {
                 scopeType: policy.scopeType,
                 scopeId: policy.scopeId,
                 amountObserved: observedAmount,
                 amountLimit: policy.amount,
-                approvalId: hardIncident.approvalId ?? null,
+                approvalId: hardIncident.incident.approvalId ?? null,
               },
             });
           }

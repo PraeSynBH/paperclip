@@ -1,4 +1,4 @@
-import { and, count, eq, gte, inArray, isNull, like, lt, notInArray, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNull, lt, notInArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   companies,
@@ -28,12 +28,19 @@ import {
   companyMemberships,
   companySkills,
   documents,
+  routineRuns,
+  routineTriggers,
+  routineRevisions,
+  routines,
 } from "@paperclipai/db";
 import { notFound, unprocessable } from "../errors.js";
 import { environmentService } from "./environments.js";
 import { heartbeatService } from "./heartbeat.js";
 import { logActivity } from "./activity-log.js";
+import { builtInAgentService } from "./built-in-agents.js";
 
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export interface CompanyActivityActor {
   actorType: "user" | "agent" | "system" | "plugin";
   actorId: string;
@@ -52,6 +59,7 @@ export function companyService(db: Db) {
   const ISSUE_PREFIX_FALLBACK = "CMP";
   const environmentsSvc = environmentService(db);
   const heartbeat = heartbeatService(db);
+  const builtInAgents = builtInAgentService(db);
 
   type CompanyTx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -131,7 +139,9 @@ export function companyService(db: Db) {
     budgetMonthlyCents: companies.budgetMonthlyCents,
     spentMonthlyCents: companies.spentMonthlyCents,
     attachmentMaxBytes: companies.attachmentMaxBytes,
+    defaultResponsibleUserId: companies.defaultResponsibleUserId,
     requireBoardApprovalForNewAgents: companies.requireBoardApprovalForNewAgents,
+    interactionResolverGovernance: companies.interactionResolverGovernance,
     feedbackDataSharingEnabled: companies.feedbackDataSharingEnabled,
     feedbackDataSharingConsentAt: companies.feedbackDataSharingConsentAt,
     feedbackDataSharingConsentByUserId: companies.feedbackDataSharingConsentByUserId,
@@ -209,49 +219,38 @@ export function companyService(db: Db) {
     return "A".repeat(attempt - 1);
   }
 
-  /**
-   * Find a unique issue prefix by querying existing prefixes.
-   * This avoids the retry-loop pattern which breaks inside a PostgreSQL
-   * transaction (a unique-constraint violation aborts the transaction,
-   * making all subsequent statements fail with "current transaction is
-   * aborted").  Works both inside and outside transactions.
-   *
-   * Returns an issue_prefix that is guaranteed not to conflict at the time
-   * of the query.  A race with a concurrent insert is still possible; the
-   * caller should handle a unique-constraint violation as a last resort.
-   */
-  async function allocateUniqueIssuePrefix(name: string): Promise<string> {
-    const base = deriveIssuePrefixBase(name);
-    const likePattern = `${base}%`;
-
-    const existingRows = await db
-      .select({ prefix: companies.issuePrefix })
-      .from(companies)
-      .where(like(companies.issuePrefix, likePattern));
-
-    const taken = new Set(existingRows.map((r) => r.prefix));
-
-    // First try the base prefix (most common case, zero suffixes)
-    if (!taken.has(base)) return base;
-
-    // Scan suffixes until we find a free slot
-    for (let attempt = 2; attempt < 10000; attempt++) {
-      const candidate = `${base}${suffixForAttempt(attempt)}`;
-      if (!taken.has(candidate)) return candidate;
+  function isIssuePrefixConflict(error: unknown) {
+    const seen = new Set<unknown>();
+    let current = error;
+    while (typeof current === "object" && current !== null && !seen.has(current)) {
+      seen.add(current);
+      const maybe = current as { code?: string; constraint?: string; constraint_name?: string; cause?: unknown };
+      const constraint = maybe.constraint ?? maybe.constraint_name;
+      if (maybe.code === "23505" && constraint === "companies_issue_prefix_idx") {
+        return true;
+      }
+      current = maybe.cause;
     }
-
-    // Extremely unlikely (~9999 taken prefixes for a 3-letter base), but
-    // fall back to the original retry logic as a safety net.
-    throw new Error("Unable to allocate unique issue prefix");
+    return false;
   }
 
   async function createCompanyWithUniquePrefix(data: typeof companies.$inferInsert) {
-    const prefix = await allocateUniqueIssuePrefix(data.name ?? "");
-    const rows = await db
-      .insert(companies)
-      .values({ ...data, issuePrefix: prefix })
-      .returning();
-    return rows[0];
+    const base = deriveIssuePrefixBase(data.name);
+    let suffix = 1;
+    while (suffix < 10000) {
+      const candidate = `${base}${suffixForAttempt(suffix)}`;
+      try {
+        const rows = await db
+          .insert(companies)
+          .values({ ...data, issuePrefix: candidate })
+          .returning();
+        return rows[0];
+      } catch (error) {
+        if (!isIssuePrefixConflict(error)) throw error;
+      }
+      suffix += 1;
+    }
+    throw new Error("Unable to allocate unique issue prefix");
   }
 
   return {
@@ -262,6 +261,11 @@ export function companyService(db: Db) {
     },
 
     getById: async (id: string) => {
+      // Non-UUID refs previously reached the uuid-typed query and threw a
+      // DrizzleQueryError ("invalid input syntax for type uuid"), surfacing
+      // as HTTP 500 from GET /api/companies/:companyId. Treat them as
+      // not-found so the route returns 404.
+      if (!UUID_RE.test(id)) return null;
       const row = await getCompanyQuery(db)
         .where(eq(companies.id, id))
         .then((rows) => rows[0] ?? null);
@@ -273,6 +277,7 @@ export function companyService(db: Db) {
     create: async (data: typeof companies.$inferInsert) => {
       const created = await createCompanyWithUniquePrefix(data);
       await environmentsSvc.ensureLocalEnvironment(created.id);
+      await builtInAgents.autoProvisionBundledAgents(created.id);
       const row = await getCompanyQuery(db)
         .where(eq(companies.id, created.id))
         .then((rows) => rows[0] ?? null);
@@ -463,6 +468,10 @@ export function companyService(db: Db) {
         await tx.delete(principalPermissionGrants).where(eq(principalPermissionGrants.companyId, id));
         await tx.delete(companyMemberships).where(eq(companyMemberships.companyId, id));
         await tx.delete(companySkills).where(eq(companySkills.companyId, id));
+        await tx.delete(routineRuns).where(eq(routineRuns.companyId, id));
+        await tx.delete(routineTriggers).where(eq(routineTriggers.companyId, id));
+        await tx.delete(routineRevisions).where(eq(routineRevisions.companyId, id));
+        await tx.delete(routines).where(eq(routines.companyId, id));
         await tx.delete(issueReadStates).where(eq(issueReadStates.companyId, id));
         await tx.delete(documents).where(eq(documents.companyId, id));
         await tx.delete(issues).where(eq(issues.companyId, id));

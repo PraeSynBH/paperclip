@@ -82,7 +82,7 @@ From here you can:
 - **Customize agents** — edit names, adapters, or budgets
 - **Add more agents** — hire from the Marketplace or create custom agents
 - **Modify the goal** — adjust the company's strategic direction
-- **Set up billing** — configure Stripe and a subscription tier
+- **Set up billing** — configure Stripe and a subscription tier ⚠️ *(fork-only impl removed; upstream-compatible restoration in progress — VOY-1590)*
 
 ## Error Codes
 

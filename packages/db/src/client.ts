@@ -1,11 +1,9 @@
 import { createHash } from "node:crypto";
-import { setTimeout as delay } from "node:timers/promises";
 import { drizzle as drizzlePg } from "drizzle-orm/postgres-js";
 import { migrate as migratePg } from "drizzle-orm/postgres-js/migrator";
 import { readFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
-import { assertMigrationJournalConsistency } from "./migration-journal-consistency.js";
 import * as schema from "./schema/index.js";
 
 const MIGRATIONS_FOLDER = fileURLToPath(new URL("./migrations", import.meta.url));
@@ -37,34 +35,89 @@ function splitMigrationStatements(content: string): string[] {
 }
 
 export type MigrationState =
-  | { status: "upToDate"; tableCount: number; availableMigrations: string[]; appliedMigrations: string[] }
+  | {
+      status: "upToDate";
+      tableCount: number;
+      availableMigrations: string[];
+      appliedMigrations: string[];
+      journalEntryCount: number;
+    }
   | {
       status: "needsMigrations";
       tableCount: number;
       availableMigrations: string[];
       appliedMigrations: string[];
       pendingMigrations: string[];
+      journalEntryCount: number;
       reason: "no-migration-journal-empty-db" | "no-migration-journal-non-empty-db" | "pending-migrations";
     };
 
-export function createDb(url: string) {
-  // prepare: false — disables postgres.js prepared statements for the whole pool.
-  //
-  // Rationale (documented per Staff Engineer review, M-series): postgres.js
-  // prepared statements use named portal caching keyed by statement text. In
-  // long-lived processes with the background-job worker + SSE + hot module
-  // reloading in dev, we observed `prepared statement "x" already exists` /
-  // portal exhaustion errors when the same parameterized statement shape is
-  // issued concurrently from different code paths (transactions with nested
-  // savepoints, drizzle .for("update") row locks). Disabling prepare forces a
-  // server-side parse+plan per query — slightly more CPU on the DB, but
-  // eliminates the class of prepared-statement name-collision failures.
-  //
-  // Tradeoff accepted: queries on the hot path (issues, board, live events)
-  // re-parse. If this becomes a measurable bottleneck, scope `prepare: false`
-  // to transactional clients only (see companyTemplateService savepoints)
-  // instead of the global pool.
-  const sql = postgres(url, { prepare: false });
+export interface DatabaseClientOptions {
+  /**
+   * postgres.js `prepare`. Set false when connecting through a
+   * transaction-mode pooler (pgbouncer / Neon `-pooler` endpoints /
+   * Supabase Supavisor transaction ports) so the client does not rely on
+   * session-scoped prepared statements. Defaults to the driver default
+   * (enabled), preserving existing behavior on direct connections.
+   */
+  prepare?: boolean;
+  /** postgres.js `max` — connection pool size (driver default: 10). */
+  maxConnections?: number;
+  /** postgres.js `idle_timeout` in seconds (driver default: disabled). */
+  idleTimeoutSeconds?: number;
+  /** postgres.js `connect_timeout` in seconds (driver default: 30). */
+  connectTimeoutSeconds?: number;
+}
+
+function envBoolean(env: NodeJS.ProcessEnv, name: string): boolean | undefined {
+  const value = env[name]?.trim().toLowerCase();
+  if (value === undefined || value === "") return undefined;
+  if (value === "true" || value === "1") return true;
+  if (value === "false" || value === "0") return false;
+  throw new Error(`${name} must be "true" or "false", got: ${env[name]}`);
+}
+
+function envPositiveInteger(env: NodeJS.ProcessEnv, name: string): number | undefined {
+  const value = env[name]?.trim();
+  if (value === undefined || value === "") return undefined;
+  if (!/^[1-9]\d*$/.test(value)) {
+    throw new Error(`${name} must be a positive integer, got: ${env[name]}`);
+  }
+  return Number.parseInt(value, 10);
+}
+
+/**
+ * Database client tuning from the environment, so hosted deployments can
+ * adapt to their connection topology (pooled endpoints, network latency)
+ * without editing source. Every variable is optional; when unset the
+ * driver defaults apply and behavior is identical to a bare
+ * `postgres(url)` — self-hosted setups need none of these.
+ */
+export function databaseClientOptionsFromEnv(env: NodeJS.ProcessEnv = process.env): DatabaseClientOptions {
+  const options: DatabaseClientOptions = {};
+  const prepare = envBoolean(env, "DATABASE_PREPARED_STATEMENTS");
+  if (prepare !== undefined) options.prepare = prepare;
+  const maxConnections = envPositiveInteger(env, "DATABASE_POOL_MAX");
+  if (maxConnections !== undefined) options.maxConnections = maxConnections;
+  const idleTimeoutSeconds = envPositiveInteger(env, "DATABASE_IDLE_TIMEOUT_SECONDS");
+  if (idleTimeoutSeconds !== undefined) options.idleTimeoutSeconds = idleTimeoutSeconds;
+  const connectTimeoutSeconds = envPositiveInteger(env, "DATABASE_CONNECT_TIMEOUT_SECONDS");
+  if (connectTimeoutSeconds !== undefined) options.connectTimeoutSeconds = connectTimeoutSeconds;
+  return options;
+}
+
+export function postgresJsOptions(options: DatabaseClientOptions): Record<string, unknown> {
+  const driverOptions: Record<string, unknown> = {};
+  if (options.prepare !== undefined) driverOptions.prepare = options.prepare;
+  if (options.maxConnections !== undefined) driverOptions.max = options.maxConnections;
+  if (options.idleTimeoutSeconds !== undefined) driverOptions.idle_timeout = options.idleTimeoutSeconds;
+  if (options.connectTimeoutSeconds !== undefined) driverOptions.connect_timeout = options.connectTimeoutSeconds;
+  return driverOptions;
+}
+
+export function createDb(url: string, options?: DatabaseClientOptions) {
+  const resolved = options ?? databaseClientOptionsFromEnv();
+  const sql = postgres(url, postgresJsOptions(resolved));
   return drizzlePg(sql, { schema });
 }
 
@@ -637,6 +690,7 @@ export async function inspectMigrations(url: string): Promise<MigrationState> {
           availableMigrations,
           appliedMigrations: [],
           pendingMigrations: availableMigrations,
+          journalEntryCount: 0,
           reason: "no-migration-journal-non-empty-db",
         };
       }
@@ -647,10 +701,16 @@ export async function inspectMigrations(url: string): Promise<MigrationState> {
         availableMigrations,
         appliedMigrations: [],
         pendingMigrations: availableMigrations,
+        journalEntryCount: 0,
         reason: "no-migration-journal-empty-db",
       };
     }
 
+    const qualifiedMigrationTable = `${quoteIdentifier(migrationTableSchema)}.${quoteIdentifier(DRIZZLE_MIGRATIONS_TABLE)}`;
+    const journalCountRows = await sql.unsafe<{ count: number }[]>(
+      `SELECT count(*)::int AS count FROM ${qualifiedMigrationTable}`,
+    );
+    const journalEntryCount = journalCountRows[0]?.count ?? 0;
     const appliedMigrations = await loadAppliedMigrations(sql, migrationTableSchema, availableMigrations);
     const pendingMigrations = availableMigrations.filter((name) => !appliedMigrations.includes(name));
     if (pendingMigrations.length === 0) {
@@ -659,6 +719,7 @@ export async function inspectMigrations(url: string): Promise<MigrationState> {
         tableCount,
         availableMigrations,
         appliedMigrations,
+        journalEntryCount,
       };
     }
 
@@ -668,6 +729,7 @@ export async function inspectMigrations(url: string): Promise<MigrationState> {
       availableMigrations,
       appliedMigrations,
       pendingMigrations,
+      journalEntryCount,
       reason: "pending-migrations",
     };
   } finally {
@@ -676,13 +738,6 @@ export async function inspectMigrations(url: string): Promise<MigrationState> {
 }
 
 export async function applyPendingMigrations(url: string): Promise<void> {
-  // Fail loudly and early when the migrations folder and meta/_journal.json
-  // disagree. Without this, an orphaned .sql file is skipped by drizzle's
-  // journal-driven migrator yet counted as pending by inspectMigrations, so
-  // bootstrap dies with an unactionable "Failed to bootstrap migrations" that
-  // no repair path can resolve.
-  await assertMigrationJournalConsistency();
-
   const initialState = await inspectMigrations(url);
   if (initialState.status === "upToDate") return;
 
@@ -779,35 +834,6 @@ export async function migratePostgresIfEmpty(url: string): Promise<MigrationBoot
   }
 }
 
-/**
- * Backoff delays (ms) between retries when the embedded PostgreSQL instance is
- * still shutting down (SQLSTATE 57P03) after a server crash. The parent server
- * process dies, launchd restarts it, and it races the old PG's shutdown; before
- * this retry, ensurePostgresDatabase failed instantly and the server exited,
- * repeating the cycle ~6 times over ~2.5 min. Backoff: 1s, 2s, 4s, 8s, 16s,
- * then capped at 30s. Worst-case total wait 121s, comfortably above the
- * observed ~2.5 min shutdown window.
- */
-const EMBEDDED_PG_SHUTDOWN_RETRY_DELAYS_MS = [
-  1_000,
-  2_000,
-  4_000,
-  8_000,
-  16_000,
-  30_000,
-  30_000,
-  30_000,
-] as const;
-
-function isPostgresShuttingDownError(err: unknown): boolean {
-  return (
-    typeof err === "object" &&
-    err !== null &&
-    "code" in err &&
-    (err as { code?: unknown }).code === "57P03"
-  );
-}
-
 export async function ensurePostgresDatabase(
   url: string,
   databaseName: string,
@@ -816,36 +842,38 @@ export async function ensurePostgresDatabase(
     throw new Error(`Unsafe database name: ${databaseName}`);
   }
 
-  // After a server crash the embedded PostgreSQL may still be shutting down
-  // (57P03 "database system is shutting down"). Retry with exponential backoff
-  // until the old instance finishes stopping; a fresh instance then starts
-  // normally on the next attempt. Each attempt uses a fresh connection because
-  // the failed one is unusable. Non-57P03 errors (auth, unsafe name, etc.)
-  // propagate immediately.
-  for (let attempt = 0; ; attempt += 1) {
-    let failure: unknown;
-    const sql = createUtilitySql(url);
-    try {
-      const existing = await sql<{ one: number }[]>`
-        select 1 as one from pg_database where datname = ${databaseName} limit 1
-      `;
-      if (existing.length > 0) return "exists";
+  const sql = createUtilitySql(url);
+  try {
+    const existing = await sql<{ one: number }[]>`
+      select 1 as one from pg_database where datname = ${databaseName} limit 1
+    `;
+    if (existing.length > 0) return "exists";
 
-      await sql.unsafe(`create database "${databaseName}" encoding 'UTF8' lc_collate 'C' lc_ctype 'C' template template0`);
-      return "created";
-    } catch (err) {
-      failure = err;
-    } finally {
-      await sql.end();
-    }
+    await sql.unsafe(`create database "${databaseName}" encoding 'UTF8' lc_collate 'C' lc_ctype 'C' template template0`);
+    return "created";
+  } finally {
+    await sql.end();
+  }
+}
 
-    if (
-      !isPostgresShuttingDownError(failure) ||
-      attempt >= EMBEDDED_PG_SHUTDOWN_RETRY_DELAYS_MS.length
-    ) {
-      throw failure;
-    }
-    await delay(EMBEDDED_PG_SHUTDOWN_RETRY_DELAYS_MS[attempt]!);
+export async function resetPostgresDatabase(
+  url: string,
+  databaseName: string,
+): Promise<"reset"> {
+  const quotedDatabaseName = quoteIdentifier(databaseName);
+  const sql = createUtilitySql(url);
+  try {
+    await sql`
+      select pg_terminate_backend(pid)
+      from pg_stat_activity
+      where datname = ${databaseName}
+        and pid <> pg_backend_pid()
+    `;
+    await sql.unsafe(`drop database if exists ${quotedDatabaseName}`);
+    await sql.unsafe(`create database ${quotedDatabaseName} encoding 'UTF8' lc_collate 'C' lc_ctype 'C' template template0`);
+    return "reset";
+  } finally {
+    await sql.end();
   }
 }
 

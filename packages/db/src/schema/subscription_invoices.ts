@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, integer, timestamp, index } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, timestamp, index, uniqueIndex } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { companySubscriptions } from "./company_subscriptions.js";
 
@@ -24,7 +24,7 @@ export const subscriptionInvoices = pgTable(
   },
   (table) => ({
     companyIdx: index("subscription_invoices_company_idx").on(table.companyId),
-    stripeInvoiceIdx: index("subscription_invoices_stripe_invoice_idx").on(table.stripeInvoiceId),
+    stripeInvoiceIdx: uniqueIndex("subscription_invoices_stripe_invoice_idx").on(table.stripeInvoiceId),
     subscriptionIdx: index("subscription_invoices_subscription_idx").on(table.subscriptionId),
   }),
 );

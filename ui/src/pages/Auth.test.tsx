@@ -5,19 +5,18 @@ import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { queryKeys } from "../lib/queryKeys";
 import { AuthPage } from "./Auth";
 
 const getSessionMock = vi.hoisted(() => vi.fn());
 const signInEmailMock = vi.hoisted(() => vi.fn());
 const signUpEmailMock = vi.hoisted(() => vi.fn());
-const signInWithGoogleMock = vi.hoisted(() => vi.fn());
 
 vi.mock("../api/auth", () => ({
   authApi: {
     getSession: () => getSessionMock(),
     signInEmail: (input: unknown) => signInEmailMock(input),
     signUpEmail: (input: unknown) => signUpEmailMock(input),
-    signInWithGoogle: (callbackURL: string) => signInWithGoogleMock(callbackURL),
   },
 }));
 
@@ -89,7 +88,6 @@ describe("AuthPage", () => {
     getSessionMock.mockResolvedValue(null);
     signInEmailMock.mockResolvedValue(undefined);
     signUpEmailMock.mockResolvedValue(undefined);
-    signInWithGoogleMock.mockReset();
   });
 
   afterEach(() => {
@@ -113,11 +111,11 @@ describe("AuthPage", () => {
     });
     await flushReact();
     await flushReact();
-    return root;
+    return { root, queryClient };
   }
 
   it("exposes password-manager metadata and a11y attributes on the sign-in form", async () => {
-    const root = await mount();
+    const { root } = await mount();
 
     const emailInput = container.querySelector('input[name="email"]') as HTMLInputElement;
     const passwordInput = container.querySelector('input[name="password"]') as HTMLInputElement;
@@ -150,7 +148,7 @@ describe("AuthPage", () => {
   });
 
   it("uses new-password autocomplete in sign-up mode", async () => {
-    const root = await mount();
+    const { root } = await mount();
 
     const createOne = Array.from(container.querySelectorAll("button")).find(
       (button) => button.textContent === "Create one",
@@ -175,7 +173,7 @@ describe("AuthPage", () => {
   });
 
   it("renders auth errors in an assertive alert region referenced by the inputs", async () => {
-    const root = await mount();
+    const { root } = await mount();
 
     const inputValueSetter = Object.getOwnPropertyDescriptor(
       HTMLInputElement.prototype,
@@ -217,70 +215,39 @@ describe("AuthPage", () => {
     });
   });
 
-  it("renders a Google sign-in button that calls the auth API and redirects on success", async () => {
-    const root = await mount();
-
-    const googleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Sign in with Google"),
-    );
-    expect(googleButton).not.toBeNull();
-    expect(googleButton?.getAttribute("type")).toBe("button");
-
-    // Mock successful response; use a spy on a fresh assign stub because
-    // jsdom's window.location.assign is non-configurable and cannot be
-    // spied on directly.
-    const redirectUrl = "https://accounts.google.com/o/oauth2/auth/...";
-    signInWithGoogleMock.mockResolvedValue({
-      url: redirectUrl,
-      redirect: true,
+  it("invalidates anonymous health metadata after sign-in", async () => {
+    const { root, queryClient } = await mount();
+    queryClient.setQueryData(queryKeys.health, {
+      status: "ok",
+      deploymentMode: "authenticated",
     });
-    const assignMock = vi.fn();
-    const originalLocation = window.location;
-    // Replace location with a copy that has a mock assign.
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: { ...originalLocation, assign: assignMock },
-    });
+
+    const inputValueSetter = Object.getOwnPropertyDescriptor(
+      HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    const emailInput = container.querySelector('input[name="email"]') as HTMLInputElement;
+    const passwordInput = container.querySelector('input[name="password"]') as HTMLInputElement;
 
     await act(async () => {
-      googleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+      inputValueSetter!.call(emailInput, "jane@example.com");
+      emailInput.dispatchEvent(new Event("input", { bubbles: true }));
+      inputValueSetter!.call(passwordInput, "supersecret");
+      passwordInput.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+
+    const form = container.querySelector("form") as HTMLFormElement;
+    await act(async () => {
+      form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
     });
     await flushReact();
-
-    expect(signInWithGoogleMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^https?:\/\/.*\/$/),
-    );
-    expect(assignMock).toHaveBeenCalledWith(redirectUrl);
-
-    // Restore original location.
-    Object.defineProperty(window, "location", {
-      configurable: true,
-      value: originalLocation,
-    });
-
-    await act(async () => {
-      root.unmount();
-    });
-  });
-
-  it("surfaces a Google OAuth failure in the alert region", async () => {
-    const root = await mount();
-
-    const googleButton = Array.from(container.querySelectorAll("button")).find(
-      (button) => button.textContent?.includes("Sign in with Google"),
-    );
-    expect(googleButton).not.toBeNull();
-
-    signInWithGoogleMock.mockRejectedValueOnce(new Error("Google sign-in failed"));
-
-    await act(async () => {
-      googleButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-    });
     await flushReact();
 
-    const alert = container.querySelector('[role="alert"]') as HTMLElement;
-    expect(alert).not.toBeNull();
-    expect(alert.textContent).toContain("Google sign-in failed");
+    expect(signInEmailMock).toHaveBeenCalledWith({
+      email: "jane@example.com",
+      password: "supersecret",
+    });
+    expect(queryClient.getQueryState(queryKeys.health)?.isInvalidated).toBe(true);
 
     await act(async () => {
       root.unmount();

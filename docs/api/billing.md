@@ -1,9 +1,12 @@
 ---
 title: Billing
-summary: Stripe-integrated subscription management — tiers, usage, invoices, and webhooks
-version: v0.4.0
-last_updated: 2026-08-18
+summary: Stripe-integrated subscription management with tier plans, usage tracking, invoices, and feature gating
+version: v0.5.0
+last_updated: 2026-08-21
+status: active
 ---
+
+> ⚠️ **Feature-flagged:** Billing endpoints are mounted only when `PAPERCLIP_BILLING_ENABLED=true` is set. Without this flag, the routes are not registered and return 404.
 
 The Billing API provides Stripe-integrated subscription management. Board users can list tiers, create/update/cancel subscriptions, report usage, sync invoices, and view a consolidated billing overview.
 
@@ -12,7 +15,7 @@ The Billing API provides Stripe-integrated subscription management. Board users 
 | Access Level | What they can do |
 |---|---|
 | **All company members** | Read endpoints: tiers, subscription, usage, invoices, overview |
-| **Board users only** | All mutations: create/update/cancel/reactivate subscription, report usage, sync invoices |
+| **Board users only** | All mutations: create/update/cancel/reactivate subscription, create checkout session, report usage, sync invoices |
 | **Agents** | Read-only — all billing mutations return `403` for agents |
 
 Every endpoint requires company access (`assertCompanyAccess`). Mutation endpoints additionally require a board-user context — agents are explicitly blocked with `403 Forbidden`.
@@ -27,8 +30,9 @@ Requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` environment variables. 
 |---|---|---|---|
 | `GET` | `/api/companies/{companyId}/billing/tiers` | List available subscription tiers | All members |
 | `GET` | `/api/companies/{companyId}/billing/subscription` | View current subscription | All members |
-| `POST` | `/api/companies/{companyId}/billing/subscription` | Create a new subscription | Board user only |
+| `POST` | `/api/companies/{companyId}/billing/subscription` | Create a new subscription (direct — admin use) | Board user only |
 | `PATCH` | `/api/companies/{companyId}/billing/subscription` | Update tier or billing period | Board user only |
+| `POST` | `/api/companies/{companyId}/billing/create-checkout-session` | Create Stripe Checkout Session for card collection | Board user only |
 | `POST` | `/api/companies/{companyId}/billing/subscription/cancel` | Cancel subscription (at period end) | Board user only |
 | `POST` | `/api/companies/{companyId}/billing/subscription/reactivate` | Reactivate a subscription scheduled for cancellation | Board user only |
 | `GET` | `/api/companies/{companyId}/billing/usage` | View billing-period usage | All members |
@@ -54,6 +58,36 @@ POST /api/companies/{companyId}/billing/subscription
 ### Response
 
 `201 Created` with the subscription object.
+
+## Create Checkout Session
+
+```text
+POST /api/companies/{companyId}/billing/create-checkout-session
+```
+
+Creates a Stripe Checkout Session (`mode: subscription`) so the customer can provide card details before the subscription is created. This is the recommended flow for new customers — it avoids `incomplete` subscriptions created by `stripe.subscriptions.create()` without a payment method.
+
+### Request Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `tierId` | `string` (uuid) | yes | The tier to subscribe to |
+| `billingPeriod` | `string` | no | `monthly` (default) or `yearly` |
+| `successUrl` | `string` (url) | no | Redirect after successful checkout. Defaults to `{PAPERCLIP_PUBLIC_URL}/boards/{companyId}` |
+| `cancelUrl` | `string` (url) | no | Redirect when checkout is cancelled. Defaults to `{PAPERCLIP_PUBLIC_URL}/pricing` |
+
+### Response
+
+`200 OK` with the Checkout Session URL:
+
+```json
+{
+  "url": "https://checkout.stripe.com/c/pay/cs_test_...",
+  "sessionId": "cs_test_..."
+}
+```
+
+The client should redirect the user to `url`. Stripe handles card collection, then fires the `checkout.session.completed` webhook, which creates the subscription in the database. If the user cancels checkout, they are returned to `cancelUrl` and no subscription is created.
 
 ## Update Subscription
 
@@ -88,8 +122,29 @@ POST /api/billing/webhook
 
 This route runs **before** authentication middleware and relies on Stripe signature verification instead of bearer/auth. Requires the `stripe-signature` header and the raw request body. `STRIPE_WEBHOOK_SECRET` must match the Stripe dashboard webhook secret.
 
+## Feature Gating
+
+Billing routes are mounted only when `PAPERCLIP_BILLING_ENABLED=true`. In addition, the system enforces **feature gating** on several capabilities:
+
+| Feature Key | What it gates | Paywall 403 message |
+|---|---|---|
+| `api_access` | Board-level API key creation | "Your current plan does not include API access" |
+| `advanced_agents` | Creating certain agent types | Feature requires an upgraded plan |
+| `unlimited_seats` | Inviting additional members beyond included count | "Your current plan is limited to N active members" |
+| `custom_plugins` | Marketplace plugin installation | Feature requires an upgraded plan |
+
+Feature-gated endpoints return `403` with `code: "PAYWALL"` in the error body, which the frontend can detect to show upgrade prompts.
+
 ## Error Notes
 
-- `403 Forbidden` on any mutation when the actor is not a board user (agents are always blocked).
-- Billing operations fail if Stripe configuration is missing.
-- See the [Billing Support Case Assessment](/support/assessments/support-case-billing-system) for troubleshooting.
+| Error | HTTP Status | Cause |
+|---|---|---|
+| `403 Forbidden` | 403 | Actor is not a board user (agents always blocked on mutations) |
+| `403 code: "PAYWALL"` | 403 | Company's subscription does not include the requested feature |
+| `500` / billing operation error | 500 | Stripe configuration missing (`STRIPE_SECRET_KEY` not set) |
+
+## Related Documentation
+
+- [Billing Setup Guide](/guides/board-operator/billing-setup)
+- [Paywall Errors KB](/support/kb/paywall-errors)
+- [Billing Support Case Assessment](/support/assessments/support-case-billing-system)

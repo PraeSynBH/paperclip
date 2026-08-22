@@ -12,7 +12,7 @@ export const stripeCustomers = pgTable(
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
-    companyIdx: index("stripe_customers_company_idx").on(table.companyId),
+    companyIdx: uniqueIndex("stripe_customers_company_idx").on(table.companyId),
     stripeCustomerIdx: uniqueIndex("stripe_customers_stripe_customer_idx").on(table.stripeCustomerId),
   }),
 );

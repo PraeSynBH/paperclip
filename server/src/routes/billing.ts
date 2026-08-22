@@ -2,6 +2,7 @@ import { Router } from "express";
 import type { Db } from "@paperclipai/db";
 import {
   createSubscriptionSchema,
+  createCheckoutSessionSchema,
   updateSubscriptionSchema,
   reportUsageSchema,
 } from "@paperclipai/shared";
@@ -83,7 +84,7 @@ export function billingRoutes(db: Db) {
 
   /**
    * POST /api/companies/:companyId/billing/subscription
-   * Create or update subscription
+   * Create or update subscription (direct — for admin use; does not collect card details)
    */
   router.post(
     "/companies/:companyId/billing/subscription",
@@ -98,6 +99,26 @@ export function billingRoutes(db: Db) {
           req.body,
         );
         res.status(201).json(subscription);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
+  /**
+   * POST /api/companies/:companyId/billing/create-checkout-session
+   * Create a Stripe Checkout Session to collect payment method before subscription
+   */
+  router.post(
+    "/companies/:companyId/billing/create-checkout-session",
+    validate(createCheckoutSessionSchema),
+    async (req, res, next) => {
+      try {
+        const companyId = req.params.companyId as string;
+        assertCompanyAccess(req, companyId);
+        requireBoardUser(req);
+        const result = await billing.createCheckoutSession(companyId, req.body);
+        res.json(result);
       } catch (err) {
         next(err);
       }

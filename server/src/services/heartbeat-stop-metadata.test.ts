@@ -64,6 +64,18 @@ describe("heartbeat stop metadata", () => {
     ).toBe("cancelled");
   });
 
+  it("records graceful interruption separately from failure", () => {
+    expect(
+      buildHeartbeatRunStopMetadata({
+        adapterType: "codex_local",
+        adapterConfig: {},
+        outcome: "interrupted",
+        errorCode: "server_shutdown_interrupted",
+        errorMessage: "Interrupted by graceful server shutdown",
+      }).stopReason,
+    ).toBe("interrupted");
+  });
+
   it("normalizes max-turn exhaustion stop reasons", () => {
     expect(
       buildHeartbeatRunStopMetadata({
@@ -116,64 +128,5 @@ describe("heartbeat stop metadata", () => {
       timeoutSource: "default",
       timeoutFired: false,
     });
-  });
-
-  // RBR-938 AC1/AC2: adapters that self-manage a child-process timeout
-  // (e.g. hermes_local) must have their self-reported value take priority
-  // over the empty-adapterConfig-derived default of 0.
-  it("prefers the adapter-reported timeout policy over an adapterConfig-derived guess", () => {
-    const metadata = buildHeartbeatRunStopMetadata({
-      adapterType: "hermes_local",
-      adapterConfig: {},
-      outcome: "timed_out",
-      errorCode: "timeout",
-      adapterReportedTimeoutPolicy: {
-        effectiveTimeoutSec: 1800,
-        timeoutConfigured: false,
-        timeoutSource: "adapter_default",
-        timeoutOwner: "hermes_local",
-      },
-    });
-
-    expect(metadata).toEqual({
-      effectiveTimeoutSec: 1800,
-      timeoutConfigured: false,
-      timeoutSource: "adapter_default",
-      timeoutOwner: "hermes_local",
-      stopReason: "timeout",
-      timeoutFired: true,
-    });
-  });
-
-  it("carries timeoutOwner through mergeHeartbeatRunStopMetadata when present", () => {
-    const merged = mergeHeartbeatRunStopMetadata(
-      null,
-      buildHeartbeatRunStopMetadata({
-        adapterType: "hermes_local",
-        adapterConfig: {},
-        outcome: "succeeded",
-        adapterReportedTimeoutPolicy: {
-          effectiveTimeoutSec: 1800,
-          timeoutConfigured: false,
-          timeoutSource: "adapter_default",
-          timeoutOwner: "hermes_local",
-        },
-      }),
-    );
-
-    expect(merged.timeoutOwner).toBe("hermes_local");
-    expect(merged.effectiveTimeoutSec).toBe(1800);
-  });
-
-  it("omits timeoutOwner when no adapter self-reports a timeout policy", () => {
-    const metadata = buildHeartbeatRunStopMetadata({
-      adapterType: "codex_local",
-      adapterConfig: {},
-      outcome: "succeeded",
-    });
-    expect(metadata).not.toHaveProperty("timeoutOwner");
-
-    const merged = mergeHeartbeatRunStopMetadata(null, metadata);
-    expect(merged).not.toHaveProperty("timeoutOwner");
   });
 });

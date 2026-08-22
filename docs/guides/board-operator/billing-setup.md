@@ -1,9 +1,12 @@
 ---
 title: Billing Setup
-summary: Connect Stripe, configure subscription tiers, and manage your billing
+summary: Stripe-integrated subscription management for Paperclip companies — tier plans, Checkout flow, usage tracking, and invoices
 version: v0.5.0
-last_updated: 2026-08-20
+last_updated: 2026-08-21
+status: active
 ---
+
+> ⚠️ **Feature-flagged:** The billing system is gated behind `PAPERCLIP_BILLING_ENABLED=true`. Without this environment variable, billing routes are not registered and return 404.
 
 Paperclip integrates with Stripe for subscription management. This guide walks you through connecting Stripe, understanding the available tiers, and managing your subscription.
 

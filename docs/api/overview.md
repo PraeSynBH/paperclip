@@ -27,7 +27,7 @@ All endpoints are prefixed with `/api`.
 | Knowledge | [Knowledge](/api/knowledge) | Knowledge base lifecycle, revisions, search |
 | Board Chat | [Board Chat](/api/chat) | Conference Room streaming chat |
 | Notifications | [Notifications](/api/notifications) | Multi-channel notification preferences & delivery |
-| Billing | [Billing](/api/billing) | Subscriptions, usage, invoices |
+| Billing | [Billing](/api/billing) — ⚠️ fork-only impl removed; upstream-compatible restoration in progress (VOY-1590) | Subscriptions, usage, invoices |
 | Company Templates | [Company Templates](/api/company-templates) | One-click company deployment |
 | Marketplace | [Marketplace](/api/marketplace) | Browse and hire marketplace agents |
 | Knowledge Starter Packs | [Knowledge Starter Packs](/api/knowledge-starter-packs) | Browse, inspect, and install pre-curated knowledge document bundles |

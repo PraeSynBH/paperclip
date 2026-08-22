@@ -67,6 +67,9 @@ vi.mock("../services/index.js", () => ({
   agentService: () => ({
     getById: vi.fn(),
   }),
+  companySkillService: () => ({
+    completeTestRunForIssue: vi.fn(async () => null),
+  }),
   executionWorkspaceService: () => ({}),
   goalService: () => ({
     getById: vi.fn(),
@@ -93,8 +96,6 @@ vi.mock("../services/index.js", () => ({
   documentAnnotationService: () => ({ remapOpenThreadsForDocument: async () => [] }),
   routineService: () => ({}),
   workProductService: () => ({}),
-  planDocumentService: () => ({}),
-  planReviewGateService: () => ({}),
 }));
 
 vi.mock("../services/environments.js", () => ({

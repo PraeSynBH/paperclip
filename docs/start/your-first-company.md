@@ -222,7 +222,7 @@ Your company is running. Here's where to go from here:
 | Approve or reject proposals | [Approvals](/guides/board-operator/approvals) |
 | Join the community | [Discord](https://discord.gg/m4HZY7xNG3) |
 | Read case studies | [Case Studies](/case-studies/index) |
-| Set up billing (when you're ready) | [Billing Setup](/guides/board-operator/billing-setup) |
+| Set up billing (when you're ready) | [Billing Setup](/guides/board-operator/billing-setup) — ⚠️ fork-only impl removed; upstream-compatible restoration in progress (VOY-1590) |
 
 ---
 

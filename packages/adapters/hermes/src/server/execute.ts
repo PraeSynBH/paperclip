@@ -35,12 +35,13 @@ import {
   DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
   joinPromptSections,
   renderPaperclipWakePrompt,
+  selectPaperclipTaskMarkdown,
   stringifyPaperclipWakePayload,
+  isPaperclipRecoveryWakePayload,
 } from "@paperclipai/adapter-utils/server-utils";
 
 import {
   HERMES_CLI,
-  ADAPTER_TYPE,
   DEFAULT_TIMEOUT_SEC,
   DEFAULT_GRACE_SEC,
   DEFAULT_MODEL,
@@ -75,106 +76,6 @@ export function resolveHermesCommand(config: Record<string, unknown>): string {
   return cfgString(config.hermesCommand) || cfgString(config.command) || HERMES_CLI;
 }
 
-/**
- * Is `candidate` demonstrably the home directory of `agentId`?
- *
- * An agent home is addressed by agent id, so the final path segment of a home
- * that belongs to this agent is that agent's id. Trailing slashes are ignored
- * and both path separators are accepted. Returns `false` when either input is
- * empty: an unattributable path is never treated as owned.
- */
-function agentHomeBelongsToAgent(candidate: string, agentId: string): boolean {
-  if (!candidate || !agentId) return false;
-  const segments = candidate.split(/[\\/]+/).filter(Boolean);
-  return segments[segments.length - 1] === agentId;
-}
-
-/**
- * Resolve `AGENT_HOME` for one run and prove it belongs to the run's own agent.
- *
- * `AGENT_HOME` is the anchor for every memory path in an agent's operating
- * instructions (`$AGENT_HOME/MEMORY.md`, `$AGENT_HOME/life/`,
- * `$AGENT_HOME/memory/YYYY-MM-DD.md`). If it names another agent's directory,
- * an agent that follows its instructions literally writes its memory into that
- * other agent's home. Two distinct failures follow: two agents' daily notes
- * collide on the same `memory/YYYY-MM-DD.md`, and — where the other agent is
- * read-only oversight — the audited party gets a writable path inside the
- * auditor's home.
- *
- * The heartbeat resolves the correct per-agent home and publishes it on
- * `context.paperclipWorkspace.agentHome`. This adapter previously never read
- * that value, so the only `AGENT_HOME` a Hermes child ever saw was whatever it
- * inherited from the server process environment. On a host with a stale
- * `export AGENT_HOME=...` in a shell rc file, that inherited value is a *fixed*
- * foreign agent id, for every agent, on every run.
- *
- * Three rules, all required:
- *   1. The run-resolved home wins over anything inherited.
- *   2. A candidate home is only used when it is attributable to this agent.
- *      This applies to the run-resolved value and the inherited value alike,
- *      so no single trusted caller can bypass the ownership invariant.
- *   3. A candidate that fails that check is dropped, not passed through. A
- *      missing `AGENT_HOME` is a loud, recoverable failure; a confidently
- *      wrong one silently corrupts another agent's memory.
- */
-export function resolveAgentHomeEnv(input: {
-  inherited?: string | null;
-  resolvedAgentHome?: string | null;
-  agentId?: string | null;
-}): { agentHome: string | null; warning: string | null } {
-  const resolved = typeof input.resolvedAgentHome === "string" ? input.resolvedAgentHome.trim() : "";
-  const inherited = typeof input.inherited === "string" ? input.inherited.trim() : "";
-  const agentId = typeof input.agentId === "string" ? input.agentId.trim() : "";
-
-  if (resolved) {
-    // The run-resolved home is the authoritative source, but it is still
-    // checked. Trusting it unconditionally would leave this helper unable to
-    // enforce the very invariant it exists for, and the failure mode is a
-    // silent write into another agent's memory.
-    if (agentId && !agentHomeBelongsToAgent(resolved, agentId)) {
-      return {
-        agentHome: null,
-        warning:
-          `Dropping run-resolved AGENT_HOME "${resolved}" — it is not addressed by agent ${agentId}. ` +
-          `Refusing to hand an agent a memory root that is not demonstrably its own.`,
-      };
-    }
-    if (inherited && inherited !== resolved) {
-      return {
-        agentHome: resolved,
-        warning:
-          `Ignoring inherited AGENT_HOME "${inherited}" — it does not match the home resolved for ` +
-          `agent ${agentId || "(unknown)"} ("${resolved}"). Using the run-resolved home.`,
-      };
-    }
-    return { agentHome: resolved, warning: null };
-  }
-
-  // No run-resolved home. An inherited value is only safe to keep if it is
-  // demonstrably this agent's own directory. Anything else belongs to some
-  // other agent and must not be handed to a process whose instructions treat
-  // it as a write target.
-  if (inherited && agentId) {
-    if (agentHomeBelongsToAgent(inherited, agentId)) {
-      return { agentHome: inherited, warning: null };
-    }
-    return {
-      agentHome: null,
-      warning:
-        `Dropping inherited AGENT_HOME "${inherited}" — it does not belong to agent ${agentId}, and no ` +
-        `per-run agent home was resolved. Writing memory there would cross-contaminate another agent's home.`,
-    };
-  }
-  if (inherited) {
-    return {
-      agentHome: null,
-      warning:
-        `Dropping inherited AGENT_HOME "${inherited}" — it could not be attributed to this run's agent.`,
-    };
-  }
-  return { agentHome: null, warning: null };
-}
-
 // ---------------------------------------------------------------------------
 // Wake-up prompt builder
 // ---------------------------------------------------------------------------
@@ -195,9 +96,8 @@ const HERMES_DEFAULT_PROMPT_TEMPLATE = [
   "- Include `-H \"Authorization: Bearer $PAPERCLIP_API_KEY\"` on API requests.",
   "- Include `-H \"X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID\"` on mutating issue requests.",
   "- For multiline comments or status updates, preserve newlines with `jq --arg` or a heredoc-fed helper rather than hand-escaping JSON.",
-  "- Always gate API calls on the HTTP status. Bare `curl -sS` exits 0 on 4xx, so piping it into `jq -r '.id'` turns a 403 rejection into `null` and a silently dropped write is indistinguishable from a success. Use `--fail-with-body` (or `scripts/pc-api.sh`) on every call.",
   "",
-  "Safe multiline update pattern (note --fail-with-body: without it curl exits 0 on 4xx):",
+  "Safe multiline update pattern:",
   "```bash",
   "api=\"${PAPERCLIP_API_URL%/}\"",
   "case \"$api\" in */api) ;; *) api=\"$api/api\" ;; esac",
@@ -210,14 +110,12 @@ const HERMES_DEFAULT_PROMPT_TEMPLATE = [
   "MD",
   ")",
   "jq -n --arg status done --arg comment \"$body\" '{status:$status, comment:$comment}' | \\",
-  "  curl -sS --fail-with-body -X PATCH \"$api/issues/{{context.issueId}}\" \\",
+  "  curl -sS -X PATCH \"$api/issues/{{context.issueId}}\" \\",
   "    -H \"Authorization: Bearer $PAPERCLIP_API_KEY\" \\",
   "    -H \"X-Paperclip-Run-Id: $PAPERCLIP_RUN_ID\" \\",
   "    -H \"Content-Type: application/json\" \\",
   "    --data-binary @-",
   "```",
-  "",
-  "Inside the paperclip repo, `scripts/pc-api.sh patch /api/issues/<id> '<json>'` is the preferred form: it applies the same status gate, writes the server error to stderr, and prints only the JSON body on success.",
   "",
   DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
 ].join("\n");
@@ -262,12 +160,16 @@ export function buildPrompt(
     paperclipApiUrl = paperclipApiUrl.replace(/\/+$/, "") + "/api";
   }
 
-  const wakePrompt = renderPaperclipWakePrompt(context.paperclipWake, {
+  const paperclipTaskMarkdown = selectPaperclipTaskMarkdown(context, {
     resumedSession: options.resumedSession === true,
   });
-  const paperclipTaskMarkdown = cfgString(context.paperclipTaskMarkdown)?.trim() || "";
+  const wakePrompt = renderPaperclipWakePrompt(context.paperclipWake, {
+    resumedSession: options.resumedSession === true,
+    // The task-context markdown is the authoritative brief on this lane; keep
+    // the wake prompt's description copy out so the prompt carries it once.
+    suppressIssueDescription: paperclipTaskMarkdown.length > 0,
+  });
   const sessionHandoffMarkdown = cfgString(context.paperclipSessionHandoffMarkdown)?.trim() || "";
-  const memoryPreamble = cfgString(context.paperclipMemoryPreamble)?.trim() || "";
   const wakePayloadJson = stringifyPaperclipWakePayload(context.paperclipWake) || "";
 
   const vars: Record<string, unknown> = {
@@ -290,18 +192,18 @@ export function buildPrompt(
     paperclipWakePrompt: wakePrompt,
     paperclipTaskMarkdown,
     taskContext: paperclipTaskMarkdown,
-    paperclipMemoryPreamble: memoryPreamble,
     paperclipWakeJson: wakePayloadJson,
     wakePayloadJson,
     paperclipApiKeyEnv: "PAPERCLIP_API_KEY",
     paperclipRunIdEnv: "PAPERCLIP_RUN_ID",
   };
 
-  const rendered = renderTemplate(renderConditionalSections(template, vars), vars);
+  const rendered = isPaperclipRecoveryWakePayload(context.paperclipWake)
+    ? ""
+    : renderTemplate(renderConditionalSections(template, vars), vars);
   return joinPromptSections([
     wakePrompt,
     sessionHandoffMarkdown,
-    memoryPreamble,
     paperclipTaskMarkdown,
     rendered,
   ]);
@@ -431,13 +333,11 @@ function parseHermesOutput(stdout: string, stderr: string): ParsedOutput {
 export async function execute(
   ctx: AdapterExecutionContext,
 ): Promise<AdapterExecutionResult> {
-  const executeStartedAtMs = Date.now();
   const config = (ctx.config ?? ctx.agent?.adapterConfig ?? {}) as Record<string, unknown>;
 
   // ── Resolve configuration ──────────────────────────────────────────────
   const hermesCmd = resolveHermesCommand(config);
   const model = cfgString(config.model) || DEFAULT_MODEL;
-  const timeoutSecConfigured = Object.prototype.hasOwnProperty.call(config, "timeoutSec");
   const timeoutSec = cfgNumber(config.timeoutSec) || DEFAULT_TIMEOUT_SEC;
   const graceSec = cfgNumber(config.graceSec) || DEFAULT_GRACE_SEC;
   const maxTurns = cfgNumber(config.maxTurnsPerRun);
@@ -562,58 +462,18 @@ export async function execute(
   }
 
   // ── Build environment ──────────────────────────────────────────────────
-  // RBR-1108: do NOT spread raw `process.env` here. This adapter runs inside
-  // the single long-lived, multi-tenant Paperclip server process. Any
-  // PAPERCLIP_TASK_ID / PAPERCLIP_WAKE_REASON / PAPERCLIP_WAKE_PAYLOAD_JSON
-  // (or any other PAPERCLIP_* value) left over in that server process's own
-  // env — e.g. from a previous run's env leaking via some other code path,
-  // or from how the server itself was launched — would otherwise leak
-  // unscoped into every subsequent hermes_local run across every company,
-  // whenever the current wake's own context doesn't happen to override it.
-  // This is the tenant-isolation leak that produced the same stale Voyonder
-  // issue id showing up twice in a row for the Rambur CEO. Every sibling
-  // local adapter (claude-local, opencode-local, codex-local, grok-local,
-  // gemini-local, pi-local, acpx-local, cursor-local) avoids this by never
-  // spreading process.env at the adapter layer; `runChildProcess` merges
-  // process.env safely later via `sanitizeInheritedPaperclipEnv`, which
-  // strips all inherited PAPERCLIP_* keys (except a small allow-list of
-  // process-identity vars) before merging. Match that pattern here.
   const userEnv = config.env as Record<string, string> | undefined;
   const env: Record<string, string> = {
+    ...(process.env as Record<string, string>),
     ...(userEnv && typeof userEnv === "object" ? userEnv : {}),
     ...buildPaperclipEnv(ctx.agent),
   };
 
-  // AGENT_HOME must name *this* agent's home. The heartbeat publishes the
-  // resolved per-agent home on context.paperclipWorkspace.agentHome; it wins
-  // over any inherited value, and any value that cannot be attributed to this
-  // agent is dropped rather than passed through. See resolveAgentHomeEnv above.
-  {
-    const workspaceContext =
-      (ctx as any).context?.paperclipWorkspace &&
-      typeof (ctx as any).context.paperclipWorkspace === "object"
-        ? ((ctx as any).context.paperclipWorkspace as Record<string, unknown>)
-        : {};
-    // `env` deliberately does not inherit raw `process.env` (see RBR-1108
-    // note above), so read the host process's own AGENT_HOME directly here
-    // as the "inherited" input — this is the same value `runChildProcess`
-    // would otherwise merge in later, and `resolveAgentHomeEnv` validates it
-    // against this run's own agent id before ever trusting it.
-    const agentHomeResolution = resolveAgentHomeEnv({
-      inherited: env.AGENT_HOME ?? process.env.AGENT_HOME,
-      resolvedAgentHome: cfgString(workspaceContext.agentHome) ?? null,
-      agentId: ctx.agent?.id ?? null,
-    });
-    if (agentHomeResolution.agentHome) env.AGENT_HOME = agentHomeResolution.agentHome;
-    else delete env.AGENT_HOME;
-    if (agentHomeResolution.warning) {
-      await ctx.onLog("stdout", `[hermes] Warning: ${agentHomeResolution.warning}\n`);
-    }
-  }
-
   if (ctx.runId) env.PAPERCLIP_RUN_ID = ctx.runId;
 
-  // BUG FIX: Inject authToken as PAPERCLIP_API_KEY (matches adapter-claude-local behavior)
+  // PAPERCLIP_API_KEY is never accepted from config — the harness-minted run
+  // token is the only source of Paperclip API identity.
+  delete env.PAPERCLIP_API_KEY;
   if ((ctx as any).authToken) env.PAPERCLIP_API_KEY = (ctx as any).authToken;
 
   // BUG FIX: Read task context from ctx.context (wake context), not ctx.config (adapter config)
@@ -678,6 +538,7 @@ export async function execute(
     timeoutSec,
     graceSec,
     onLog: wrappedOnLog,
+    onSpawn: ctx.onSpawn,
   });
 
   // ── Parse output ───────────────────────────────────────────────────────
@@ -692,39 +553,18 @@ export async function execute(
   }
 
   // ── Build result ───────────────────────────────────────────────────────
-  // AC1/AC2: report the timeout we actually armed above (`timeoutSec`), not
-  // a guess derived server-side from an empty adapterConfig. `timeoutOwner`
-  // names this adapter as the source when the value came from our own
-  // DEFAULT_TIMEOUT_SEC rather than an explicit user-set timeoutSec.
-  // AC3: report the unmetered setup phase (everything before this adapter's
-  // own timeout was armed and the child spawned) as its own field, so
-  // wall-clock (startedAt -> finishedAt) duration spread is not misread as
-  // timeout variance.
-  const unmeteredSetupSec = Math.max(0, Math.round((Date.now() - executeStartedAtMs) / 1000));
   const executionResult: AdapterExecutionResult = {
     exitCode: result.exitCode,
     signal: result.signal,
-    // AC4: `signalSent` is the signal our own timeout path actually sent
-    // (SIGTERM, then SIGKILL after graceSec). `result.signal` reflects
-    // whatever the OS/CLI reports after the fact, which has been observed
-    // to disagree (e.g. SIGINT reported for a SIGTERM kill) and is not
-    // reliable for attribution on its own.
-    signalSent: result.signalSent,
     timedOut: result.timedOut,
     provider: resolvedProvider,
     model,
-    adapterTimeoutPolicy: {
-      effectiveTimeoutSec: timeoutSec,
-      timeoutConfigured: timeoutSecConfigured,
-      timeoutSource: timeoutSecConfigured ? "config" : "adapter_default",
-      timeoutOwner: ADAPTER_TYPE,
-    },
-    unmeteredSetupSec,
   };
-
 
   if (parsed.errorMessage) {
     executionResult.errorMessage = parsed.errorMessage;
+  } else if (!result.timedOut && typeof result.exitCode === "number" && result.exitCode !== 0) {
+    executionResult.errorMessage = `Hermes exited with code ${result.exitCode}`;
   }
 
   if (parsed.usage) {

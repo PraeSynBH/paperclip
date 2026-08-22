@@ -1,12 +1,10 @@
 import type { AdapterModel } from "./types.js";
 import { models as codexFallbackModels } from "@paperclipai/adapter-codex-local";
 import { readConfigFile } from "../config-file.js";
-import {
-  OPENAI_MODELS_TIMEOUT_MS,
-  OPENAI_MODELS_CACHE_TTL_MS,
-} from "../timeout-constants.js";
 
 const OPENAI_MODELS_ENDPOINT = "https://api.openai.com/v1/models";
+const OPENAI_MODELS_TIMEOUT_MS = 5000;
+const OPENAI_MODELS_CACHE_TTL_MS = 60_000;
 
 let cached: { keyFingerprint: string; expiresAt: number; models: AdapterModel[] } | null = null;
 

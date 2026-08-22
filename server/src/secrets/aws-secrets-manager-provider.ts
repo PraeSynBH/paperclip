@@ -14,10 +14,6 @@ import type {
   StoredSecretVersionMaterial,
 } from "./types.js";
 import { SecretProviderClientError } from "./types.js";
-import {
-  AWS_SECRETS_REQUEST_TIMEOUT_MS,
-  AWS_CREDENTIAL_CACHE_TTL_MS,
-} from "../timeout-constants.js";
 
 const AWS_SECRETS_MANAGER_SCHEME = "aws_secrets_manager_v1";
 const DEFAULT_PREFIX = "paperclip";
@@ -25,6 +21,8 @@ const DEFAULT_OWNER_TAG = "paperclip";
 const DEFAULT_VERSION_STAGE = "AWSCURRENT";
 const PAPERCLIP_PENDING_VERSION_STAGE = "PAPERCLIP_PENDING";
 const DEFAULT_DELETE_RECOVERY_WINDOW_DAYS = 30;
+const AWS_SECRETS_MANAGER_REQUEST_TIMEOUT_MS = 30_000;
+const AWS_CREDENTIAL_CACHE_TTL_MS = 5 * 60_000;
 const AWS_CREDENTIAL_EXPIRATION_SKEW_MS = 60_000;
 const PROVIDER_CONFIG_DISCOVERY_SAMPLE_LIMIT = 3;
 const PROVIDER_CONFIG_DISCOVERY_CANDIDATE_LIMIT = 6;
@@ -38,6 +36,8 @@ interface AwsSecretsManagerMaterial extends StoredSecretVersionMaterial {
   secretId: string;
   versionId: string | null;
   source: "managed" | "external_reference";
+  lastWrittenVersionId?: string | null;
+  previousCurrentVersionId?: string | null;
 }
 
 interface AwsSecretsManagerConfig {
@@ -266,6 +266,7 @@ function configuredAwsSecretsManagerDescriptor() {
     requiresExternalRef: false,
     supportsManagedValues: true,
     supportsExternalReferences: true,
+    supportsExternalValueWrites: true,
     configured: canLoadAwsSecretsManagerConfig(),
   };
 }
@@ -972,7 +973,7 @@ class AwsSecretsManagerJsonGateway implements AwsSecretsManagerGateway {
       method: "POST",
       headers,
       body,
-      signal: AbortSignal.timeout(AWS_SECRETS_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(AWS_SECRETS_MANAGER_REQUEST_TIMEOUT_MS),
     });
     const text = await response.text();
     const parsed = text ? (JSON.parse(text) as Record<string, unknown>) : {};
@@ -1181,6 +1182,42 @@ export function createAwsSecretsManagerProvider(
       assertNotManagedNamespaceExternalRef(config, input.externalRef);
       return createExternalReferenceMaterial(input.externalRef, input.providerVersionRef ?? null);
     },
+    async updateExternalSecretValue(input) {
+      const config = resolveConfig(input.providerConfig);
+      assertNotManagedNamespaceExternalRef(config, input.externalRef);
+      const gateway = resolveGateway(config);
+      const secretId = input.externalRef.trim();
+
+      try {
+        const previous = await gateway.getSecretValue({
+          SecretId: secretId,
+          VersionStage: DEFAULT_VERSION_STAGE,
+        });
+        // No VersionStages: the new version becomes AWSCURRENT so every consumer of the
+        // referenced secret (not just Paperclip) picks up the new value.
+        const created = await gateway.putSecretValue({
+          SecretId: secretId,
+          SecretString: input.value,
+        });
+        const normalizedSecretId = created.ARN ?? created.Name ?? secretId;
+        // Material keeps versionId null so resolution keeps tracking AWSCURRENT and
+        // out-of-band rotations done directly in AWS still flow through.
+        const prepared = createExternalReferenceMaterial(normalizedSecretId, null);
+        const valueSha256 = sha256Hex(input.value);
+        return {
+          ...prepared,
+          material: {
+            ...prepared.material,
+            lastWrittenVersionId: created.VersionId ?? null,
+            previousCurrentVersionId: previous.VersionId ?? null,
+          },
+          valueSha256,
+          fingerprintSha256: valueSha256,
+        };
+      } catch (error) {
+        normalizeAwsError("updateExternalSecretValue", error);
+      }
+    },
     async listRemoteSecrets(input): Promise<RemoteSecretListResult> {
       const config = resolveConfig(input.providerConfig);
       const gateway = resolveGateway(config);
@@ -1279,10 +1316,31 @@ export function createAwsSecretsManagerProvider(
           ? asAwsSecretsManagerMaterial(input.material)
           : null;
 
-      if (material?.source !== "managed") return;
-
       const config = resolveConfig(input.providerConfig);
       const gateway = resolveGateway(config);
+
+      if (material?.source === "external_reference") {
+        if (
+          input.mode === "archive" &&
+          material.lastWrittenVersionId &&
+          material.previousCurrentVersionId &&
+          gateway.updateSecretVersionStage
+        ) {
+          try {
+            await gateway.updateSecretVersionStage({
+              SecretId: material.secretId,
+              VersionStage: DEFAULT_VERSION_STAGE,
+              MoveToVersionId: material.previousCurrentVersionId,
+              RemoveFromVersionId: material.lastWrittenVersionId,
+            });
+          } catch (error) {
+            normalizeAwsError("updateSecretVersionStage", error);
+          }
+        }
+        return;
+      }
+      if (material?.source !== "managed") return;
+
       const secretId = resolveManagedSecretRef({
         config,
         context: input.context,

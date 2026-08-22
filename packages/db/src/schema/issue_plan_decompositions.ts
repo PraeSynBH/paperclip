@@ -26,7 +26,6 @@ export const issuePlanDecompositions = pgTable(
     ownerAgentId: uuid("owner_agent_id").references(() => agents.id, { onDelete: "set null" }),
     ownerUserId: text("owner_user_id"),
     ownerRunId: uuid("owner_run_id").references(() => heartbeatRuns.id, { onDelete: "set null" }),
-    milestoneId: text("milestone_id"),
     completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

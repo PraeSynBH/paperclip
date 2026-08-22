@@ -1,5 +1,7 @@
 # Support Case Assessment: Stripe Tier Sync Hardening (v0.2.13)
 
+> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.** The fork-specific Stripe billing code (including tier sync) was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). This assessment describes the **old fork-specific implementation** and may be stale. Pending: VOY-1590 completion.
+
 **Feature**: Stripe subscription tier synchronization fixes
 **Assessed by**: Support Engineer
 **Date**: 2026-08-16
