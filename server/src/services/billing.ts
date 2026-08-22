@@ -225,30 +225,32 @@ export function billingService(db: Db) {
     if (!invoice.subscription) return;
     const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
 
-    const result = await db
-      .update(companySubscriptionsTable)
-      .set({
-        status: "past_due",
-        updatedAt: new Date(),
-      })
-      .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
-      .returning()
-      .then((r) => r[0] ?? null);
-
-    logger.warn({ stripeSubscriptionId: subId, invoiceId: invoice.id }, "Subscription payment failed");
-
-    if (result) {
-      publishLiveEvent({
-        companyId: result.companyId,
-        type: "subscription.status.updated",
-        payload: {
+    await db.transaction(async (tx) => {
+      const result = await tx
+        .update(companySubscriptionsTable)
+        .set({
           status: "past_due",
-          stripeSubscriptionId: subId,
-          cancelAtPeriodEnd: result.cancelAtPeriodEnd,
-          tierId: result.tierId,
-        },
-      });
-    }
+          updatedAt: new Date(),
+        })
+        .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
+        .returning()
+        .then((r) => r[0] ?? null);
+
+      logger.warn({ stripeSubscriptionId: subId, invoiceId: invoice.id }, "Subscription payment failed");
+
+      if (result) {
+        publishLiveEvent({
+          companyId: result.companyId,
+          type: "subscription.status.updated",
+          payload: {
+            status: "past_due",
+            stripeSubscriptionId: subId,
+            cancelAtPeriodEnd: result.cancelAtPeriodEnd,
+            tierId: result.tierId,
+          },
+        });
+      }
+    });
   };
 
   const handleSubscriptionUpdated = async (stripeSub: Stripe.Subscription) => {
@@ -354,29 +356,31 @@ export function billingService(db: Db) {
   const handleSubscriptionDeleted = async (stripeSub: Stripe.Subscription) => {
     const companyId = stripeSub.metadata?.paperclipCompanyId;
 
-    await db
-      .update(companySubscriptionsTable)
-      .set({
-        status: "canceled",
-        canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
-
-    logger.info({ stripeSubscriptionId: stripeSub.id }, "Subscription canceled via Stripe");
-
-    if (companyId) {
-      publishLiveEvent({
-        companyId,
-        type: "subscription.status.updated",
-        payload: {
+    await db.transaction(async (tx) => {
+      await tx
+        .update(companySubscriptionsTable)
+        .set({
           status: "canceled",
-          stripeSubscriptionId: stripeSub.id,
-          cancelAtPeriodEnd: false,
-          tierId: stripeSub.metadata?.paperclipTierId ?? null,
-        },
-      });
-    }
+          canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
+
+      logger.info({ stripeSubscriptionId: stripeSub.id }, "Subscription canceled via Stripe");
+
+      if (companyId) {
+        publishLiveEvent({
+          companyId,
+          type: "subscription.status.updated",
+          payload: {
+            status: "canceled",
+            stripeSubscriptionId: stripeSub.id,
+            cancelAtPeriodEnd: false,
+            tierId: stripeSub.metadata?.paperclipTierId ?? null,
+          },
+        });
+      }
+    });
   };
 
   const handleCheckoutSessionCompleted = async (session: Stripe.Checkout.Session) => {
