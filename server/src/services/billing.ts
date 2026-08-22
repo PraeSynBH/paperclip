@@ -17,6 +17,47 @@ import { publishLiveEvent } from "./live-events.js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
+/** Max attempts for Stripe API retries in webhook handler contexts. */
+const STRIPE_RETRY_MAX_ATTEMPTS = 3;
+/** Base delay in ms for exponential backoff (1st retry: 200ms, 2nd: 400ms). */
+const STRIPE_RETRY_BASE_DELAY_MS = 200;
+
+/**
+ * Wrap a Stripe API call with exponential-backoff retry.
+ * Only retries on transient/rate-limit errors (5xx, 429, network).
+ * Idempotent callers (our handlers use upserts) can safely retry.
+ */
+async function withStripeRetry<T>(fn: () => Promise<T>, ctx?: string): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= STRIPE_RETRY_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      lastErr = err;
+      const stripeErr = err as { type?: string; statusCode?: number; code?: string };
+      const statusCode = stripeErr?.statusCode;
+      const isTransient =
+        statusCode === 429 ||
+        (statusCode !== undefined && statusCode >= 500) ||
+        stripeErr?.type === "StripeConnectionError" ||
+        stripeErr?.type === "StripeTimeoutError" ||
+        stripeErr?.code === "service_unavailable";
+
+      if (!isTransient || attempt === STRIPE_RETRY_MAX_ATTEMPTS) {
+        throw err;
+      }
+
+      const delay = STRIPE_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      logger.warn(
+        { attempt, maxAttempts: STRIPE_RETRY_MAX_ATTEMPTS, delayMs: delay, ctx },
+        "Stripe API call failed — retrying",
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastErr; // unreachable, but satisfies TS
+}
+
 export function getStripeClient(): Stripe {
   const secretKey = process.env.STRIPE_SECRET_KEY ?? "";
   if (!secretKey) {
@@ -59,6 +100,7 @@ export function billingService(db: Db) {
   const getOrCreateStripeCustomer = async (companyId: string): Promise<{ id: string; stripeCustomerId: string }> => {
     const stripe = getStripeClient();
 
+    // Fast path: SELECT without contention.
     const existing = await db
       .select()
       .from(stripeCustomersTable)
@@ -76,26 +118,49 @@ export function billingService(db: Db) {
       .then((r) => r[0] ?? null);
     if (!company) throw notFound("Company not found");
 
-    const customer = await stripe.customers.create({
+    const customer = await withStripeRetry(
+      () => stripe.customers.create({
       name: company.name,
       description: `Paperclip company: ${company.name} (${companyId})`,
       metadata: {
         paperclipCompanyId: companyId,
       },
-    });
+    }),
+      "getOrCreateStripeCustomer:customers.create",
+    );
 
-    const record = await db
-      .insert(stripeCustomersTable)
-      .values({
-        companyId,
-        stripeCustomerId: customer.id,
-      })
-      .returning()
-      .then((r) => r[0]);
+    // INSERT … ON CONFLICT DO NOTHING — if another request won the race,
+    // this returns null instead of throwing 23505. The local Stripe customer
+    // we just created becomes an orphan (a rare, harmless side-effect).
+    const [record] = await db.execute(sql`
+      INSERT INTO "stripe_customers"
+        ("company_id", "stripe_customer_id")
+      VALUES (${companyId}, ${customer.id})
+      ON CONFLICT ("company_id") DO NOTHING
+      RETURNING "id", "stripe_customer_id"
+    `);
 
-    logger.info({ companyId, stripeCustomerId: customer.id }, "Created Stripe customer");
+    if (record) {
+      logger.info({ companyId, stripeCustomerId: customer.id }, "Created Stripe customer");
+      return { id: record.id as string, stripeCustomerId: record.stripe_customer_id as string };
+    }
 
-    return { id: record.id, stripeCustomerId: customer.id };
+    // Another request inserted the row between our SELECT and INSERT.
+    // Fetch the winner's record and return it. The Stripe customer created
+    // above is orphaned but harmless.
+    const winner = await db
+      .select()
+      .from(stripeCustomersTable)
+      .where(eq(stripeCustomersTable.companyId, companyId))
+      .then((r) => r[0] ?? null);
+
+    if (!winner) {
+      // Should never happen after the CONFLICT above resolved in favour of
+      // another session, but be defensive.
+      throw new Error("Concurrent Stripe customer creation lost race and no existing record found");
+    }
+
+    return { id: winner.id, stripeCustomerId: winner.stripeCustomerId };
   };
 
   const listInvoices = async (companyId: string) => {
@@ -337,7 +402,10 @@ export function billingService(db: Db) {
     }
 
     const stripe = getStripeClient();
-    const stripeSub = await stripe.subscriptions.retrieve(subId);
+    const stripeSub = await withStripeRetry(
+      () => stripe.subscriptions.retrieve(subId),
+      "handleCheckoutSessionCompleted:subscriptions.retrieve",
+    );
 
     const sessionCustomerId = session.customer
       ? (typeof session.customer === "string" ? session.customer : session.customer.id)
@@ -1061,27 +1129,6 @@ export function billingService(db: Db) {
 
       logger.info({ type: event.type, id: event.id }, "Processing Stripe webhook event");
 
-      // Event-level dedup: record the event ID before processing.
-      // If the INSERT succeeds it's the first time we see this event.
-      // If it fails with a unique violation (23505), the event was already
-      // processed — silently acknowledge.
-      try {
-        await db.insert(stripeWebhookEventsTable).values({
-          stripeEventId: event.id,
-          eventType: event.type,
-        });
-      } catch (err: unknown) {
-        const pgErr = err as { code?: string };
-        if (pgErr?.code === "23505") {
-          logger.info(
-            { type: event.type, id: event.id },
-            "Duplicate Stripe webhook event — skipping (already processed)",
-          );
-          return { received: true, type: event.type };
-        }
-        throw err;
-      }
-
       switch (event.type) {
         case "invoice.paid":
         case "invoice.payment_succeeded": {
@@ -1118,6 +1165,27 @@ export function billingService(db: Db) {
           break;
         default:
           logger.info({ type: event.type }, "Unhandled Stripe webhook event type");
+      }
+
+      // Event-level dedup: record the event AFTER successful processing.
+      // If the handler threw, the event is NOT recorded — Stripe's at-least-once
+      // delivery will retry and the handler will run again.  Each handler is
+      // idempotent (upsert-based), so replay is safe.
+      try {
+        await db.insert(stripeWebhookEventsTable).values({
+          stripeEventId: event.id,
+          eventType: event.type,
+        });
+      } catch (err: unknown) {
+        const pgErr = err as { code?: string };
+        if (pgErr?.code === "23505") {
+          logger.info(
+            { type: event.type, id: event.id },
+            "Duplicate Stripe webhook event — skipping (already processed)",
+          );
+          return { received: true, type: event.type };
+        }
+        throw err;
       }
 
       return { received: true, type: event.type };
