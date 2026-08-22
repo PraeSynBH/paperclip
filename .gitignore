@@ -73,3 +73,8 @@ tests/storybook-visual/playwright-report/
 .herenow
 .gstack/
 .worktrees/
+
+# Paperclip runtime scratch directories
+server/\$PAPERCLIP_SCRATCH_DIR/
+server/\$PAPERCLIP_RUN_SCRATCH_DIR/
+server/ceo_scratch/
