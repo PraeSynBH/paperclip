@@ -11,6 +11,22 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
+## Feature Gating / Paywall — August 22, 2026
+
+[Full release notes →](/support/releases/voy-1609-feature-gating)
+
+### Highlights
+
+- **Subscription Feature Gating** — Added `requireFeature` Express middleware that gates operations behind subscription tier features. Routes check `checkFeatureAccess` before proceeding; denied requests return `403 PAYWALL` with a descriptive message.
+- **Four Gated Operations** — API key creation (`api_access`), advanced agent creation (`advanced_agents`), member invites past seat limit (`unlimited_seats`), and marketplace plugin installation (`custom_plugins` — free feature).
+- **Ten Feature Keys** — The feature catalog includes `custom_plugins`, `advanced_agents`, `audit_logs`, `api_access`, `priority_support`, `extended_storage`, `sso`, `custom_roles`, `advanced_reporting`, and `unlimited_seats`.
+- **Degradation Handling** — When a subscription cancels at period end, paid features are denied once the paid period elapses — even if Stripe still reports the subscription as active.
+- **Free Feature Passthrough** — Features in the `FREE_FEATURES` set bypass all checks, ensuring core functionality is always available.
+
+[Full release notes →](/support/releases/voy-1609-feature-gating)
+
+---
+
 ## P1-2 TOCTOU Billing Fix — August 22, 2026
 
 [Full release notes →](/support/releases/voy-1669-toctou-billing-fix)
