@@ -2,17 +2,17 @@
 title: P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 version: voy-1669
 date: 2026-08-22
-commit: b840497fab + 151f0a2066
-status: PENDING — merged to custom branch, awaiting PR merge via VOY-1673
+commit: e71139c430 + 80e981f72c
+status: RELEASED — merged via PR #67
 ---
 
 # P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 
-**Release:** VOY-1669 / VOY-1673
-**Commits:** `b840497fab`, `cd74f15ca8`, `151f0a2066`
+**Release:** VOY-1669 / VOY-1645 / PR #67
+**Commits:** `e71139c430` (VOY-1645 TOCTOU fix), `80e981f72c` (P2 stripe cast fix)
 **Date:** 2026-08-22
-**Status:** PENDING — merged to custom branch, awaiting PR merge via VOY-1673
-**Related issues:** VOY-1669, VOY-1671, VOY-1687, VOY-1673, VOY-1682
+**Status:** RELEASED — merged via PR #67 (admin merge per CEO authorization)
+**Related issues:** VOY-1645, VOY-1669, VOY-1671, VOY-1687, VOY-1673, VOY-1682
 
 ## Summary
 

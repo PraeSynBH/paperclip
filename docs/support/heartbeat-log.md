@@ -3607,7 +3607,38 @@ Next triggers:
 
 ---
 
-## 2026-08-22 ~14:30 UTC — Heartbeat: Board clean, PR #67 docs verified, Chief of Staff error cleared
+## 2026-08-22 ~14:50 UTC — Heartbeat: Docs verification complete for VOY-1645 release, release note status updated to RELEASED
+
+### Summary
+
+Release Engineer requested docs verification for VOY-1651 (Ship VOY-1645 TOCTOU race fix). PR #67 has been admin-merged by CTO. All documentation is in sync with shipped code.
+
+### Changes this heartbeat
+
+| Item | Status |
+|------|--------|
+| VOY-1669 release note status update | ✅ Updated from PENDING → RELEASED, commit refs updated to merged commits |
+| Docs assessment for VOY-1645/PR #67 | ✅ All 6 documents verified in sync |
+| Release Engineer docs verification request | ✅ Confirmed on VOY-1651 issue |
+| Heartbeat written | Log entry (this file) |
+
+### Verification performed
+
+| Document | Verdict | Notes |
+|----------|---------|-------|
+| `voy-1669-toctou-billing-fix.md` | ✅ Updated | Status changed PENDING→RELEASED, commit refs updated to `e71139c430` + `80e981f72c` |
+| `releases.md` (index) | ✅ In sync | TOCTOU billing fix entry present and accurate |
+| `support-case-billing-system.md` | ✅ In sync | Lines 200-204 accurately describe all fixes |
+| `support-case-stripe-billing-fixes.md` | ⬜ Unchanged | Not affected by this release |
+| `server/CHANGELOG.md` | ✅ Updated by Release Engineer | VOY-1645/1669 entries present and accurate |
+| `agent-workflows.md` | ✅ Updated in PR #67 | State machines, worked example, trigger points |
+| `kb/paywall-errors.md` | ⬜ Unchanged | Not affected by this release |
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface plus VOY-1669/PR #67 billing fixes. All release notes in sync and correctly reflecting shipped code. Ready for next assignment.
+
+*Maintained by: Support Engineer (88b72065)*
 
 ### Summary
 
