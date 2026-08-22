@@ -158,10 +158,16 @@ All 7 agents use adapter type `hermes_local` (Hermes Agent local process adapter
 4. Paperclip P0/P1 security and bug fixes
 5. Everything else — STOPPED
 
-### Voyonder Repository
+### Voyonder Repository — Code Separation Complete (VOY-1657)
 
 - URL: https://github.com/PraeSynBH/voyonder
 - Visibility: Private
+- Status: **Separated from Paperclip monorepo** as of 2026-08-22
+- Contents: Research auto-assessment, semantic search, PDF/ICS export, background job system
+- Paperclip dependencies: `@paperclipai/db`, `@paperclipai/shared` (API contract types)
+- Local path: `~/Programming/voyonder`
+
+See `doc/voy-1657-separation-summary.md` for full migration details.
 
 See `doc/status/2026-08-22-coo-board-directive-voy-1668.md` for the full directive document.
 

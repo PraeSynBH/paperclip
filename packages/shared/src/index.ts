@@ -118,6 +118,7 @@ export {
   type ResponsibleUserDenialCopy,
   type ResponsibleUserDenialTone,
 } from "./responsible-user-denial.js";
+export { ATTENTION_SOURCE_KINDS } from "./types/attention.js";
 export type {
   AttentionDecisionVerb,
   AttentionDetailImage,
@@ -137,7 +138,19 @@ export type {
   AttentionTriageAttribution,
   AttentionWorkspaceRef,
 } from "./types/attention.js";
-export { ATTENTION_SOURCE_KINDS } from "./types/attention.js";
+
+// ── Background job types (API contract shared with Voyonder) ──
+export {
+  BACKGROUND_JOB_TYPES,
+  type BackgroundJobType,
+  type BackgroundJobStatus,
+} from "./background-job-types.js";
+export type {
+  BackgroundJob,
+  CreateBackgroundJobRequest,
+  BackgroundJobEvent,
+} from "./types/background-job.js";
+
 export type {
   DecisionQueue,
   DecisionQueueItem,
