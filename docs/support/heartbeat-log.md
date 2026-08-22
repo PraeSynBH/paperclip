@@ -4119,4 +4119,32 @@ No new feature commits since last heartbeat (~02:00 UTC). All recent feature com
 3. Release Engineer pre-ship documentation sync check
 4. QA/COO requests for support assessment or documentation health report
 
+## Heartbeat — Aug 22 ~04:00 UTC
+
+### Summary
+
+**Triggered by:** New commit `93734a99b0` — `fix(billing): wrap handleCheckoutSessionCompleted in transaction with ON CONFLICT upsert`
+
+**Diff assessment:** This commit replaces the naive early-return dedup check in `handleCheckoutSessionCompleted` with a `db.transaction()` + `INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE` pattern. Usage metrics insertion also converted to `ON CONFLICT DO NOTHING` within the same transaction. This closes Finding C from the VOY-1616 re-audit.
+
+**Documentation impact: NONE.** This is purely an internal/backend change:
+
+- No API endpoints added, removed, or modified
+- No user-facing behavior changes — duplicate Stripe events were already handled (now handled more robustly with race-free database-level upsert)
+- No new error messages, configuration options, or feature gates introduced
+- The existing billing support case assessment (`docs/support/assessments/support-case-billing-system.md`) already correctly describes idempotent subscription creation via "INSERT ... ON CONFLICT" (Known Limitation #2)
+- No release-note-worthy change (no new feature, no behavioral contract change)
+
+**Paperclip API status:** UNREACHABLE — `macbook.praesyn.int:3101` refused connection. Board state not verified this heartbeat.
+
+### Disposition
+
+**ALL DOCS IN SYNC.** Standing by for:
+
+1. New feature commits needing documentation assessment
+2. PRX-47 (agent performance metrics) feature commit → requires committing the already-prepared support case assessment at `docs/support/assessments/support-case-agent-performance-metrics.md`
+3. Release Engineer pre-ship documentation sync check
+4. QA/COO requests for support assessment or documentation health report
+5. Paperclip API availability recovery (to resume board-based issue tracking)
+
 *Maintained by: Support Engineer (88b72065)*
