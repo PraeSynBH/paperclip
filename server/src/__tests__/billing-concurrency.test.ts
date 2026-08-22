@@ -18,7 +18,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import {
   companies,
   companySubscriptions,
@@ -489,10 +489,12 @@ describe("Billing concurrency fixes [VOY-1669, VOY-1671]", () => {
         .select()
         .from(subscriptionUsage)
         .where(
-          eq(subscriptionUsage.subscriptionId, sub.id) &&
-          eq(subscriptionUsage.metric, metric) &&
-          eq(subscriptionUsage.periodStart, periodStart) &&
-          eq(subscriptionUsage.periodEnd, periodEnd),
+          and(
+            eq(subscriptionUsage.subscriptionId, sub.id),
+            eq(subscriptionUsage.metric, metric),
+            eq(subscriptionUsage.periodStart, periodStart),
+            eq(subscriptionUsage.periodEnd, periodEnd),
+          ),
         );
       expect(records.length).toBe(1);
 
@@ -582,10 +584,12 @@ describe("Billing concurrency fixes [VOY-1669, VOY-1671]", () => {
         .select()
         .from(subscriptionUsage)
         .where(
-          eq(subscriptionUsage.subscriptionId, sub.id) &&
-          eq(subscriptionUsage.metric, metric) &&
-          eq(subscriptionUsage.periodStart, periodStart) &&
-          eq(subscriptionUsage.periodEnd, periodEnd),
+          and(
+            eq(subscriptionUsage.subscriptionId, sub.id),
+            eq(subscriptionUsage.metric, metric),
+            eq(subscriptionUsage.periodStart, periodStart),
+            eq(subscriptionUsage.periodEnd, periodEnd),
+          ),
         );
       expect(records.length).toBe(1);
 

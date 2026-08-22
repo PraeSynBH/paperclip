@@ -3,16 +3,16 @@ title: P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Eliminat
 version: voy-1669
 date: 2026-08-22
 commit: b840497fab + 151f0a2066
-status: SHIPPED — merged to main via VOY-1682 (2026-08-22)
+status: SHIPPED — merged to main via VOY-1682
 ---
 
 # P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 
-**Release:** VOY-1669 / VOY-1673 / VOY-1682
+**Release:** VOY-1669 / VOY-1673
 **Commits:** `b840497fab`, `cd74f15ca8`, `151f0a2066`
 **Date:** 2026-08-22
-**Status:** SHIPPED — merged and deployed via VOY-1682 (2026-08-22)
-**Related issues:** VOY-1669, VOY-1671, VOY-1687, VOY-1673
+**Status:** SHIPPED — merged to main via VOY-1682
+**Related issues:** VOY-1669, VOY-1671, VOY-1687, VOY-1673, VOY-1682
 
 ## Summary
 
@@ -95,6 +95,7 @@ No new configuration options. Existing `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_S
 - [x] `handleInvoicePaymentFailed` and `handleSubscriptionDeleted` wrapped in `db.transaction()`
 - [x] VOY-1687: Idempotency key on `stripe.subscriptions.create()`
 - [x] Code reviewed by Staff Engineer, CTO approval gate
+- [x] Merged to main via PR #63 (VOY-1682)
 
 ## Support Escalation Path
 
