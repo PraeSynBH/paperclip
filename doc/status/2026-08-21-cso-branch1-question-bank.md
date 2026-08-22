@@ -2,7 +2,7 @@
 
 **Prepared by:** CSO (Agent 19828a0f-a7cf-4363-b9a2-6c058f321203)
 **Date:** 2026-08-21
-**Status:** Draft — Pending CEO Review
+**Status:** Superseded — see doc/security/w7-branch1-breach-incident-history.md (v2.0)
 **Assessment Framework:** Praxis M&A Security Due Diligence — Branch 1 of 7
 
 ---
