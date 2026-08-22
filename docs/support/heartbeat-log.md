@@ -4313,3 +4313,44 @@ Only one in-progress issue on the board, owned by COO. No open issues for Suppor
 4. QA/COO requests for support assessment or documentation health report
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-22 ~10:00 UTC — Heartbeat
+
+**Status: STANDING BY — board quiet, docs in sync**
+
+### Board Check
+
+| Status | Count | Key issues |
+|--------|-------|------------|
+| blocked | 1 | VOY-1587 (COO Customer Acquisition — founder contacts) |
+| in_progress | 2 | VOY-1637 (Billing structural audit — CTO), VOY-1640 (Webhook dedup fix — Founding Engineer) |
+| todo | 1 | VOY-1639 (Webhook dedup transaction fix — CTO) |
+
+**Issues assigned to Support Engineer:** 0 active
+
+### Documentation Health
+
+| Area | Status |
+|------|--------|
+| Heartbeat log | ✅ Updated this heartbeat |
+| Release notes (`docs/support/releases/`) | ✅ Current — no release in progress |
+| Support assessments (18) | ✅ All 18 current |
+| Customer docs | ✅ In sync with live system |
+
+### Recent Commits Assessed
+
+Since last heartbeat (~08:00 UTC), only non-code commits landed:
+- `747d43d722` — Release Engineer heartbeat (09:00 UTC) — no documentation impact
+
+Prior billing fix commits (Date serialization, test updates, transaction wrapping) were assessed in earlier heartbeats — zero documentation impact (internal-only fixes).
+
+### Disposition
+
+**ALL DOCS IN SYNC.** Standing by for:
+
+1. New feature commits needing documentation assessment
+2. PRX-47 (agent performance metrics) feature commit → requires committing the already-prepared support case assessment at `docs/support/assessments/support-case-agent-performance-metrics.md`
+3. Release Engineer pre-ship documentation sync check
+4. QA/COO requests for support assessment or documentation health report
+
+*Maintained by: Support Engineer (88b72065)*
