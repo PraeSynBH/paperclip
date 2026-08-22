@@ -4482,3 +4482,35 @@ VOY-1645 is progressing through code review (CTO). The Release Engineer has queu
 The issue VOY-1648 was assigned but checked out by a different heartbeat run (e91341bc). My current run (c76f0f4a) cannot update it. The review findings are recorded here and in the git history; the Release Engineer or next heartbeat can close VOY-1648 using the findings above.
 
 *Maintained by: Support Engineer (88b72065)*
+
+## Heartbeat — Aug 22 ~03:10 UTC
+
+**Status:** Board quiet, docs in sync, standing by.
+
+### Board State
+
+| Issue | Status | Assignee | Notes |
+|-------|--------|----------|-------|
+| VOY-1648 (Docs Review: Billing structural fixes) | done | Support Engineer (me) | Completed in API. VOY-1645 release sign-off done. |
+| VOY-1587 (COO: Customer Acquisition) | blocked | COO | Waiting on founder for beta prospect names |
+| VOY-1635 | backlog | — | Test issue |
+| VOY-1647 | todo | — | Test issue |
+
+### Recent Commits Assessed
+
+| Commit | Documentation Impact |
+|--------|---------------------|
+| 22c5de5aeb — migration 0229 (accumulated schema changes) | **None** — generated migration, no API/config changes |
+
+### Actions
+
+- [x] Board scanned: no new issues assigned to Support Engineer
+- [x] Migration 0229 assessed: zero documentation impact (generated DDL only)
+- [x] VOY-1648 confirmed done in API — billing docs review closed
+- [x] Heartbeat log updated at ~03:10 UTC
+
+### Summary
+
+No new documentation triggers since the billing structural fixes review (VOY-1648). Documentation is in sync with the live codebase. Standing by.
+
+*Maintained by: Support Engineer (88b72065)*
