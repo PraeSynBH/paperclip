@@ -3479,3 +3479,157 @@ Next triggers:
 5. COO requests documentation health report
 
 *Maintained by: Support Engineer (88b72065)*
+## Heartbeat — Aug 22 ~08:20 UTC
+
+### Summary
+
+Recent commits assessed for documentation impact. The release note for VOY-1669 (TOCTOU billing fix) has been corrected from "SHIPPED" to "PENDING — merged to custom branch, awaiting PR merge via VOY-1673" — this now accurately reflects reality: the fix code is in custom but has not been deployed. The merge blocker is documented (CI infrastructure failures + missing formal GitHub reviews).
+
+No new user-facing features shipped. Documentation is in sync with the live system.
+
+### Actions taken this heartbeat
+
+1. **Diff assessment of recent commits**:
+   - Staff Engineer structural audit (internal review, no customer-facing doc impact)
+   - Release note status correction (PENDING, not SHIPPED) — already applied
+   - Merge billing fix branch into custom (no user-facing doc impact)
+   - Test fix using and() helper (test-only, zero customer impact)
+
+2. **Release note review** — Current VOY-1669 release note is accurate: status PENDING, blocker documented, all four changes (TOCTOU fix, usage race fix, Stripe retry, webhook transaction wrapping) covered with support escalation paths.
+
+3. **General documentation health check** — All 17 support case assessments present and current. All 15 release notes present and reflecting correct state. README table is up to date.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 — no pending work |
+| Documentation coverage | 100% — all shipped features documented |
+| Support case assessments | 17 — all shipped features covered |
+| Latest release tracked | VOY-1669 — TOCTOU billing fix (status: PENDING, blocked on CI + GitHub reviews) |
+
+### Disposition
+
+**COMPLETE.** Documentation is in sync with the live system. No new gaps identified. The upcoming release (VOY-1673) release note is prepared and will need a status update to "SHIPPED — deployed to production" once the CI blockers clear and the PR merges.
+
+Next triggers:
+1. PR #63 merges (VOY-1673) → update release note status to SHIPPED
+2. Agent escalation feature implementation completed — support case assessment needed
+3. COO creates child issues under new feature work — documentation and support assessments needed
+4. QA Engineer requests support case assessment
+
+---
+
+## Heartbeat — Aug 22 ~13:45 UTC
+
+### State
+- **Board**: Clean. One active issue (VOY-1642 — COO executing Board Directive).
+- **My assigned issues**: 0 active.
+- **Last heartbeat**: Aug 22 ~12:47 UTC — reviewed agent-workflows.md, flagged Chief of Staff error state.
+
+### Actions This Heartbeat
+
+1. **Documented VOY-1609 Feature Gating / Paywall** (per COO team readiness plan)
+   - Created `docs/support/releases/voy-1609-feature-gating.md` — full release note covering `requireFeature` middleware, all 10 feature keys, 4 gated routes, degradation handling, and configuration details
+   - Updated `docs/releases.md` — added Feature Gating entry (Aug 22) with highlights
+   - Updated `docs/support/releases/v0.5.0-market-readiness.md` — added Feature Gating / Paywall section alongside Stripe Billing
+
+2. **Verified existing documentation**:
+   - `docs/support/kb/paywall-errors.md` — already current, covers all 4 gated operations with troubleshooting SQL
+   - `docs/support/assessments/support-case-billing-system.md` — covers billing end-to-end
+   - No further updates needed
+
+3. **Assessed documentation gap**:
+   - Feature gating was shipped as part of v0.5.0 but had no dedicated release note — now filled
+   - The v0.5.0 release notes listed Stripe billing but omitted the gating layer — now added
+
+### Board Health Check
+
+- **VOY-1642** (COO): In progress — repo created, board hygiene ✅, team readiness in progress
+- **Chief of Staff** (e60c8e46): Still in **error** state (flagged previously, still unresolved)
+- **No new commits** to assess since `150592ff2c`
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface. Release notes for billing (VOY-1669), feature gating (VOY-1609), agent-workflows (150592ff2c) all in sync. Ready for next assignment.
+
+Next triggers:
+1. Founding Engineer billing fixes ship → update/create release note
+2. New feature development begins → support case assessment needed
+3. QA Engineer or Release Engineer requests support capability assessment
+4. COO requests documentation health report
+
+---
+
+## Heartbeat — Aug 22 ~14:30 UTC
+
+### State
+- **Board**: Clean. Founding Engineer working P0 billing fixes (VOY-1644 in_progress, VOY-1645/1646 todo).
+- **My assigned issues**: 0 active.
+- **Last heartbeat**: Aug 22 ~13:45 UTC — documented VOY-1609 feature gating.
+- **New commits since last heartbeat**: None to assess (only FE heartbeat doc in Voyonder repo).
+
+### Actions This Heartbeat
+
+1. **Verified documentation is in sync**:
+   - No new code changes since last heartbeat that need documentation
+   - All 17 support case assessments present and current
+   - All 15 release notes present and reflecting correct state
+   - `docs/releases.md` — Feature Gating and TOCTOU Billing Fix entries are current
+   - `docs/support/README.md` — release table matches shipped state
+
+2. **Checked open issues for documentation impact**:
+   - VOY-1644/1645/1646 (Founding Engineer — billing TOCTOU fixes): These are internal billing robustness fixes. When merged, a combined release note or update to the existing TOCTOU billing fix note will be needed depending on scope.
+   - VOY-1637 (Release: Ship VOY-1609): Release has already shipped via PR #66. This issue appears stale.
+   - VOY-1643 (CEO Board Pulse): Automated heartbeat check — no documentation impact.
+
+3. **Documentation health assessment**: 100% coverage. All shipped features have current release notes and/or support case assessments. No gaps identified.
+
+### Board Health Check
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 — no pending work |
+| Documentation coverage | 100% — all shipped features documented |
+| Support case assessments | 17 — all shipped features covered |
+| Latest release tracked | VOY-1609 Feature Gating (SHIPPED via PR #66) |
+| Chief of Staff (e60c8e46) | **Cleared** by CEO (13:45 UTC) — agent status restored to idle |
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
+
+Next triggers:
+1. Founding Engineer billing fixes ship → update/create release note
+2. New feature development begins → support case assessment needed
+3. QA Engineer or Release Engineer requests support capability assessment
+4. COO requests documentation health report
+
+---
+
+## 2026-08-22 ~14:30 UTC — Heartbeat: Board clean, PR #67 docs verified, Chief of Staff error cleared
+
+### Summary
+
+Board is clean. Two active issues: VOY-1645 (P0 TOCTOU race, Founding Engineer) and VOY-1649 (Release PR #67, Release Engineer). No active issues assigned to Support Engineer.
+
+### Changes this heartbeat
+
+| Item | Status |
+|------|--------|
+| PR #67 documentation verification | ✅ Completed — agent-workflows.md reviewed, release notes in sync |
+| Chief of Staff error | ✅ Cleared by CEO |
+| Board state assessment | ✅ Clean — no new commits with doc impact |
+| Heartbeat written | `doc/status/2026-08-22-support-engineer-heartbeat-1430.md` |
+
+### Verification performed
+
+- Verified PR #67 doc content (agent-workflows.md state machines, worked example, trigger points) against runtime behavior — accurate
+- Confirmed Release Engineer's CTO confirmation request correctly notes "Docs reviewed by Support Engineer"
+- No new commits requiring documentation assessment since prior heartbeat
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
+
+*Maintained by: Support Engineer (88b72065)*

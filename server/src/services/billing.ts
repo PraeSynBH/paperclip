@@ -82,6 +82,44 @@ export function billingService(db: Db) {
     return tier;
   };
 
+  /**
+   * Seed initial usage metric rows for a new subscription.
+   * Idempotent — uses ON CONFLICT DO NOTHING so duplicate calls are safe.
+   * Shared between handleSubscriptionUpdated (fallback) and handleCheckoutSessionCompleted
+   * to close the TOCTOU race where either handler may create the subscription row first.
+   */
+  const seedSubscriptionUsageRows = async (
+    tx: { execute: Db["execute"] },
+    companyId: string,
+    stripeSubscriptionId: string,
+    periodStart: Date,
+    periodEnd: Date,
+    tier: { includedSeats: number; includedAgentRuns: number; includedStorageGb: number },
+  ) => {
+    const usageMetrics: Array<{ metric: string; included: number }> = [
+      { metric: "seats", included: tier.includedSeats },
+      { metric: "agent_runs", included: tier.includedAgentRuns },
+      { metric: "storage_gb", included: tier.includedStorageGb },
+    ];
+
+    for (const m of usageMetrics) {
+      await tx.execute(sql`
+        INSERT INTO "subscription_usage"
+          ("company_id", "subscription_id", "metric", "usage", "included",
+           "overage", "overage_cents", "period_start", "period_end")
+        VALUES (
+          ${companyId},
+          (SELECT "id" FROM "company_subscriptions" WHERE "stripe_subscription_id" = ${stripeSubscriptionId}),
+          ${m.metric}, 0, ${m.included},
+          0, 0,
+          ${periodStart.toISOString()},
+          ${periodEnd.toISOString()}
+        )
+        ON CONFLICT ("subscription_id", "metric", "period_start", "period_end") DO NOTHING
+      `);
+    }
+  };
+
   const getOrCreateStripeCustomer = async (companyId: string): Promise<{ id: string; stripeCustomerId: string }> => {
     const stripe = getStripeClient();
 
@@ -317,6 +355,19 @@ export function billingService(db: Db) {
             "updated_at" = NOW()
         `);
 
+        // Seed usage metrics — closes the TOCTOU race where handleSubscriptionUpdated
+        // creates the subscription row before handleCheckoutSessionCompleted runs.
+        // Idempotent via ON CONFLICT DO NOTHING.
+        const tier = await getTier(tierId);
+        await seedSubscriptionUsageRows(
+          tx,
+          companyId,
+          stripeSub.id,
+          new Date(stripeSub.current_period_start * 1000),
+          new Date(stripeSub.current_period_end * 1000),
+          tier,
+        );
+
         logger.info(
           { stripeSubscriptionId: stripeSub.id, companyId, tierId },
           "Created subscription record from Stripe webhook (fallback)",
@@ -368,6 +419,18 @@ export function billingService(db: Db) {
     });
   };
 
+  /**
+   * Extract a Stripe customer ID from a field that may be a string (the ID) or an expanded
+   * customer object (string | Stripe.Customer | Stripe.DeletedCustomer).
+   * Returns null if the value is null/undefined.
+   */
+  const getStripeCustomerId = (
+    customer: string | Stripe.Customer | Stripe.DeletedCustomer | null,
+  ): string | null => {
+    if (!customer) return null;
+    return typeof customer === "string" ? customer : customer.id;
+  };
+
   const handleCheckoutSessionCompleted = async (session: Stripe.Checkout.Session) => {
     if (session.mode !== "subscription") return;
     const subId = session.subscription
@@ -396,10 +459,8 @@ export function billingService(db: Db) {
       "handleCheckoutSessionCompleted:subscriptions.retrieve",
     );
 
-    const sessionCustomerId = session.customer
-      ? (typeof session.customer === "string" ? session.customer : session.customer.id)
-      : null;
-    const stripeCustomerId = sessionCustomerId ?? stripeSub.customer as string;
+    const sessionCustomerId = getStripeCustomerId(session.customer);
+    const stripeCustomerId = sessionCustomerId ?? getStripeCustomerId(stripeSub.customer);
 
     // Use transaction + upsert for idempotent handling of at-least-once Stripe delivery.
     // The UNIQUE index on stripe_subscription_id prevents duplicate rows; the upsert
@@ -448,30 +509,18 @@ export function billingService(db: Db) {
           "updated_at" = NOW()
       `);
 
-      // Insert usage metrics with ON CONFLICT DO NOTHING — if the row already exists
-      // from a duplicate event the unique constraint silently prevents re-insertion.
-      const usageMetrics: Array<{ metric: string; included: number }> = [
-        { metric: "seats", included: tier.includedSeats },
-        { metric: "agent_runs", included: tier.includedAgentRuns },
-        { metric: "storage_gb", included: tier.includedStorageGb },
-      ];
-
-      for (const m of usageMetrics) {
-        await tx.execute(sql`
-          INSERT INTO "subscription_usage"
-            ("company_id", "subscription_id", "metric", "usage", "included",
-             "overage", "overage_cents", "period_start", "period_end")
-          VALUES (
-            ${companyId},
-            (SELECT "id" FROM "company_subscriptions" WHERE "stripe_subscription_id" = ${subId}),
-            ${m.metric}, 0, ${m.included},
-            0, 0,
-            ${new Date(stripeSub.current_period_start * 1000).toISOString()},
-            ${new Date(stripeSub.current_period_end * 1000).toISOString()}
-          )
-          ON CONFLICT ("subscription_id", "metric", "period_start", "period_end") DO NOTHING
-        `);
-      }
+      // Seed usage metrics — idempotent via ON CONFLICT DO NOTHING.
+      // Shared helper ensures both handleCheckoutSessionCompleted and
+      // handleSubscriptionUpdated (fallback) create usage rows, closing the
+      // TOCTOU race between the two webhook handlers.
+      await seedSubscriptionUsageRows(
+        tx,
+        companyId,
+        subId,
+        new Date(stripeSub.current_period_start * 1000),
+        new Date(stripeSub.current_period_end * 1000),
+        tier,
+      );
 
       logger.info(
         { companyId, tierId, stripeSubscriptionId: subId },
