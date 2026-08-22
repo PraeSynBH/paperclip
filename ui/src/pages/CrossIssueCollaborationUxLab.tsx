@@ -3,6 +3,7 @@ import { ISSUE_WRITE_DENIAL_CODES } from "@paperclipai/shared";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { CommentAttributionChip } from "@/components/CommentAttributionChip";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { IssueFieldChangeReceipt } from "@/components/IssueFieldChangeReceipt";
 import { IssueWriteDenialNotice } from "@/components/IssueWriteDenialNotice";
 import { Identity } from "@/components/Identity";
@@ -115,6 +116,7 @@ const AGENT_NAMES = new Map([
 ]);
 
 export function CrossIssueCollaborationUxLab() {
+  usePageMeta("Cross-Issue Collaboration UX Lab", "UX lab for cross-issue collaboration surfaces.");
   const resolveAgentLabel = (id: string) => AGENT_NAMES.get(id) ?? null;
   const resolveUserLabel = (id: string) => (id === "user-dotta" ? "Dotta" : null);
 

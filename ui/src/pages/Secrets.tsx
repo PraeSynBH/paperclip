@@ -1,3 +1,4 @@
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -647,6 +648,7 @@ export function getAwsManagedPathPreview(input: {
 }
 
 export function Secrets() {
+  usePageMeta("Secrets", "Manage secrets and sensitive configuration values.");
   const queryClient = useQueryClient();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

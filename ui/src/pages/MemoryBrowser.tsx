@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { MemorySnippet } from "@paperclipai/shared";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -442,6 +443,7 @@ function OperationsTab({ companyId }: { companyId: string }) {
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
+  usePageMeta("Memory", "Browse agent and company memory entries.");
 export function MemoryBrowser() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

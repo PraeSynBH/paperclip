@@ -84,6 +84,7 @@ import { pluginRoutes } from "./routes/plugins.js";
 import { mcpGatewayProtocolRoutes, toolGatewayRoutes } from "./routes/tool-gateway.js";
 import { adapterRoutes } from "./routes/adapters.js";
 import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
+import { seoRoutes } from "./routes/seo.js";
 import { readBrandedStaticIndexHtml } from "./static-index-html.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
@@ -133,6 +134,8 @@ const VITE_DEV_STATIC_PATHS = new Set([
   "/favicon.svg",
   "/site.webmanifest",
   "/sw.js",
+  "/robots.txt",
+  "/sitemap.xml",
 ]);
 
 export function isDatabaseConnectionUnavailableError(err: unknown): boolean {
@@ -672,6 +675,10 @@ export async function createApp(
   app.use(pluginUiStaticRoutes(db, {
     localPluginDir: opts.localPluginDir ?? DEFAULT_LOCAL_PLUGIN_DIR,
   }));
+
+  // SEO routes (robots.txt, sitemap.xml) — must be before the SPA fallback
+  // so crawlers get the correct response instead of the HTML shell.
+  app.use(seoRoutes(db));
 
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   if (opts.uiMode === "static") {

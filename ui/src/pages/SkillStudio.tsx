@@ -139,6 +139,7 @@ import { ImageGalleryModal, type GalleryMediaItem } from "@/components/ImageGall
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { IssueOutputSection } from "@/components/issue-output/IssueOutputSection";
 import { buildLineDiff } from "@/lib/line-diff";
+import { usePageMeta } from "../hooks/usePageMeta";
 import {
   buildCreateRunRequest,
   buildReRunRequest,
@@ -267,6 +268,7 @@ function useIsMobile() {
 // Root
 // ---------------------------------------------------------------------------
 
+  usePageMeta("Skill Studio", "Create and edit AI skills for your agents.");
 export function SkillStudio() {
   const { skillId = "" } = useParams<{ skillId: string }>();
   const location = useLocation();

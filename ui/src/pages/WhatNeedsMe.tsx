@@ -1,3 +1,4 @@
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Inbox } from "lucide-react";
@@ -85,6 +86,7 @@ function findScrollContainer(element: HTMLElement | null): HTMLElement | null {
 }
 
 export function WhatNeedsMe() {
+  usePageMeta("Decisions", "Review decisions that need your attention.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const [expandedId, setExpandedId] = useState<string | null>(null);
