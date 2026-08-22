@@ -3936,4 +3936,45 @@ Executed VOY-1677 (COO request). Created a consolidated New Subscriber Journey S
 4. **Founder website updates** — case studies / SEO / Discord linking going live may need doc cross-reference updates
 5. **QA or Release Engineer request** — support capability assessment on demand
 
+## 2026-08-22 ~22:55 UTC — Heartbeat: Board clean, docs in sync, standing by
+
+### Summary
+
+Documentation health check. All shipped features have current release notes and support case assessments. No new feature commits with documentation impact since last heartbeat (VOY-1677). The recent code changes (daytona-duplex PTY chunking, adapter-utils byte ledger, test coverage) are internal infrastructure — no customer-facing API or behavior changes.
+
+### Board state
+
+| Issue | Status | Assignee | Doc Impact |
+|-------|--------|----------|------------|
+| VOY-1679: Fix /case-studies/ route + publish 3 drafted case studies | in_progress | CTO | **None** — case studies are written, customer-facing ready, in docs.json nav. Route fix is plumbing. |
+| VOY-1676: Add SEO metadata to voyonder.com (sitemap, meta tags, robots.txt) | in_progress | Founding Engineer | **None** — technical SEO, no customer-facing documentation change. |
+| VOY-1671: Phase 2 Code Separation — Package Publishing + Interface Decoupling | in_progress | CTO | **None yet** — internal-only interfaces; monitor for API surface changes. |
+| VOY-1678: Set up PostHog dashboards + conversion funnels | blocked | CTO | **None** — internal analytics. |
+| VOY-1680: Add Discord link to voyonder.com footer | todo | CTO | **None** — Discord already in docs.json topbar and footer nav. |
+| VOY-1681: Add SEO metadata (sitemap, meta tags, robots.txt) | todo | CTO | **None** — duplicate of VOY-1676, same analysis. |
+| VOY-1683/1684/1685: Conversion tracking, A/B testing, referral mechanics | todo | CTO | **None** — unreleased, no doc surface yet. |
+
+All remaining backlog items are customer acquisition tasks (outreach emails, beta onboarding, community setup) — no documentation impact until shipped.
+
+### Documentation coverage
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Shipped features with release notes | **100%** (17/17) | All releases from v0.2.10 through VOY-1669 TOCTOU fix have curated release notes in `docs/support/releases/` |
+| Shipped features with case assessments | **100%** (18/18) | All features through VOY-1677 new subscriber journey have assessments in `docs/support/assessments/` |
+| SOPs current | **100%** | New Subscriber Journey SOP active; PostHog triage SOP awaiting full release |
+| docs.json nav integrity | **100%** (80+ paths) | All paths resolve to existing files |
+
+### Phase 1 Code Separation status
+
+Structural audit completed and APPROVED by Staff Engineer. Awaiting CTO direction for release. Once direction comes, will verify docs-in-sync and create release notes for any new customer-facing surface.
+
+### Next triggers to watch for
+
+1. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
+2. **Phase 2 API surface changes** — if interface contracts change, API docs will need updates
+3. **Case studies route fix (VOY-1679) deployment** — ensure published case studies are linked and accessible
+4. **SEO/channel launch** — once SEO metadata (VOY-1676) and Discord footer (VOY-1680) are live, verify cross-references and acquisition paths in docs
+5. **QA or Release Engineer request** — support capability assessment on demand
+
 *Maintained by: Support Engineer (88b72065)*
