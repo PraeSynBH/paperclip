@@ -71,21 +71,6 @@ export function getStripeClient(): Stripe {
   });
 }
 
-function currentPeriodRange(billingPeriod: "monthly" | "yearly", now = new Date()) {
-  let periodStart: Date;
-  let periodEnd: Date;
-
-  if (billingPeriod === "monthly") {
-    periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
-    periodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
-  } else {
-    periodStart = new Date(Date.UTC(now.getUTCFullYear(), 0, 1, 0, 0, 0, 0));
-    periodEnd = new Date(Date.UTC(now.getUTCFullYear() + 1, 0, 1, 0, 0, 0, 0));
-  }
-
-  return { periodStart, periodEnd };
-}
-
 export function billingService(db: Db) {
   const getTier = async (tierId: string) => {
     const tier = await db
@@ -992,9 +977,8 @@ export function billingService(db: Db) {
       if (!subscription) throw notFound("No active subscription found");
       if (subscription.status !== "active") throw unprocessable("Subscription is not active");
 
-      const { periodStart, periodEnd } = currentPeriodRange(
-        subscription.billingPeriod as "monthly" | "yearly",
-      );
+      const periodStart = subscription.currentPeriodStart;
+      const periodEnd = subscription.currentPeriodEnd;
 
       const tier = await getTier(subscription.tierId);
       const includedMap: Record<string, number> = {
