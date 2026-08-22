@@ -511,26 +511,26 @@ function buildLivenessOriginalIssueComment(finding: IssueLivenessFinding, escala
   ].join("\n");
 }
 
-// RBR-1104 (RBR-933 Tier 1): a status compare-and-set (RBR-929) reports a lost
-// race by throwing `conflict()` (HTTP 409) rather than returning `null` --
-// `null` is already spoken for by "issue not found" on `issuesSvc.update`. A
-// recovery call site that now passes `expectedStatus`/`expectedStatuses` must
-// treat a lost CAS as a no-op, exactly like the pre-existing
-// `if (!updated) return null` branches treat a not-found: skip, do not write
-// anything further, and let the caller's loop move on. This helper narrows
-// the catch to that one known-shape conflict so an unrelated error (a real
-// bug) still propagates.
+// RBR-1104 (RBR-933 Tier 1) + RBR-1107 (RBR-933 Tier 2): a status
+// compare-and-set (RBR-929) reports a lost race by throwing `conflict()`
+// (HTTP 409) rather than returning `null` -- `null` is already spoken for by
+// "issue not found" on `issuesSvc.update`. A recovery call site that now
+// passes `expectedStatus`/`expectedStatuses` must treat a lost CAS as a
+// no-op, exactly like the pre-existing `if (!updated) return null` branches
+// treat a not-found: skip, do not write anything further, and let the
+// caller's loop move on. This helper narrows the catch to that one
+// known-shape conflict so an unrelated error (a real bug) still propagates.
 //
 // It also has to recognize RBR-953's terminal-reopen gate
 // (`issue_terminal_status_regression`), not just the CAS predicate's own
 // conflict. `assertTransition` re-checks the *actual current* status (fresh
 // `existing` at the top of `update`, then again against the row-locked
 // `receiptExisting` inside the transaction) before the CAS predicate ever
-// runs. The write this issue converts is exactly the shape that gate exists
-// for: a `blocked` write whose target status was derived from an earlier,
-// now-stale snapshot, with no `allowTerminalReopen` opt-in. If the issue has
-// already reached `done`/`cancelled` by write time, the gate throws *before*
-// the CAS WHERE clause is evaluated -- so a lost race here surfaces as
+// runs. Every write site this helper guards is the same shape: a status
+// write whose target was derived from an earlier, now-stale snapshot, with
+// no `allowTerminalReopen` opt-in. If the issue has already reached
+// `done`/`cancelled` by write time, the gate throws *before* the CAS WHERE
+// clause is evaluated -- so a lost race here surfaces as
 // `issue_terminal_status_regression`, not "Issue status compare-and-set
 // failed". Both are the same class of event (someone else already resolved
 // this issue; this recovery write is stale) and both must be a no-op, not an
@@ -2698,7 +2698,28 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     const blockedByIssueIds = [...new Set([...existingBlockers.map((row) => row.id), ...openChildren.map((row) => row.id)])];
     if (blockedByIssueIds.length === 0) return null;
 
-    const updated = await issuesSvc.update(issue.id, { status: "blocked", blockedByIssueIds });
+    // RBR-1107 (RBR-933 Tier 2, site 2): `issue` is the caller's snapshot --
+    // by the time this write lands, several awaits (the two selects above)
+    // have already elapsed since it was read, and it can be arbitrarily
+    // stale by the time the caller's own read happened too. Without a CAS
+    // this could revert an issue that concurrently reached `done`/`cancelled`
+    // back to `blocked` (RBR-864's class of bug). This function cannot
+    // phantom-block an already-resolved issue with no real blockers (the
+    // `blockedByIssueIds.length === 0` bail above already prevents that),
+    // but it can still stomp a legitimate concurrent terminal transition. A
+    // lost race is a no-op, not an error: something else already resolved
+    // this issue and this recovery decision is stale.
+    let updated: Awaited<ReturnType<typeof issuesSvc.update>>;
+    try {
+      updated = await issuesSvc.update(issue.id, {
+        status: "blocked",
+        blockedByIssueIds,
+        expectedStatus: issue.status,
+      });
+    } catch (error) {
+      if (!isIssueStatusCasConflict(error)) throw error;
+      updated = null;
+    }
     if (!updated) return null;
 
     const waitingOn = formatIssueLinksForComment([...openChildren, ...existingBlockers]);
@@ -2904,11 +2925,29 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         (currentIssue.status !== "blocked" ||
           currentIssue.assigneeAgentId !== recoveryAction.ownerAgentId)
       ) {
-        const reblocked = await issuesSvc.update(input.issue.id, {
-          status: "blocked",
-          blockedByIssueIds: blockerIds,
-          assigneeAgentId: recoveryAction.ownerAgentId,
-        });
+        // RBR-1107 (RBR-933 Tier 2, site 1 -- "the reblock retry" named in the
+        // parent's AC3): the re-read/compare immediately above narrows the
+        // race window but does not close it -- there is still a gap between
+        // that compare and this write's own statement. `currentIssue.status`
+        // is the value the compare just confirmed, so it is also the correct
+        // CAS predicate: if the row changed again between the compare and
+        // this write, the write must lose, not silently clobber whatever the
+        // row became (including a concurrent `done`/`cancelled`, RBR-864's
+        // class of bug). A lost race here is a no-op -- fall through to the
+        // earlier, already-committed `updated` write instead of returning a
+        // reblock that never happened.
+        let reblocked: Awaited<ReturnType<typeof issuesSvc.update>> = null;
+        try {
+          reblocked = await issuesSvc.update(input.issue.id, {
+            status: "blocked",
+            blockedByIssueIds: blockerIds,
+            assigneeAgentId: recoveryAction.ownerAgentId,
+            expectedStatus: currentIssue.status,
+          });
+        } catch (error) {
+          if (!isIssueStatusCasConflict(error)) throw error;
+          reblocked = null;
+        }
         if (reblocked) return reblocked;
       }
     }
