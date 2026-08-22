@@ -30,11 +30,11 @@ export interface CreateBackgroundJobRequest {
 }
 
 /**
- * A background job event published via SSE or WebSocket.
+ * The payload carried inside a background_job.status LiveEvent envelope.
+ * This is what {@link BackgroundJobEvent.payload} contains.
  */
-export interface BackgroundJobEvent {
+export interface BackgroundJobEventPayload {
   jobId: string;
-  companyId: string;
   status: BackgroundJobStatus;
   progress: number;
   progressMessage: string | null;
@@ -44,4 +44,18 @@ export interface BackgroundJobEvent {
   startedAt: string | null;
   finishedAt: string | null;
   updatedAt: string;
+}
+
+/**
+ * A background job event published via SSE or WebSocket.
+ * Matches the LiveEvent envelope wire format: the event is wrapped in
+ * `{ id, companyId, type, createdAt, payload }` where `payload` is a
+ * {@link BackgroundJobEventPayload}.
+ */
+export interface BackgroundJobEvent {
+  id: string;
+  companyId: string;
+  type: "background_job.status";
+  createdAt: string;
+  payload: BackgroundJobEventPayload;
 }
