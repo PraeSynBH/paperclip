@@ -3593,16 +3593,43 @@ Next triggers:
 | Documentation coverage | 100% — all shipped features documented |
 | Support case assessments | 17 — all shipped features covered |
 | Latest release tracked | VOY-1609 Feature Gating (SHIPPED via PR #66) |
-| Chief of Staff (e60c8e46) | Still in **error** state — needs board-level clear-error |
+| Chief of Staff (e60c8e46) | **Cleared** by CEO (13:45 UTC) — agent status restored to idle |
 
 ### Standing By
 
-Fully available. Documentation current through v0.5.0 feature surface including feature gating/paywall. All release notes in sync. Ready for next assignment.
+Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
 
 Next triggers:
 1. Founding Engineer billing fixes ship → update/create release note
 2. New feature development begins → support case assessment needed
 3. QA Engineer or Release Engineer requests support capability assessment
 4. COO requests documentation health report
+
+---
+
+## 2026-08-22 ~14:30 UTC — Heartbeat: Board clean, PR #67 docs verified, Chief of Staff error cleared
+
+### Summary
+
+Board is clean. Two active issues: VOY-1645 (P0 TOCTOU race, Founding Engineer) and VOY-1649 (Release PR #67, Release Engineer). No active issues assigned to Support Engineer.
+
+### Changes this heartbeat
+
+| Item | Status |
+|------|--------|
+| PR #67 documentation verification | ✅ Completed — agent-workflows.md reviewed, release notes in sync |
+| Chief of Staff error | ✅ Cleared by CEO |
+| Board state assessment | ✅ Clean — no new commits with doc impact |
+| Heartbeat written | `doc/status/2026-08-22-support-engineer-heartbeat-1430.md` |
+
+### Verification performed
+
+- Verified PR #67 doc content (agent-workflows.md state machines, worked example, trigger points) against runtime behavior — accurate
+- Confirmed Release Engineer's CTO confirmation request correctly notes "Docs reviewed by Support Engineer"
+- No new commits requiring documentation assessment since prior heartbeat
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
 
 *Maintained by: Support Engineer (88b72065)*
