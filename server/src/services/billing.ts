@@ -134,8 +134,8 @@ export function billingService(db: Db) {
           ${sub.companyId}, ${sub.id}, ${invoice.id}, ${invoice.number ?? null}, ${invoice.status ?? "paid"},
           ${invoice.total}, ${invoice.amount_paid}, ${invoice.amount_remaining}, ${invoice.currency},
           ${invoice.invoice_pdf ?? null}, ${invoice.hosted_invoice_url ?? null},
-          ${invoice.period_start ? new Date(invoice.period_start * 1000) : null},
-          ${invoice.period_end ? new Date(invoice.period_end * 1000) : null},
+          ${invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null},
+          ${invoice.period_end ? new Date(invoice.period_end * 1000).toISOString() : null},
           NOW(), NOW()
         )
         ON CONFLICT ("stripe_invoice_id") DO UPDATE SET
@@ -250,11 +250,11 @@ export function billingService(db: Db) {
           VALUES (
             ${companyId}, ${tierId}, ${cust.id}, ${stripeSub.status},
             ${stripeSub.metadata?.billingPeriod ?? "monthly"},
-            ${new Date(stripeSub.current_period_start * 1000)},
-            ${new Date(stripeSub.current_period_end * 1000)},
+            ${new Date(stripeSub.current_period_start * 1000).toISOString()},
+            ${new Date(stripeSub.current_period_end * 1000).toISOString()},
             ${stripeSub.id}, ${stripeSubItemId},
             ${stripeSub.cancel_at_period_end},
-            ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null},
+            ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
             NOW(), NOW()
           )
           ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
@@ -376,11 +376,11 @@ export function billingService(db: Db) {
         VALUES (
           ${companyId}, ${tierId}, ${cust.id}, ${stripeSub.status},
           ${billingPeriod},
-          ${new Date(stripeSub.current_period_start * 1000)},
-          ${new Date(stripeSub.current_period_end * 1000)},
+          ${new Date(stripeSub.current_period_start * 1000).toISOString()},
+          ${new Date(stripeSub.current_period_end * 1000).toISOString()},
           ${subId}, ${stripeSubItemId},
           ${stripeSub.cancel_at_period_end},
-          ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null},
+          ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
           NOW(), NOW()
         )
         ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
@@ -409,8 +409,8 @@ export function billingService(db: Db) {
             (SELECT "id" FROM "company_subscriptions" WHERE "stripe_subscription_id" = ${subId}),
             ${m.metric}, 0, ${m.included},
             0, 0,
-            ${new Date(stripeSub.current_period_start * 1000)},
-            ${new Date(stripeSub.current_period_end * 1000)}
+            ${new Date(stripeSub.current_period_start * 1000).toISOString()},
+            ${new Date(stripeSub.current_period_end * 1000).toISOString()}
           )
           ON CONFLICT ("subscription_id", "metric", "period_start", "period_end") DO NOTHING
         `);
@@ -1015,8 +1015,8 @@ export function billingService(db: Db) {
             ${companyId}, ${subscription.id}, ${inv.id}, ${inv.number ?? null}, ${inv.status ?? "unknown"},
             ${inv.total}, ${inv.amount_paid}, ${inv.amount_remaining}, ${inv.currency},
             ${inv.invoice_pdf ?? null}, ${inv.hosted_invoice_url ?? null},
-            ${inv.period_start ? new Date(inv.period_start * 1000) : null},
-            ${inv.period_end ? new Date(inv.period_end * 1000) : null},
+            ${inv.period_start ? new Date(inv.period_start * 1000).toISOString() : null},
+            ${inv.period_end ? new Date(inv.period_end * 1000).toISOString() : null},
             NOW(), NOW()
           )
           ON CONFLICT ("stripe_invoice_id") DO UPDATE SET
