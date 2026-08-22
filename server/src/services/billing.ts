@@ -671,7 +671,8 @@ export function billingService(db: Db) {
       const successUrl = data.successUrl ?? `${publicUrl}/boards/${companyId}`;
       const cancelUrl = data.cancelUrl ?? `${publicUrl}/pricing`;
 
-      const session = await stripe.checkout.sessions.create({
+      const session = await withStripeRetry(
+        () => stripe.checkout.sessions.create({
         mode: "subscription",
         customer: stripeCustomerId,
         line_items: [{ price: stripePriceId, quantity: 1 }],
@@ -682,7 +683,9 @@ export function billingService(db: Db) {
         },
         success_url: successUrl,
         cancel_url: cancelUrl,
-      });
+      }),
+        "createCheckoutSession:checkout.sessions.create",
+      );
 
       logger.info({ companyId, sessionId: session.id }, "Created Checkout Session");
 
@@ -709,142 +712,176 @@ export function billingService(db: Db) {
         ? (tier.stripePriceYearlyId ?? tier.stripePriceMonthlyId)
         : (tier.stripePriceMonthlyId ?? tier.stripePriceYearlyId);
 
-      const { id: stripeCustomerId } = await getOrCreateStripeCustomer(companyId);
-      const { periodStart, periodEnd } = currentPeriodRange(data.billingPeriod);
+      const { id: stripeCustomerId, stripeCustomerId: stripeCustomerStr } = await getOrCreateStripeCustomer(companyId);
 
-      const existingSub = await db
-        .select()
-        .from(companySubscriptionsTable)
-        .where(eq(companySubscriptionsTable.companyId, companyId))
-        .then((r) => r[0] ?? null);
+      // ── Transaction with row-level locking prevents TOCTOU races ──
+      // The FOR UPDATE lock serialises concurrent requests for this
+      // company's subscription row, ensuring a consistent read-write
+      // sequence.  The atomic upsert (ON CONFLICT DO UPDATE) inside the
+      // transaction is a belt-and-suspenders guard.
+      const result = await db.transaction(async (tx) => {
+        let stripeSubscription: Stripe.Subscription;
+        let stripeSubItemId: string | null = null;
+        let isNewSubscriptionRecord = false;
 
-      let stripeSubscription: Stripe.Subscription;
-      let stripeSubItemId: string | null = null;
+        // Lock the subscription row (or get null if it doesn't exist).
+        const existingSub = await tx
+          .select()
+          .from(companySubscriptionsTable)
+          .where(eq(companySubscriptionsTable.companyId, companyId))
+          .for("update")
+          .then((r) => r[0] ?? null);
 
-      if (existingSub?.stripeSubscriptionId) {
-        const sub = await stripe.subscriptions.retrieve(existingSub.stripeSubscriptionId);
-        const subscriptionItemId = sub.items.data[0]?.id;
+        if (existingSub?.stripeSubscriptionId) {
+          // ── Update path ──────────────────────────────────────────────
+          const sub = await withStripeRetry(
+            () => stripe.subscriptions.retrieve(existingSub.stripeSubscriptionId),
+            "createOrUpdateSubscription:subscriptions.retrieve",
+          );
+          const subscriptionItemId = sub.items.data[0]?.id;
 
-        stripeSubscription = await stripe.subscriptions.update(existingSub.stripeSubscriptionId, {
-          items: subscriptionItemId
-            ? [{ id: subscriptionItemId, price: stripePriceId! }]
-            : [{ price: stripePriceId! }],
-          proration_behavior: "create_prorations",
-          metadata: {
-            paperclipCompanyId: companyId,
-            paperclipTierId: data.tierId,
-          },
-        });
+          stripeSubscription = await withStripeRetry(
+            () => stripe.subscriptions.update(existingSub.stripeSubscriptionId, {
+              items: subscriptionItemId
+                ? [{ id: subscriptionItemId, price: stripePriceId! }]
+                : [{ price: stripePriceId! }],
+              proration_behavior: "create_prorations",
+              metadata: {
+                paperclipCompanyId: companyId,
+                paperclipTierId: data.tierId,
+              },
+            }),
+            "createOrUpdateSubscription:subscriptions.update",
+          );
 
-        stripeSubItemId = stripeSubscription.items.data[0]?.id ?? null;
+          stripeSubItemId = stripeSubscription.items.data[0]?.id ?? null;
+        } else {
+          // ── Create path ────────────────────────────────────────────────
+          isNewSubscriptionRecord = true;
 
-        const updated = await db
-          .update(companySubscriptionsTable)
-          .set({
+          stripeSubscription = await withStripeRetry(
+            () => stripe.subscriptions.create({
+              customer: stripeCustomerStr,
+              items: [{ price: stripePriceId! }],
+              metadata: {
+                paperclipCompanyId: companyId,
+                paperclipTierId: data.tierId,
+              },
+              proration_behavior: "create_prorations",
+            }, {
+              // Idempotency key prevents orphan subscriptions when the
+              // Stripe API call succeeds but the HTTP response is lost
+              // and withStripeRetry retries.
+              idempotencyKey: `createOrUpdateSubscription:create:${companyId}:${data.tierId}`,
+            }),
+            "createOrUpdateSubscription:subscriptions.create",
+          );
+
+          stripeSubItemId = stripeSubscription.items.data[0]?.id ?? null;
+        }
+
+        // ── Atomic upsert ────────────────────────────────────────────
+        const currentPeriodStart = new Date(stripeSubscription.current_period_start * 1000);
+        const currentPeriodEnd = new Date(stripeSubscription.current_period_end * 1000);
+        const cancelAtPeriodEnd = stripeSubscription.cancel_at_period_end;
+        const trialEnd = stripeSubscription.trial_end
+          ? new Date(stripeSubscription.trial_end * 1000)
+          : null;
+
+        const record = await tx
+          .insert(companySubscriptionsTable)
+          .values({
+            companyId,
             tierId: data.tierId,
-            billingPeriod: data.billingPeriod,
-            stripeSubscriptionItemId: stripeSubItemId,
-            currentPeriodStart: periodStart,
-            currentPeriodEnd: periodEnd,
+            stripeCustomerId,
             status: stripeSubscription.status,
-            updatedAt: new Date(),
+            billingPeriod: data.billingPeriod,
+            currentPeriodStart,
+            currentPeriodEnd,
+            stripeSubscriptionId: stripeSubscription.id,
+            stripeSubscriptionItemId: stripeSubItemId,
+            cancelAtPeriodEnd,
+            trialEnd,
           })
-          .where(eq(companySubscriptionsTable.id, existingSub.id))
+          .onConflictDoUpdate({
+            target: companySubscriptionsTable.companyId,
+            set: {
+              tierId: data.tierId,
+              stripeCustomerId,
+              status: stripeSubscription.status,
+              billingPeriod: data.billingPeriod,
+              currentPeriodStart,
+              currentPeriodEnd,
+              stripeSubscriptionId: stripeSubscription.id,
+              stripeSubscriptionItemId: stripeSubItemId,
+              cancelAtPeriodEnd,
+              trialEnd,
+              updatedAt: new Date(),
+            },
+          })
           .returning()
           .then((r) => r[0]);
 
-        logger.info(
-          { companyId, tierId: data.tierId, stripeSubscriptionId: stripeSubscription.id },
-          "Updated subscription",
-        );
+        // ── Detect race loss on create path ──────────────────────────
+        // If we went through the create path but the upsert updated a row
+        // with a different stripeSubscriptionId, another request inserted
+        // first.  Cancel our orphan Stripe sub.
+        if (isNewSubscriptionRecord && record.stripeSubscriptionId !== stripeSubscription.id) {
+          logger.warn(
+            { companyId, tierId: data.tierId, ourStripeSubId: stripeSubscription.id, winnerStripeSubId: record.stripeSubscriptionId },
+            "createOrUpdateSubscription race lost — another request created the subscription first; cancelling orphan Stripe sub",
+          );
+          await stripe.subscriptions.cancel(stripeSubscription.id).catch((err) => {
+            logger.warn(
+              { err, stripeSubscriptionId: stripeSubscription.id },
+              "Failed to cancel orphan Stripe subscription (non-fatal)",
+            );
+          });
+        }
 
-        publishLiveEvent({
-          companyId,
-          type: "subscription.status.updated",
-          payload: {
-            status: stripeSubscription.status,
-            stripeSubscriptionId: stripeSubscription.id,
-            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
-            tierId: data.tierId,
-          },
-        });
+        // ── Usage metrics (only for genuinely new subscriptions) ─────
+        if (isNewSubscriptionRecord && record.stripeSubscriptionId === stripeSubscription.id) {
+          const usageMetrics: Array<{ metric: string; included: number }> = [
+            { metric: "seats", included: tier.includedSeats },
+            { metric: "agent_runs", included: tier.includedAgentRuns },
+            { metric: "storage_gb", included: tier.includedStorageGb },
+          ];
 
-        return updated;
-      }
+          for (const m of usageMetrics) {
+            await tx.insert(subscriptionUsageTable).values({
+              companyId,
+              subscriptionId: record.id,
+              metric: m.metric,
+              usage: 0,
+              included: m.included,
+              overage: 0,
+              overageCents: 0,
+              periodStart: currentPeriodStart,
+              periodEnd: currentPeriodEnd,
+            });
+          }
+        }
 
-      const cust = await db
-        .select()
-        .from(stripeCustomersTable)
-        .where(eq(stripeCustomersTable.id, stripeCustomerId))
-        .then((r) => r[0]);
-
-      stripeSubscription = await stripe.subscriptions.create({
-        customer: cust.stripeCustomerId,
-        items: [{ price: stripePriceId! }],
-        metadata: {
-          paperclipCompanyId: companyId,
-          paperclipTierId: data.tierId,
-        },
-        proration_behavior: "create_prorations",
+        return record;
       });
 
-      stripeSubItemId = stripeSubscription.items.data[0]?.id ?? null;
-
-      const created = await db
-        .insert(companySubscriptionsTable)
-        .values({
-          companyId,
-          tierId: data.tierId,
-          stripeCustomerId,
-          status: stripeSubscription.status,
-          billingPeriod: data.billingPeriod,
-          currentPeriodStart: new Date(stripeSubscription.current_period_start * 1000),
-          currentPeriodEnd: new Date(stripeSubscription.current_period_end * 1000),
-          stripeSubscriptionId: stripeSubscription.id,
-          stripeSubscriptionItemId: stripeSubItemId,
-          cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
-          trialEnd: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : null,
-        })
-        .returning()
-        .then((r) => r[0]);
-
-      const usageMetrics: Array<{ metric: string; included: number }> = [
-        { metric: "seats", included: tier.includedSeats },
-        { metric: "agent_runs", included: tier.includedAgentRuns },
-        { metric: "storage_gb", included: tier.includedStorageGb },
-      ];
-
-      for (const m of usageMetrics) {
-        await db.insert(subscriptionUsageTable).values({
-          companyId,
-          subscriptionId: created.id,
-          metric: m.metric,
-          usage: 0,
-          included: m.included,
-          overage: 0,
-          overageCents: 0,
-          periodStart: created.currentPeriodStart,
-          periodEnd: created.currentPeriodEnd,
-        });
-      }
-
       logger.info(
-        { companyId, tierId: data.tierId, stripeSubscriptionId: stripeSubscription.id },
-        "Created subscription",
+        { companyId, tierId: data.tierId, stripeSubscriptionId: result.stripeSubscriptionId },
+        "Updated subscription",
       );
 
       publishLiveEvent({
         companyId,
         type: "subscription.status.updated",
         payload: {
-          status: stripeSubscription.status,
-          stripeSubscriptionId: stripeSubscription.id,
-          cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+          status: result.status,
+          stripeSubscriptionId: result.stripeSubscriptionId,
+          cancelAtPeriodEnd: result.cancelAtPeriodEnd,
           tierId: data.tierId,
         },
       });
 
-      return created;
+      return result;
     },
 
     cancelSubscription: async (companyId: string) => {
@@ -859,9 +896,12 @@ export function billingService(db: Db) {
       if (!subscription) throw notFound("No active subscription found");
       if (!subscription.stripeSubscriptionId) throw unprocessable("No Stripe subscription to cancel");
 
-      await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+      await withStripeRetry(
+        () => stripe.subscriptions.update(subscription.stripeSubscriptionId, {
         cancel_at_period_end: true,
-      });
+      }),
+        "cancelSubscription:subscriptions.update",
+      );
 
       const updated = await db
         .update(companySubscriptionsTable)
@@ -902,9 +942,12 @@ export function billingService(db: Db) {
       if (!subscription.stripeSubscriptionId) throw unprocessable("No Stripe subscription to reactivate");
       if (!subscription.cancelAtPeriodEnd) throw unprocessable("Subscription is not scheduled for cancellation");
 
-      await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+      await withStripeRetry(
+        () => stripe.subscriptions.update(subscription.stripeSubscriptionId, {
         cancel_at_period_end: false,
-      });
+      }),
+        "reactivateSubscription:subscriptions.update",
+      );
 
       const updated = await db
         .update(companySubscriptionsTable)
@@ -949,19 +992,6 @@ export function billingService(db: Db) {
         subscription.billingPeriod as "monthly" | "yearly",
       );
 
-      let usageRecord = await db
-        .select()
-        .from(subscriptionUsageTable)
-        .where(
-          and(
-            eq(subscriptionUsageTable.subscriptionId, subscription.id),
-            eq(subscriptionUsageTable.metric, data.metric),
-            eq(subscriptionUsageTable.periodStart, periodStart),
-            eq(subscriptionUsageTable.periodEnd, periodEnd),
-          ),
-        )
-        .then((r) => r[0] ?? null);
-
       const tier = await getTier(subscription.tierId);
       const includedMap: Record<string, number> = {
         seats: tier.includedSeats,
@@ -979,46 +1009,52 @@ export function billingService(db: Db) {
       const overage = Math.max(0, usage - included);
       const overageCents = overage * (priceMap[data.metric] ?? 0);
 
-      if (usageRecord) {
-        usageRecord = await db
-          .update(subscriptionUsageTable)
-          .set({
+      // Upsert — INSERT ... ON CONFLICT handles the read-then-write race.
+      // The unique index on (subscription_id, metric, period_start, period_end)
+      // prevents duplicate rows; the DO UPDATE makes concurrent calls safe.
+      const usageRecord = await db
+        .insert(subscriptionUsageTable)
+        .values({
+          companyId,
+          subscriptionId: subscription.id,
+          metric: data.metric,
+          usage,
+          included,
+          overage,
+          overageCents,
+          periodStart,
+          periodEnd,
+        })
+        .onConflictDoUpdate({
+          target: [
+            subscriptionUsageTable.subscriptionId,
+            subscriptionUsageTable.metric,
+            subscriptionUsageTable.periodStart,
+            subscriptionUsageTable.periodEnd,
+          ],
+          set: {
             usage,
             overage,
             overageCents,
             updatedAt: new Date(),
-          })
-          .where(eq(subscriptionUsageTable.id, usageRecord.id))
-          .returning()
-          .then((r) => r[0]);
-      } else {
-        usageRecord = await db
-          .insert(subscriptionUsageTable)
-          .values({
-            companyId,
-            subscriptionId: subscription.id,
-            metric: data.metric,
-            usage,
-            included,
-            overage,
-            overageCents,
-            periodStart,
-            periodEnd,
-          })
-          .returning()
-          .then((r) => r[0]);
-      }
+          },
+        })
+        .returning()
+        .then((r) => r[0]);
 
       if (subscription.stripeSubscriptionItemId) {
         try {
           const stripe = getStripeClient();
-          await stripe.subscriptionItems.createUsageRecord(
-            subscription.stripeSubscriptionItemId,
-            {
-              quantity: data.quantity,
-              timestamp: Math.floor(Date.now() / 1000),
-              action: "set",
-            },
+          await withStripeRetry(
+            () => stripe.subscriptionItems.createUsageRecord(
+              subscription.stripeSubscriptionItemId,
+              {
+                quantity: data.quantity,
+                timestamp: Math.floor(Date.now() / 1000),
+                action: "set",
+              },
+            ),
+            "reportUsage:subscriptionItems.createUsageRecord",
           );
         } catch (err) {
           logger.warn(
@@ -1066,10 +1102,13 @@ export function billingService(db: Db) {
         throw notFound("No subscription with Stripe integration found");
       }
 
-      const stripeInvoices = await stripe.invoices.list({
+      const stripeInvoices = await withStripeRetry(
+        () => stripe.invoices.list({
         subscription: subscription.stripeSubscriptionId,
         limit: 100,
-      });
+      }),
+        "syncInvoicesFromStripe:invoices.list",
+      );
 
       for (const inv of stripeInvoices.data) {
         // Upsert: INSERT ... ON CONFLICT (stripe_invoice_id) DO UPDATE
@@ -1121,6 +1160,7 @@ export function billingService(db: Db) {
       let event: Stripe.Event;
 
       try {
+        // Local signature verification only — no outbound API call; does not need withStripeRetry.
         event = stripe.webhooks.constructEvent(rawBody, signature, STRIPE_WEBHOOK_SECRET);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Unknown webhook error";
