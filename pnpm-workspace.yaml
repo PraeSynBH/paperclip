@@ -12,3 +12,5 @@ packages:
   - server
   - ui
   - cli
+  # Voyonder product code — separate repo, same workspace for dev
+  - ../voyonder

@@ -1,9 +1,9 @@
 ---
 title: Async UX Release — Background Jobs + Process Visibility (M1+M2)
-version: voy-1474
+version: voy-1474, voy-1493, voy-1527, voy-1657
 date: 2026-08-20
-commits: 7211f8ba87, 01009090bf, daa8360578, f81d572a40, dd2a41f9a0, 10536a49ee, 953249ae19, 9949b6dfcb
-status: Released — deployed to production (VPS) 2026-08-20 ~17:20 UTC. All 4 P0/P1 hotfixes applied and verified (VOY-1527 resolved, VOY-1531 follow-up refinements landed)
+commits: 7211f8ba87, 01009090bf, daa8360578, f81d572a40, dd2a41f9a0, 10536a49ee, 953249ae19, 9949b6dfcb, 076bf825e1 (S2 shared type fix), ce55ad6 (Voyonder S2-S4 fixes), 883ea89 (Voyonder M2 audit — Zod handler, dead processor, retry loop)
+status: Released — deployed to production (VPS) 2026-08-20 ~17:20 UTC. All 4 P0/P1 hotfixes applied and verified (VOY-1527 resolved, VOY-1531 follow-up refinements landed). Code separation (VOY-1657) completed 2026-08-22 — route paths now company-scoped, search synchronous
 ---
 
 # Async UX Release: Background Jobs + Process Visibility (M1+M2)
@@ -26,7 +26,7 @@ The first milestone established the core background job infrastructure:
 - **Job creation API** — `POST /api/companies/:companyId/background-jobs` creates a job (board-only). Returns HTTP 201 with the job row.
 - **Job list/detail API** — `GET .../background-jobs` (paginated, filterable by status/job type) and `GET .../background-jobs/:id`.
 - **SSE event stream** — `GET .../background-jobs/events` streams job status changes in real time. Authenticated users must have `company_scope:read` permission.
-- **Activity search → background job** — `POST /api/companies/:companyId/research/activities` now creates a background job instead of running inline. Returns HTTP 202 with a `jobId`.
+| **Activity search → synchronous keyword-first** | `POST /api/companies/:companyId/research/search` returns keyword results synchronously. If `semanticUpgrade: true`, a `research.semantic_search` background job is enqueued and the response includes a `semanticJobId`. The `research.activity_search` job type was removed — no background job is created for keyword search alone. |
 - **`useJobStatus` React hook** — Polls every 2 seconds with optional SSE subscription for live updates (best-effort, falls back to polling).
 - **`StatusCue`** — Compact inline job status indicator (colored dot, label, optional progress bar).
 - **`IncompleteDataNotice`** — Banner shown while data is being prepared.
@@ -70,11 +70,12 @@ All Staff Engineer findings from the M2 structural audit were addressed, and the
 
 | Job Type | Processor | Result |
 |----------|-----------|--------|
-| `research.activity_search` | Keyword search over issues, documents, activity | `{ query, results, total }` |
 | `research.semantic_search` | Keyword candidates + embedding cosine rerank (falls back to keyword when no embedding provider configured) | `{ query, upgraded, model, results, total }` |
 | `research.auto_assess` | Heuristic freshness/completeness/relevance per research item | `{ assessedAt, items[] }` |
 | `export.pdf` | pdfkit paginated PDF (title page, item cards, separators) — result carries base64 `dataUri` | `{ kind, title, items, generatedAt, dataUri }` |
 | `export.ics` | iCalendar text builder (v2.0, VEVENT entries with sanitized fields) | `{ kind, title, calendarText, eventCount }` |
+
+> **Note**: `research.activity_search` was removed during Voyonder code separation (Phase 1). Keyword search now runs synchronously — only the semantic upgrade runs as a background job.
 
 ## Known Limitations
 
@@ -97,7 +98,7 @@ All Staff Engineer findings from the M2 structural audit were addressed, and the
 
 | Change | What to know |
 |--------|-------------|
-| **Activity search now async** | Users see a "Search queued — results will appear shortly" message while the job runs. If this persists, verify the worker is running (restart server) |
+| **Activity search now synchronous** | Keyword-first search returns results immediately. If the user requests semantic upgrade (`semanticUpgrade: true`), a background job is created for re-ranking. The search panel shows results right away; the upgraded ranking arrives later via SSE |
 | **Export generates via background job** | PDF/ICS requests return immediately with a job ID. The download must be constructed client-side from the job result (`result.dataUri` for PDF, `result.calendarText` for ICS) |
 | **Export payload limit** | Payloads over 512 KB receive HTTP 413. Advise users to reduce item counts before exporting |
 | **Semantic search is optional** | The search endpoint returns keyword results synchronously. Semantic upgrade is an enhancement — if it never arrives, check `PAPERCLIP_EMBEDDING_API_KEY` |
@@ -124,5 +125,5 @@ The 4 P0/P1 issues that shipped with the release are now resolved:
 - [Research API](/api/research) — API reference for research endpoints (activity search, auto-assess, keyword-first search)
 - [Exports API](/api/exports) — API reference for PDF/ICS export endpoints
 
-*Last updated: 2026-08-20 ~21:30 UTC — VOY-1527 P0/P1 hotfixes and VOY-1531 follow-up refinements resolved: emitEvent guard, stale-job recovery, list slim projection, email digest ordering. All production issues resolved.*
+*Last updated: 2026-08-22 — search now synchronous (Phase 1 code separation); `research.activity_search` removed from job types*
 *Maintained by: Support Engineer (88b72065)*
