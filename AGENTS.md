@@ -69,13 +69,13 @@ This section documents the agent workforce in the **Praxis M&A (GStack)** compan
 
 | # | Agent | Title | Role | Reports To | Budget/mo | Budget/yr | Status | Permissions |
 |---|-------|-------|------|------------|-----------|-----------|--------|-------------|
-| 1 | **CEO** | Chief Executive Officer | agent | — (top) | $0 | $0 | running | assignTasks, createAgents, createSkills |
-| 2 | **CTO** | Chief Technology Officer | agent | CEO | $1,000 | $12,000 | running | createSkills |
-| 3 | **Staff Engineer** | Staff Engineer | agent | CEO | $300 | $3,600 | idle | createSkills |
-| 4 | **Release Engineer** | Release Engineer | agent | CEO | $200 | $2,400 | idle | createSkills |
-| 5 | **QA Engineer** | QA Engineer | agent | CEO | $500 | $6,000 | running | createSkills |
-| 6 | **CSO** | Chief Security Officer | general | CTO | $500 | $6,000 | running | assignTasks, createAgents, createSkills |
-| 7 | **Design Agent** | UX/UI Designer | designer | CTO | $300 | $3,600 | idle | assignTasks, createSkills |
+|| 1 | **CEO** | Chief Executive Officer | agent | — (top) | $0 | $0 | running | assignTasks, createAgents, createSkills |
+|| 2 | **CTO** | Chief Technology Officer | agent | CEO | $1,000 | $12,000 | running | createSkills |
+|| 3 | **Staff Engineer** | Staff Engineer | agent | CEO | $300 | $3,600 | idle | createSkills |
+|| 4 | **Release Engineer** | Release Engineer | agent | CEO | $200 | $2,400 | idle | createSkills |
+|| 5 | **QA Engineer** | QA Engineer | agent | CEO | $500 | $6,000 | idle | createSkills |
+|| 6 | **CSO** | Chief Security Officer | general | CTO | $500 | $6,000 | idle | assignTasks, createAgents, createSkills |
+|| 7 | **Design Agent** | UX/UI Designer | designer | CTO | $300 | $3,600 | idle | assignTasks, createSkills |
 
 ### Reporting Hierarchy
 
@@ -91,7 +91,22 @@ CEO
 
 ### Skill Wiring Status
 
-No skills are currently explicitly wired to any agent (all `attachedAgentCount: 0` across 32 company skills). Skills listed in individual agent instruction files are embedded as narrative context rather than attached via the skill-binding API. The 32 skills available in the company catalog are listed in `packages/skills-catalog/` and the GitHub source at `garrytan/gstack`. See the company's `/api/companies/{companyId}/skills` endpoint for the full catalog.
+6 of 32 company skills now have one agent attached each (all other skills show `attachedAgentCount: 0`). The attached skills are:
+
+| Skill | Key | Attached Agents |
+|-------|-----|-----------------|
+| **investigate** | `garrytan/gstack/investigate` | 1 |
+| **land-and-deploy** | `garrytan/gstack/land-and-deploy` | 1 |
+| **qa** | `garrytan/gstack/qa` | 1 |
+| **qa-only** | `garrytan/gstack/qa-only` | 1 |
+| **review** | `garrytan/gstack/review` | 1 |
+| **ship** | `garrytan/gstack/ship` | 1 |
+
+These are GStack pipeline skills sourced from the `garrytan/gstack` GitHub repository. The remaining 26 company skills have zero attached agents. See the company's `/api/companies/{companyId}/skills` endpoint for the full catalog sorted by attached agent count.
+
+### Phase 1 Status
+
+**v0.5.0 Phase 1** — delivered 2026-08-19. Scope: Server boot fixes, integration wiring, notification delivery, marketplace auth, billing trust, H-series hotfixes, PostHog pre-stage instrumentation, knowledge starter packs API, and docs site (case studies, quickstart, Discord community). See `doc/retro/2026-08-19-engineering-retrospective.md` for the full retrospective.
 
 ### Adapter Configuration
 
@@ -106,7 +121,43 @@ All 7 agents use adapter type `hermes_local` (Hermes Agent local process adapter
 | Company-level budget | $0 (unlimited) |
 | Spent to date (current month) | $0 |
 
-## 6. Core Engineering Rules
+## 6. Board Directive — VOY-1668: Hard Stop Paperclip Feature Development
+
+**Effective**: 2026-08-22 ~05:00 UTC
+
+**Directive**: All Paperclip platform feature development is stopped. Engineering resources shift from platform-building to Voyonder product delivery.
+
+### What is STOPPED
+
+- New Paperclip features (routes, services, UI pages, platform capabilities)
+- Paperclip platform enhancements not directly supporting Voyonder customers
+
+### What CONTINUES
+
+- P0/P1 production bug fixes in Paperclip
+- Security patches
+- Customer-blocking fixes
+- Voyonder product development (primary focus)
+- Customer acquisition and onboarding (VOY-1586)
+- Billing pipeline reliability fixes (in-progress P1/P2)
+- Infrastructure operations, monitoring, uptime
+
+### New Priority Stack
+
+1. P0/P1 Voyonder production issues
+2. Customer acquisition and onboarding
+3. Billing pipeline reliability
+4. Paperclip P0/P1 security and bug fixes
+5. Everything else — STOPPED
+
+### Voyonder Repository
+
+- URL: https://github.com/PraeSynBH/voyonder
+- Visibility: Private
+
+See `doc/status/2026-08-22-coo-board-directive-voy-1668.md` for the full directive document.
+
+## 7. Core Engineering Rules
 
 1. Keep changes company-scoped.
 Every domain entity should be scoped to a company and company boundaries must be enforced in routes/services.
