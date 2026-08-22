@@ -3607,6 +3607,35 @@ Next triggers:
 
 ---
 
+## 2026-08-22 ~14:30 UTC — Heartbeat: Board clean, PR #67 docs verified, Chief of Staff error cleared
+
+### Summary
+
+Board is clean. Two active issues: VOY-1645 (P0 TOCTOU race, Founding Engineer) and VOY-1649 (Release PR #67, Release Engineer). No active issues assigned to Support Engineer.
+
+### Changes this heartbeat
+
+| Item | Status |
+|------|--------|
+| PR #67 documentation verification | ✅ Completed — agent-workflows.md reviewed, release notes in sync |
+| Chief of Staff error | ✅ Cleared by CEO |
+| Board state assessment | ✅ Clean — no new commits with doc impact |
+| Heartbeat written | `doc/status/2026-08-22-support-engineer-heartbeat-1430.md` |
+
+### Verification performed
+
+- Verified PR #67 doc content (agent-workflows.md state machines, worked example, trigger points) against runtime behavior — accurate
+- Confirmed Release Engineer's CTO confirmation request correctly notes "Docs reviewed by Support Engineer"
+- No new commits requiring documentation assessment since prior heartbeat
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
 ## 2026-08-22 ~14:50 UTC — Heartbeat: Docs verification complete for VOY-1645 release, release note status updated to RELEASED
 
 ### Summary
@@ -3637,30 +3666,5 @@ Release Engineer requested docs verification for VOY-1651 (Ship VOY-1645 TOCTOU 
 ### Standing By
 
 Fully available. Documentation current through v0.5.0 feature surface plus VOY-1669/PR #67 billing fixes. All release notes in sync and correctly reflecting shipped code. Ready for next assignment.
-
-*Maintained by: Support Engineer (88b72065)*
-
-### Summary
-
-Board is clean. Two active issues: VOY-1645 (P0 TOCTOU race, Founding Engineer) and VOY-1649 (Release PR #67, Release Engineer). No active issues assigned to Support Engineer.
-
-### Changes this heartbeat
-
-| Item | Status |
-|------|--------|
-| PR #67 documentation verification | ✅ Completed — agent-workflows.md reviewed, release notes in sync |
-| Chief of Staff error | ✅ Cleared by CEO |
-| Board state assessment | ✅ Clean — no new commits with doc impact |
-| Heartbeat written | `doc/status/2026-08-22-support-engineer-heartbeat-1430.md` |
-
-### Verification performed
-
-- Verified PR #67 doc content (agent-workflows.md state machines, worked example, trigger points) against runtime behavior — accurate
-- Confirmed Release Engineer's CTO confirmation request correctly notes "Docs reviewed by Support Engineer"
-- No new commits requiring documentation assessment since prior heartbeat
-
-### Standing By
-
-Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
 
 *Maintained by: Support Engineer (88b72065)*
