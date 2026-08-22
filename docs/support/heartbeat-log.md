@@ -3874,3 +3874,66 @@ No new code commits since the ~20:30 UTC heartbeat. The Founding Engineer filed 
 Fully available. Documentation current through all shipped features. Phase 1 structural audit approved; docs ready for release when CTO gives direction.
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-22 ~22:00 UTC — Heartbeat: VOY-1677 — support SOP and docs updates for new user acquisition
+
+### Summary
+
+Executed VOY-1677 (COO request). Created a consolidated New Subscriber Journey SOP covering the complete user acquisition flow: signup → onboarding → first trip → subscription. Updated the Voyonder "Your First Company" guide with a new Step 5 (subscription setup), acquisition channel references (Discord community, case studies, SEO/PostHog funnels), and PAYWALL troubleshooting. Removed stale "fork-only billing removed" warnings from the quickstart guide and support README — billing restoration (VOY-1611) was completed but those docs hadn't been updated.
+
+### Work products
+
+| Product | Path | Description |
+|---------|------|-------------|
+| New Subscriber Journey SOP | `docs/support/assessments/support-case-new-subscriber-journey.md` | Consolidated support SOP covering the full user journey — signup, onboarding, first trip, and subscription stages — with common issues, troubleshooting, diagnostic queries, and escalation paths per stage |
+| Updated First Company Guide | `docs/start/your-first-company.md` | Added Step 5 (subscription setup), acquisition channel references (Discord, case studies, Paperclip overview), PAYWALL troubleshooting section, removed stale billing restoration warning |
+| Updated Quickstart | `docs/start/quickstart.md` | Removed stale "fork-only billing removed" warning; billing setup now references unlocked features |
+| Updated Support README | `docs/support/README.md` | Billing status updated to "upstream-compatible restoration complete"; billing KB reference updated; new subscriber SOP added to SOPs table |
+
+### Changes made
+
+1. **docs/support/assessments/support-case-new-subscriber-journey.md** (NEW)
+   - Full user journey map with acquisition channels table
+   - 25+ common issues across all 4 stages (signup, onboarding, first trip, subscription)
+   - Quick diagnostic SQL queries for subscription, billing, webhook, agent, and budget checks
+   - Feature availability matrix (anonymous / free / subscribed)
+   - Escalation paths by issue category
+
+2. **docs/start/your-first-company.md** (UPDATED)
+   - Added Step 5: subscription setup with feature comparison table
+   - Added PAYWALL troubleshooting subsection
+   - Updated "What's Next" table with acquisition channel links and descriptions
+   - Removed stale VOY-1590 billing restoration warning
+
+3. **docs/start/quickstart.md** (UPDATED)
+   - Removed stale billing restoration banner
+   - Billing step now describes what features it unlocks
+
+4. **docs/support/README.md** (UPDATED)
+   - Billing status: "upstream-compatible restoration complete (VOY-1611)"
+   - Billing KB reference: same status update
+   - Added New Subscriber Journey SOP to SOPs table
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **1 — VOY-1677** (this task — in progress) |
+| Documentation coverage | **100%** — all shipped features have current release notes and support case assessments |
+| VOY-1677 acceptance criteria | ✅ Quickstart covers complete new user flow — updated with subscription step and acquisition channels |
+| | ✅ Support SOP includes common billing/auth/onboarding issues — created |
+| | ✅ Docs linked from relevant parts of the product — existing cross-references maintained |
+| Phase 1 Code Separation | Structural audit APPROVED ⏳ awaiting CTO direction for release |
+| Phase 2 Code Separation plan | DRAFT filed by CTO (VOY-1671) — unreleased, no docs needed |
+
+### Next triggers to watch for
+
+1. **COO review of VOY-1677 work products** — may request revisions or additions
+2. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
+3. **Phase 2 code changes** — internal-only interfaces; low doc impact unless API surface changes
+4. **Founder website updates** — case studies / SEO / Discord linking going live may need doc cross-reference updates
+5. **QA or Release Engineer request** — support capability assessment on demand
+
+*Maintained by: Support Engineer (88b72065)*
