@@ -709,23 +709,29 @@ export function billingService(db: Db) {
         ? (tier.stripePriceYearlyId ?? tier.stripePriceMonthlyId)
         : (tier.stripePriceMonthlyId ?? tier.stripePriceYearlyId);
 
-      const { id: stripeCustomerId } = await getOrCreateStripeCustomer(companyId);
+      const { id: stripeCustomerId, stripeCustomerId: stripeCustomerStr } = await getOrCreateStripeCustomer(companyId);
       const { periodStart, periodEnd } = currentPeriodRange(data.billingPeriod);
 
+      let stripeSubscription: Stripe.Subscription;
+      let stripeSubItemId: string | null = null;
+
+      // Optimistic check — the INSERT below uses ON CONFLICT to handle the race.
       const existingSub = await db
         .select()
         .from(companySubscriptionsTable)
         .where(eq(companySubscriptionsTable.companyId, companyId))
         .then((r) => r[0] ?? null);
 
-      let stripeSubscription: Stripe.Subscription;
-      let stripeSubItemId: string | null = null;
-
       if (existingSub?.stripeSubscriptionId) {
-        const sub = await stripe.subscriptions.retrieve(existingSub.stripeSubscriptionId);
+        // ── Update path ──────────────────────────────────────────────
+        const sub = await withStripeRetry(
+          () => stripe.subscriptions.retrieve(existingSub.stripeSubscriptionId),
+          "createOrUpdateSubscription:subscriptions.retrieve",
+        );
         const subscriptionItemId = sub.items.data[0]?.id;
 
-        stripeSubscription = await stripe.subscriptions.update(existingSub.stripeSubscriptionId, {
+        stripeSubscription = await withStripeRetry(
+          () => stripe.subscriptions.update(existingSub.stripeSubscriptionId, {
           items: subscriptionItemId
             ? [{ id: subscriptionItemId, price: stripePriceId! }]
             : [{ price: stripePriceId! }],
@@ -734,7 +740,9 @@ export function billingService(db: Db) {
             paperclipCompanyId: companyId,
             paperclipTierId: data.tierId,
           },
-        });
+        }),
+          "createOrUpdateSubscription:subscriptions.update",
+        );
 
         stripeSubItemId = stripeSubscription.items.data[0]?.id ?? null;
 
@@ -749,7 +757,7 @@ export function billingService(db: Db) {
             status: stripeSubscription.status,
             updatedAt: new Date(),
           })
-          .where(eq(companySubscriptionsTable.id, existingSub.id))
+          .where(eq(companySubscriptionsTable.companyId, companyId))
           .returning()
           .then((r) => r[0]);
 
@@ -772,24 +780,27 @@ export function billingService(db: Db) {
         return updated;
       }
 
-      const cust = await db
-        .select()
-        .from(stripeCustomersTable)
-        .where(eq(stripeCustomersTable.id, stripeCustomerId))
-        .then((r) => r[0]);
-
-      stripeSubscription = await stripe.subscriptions.create({
-        customer: cust.stripeCustomerId,
+      // ── Create path ────────────────────────────────────────────────
+      // stripeCustomerStr is the Stripe-side customer ID (cus_xxx);
+      // stripeCustomerId is the local DB FK uuid.
+      stripeSubscription = await withStripeRetry(
+        () => stripe.subscriptions.create({
+        customer: stripeCustomerStr,
         items: [{ price: stripePriceId! }],
         metadata: {
           paperclipCompanyId: companyId,
           paperclipTierId: data.tierId,
         },
         proration_behavior: "create_prorations",
-      });
+      }),
+        "createOrUpdateSubscription:subscriptions.create",
+      );
 
       stripeSubItemId = stripeSubscription.items.data[0]?.id ?? null;
 
+      // INSERT with ON CONFLICT — if another request created the subscription
+      // between our SELECT and this INSERT, the conflict is a no-op and we
+      // fall through to the race-lost path below.
       const created = await db
         .insert(companySubscriptionsTable)
         .values({
@@ -805,8 +816,35 @@ export function billingService(db: Db) {
           cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
           trialEnd: stripeSubscription.trial_end ? new Date(stripeSubscription.trial_end * 1000) : null,
         })
+        .onConflictDoNothing({ target: companySubscriptionsTable.companyId })
         .returning()
-        .then((r) => r[0]);
+        .then((r) => r[0] ?? null);
+
+      if (!created) {
+        // Race lost — another request inserted between our SELECT and INSERT.
+        // The Stripe subscription we just created is an orphan (rare, harmless).
+        // Fetch the winner's record and return it.
+        logger.warn(
+          { companyId, tierId: data.tierId },
+          "createOrUpdateSubscription race lost — another request created the subscription first; orphan Stripe sub is harmless",
+        );
+        const winner = await db
+          .select()
+          .from(companySubscriptionsTable)
+          .where(eq(companySubscriptionsTable.companyId, companyId))
+          .then((r) => r[0] ?? null);
+        if (!winner) {
+          throw new Error("Concurrent subscription creation lost race and no existing record found");
+        }
+        // Cancel the orphan Stripe subscription to avoid billing the customer twice
+        await stripe.subscriptions.cancel(stripeSubscription.id).catch((err) => {
+          logger.warn(
+            { err, stripeSubscriptionId: stripeSubscription.id },
+            "Failed to cancel orphan Stripe subscription (non-fatal)",
+          );
+        });
+        return winner;
+      }
 
       const usageMetrics: Array<{ metric: string; included: number }> = [
         { metric: "seats", included: tier.includedSeats },
@@ -859,9 +897,12 @@ export function billingService(db: Db) {
       if (!subscription) throw notFound("No active subscription found");
       if (!subscription.stripeSubscriptionId) throw unprocessable("No Stripe subscription to cancel");
 
-      await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+      await withStripeRetry(
+        () => stripe.subscriptions.update(subscription.stripeSubscriptionId, {
         cancel_at_period_end: true,
-      });
+      }),
+        "cancelSubscription:subscriptions.update",
+      );
 
       const updated = await db
         .update(companySubscriptionsTable)
@@ -902,9 +943,12 @@ export function billingService(db: Db) {
       if (!subscription.stripeSubscriptionId) throw unprocessable("No Stripe subscription to reactivate");
       if (!subscription.cancelAtPeriodEnd) throw unprocessable("Subscription is not scheduled for cancellation");
 
-      await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
+      await withStripeRetry(
+        () => stripe.subscriptions.update(subscription.stripeSubscriptionId, {
         cancel_at_period_end: false,
-      });
+      }),
+        "reactivateSubscription:subscriptions.update",
+      );
 
       const updated = await db
         .update(companySubscriptionsTable)
@@ -949,19 +993,6 @@ export function billingService(db: Db) {
         subscription.billingPeriod as "monthly" | "yearly",
       );
 
-      let usageRecord = await db
-        .select()
-        .from(subscriptionUsageTable)
-        .where(
-          and(
-            eq(subscriptionUsageTable.subscriptionId, subscription.id),
-            eq(subscriptionUsageTable.metric, data.metric),
-            eq(subscriptionUsageTable.periodStart, periodStart),
-            eq(subscriptionUsageTable.periodEnd, periodEnd),
-          ),
-        )
-        .then((r) => r[0] ?? null);
-
       const tier = await getTier(subscription.tierId);
       const includedMap: Record<string, number> = {
         seats: tier.includedSeats,
@@ -979,46 +1010,52 @@ export function billingService(db: Db) {
       const overage = Math.max(0, usage - included);
       const overageCents = overage * (priceMap[data.metric] ?? 0);
 
-      if (usageRecord) {
-        usageRecord = await db
-          .update(subscriptionUsageTable)
-          .set({
+      // Upsert — INSERT ... ON CONFLICT handles the read-then-write race.
+      // The unique index on (subscription_id, metric, period_start, period_end)
+      // prevents duplicate rows; the DO UPDATE makes concurrent calls safe.
+      const usageRecord = await db
+        .insert(subscriptionUsageTable)
+        .values({
+          companyId,
+          subscriptionId: subscription.id,
+          metric: data.metric,
+          usage,
+          included,
+          overage,
+          overageCents,
+          periodStart,
+          periodEnd,
+        })
+        .onConflictDoUpdate({
+          target: [
+            subscriptionUsageTable.subscriptionId,
+            subscriptionUsageTable.metric,
+            subscriptionUsageTable.periodStart,
+            subscriptionUsageTable.periodEnd,
+          ],
+          set: {
             usage,
             overage,
             overageCents,
             updatedAt: new Date(),
-          })
-          .where(eq(subscriptionUsageTable.id, usageRecord.id))
-          .returning()
-          .then((r) => r[0]);
-      } else {
-        usageRecord = await db
-          .insert(subscriptionUsageTable)
-          .values({
-            companyId,
-            subscriptionId: subscription.id,
-            metric: data.metric,
-            usage,
-            included,
-            overage,
-            overageCents,
-            periodStart,
-            periodEnd,
-          })
-          .returning()
-          .then((r) => r[0]);
-      }
+          },
+        })
+        .returning()
+        .then((r) => r[0]);
 
       if (subscription.stripeSubscriptionItemId) {
         try {
           const stripe = getStripeClient();
-          await stripe.subscriptionItems.createUsageRecord(
-            subscription.stripeSubscriptionItemId,
-            {
-              quantity: data.quantity,
-              timestamp: Math.floor(Date.now() / 1000),
-              action: "set",
-            },
+          await withStripeRetry(
+            () => stripe.subscriptionItems.createUsageRecord(
+              subscription.stripeSubscriptionItemId,
+              {
+                quantity: data.quantity,
+                timestamp: Math.floor(Date.now() / 1000),
+                action: "set",
+              },
+            ),
+            "reportUsage:subscriptionItems.createUsageRecord",
           );
         } catch (err) {
           logger.warn(
@@ -1066,10 +1103,13 @@ export function billingService(db: Db) {
         throw notFound("No subscription with Stripe integration found");
       }
 
-      const stripeInvoices = await stripe.invoices.list({
+      const stripeInvoices = await withStripeRetry(
+        () => stripe.invoices.list({
         subscription: subscription.stripeSubscriptionId,
         limit: 100,
-      });
+      }),
+        "syncInvoicesFromStripe:invoices.list",
+      );
 
       for (const inv of stripeInvoices.data) {
         // Upsert: INSERT ... ON CONFLICT (stripe_invoice_id) DO UPDATE
