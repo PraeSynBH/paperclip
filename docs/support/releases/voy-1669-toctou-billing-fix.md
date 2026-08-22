@@ -1,18 +1,18 @@
----
+|---
 title: P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 version: voy-1669
 date: 2026-08-22
-commit: b840497fab
-status: Merged to main (PR #62)
+commit: b840497fab + 151f0a2066
+status: All gates clear — PR #63 awaiting merge
 ---
 
 # P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 
 **Release:** VOY-1669 / VOY-1673
-**Commit:** `b840497fab`
+**Commits:** `b840497fab`, `cd74f15ca8`, `151f0a2066`
 **Date:** 2026-08-22
-**Status:** Merged to main
-**Related issues:** VOY-1669, VOY-1673
+**Status:** All gates clear — PR #63 awaiting merge
+**Related issues:** VOY-1669, VOY-1671, VOY-1687, VOY-1673
 
 ## Summary
 
@@ -56,7 +56,7 @@ The `POST /api/companies/:companyId/billing/usage` endpoint had a similar race: 
 Seven Stripe API calls that were previously unwrapped now benefit from exponential-backoff retry on transient failures:
 
 | Call site | Operation |
-|---|---|
+|---|---|---|
 | `createOrUpdateSubscription` (update path) | `stripe.subscriptions.retrieve()` |
 | `createOrUpdateSubscription` (update path) | `stripe.subscriptions.update()` |
 | `createOrUpdateSubscription` (create path) | `stripe.subscriptions.create()` |
@@ -70,6 +70,18 @@ Seven Stripe API calls that were previously unwrapped now benefit from exponenti
 - Customers will see fewer "Stripe API error" messages during normal operation
 - No configuration or customer action needed
 
+### 4. Webhook transaction wrapping — `handleInvoicePaymentFailed` and `handleSubscriptionDeleted` (P2-1)
+
+The two remaining Stripe webhook handlers — `handleInvoicePaymentFailed` (marks subscription as `past_due`) and `handleSubscriptionDeleted` (marks subscription as `canceled`) — are now wrapped in `db.transaction()` to match the pattern already used by `handleInvoicePaid` and `handleSubscriptionUpdated`.
+
+**Why this matters:** These handlers perform single UPDATE operations with no read-then-write race, so the TOCTOU risk was minimal. The wrapping ensures consistent error-recovery semantics across all webhook handlers: if a handler fails partway through, the entire UPDATE + live-event publish is rolled back atomically. This prevents a state where the database is updated but the live event is not published (or vice versa).
+
+**What this means for support:**
+- Completely invisible to customers — no API change, no UI change, no configuration change
+- Eliminates inconsistent state where a subscription status updates in the database but the live event is not emitted to the UI
+- If a customer previously reported that their subscription status appeared to "stick" (e.g., a canceled subscription still showing as active in the UI briefly before catching up), this fix ensures the database update and live event are always atomic
+- No customer action needed. No manual intervention needed from support.
+
 ## Configuration
 
 No new configuration options. Existing `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` remain the only required Stripe environment variables.
@@ -80,6 +92,8 @@ No new configuration options. Existing `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_S
 - [x] `createOrUpdateSubscription` uses `ON CONFLICT DO NOTHING` on `(company_id)`
 - [x] `reportUsage` uses `INSERT ... ON CONFLICT DO UPDATE` on `(subscription_id, metric, period_start, period_end)`
 - [x] Orphan Stripe subscription cancellation on race loss
+- [x] `handleInvoicePaymentFailed` and `handleSubscriptionDeleted` wrapped in `db.transaction()`
+- [x] VOY-1687: Idempotency key on `stripe.subscriptions.create()`
 - [x] Code reviewed by Staff Engineer, CTO approval gate
 
 ## Support Escalation Path
