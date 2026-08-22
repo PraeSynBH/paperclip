@@ -67,42 +67,46 @@ pnpm dev
 
 This section documents the agent workforce in the **Praxis M&A (GStack)** company.
 
-| # | Agent | Title | Role | Reports To | Budget/mo | Budget/yr | Status | Permissions |
-|---|-------|-------|------|------------|-----------|-----------|--------|-------------|
+| # | Agent | Title | Role | Reports To | Target Budget/mo | Target Budget/yr | Status | Permissions |
+|---|-------|-------|------|------------|-----------------|-----------------|--------|-------------|
 || 1 | **CEO** | Chief Executive Officer | agent | — (top) | $0 | $0 | running | assignTasks, createAgents, createSkills |
 || 2 | **CTO** | Chief Technology Officer | agent | CEO | $1,000 | $12,000 | running | createSkills |
-|| 3 | **Staff Engineer** | Staff Engineer | agent | CEO | $300 | $3,600 | idle | createSkills |
+|| 3 | **Staff Engineer** | Staff Engineer | agent | CEO | $300 | $3,600 | running | createSkills |
 || 4 | **Release Engineer** | Release Engineer | agent | CEO | $200 | $2,400 | idle | createSkills |
-|| 5 | **QA Engineer** | QA Engineer | agent | CEO | $500 | $6,000 | idle | createSkills |
+|| 5 | **QA Engineer** | QA Engineer | agent | CEO | $500 | $6,000 | running | createSkills |
 || 6 | **CSO** | Chief Security Officer | general | CTO | $500 | $6,000 | idle | assignTasks, createAgents, createSkills |
 || 7 | **Design Agent** | UX/UI Designer | designer | CTO | $300 | $3,600 | idle | assignTasks, createSkills |
+
+> **Note**: Budgets above are planned target allocations. The API currently reports `null` for all agent-level budgets — these are not yet wired as system-enforced limits. The reporting hierarchy reflects the intended org structure; `managerAgentId` is not yet set in the database (all agents currently show `null`).
 
 ### Reporting Hierarchy
 
 ```
-CEO
-├── CTO
-│   ├── CSO
-│   └── Design Agent
-├── Staff Engineer
-├── Release Engineer
-└── QA Engineer
+CEO (running)
+├── CTO (running)
+│   ├── CSO (idle)
+│   └── Design Agent (idle)
+├── Staff Engineer (running)
+├── Release Engineer (idle)
+└── QA Engineer (running)
 ```
 
 ### Skill Wiring Status
 
-6 of 32 company skills now have one agent attached each (all other skills show `attachedAgentCount: 0`). The attached skills are:
+8 of 32 company skills now have one agent attached each (all other skills show `attachedAgentCount: 0`). The attached skills are:
 
 | Skill | Key | Attached Agents |
 |-------|-----|-----------------|
 | **investigate** | `garrytan/gstack/investigate` | 1 |
 | **land-and-deploy** | `garrytan/gstack/land-and-deploy` | 1 |
+| **office-hours** | `garrytan/gstack/office-hours` | 1 |
+| **plan-ceo-review** | `garrytan/gstack/plan-ceo-review` | 1 |
 | **qa** | `garrytan/gstack/qa` | 1 |
 | **qa-only** | `garrytan/gstack/qa-only` | 1 |
 | **review** | `garrytan/gstack/review` | 1 |
 | **ship** | `garrytan/gstack/ship` | 1 |
 
-These are GStack pipeline skills sourced from the `garrytan/gstack` GitHub repository. The remaining 26 company skills have zero attached agents. See the company's `/api/companies/{companyId}/skills` endpoint for the full catalog sorted by attached agent count.
+These are GStack pipeline skills sourced from the `garrytan/gstack` GitHub repository. The remaining 24 company skills have zero attached agents. See the company's `/api/companies/{companyId}/skills` endpoint for the full catalog sorted by attached agent count.
 
 ### Phase 1 Status
 
@@ -114,10 +118,12 @@ All 7 agents use adapter type `hermes_local` (Hermes Agent local process adapter
 
 ### Budget Summary
 
+> **Note**: Budget figures are planned target allocations. The API currently records `null` for all per-agent budgets — these are aspirational targets, not system-enforced limits.
+
 | Metric | Amount |
 |--------|--------|
-| Total monthly budget | $2,800 |
-| Total yearly budget | $33,600 |
+| Total monthly target budget | $2,800 |
+| Total yearly target budget | $33,600 |
 | Company-level budget | $0 (unlimited) |
 | Spent to date (current month) | $0 |
 
@@ -185,7 +191,7 @@ When you are creating a plan file in the repository itself, new plan documents b
 6. Attach inspectable generated artifacts.
 When your task produces a user-inspectable deliverable file, follow the Paperclip skill's "Generated Artifacts and Work Products" workflow before final disposition. In this repo, prefer the self-contained skill helper at `skills/paperclip/scripts/paperclip-upload-artifact.sh` so the file is available through the Paperclip API, create/update an artifact work product when the file is the deliverable, link the uploaded artifact in the final issue comment, and then set status. Do not rely on local filesystem paths as the only access path. If an important file intentionally remains workspace-only, create/update a work product with `metadata.resourceRef.kind: "workspace_file"` and a workspace-relative path, then name that work product and path in the final comment. Treat browse/search as a fallback for recovering workspace files, not the preferred deliverable path. See `doc/AGENT-ARTIFACTS.md` for details and `.mp4`/`.webm` examples.
 
-## 7. Database Change Workflow
+## 8. Database Change Workflow
 
 When changing data model:
 
@@ -207,7 +213,7 @@ Notes:
 - `packages/db/drizzle.config.ts` reads compiled schema from `dist/schema/*.js`
 - `pnpm db:generate` compiles `packages/db` first
 
-## 8. Verification Before Hand-off
+## 9. Verification Before Hand-off
 
 Default local/agent test path:
 
@@ -236,7 +242,7 @@ pnpm build
 
 If anything cannot be run, explicitly report what was not run and why.
 
-## 9. API and Auth Expectations
+## 10. API and Auth Expectations
 
 - Base path: `/api`
 - Board access is treated as full-control operator context
@@ -250,13 +256,13 @@ When adding endpoints:
 - write activity log entries for mutations
 - return consistent HTTP errors (`400/401/403/404/409/422/500`)
 
-## 10. UI Expectations
+## 11. UI Expectations
 
 - Keep routes and nav aligned with available API surface
 - Use company selection context for company-scoped pages
 - Surface failures clearly; do not silently ignore API errors
 
-## 11. Pull Request Requirements
+## 12. Pull Request Requirements
 
 When creating a pull request (via `gh pr create` or any other method), you **must** read and fill in every section of [`.github/PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md). Do not craft ad-hoc PR bodies — use the template as the structure for your PR description. Required sections:
 
@@ -267,7 +273,7 @@ When creating a pull request (via `gh pr create` or any other method), you **mus
 - **Model Used** — the AI model that produced or assisted with the change (provider, exact model ID, context window, capabilities). Write "None — human-authored" if no AI was used.
 - **Checklist** — all items checked
 
-## 12. Definition of Done
+## 13. Definition of Done
 
 A change is done when all are true:
 
@@ -277,7 +283,7 @@ A change is done when all are true:
 4. Docs updated when behavior or commands change
 5. PR description follows the [PR template](.github/PULL_REQUEST_TEMPLATE.md) with all sections filled in (including Model Used)
 
-## 13. Fork & Upstream Merge Policy
+## 14. Fork & Upstream Merge Policy
 
 This is a fork of `paperclipai/paperclip`. We maintain a `custom` branch with
 our changes and periodically merge upstream updates. **When merging upstream,
