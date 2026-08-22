@@ -11,6 +11,7 @@ import { PageSkeleton } from "../components/PageSkeleton";
 import { ChevronRight, GitBranch } from "lucide-react";
 import { cn } from "../lib/utils";
 import { agentStatusDot, agentStatusDotDefault } from "../lib/status-colors";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 function OrgTree({
   nodes,
@@ -84,6 +85,7 @@ function OrgTreeNode({
   );
 }
 
+  usePageMeta("Organization", "View and manage your organization structure.");
 export function Org() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

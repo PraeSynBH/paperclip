@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { Loader2, Rocket, Sparkles, CheckCircle2, Bot, Building2, ListTodo, Compass, Star, Clock, ArrowUpRight } from "lucide-react";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 // ─── Agent profile data ──────────────────────────────────────────────────────
 
@@ -67,6 +68,7 @@ interface WalkthroughStep {
 // ─── Page component ──────────────────────────────────────────────────────────
 
 export function DemoTravelConcierge() {
+  usePageMeta("Demo: Travel Concierge", "Demo: AI-powered travel concierge experience.");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
