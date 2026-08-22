@@ -419,6 +419,18 @@ export function billingService(db: Db) {
     });
   };
 
+  /**
+   * Extract a Stripe customer ID from a field that may be a string (the ID) or an expanded
+   * customer object (string | Stripe.Customer | Stripe.DeletedCustomer).
+   * Returns null if the value is null/undefined.
+   */
+  const getStripeCustomerId = (
+    customer: string | Stripe.Customer | Stripe.DeletedCustomer | null,
+  ): string | null => {
+    if (!customer) return null;
+    return typeof customer === "string" ? customer : customer.id;
+  };
+
   const handleCheckoutSessionCompleted = async (session: Stripe.Checkout.Session) => {
     if (session.mode !== "subscription") return;
     const subId = session.subscription
@@ -447,10 +459,8 @@ export function billingService(db: Db) {
       "handleCheckoutSessionCompleted:subscriptions.retrieve",
     );
 
-    const sessionCustomerId = session.customer
-      ? (typeof session.customer === "string" ? session.customer : session.customer.id)
-      : null;
-    const stripeCustomerId = sessionCustomerId ?? stripeSub.customer as string;
+    const sessionCustomerId = getStripeCustomerId(session.customer);
+    const stripeCustomerId = sessionCustomerId ?? getStripeCustomerId(stripeSub.customer);
 
     // Use transaction + upsert for idempotent handling of at-least-once Stripe delivery.
     // The UNIQUE index on stripe_subscription_id prevents duplicate rows; the upsert
