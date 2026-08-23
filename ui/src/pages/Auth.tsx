@@ -47,13 +47,17 @@ export function AuthPage() {
         await authApi.signInEmail({ email: email.trim(), password });
         return;
       }
+      // Sign up creates the user via better-auth
       await authApi.signUpEmail({
         name: name.trim(),
         email: email.trim(),
         password,
       });
+      // After sign-up, complete registration (creates company + trial)
+      const result = await authApi.completeRegistration({ companyName: name.trim() });
+      return result;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
       setError(null);
       await queryClient.invalidateQueries({ queryKey: queryKeys.auth.session });
       await queryClient.invalidateQueries({ queryKey: queryKeys.health });
@@ -62,7 +66,13 @@ export function AuthPage() {
       // readable (and any fetch for that session in flight) until the refetch lands.
       // Sign-in can change accounts, so drop the list outright.
       await queryClient.resetQueries({ queryKey: queryKeys.companies.all });
-      navigate(nextPath, { replace: true });
+
+      // Navigate to the new company's onboarding page, or the default next path
+      if (result?.companyPrefix) {
+        navigate(`/${result.companyPrefix}/onboarding`, { replace: true });
+      } else {
+        navigate(nextPath, { replace: true });
+      }
     },
     onError: (err) => {
       setError(err instanceof Error ? err.message : "Authentication failed");

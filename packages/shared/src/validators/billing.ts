@@ -30,3 +30,14 @@ export const reportUsageSchema = z.object({
 });
 
 export type ReportUsage = z.infer<typeof reportUsageSchema>;
+
+/**
+ * Schema for the self-serve registration flow.
+ * Submitted after better-auth creates the user session.
+ */
+export const completeRegistrationSchema = z.object({
+  companyName: z.string().min(1).max(100).optional(),
+  trialDays: z.number().int().min(1).max(90).optional(),
+});
+
+export type CompleteRegistration = z.infer<typeof completeRegistrationSchema>;
