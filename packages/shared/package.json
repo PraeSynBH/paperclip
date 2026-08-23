@@ -1,6 +1,6 @@
 {
   "name": "@paperclipai/shared",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "license": "MIT",
   "homepage": "https://github.com/paperclipai/paperclip",
   "bugs": {
@@ -42,7 +42,8 @@
   "scripts": {
     "build": "tsc",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "zod": "^4.4.3"

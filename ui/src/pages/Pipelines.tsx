@@ -127,6 +127,7 @@ import { extractIssueTimelineEvents } from "../lib/issue-timeline-events";
 import { applyLocalQueuedIssueCommentState, isQueuedIssueComment } from "../lib/optimistic-issue-comments";
 import type { IssueChatComment } from "../lib/issue-chat-messages";
 import { Badge } from "@/components/ui/badge";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 type PipelineConversationActionableInteraction =
   | SuggestTasksInteraction
@@ -343,6 +344,7 @@ function retryPrimaryActionLabel(plan: PipelineAutomationRetryPlan) {
 }
 
 export function Pipelines() {
+  usePageMeta("Pipelines", "Build and manage automation pipelines.");
   const params = useParams<{ pipelineId?: string }>();
   const location = useLocation();
   const pipelineId = params.pipelineId ?? null;

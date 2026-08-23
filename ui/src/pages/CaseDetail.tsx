@@ -38,6 +38,7 @@ import { IssueDocumentsSection } from "@/components/IssueDocumentsSection";
 import { CaseCopyableToken, CaseIdentifierKey } from "@/components/CaseIdentifierKey";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 const STATUS_LABEL: Record<CaseStatus, string> = {
   draft: "Draft",
@@ -446,6 +447,7 @@ function CasePropertiesContent({
 }
 
 export function CaseDetail() {
+  usePageMeta("Case Detail", "View pipeline case details and associated tasks.");
   const { caseIdentifier } = useParams<{ caseIdentifier: string }>();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { ChoosePathButton } from "@/components/PathInstructionsModal";
 import { invalidateDynamicParser } from "@/adapters/dynamic-loader";
 import { invalidateConfigSchemaCache } from "@/adapters/schema-config-fields";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 function AdapterRow({
   adapter,
@@ -255,6 +256,7 @@ function ReinstallDialog({
 }
 
 export function AdapterManager() {
+  usePageMeta("Adapters", "Manage adapter configurations for AI model access.");
   const { selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();

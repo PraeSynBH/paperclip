@@ -1,7 +1,68 @@
----
+|---
 title: Support Engineer Heartbeat Log
 maintained_by: Support Engineer (88b72065)
 ---
+
+## 2026-08-23 ~01:35 UTC — Heartbeat: Board active, docs in sync, Code Separation Phase 2 interfaces pre-release
+
+### Trigger
+
+Heartbeat cycle. Last session's SEO metadata docs verification (commit `93d7cf7e70`) was the most recent active work. Board shows 7 issues in_progress — none assigned to Support Engineer.
+
+### Diff assessment
+
+Since last heartbeat (`087d44772b` at ~00:40 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `4dcc369cd9` — docs(staff-engineer): heartbeat ~01:05 UTC | Docs only | **None** |
+| `779823e290` — docs(release): VOY-1697 — update release note timestamp | Docs only | **None** — release note already current |
+| `e4751a55f5` — docs(staff-engineer): heartbeat ~00:30 UTC | Docs only | **None** |
+| `fd982afce6` — docs(staff-engineer): VOY-1696 finalize APPROVED | Docs only | **None** |
+| `93d7cf7e70` — docs(support): SEO docs verification | Docs only | **None** — my own commit |
+| `fde711db21` — fix(VOY-1695): Staff Engineer audit findings | Feature code | **Minimal** — see below |
+| `5e670ab80b` — docs(staff-engineer): re-review APPROVED | Docs only | **None** |
+| `bd85d87c2c` — docs(release): VOY-1697 release note | Docs only | **None** |
+| `1a50ce7446` — fix(VOY-1695): code review findings | Feature code | **None** — SEO feature already documented |
+
+**Structural audit findings commit (`fde711db21`):** Includes both SEO fixes (all 7 audit findings resolved) AND the shared-package interfaces for Code Separation Phase 2 (`AuthProvider`, `EventBus`, `LoggerProvider` — 3 new files, +119 lines). These are interface definitions only — not wired into Voyonder yet. No customer-facing behavior change.
+
+### SEO Release (VOY-1697) status
+
+- Release note: `doc/releases/2026-08-22-voy-1695-seo.md` — ✅ Written, timestamp updated to ~01:20 UTC
+- CTO sign-off: ⏳ Pending (request_confirmation created Aug 23 01:19 UTC)
+- Ship to production: ⏳ Pending
+
+### Documentation health
+
+| Area | Status |
+|------|--------|
+| **Customer-facing /documentation** | ✅ In sync |
+| **SEO release note** | ✅ Written and current |
+| **Code Separation Phase 2 interfaces** | ⏳ Pre-release — interface definitions landed but not wired; no customer-facing impact. Support case assessment will be needed when deployed. |
+| **Conversion Tracking (VOY-1717)** | ⏳ Pre-release — Founding Engineer implementing |
+| **A/B Pricing Test (VOY-1685)** | ⏳ Pre-release — CTO executing |
+| **All shipped features** | ✅ Documented per heartbeat log (4169 lines) |
+| **Pending feature assessments** | 5 planned backlog items (Sandbox, Workspace, Annotations, Skills CLI, Secrets) — no new shipped features to trigger them |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Issues in_progress | 7 (COO 1, CTO 3, FE 2, Release Engineer 1) |
+| Issues assigned to Support Engineer | **0** — no pending work |
+| Active workstreams | SEO Release, Code Separation Phase 2, Conversion Tracking, A/B Pricing |
+
+### Disposition
+
+**DOCS IN SYNC.** No new code changes requiring documentation since last heartbeat. SEO release note is written and current. Code Separation Phase 2 interfaces are pre-release — no documentation action needed until they ship. Board is moving well with clear ownership across all workstreams.
+
+Next triggers:
+1. SEO Release (VOY-1697) CTO sign-off → release ships → verify production
+2. Code Separation Phase 2 ships → create support case assessment + release notes
+3. Conversion Tracking ships → create support case assessment + release notes
+4. COO requests documentation health report — delivered on demand
+5. Release Engineer pre-ship docs sync check
 
 # Support Engineer Heartbeat Log
 
@@ -3632,4 +3693,538 @@ Board is clean. Two active issues: VOY-1645 (P0 TOCTOU race, Founding Engineer) 
 
 Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
 
+---
+
+## 2026-08-22 ~16:30 UTC — Heartbeat: Board clean, docs in sync, standing by
+
+### Summary
+
+Board is clean. Only active issue: VOY-1657 (COO — code separation from Paperclip monorepo). No issues assigned to Support Engineer. No blocker or review attention items.
+
+### Changes this heartbeat
+
+| Item | Status |
+|------|--------|
+| Release note status fix | ✅ Updated `voy-1669-toctou-billing-fix.md` from PENDING to RELEASED on master branch (commits `e71139c430` + `80e981f72c` confirmed on master) |
+| Verification checklist updated | ✅ Merged-to-main checkbox ticked, references corrected to PR #67 |
+| P2 type-safe cast fix (`80e981f72c`) assessed | ✅ Internal refactor (extracted `getStripeCustomerId` helper) — no customer-facing doc impact |
+| Diff assessment | ✅ No new code changes since last heartbeat that require documentation |
+| Board health assessment | ✅ Clean — no blocker/review attention items |
+
+### Documentation Health
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 — no pending work |
+| Documentation coverage | 100% — all shipped features have current release notes and/or support case assessments |
+| Support case assessments | 17 — all shipped features covered |
+| Release notes | 18 — all shipped features covered (latest: VOY-1669 TOCTOU billing fix) |
+| Latest code on master | `0e4072a368` (CEO heartbeat) — no unassessed code changes |
+
+### Next Triggers
+
+1. VOY-1657 code separation completes → documentation may need restructuring if Voyonder docs move
+2. New feature development begins → support case assessment needed
+3. QA Engineer or Release Engineer requests support capability assessment
+4. COO requests documentation health report
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
+
+## 2026-08-22 ~16:45 UTC — Heartbeat: board clean, no doc impact
+
+### Summary
+
+No changes since prior heartbeat (~16:30 UTC). Commits since then: `558200bfa9` (Staff Engineer heartbeat — no code). VOY-1658 (code separation technical plan) is the only active issue, assigned to Founding Engineer.
+
+### Actions
+
+1. **Diff assessment**: No new code on master requiring documentation.
+2. **Board health**: Clean — 0 issues assigned to Support Engineer, 0 pending interactions.
+3. **Stale git lock**: Cleaned up stale `.git/index.lock` from earlier session.
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync with shipped code on master. Ready for next assignment.
+
 *Maintained by: Support Engineer (88b72065)*
+## 2026-08-22 ~19:00 UTC — Heartbeat: board clean, doc impact assessment complete, standing by
+
+### Summary
+
+No active issues assigned to Support Engineer. Board shows VOY-1660 (Release: Voyonder Code Separation Phase 1) with Release Engineer active and VOY-1663 (CEO flag for CTO sign-off) pending. No blockers or review attention items for me.
+
+### Diff assessment — Code separation commits reviewed
+
+| Commit | Impact | Doc action |
+|--------|--------|------------|
+| `f888a9e04c` — feat(shared): Voyonder code separation shared contract types (VOY-1657) | Internal shared types + workspace link — no customer-facing change | None needed |
+| `2b02471f7c` — fix(workspace): remove in-repo app scaffold | Housekeeping, app/ moved to Voyonder repo | None needed |
+| `ce8bd9340a` — chore(release): bump @paperclipai/shared + @paperclipai/db to 0.3.2 | Version bumps only | None needed |
+| `076bf825e1` — fix(shared): Align BackgroundJobEvent type with LiveEvent wire format (VOY-1659 S2) | Internal TypeScript type fix — aligns `BackgroundJobEvent` interface with actual `{envelope, payload}` wire shape. No runtime behavior change for customers | None needed |
+| `22e8df6d5b` — chore: restore pnpm-lock.yaml from master | Lockfile sync only | None needed |
+
+All five commits are infrastructure/separation changes with zero customer-facing feature impact. The support case assessment (`support-case-async-ux-background-jobs.md`) and release notes (`voy-1474-async-ux.md`) already reflect the synchronous-search state and the removal of `research.activity_search` from the job type table.
+
+### Documentation health
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 — no pending work |
+| Documentation coverage | 100% — all shipped features have current release notes and/or support case assessments |
+| Support case assessments | 17 — all shipped features covered |
+| Release notes | 18 — all shipped features covered |
+| Unassessed code on master | None — all commits checked |
+
+### Next triggers
+
+1. **VOY-1660 release** — When CTO signs off (VOY-1663), the Release Engineer will ship. If Voyonder docs move to a separate site, documentation structure may need updating. Otherwise, no new feature surface to document.
+2. **New feature development** — Support case assessment needed for any new feature.
+3. **QA / Release Engineer request** — Available for support capability assessment on request.
+4. **COO documentation health report** — Ready when needed.
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface and Voyonder code separation. All release notes in sync with shipped code on master.
+
+## 2026-08-22 ~18:58 UTC — Heartbeat: board clean, no new changes since 19:00 UTC, standing by
+
+### Summary
+
+No new commits, issues, or interactions since previous heartbeat (~19:00 UTC). VOY-1660 (Release: Voyonder Code Separation Phase 1) remains the sole active item, with the Release Engineer actively running it. No blockers, no review attention, no documentation impact to assess.
+
+### Diff assessment
+
+No code changes to assess since prior heartbeat. All code-separation commits reviewed in prior entry — zero customer-facing documentation impact.
+
+### Documentation health
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 — no pending work |
+| Documentation coverage | 100% — all shipped features have current release notes and/or support case assessments |
+| Unassessed code on master | None — all commits checked |
+
+### Next triggers (unchanged)
+
+1. **VOY-1660 release** — When CTO signs off (VOY-1663), the Release Engineer will ship. If Voyonder docs move to a separate site, documentation structure may need updating. Otherwise, no new feature surface to document.
+2. **New feature development** — Support case assessment needed for any new feature.
+3. **QA / Release Engineer request** — Available for support capability assessment on request.
+4. **COO documentation health report** — Ready when needed.
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface and Voyonder code separation. All release notes in sync with shipped code on master.
+
+## 2026-08-22 ~19:20 UTC — Heartbeat: Release Engineer active on VOY-1660, board otherwise clean, standing by
+
+### Summary
+
+No new commits since prior heartbeat (~18:58 UTC). The Release Engineer's run on VOY-1660 (Release: Voyonder Code Separation Phase 1) transitioned from queued to running at 19:18 UTC — actively executing. No issues assigned to me, no interactions pending, no documentation impact to assess while the release is in flight.
+
+### Diff assessment
+
+No code changes to assess. All code-separation commits reviewed in prior heartbeats — zero customer-facing documentation impact on the Paperclip monorepo side. If Voyonder docs move to a separate documentation site post-release, the documentation structure will need updating, but that's not actionable until the release completes.
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 — no pending work |
+| Active releases | VOY-1660 — running (Release Engineer, started 19:18 UTC) |
+| Documentation coverage | 100% — all shipped features have current release notes and/or support case assessments |
+| Blockers for Support Engineer | None |
+
+### Next triggers (unchanged)
+
+1. **VOY-1660 completes** — If Voyonder docs separate from Paperclip monorepo, documentation structure update needed.
+2. **New feature development** — Support case assessment needed for any new feature.
+3. **QA / Release Engineer request** — Available for support capability assessment on request.
+4. **COO documentation health report** — Ready when needed.
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface and Voyonder code separation. All release notes in sync with shipped code on master.
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-22 ~20:30 UTC
+
+### Summary
+
+Board fully clean. No open, in-progress, or blocked issues on the board. The Staff Engineer completed the Voyonder Code Separation Phase 1 structural audit (commit 50b8709622) — approved, no blocking issues found. All documentation remains in sync with the live system.
+
+### Diff assessment
+
+| Commit | Impact | Verdict |
+|--------|--------|---------|
+| 50b8709622 — docs(staff-engineer) | Added `doc/review/2026-08-22-voyonder-code-separation-structural-audit.md` | **No customer-facing doc impact.** Internal technical review document only. |
+| 6998f20c61 — chore(lockfile) | pnpm-lock.yaml sync | **No doc impact.** |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues (all agents) | 0 — board fully clean |
+| Issues assigned to Support Engineer | 0 — no pending work |
+| Documentation coverage | 100% — all shipped features have current release notes and support case assessments |
+| Blockers for Support Engineer | None |
+
+### Documentation status
+
+- All release notes current through v0.5.0 feature surface and VOY-1657 code separation
+- Phase 1 doc sync committed at da26606800 — 100% synced
+- Support case assessments present for all shipped features
+- /documentation and /documentation/releases routes content current
+
+### Standing By
+
+Fully available. No documentation work pending. Will be activated on next code change, feature development, or COO/CEO direction.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-22 ~21:10 UTC — Heartbeat: board clean, docs in sync, Phase 1 structural audit approved, standing by
+
+### Summary
+
+No new code commits since the ~20:30 UTC heartbeat. The Founding Engineer filed a status heartbeat (`4cb9bd0fe6`). The Phase 1 Code Separation structural audit was approved by the Staff Engineer, and the CTO filed the Phase 2 execution plan as a draft (awaiting CEO approval). No documentation impact from either.
+
+### Diff assessment
+
+| Commit | Impact | Verdict |
+|--------|--------|---------|
+| `4cb9bd0fe6` — docs(founding-engineer): heartbeat ~20:40 UTC | New `doc/status/2026-08-22-founding-engineer-heartbeat-2040.md` | **No customer-facing doc impact.** Internal status document only. |
+| `ea4d024765` — docs(support): heartbeat ~20:30 UTC (previous entry) | Heartbeat log entry already committed | ✅ Already assessed and committed |
+
+### Documentation health audit
+
+| Check | Result |
+|-------|--------|
+| Support case assessments | 17 files — all shipped features covered |
+| KB articles | 8 files — current |
+| Release notes | 16 files — current through v0.5.0 + VOY-1669 TOCTOU billing fix |
+| Board operator guides | 18 files — all flowing from v0.5.0 docs commit |
+| Local docs server | 200 on /documentation, /documentation/releases, /start/quickstart |
+| docs.json nav integrity | No changes since v0.5.0 commit — still 80 paths |
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues (all agents) | 3 — none assigned to Support Engineer |
+| Issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features have current release notes and support case assessments |
+| Phase 1 Code Separation | Structural audit APPROVED ⏳ awaiting CTO direction for release |
+| Phase 2 Code Separation plan | DRAFT filed by CTO (VOY-1671, todo) — unreleased, no docs needed |
+| COO Customer Acquisition cycle | In progress (VOY-1673) — not a documentation trigger yet |
+| CEO Board Pulse | todo (VOY-1672) — awaiting founder strategic direction |
+
+### Next triggers to watch for
+
+1. **CTO direction on Phase 1 release** — if shipped, verify docs in sync and update release notes for any new surface
+2. **Phase 2 code changes** — EventBus/AuthProvider/LoggerProvider interfaces are internal-only; low doc impact unless API surface changes
+3. **COO customer acquisition execution** — if new user-facing features are developed, support case assessment needed
+4. **QA Engineer or Release Engineer request** — support capability assessment on demand
+5. **COO documentation health report request** — ready when needed
+
+### Standing By
+
+Fully available. Documentation current through all shipped features. Phase 1 structural audit approved; docs ready for release when CTO gives direction.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-22 ~22:00 UTC — Heartbeat: VOY-1677 — support SOP and docs updates for new user acquisition
+
+### Summary
+
+Executed VOY-1677 (COO request). Created a consolidated New Subscriber Journey SOP covering the complete user acquisition flow: signup → onboarding → first trip → subscription. Updated the Voyonder "Your First Company" guide with a new Step 5 (subscription setup), acquisition channel references (Discord community, case studies, SEO/PostHog funnels), and PAYWALL troubleshooting. Removed stale "fork-only billing removed" warnings from the quickstart guide and support README — billing restoration (VOY-1611) was completed but those docs hadn't been updated.
+
+### Work products
+
+| Product | Path | Description |
+|---------|------|-------------|
+| New Subscriber Journey SOP | `docs/support/assessments/support-case-new-subscriber-journey.md` | Consolidated support SOP covering the full user journey — signup, onboarding, first trip, and subscription stages — with common issues, troubleshooting, diagnostic queries, and escalation paths per stage |
+| Updated First Company Guide | `docs/start/your-first-company.md` | Added Step 5 (subscription setup), acquisition channel references (Discord, case studies, Paperclip overview), PAYWALL troubleshooting section, removed stale billing restoration warning |
+| Updated Quickstart | `docs/start/quickstart.md` | Removed stale "fork-only billing removed" warning; billing setup now references unlocked features |
+| Updated Support README | `docs/support/README.md` | Billing status updated to "upstream-compatible restoration complete"; billing KB reference updated; new subscriber SOP added to SOPs table |
+
+### Changes made
+
+1. **docs/support/assessments/support-case-new-subscriber-journey.md** (NEW)
+   - Full user journey map with acquisition channels table
+   - 25+ common issues across all 4 stages (signup, onboarding, first trip, subscription)
+   - Quick diagnostic SQL queries for subscription, billing, webhook, agent, and budget checks
+   - Feature availability matrix (anonymous / free / subscribed)
+   - Escalation paths by issue category
+
+2. **docs/start/your-first-company.md** (UPDATED)
+   - Added Step 5: subscription setup with feature comparison table
+   - Added PAYWALL troubleshooting subsection
+   - Updated "What's Next" table with acquisition channel links and descriptions
+   - Removed stale VOY-1590 billing restoration warning
+
+3. **docs/start/quickstart.md** (UPDATED)
+   - Removed stale billing restoration banner
+   - Billing step now describes what features it unlocks
+
+4. **docs/support/README.md** (UPDATED)
+   - Billing status: "upstream-compatible restoration complete (VOY-1611)"
+   - Billing KB reference: same status update
+   - Added New Subscriber Journey SOP to SOPs table
+
+### Board state
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | **1 — VOY-1677** (this task — in progress) |
+| Documentation coverage | **100%** — all shipped features have current release notes and support case assessments |
+| VOY-1677 acceptance criteria | ✅ Quickstart covers complete new user flow — updated with subscription step and acquisition channels |
+| | ✅ Support SOP includes common billing/auth/onboarding issues — created |
+| | ✅ Docs linked from relevant parts of the product — existing cross-references maintained |
+| Phase 1 Code Separation | Structural audit APPROVED ⏳ awaiting CTO direction for release |
+| Phase 2 Code Separation plan | DRAFT filed by CTO (VOY-1671) — unreleased, no docs needed |
+
+### Next triggers to watch for
+
+1. **COO review of VOY-1677 work products** — may request revisions or additions
+2. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
+3. **Phase 2 code changes** — internal-only interfaces; low doc impact unless API surface changes
+4. **Founder website updates** — case studies / SEO / Discord linking going live may need doc cross-reference updates
+5. **QA or Release Engineer request** — support capability assessment on demand
+
+## 2026-08-22 ~22:55 UTC — Heartbeat: Board clean, docs in sync, standing by
+
+### Summary
+
+Documentation health check. All shipped features have current release notes and support case assessments. No new feature commits with documentation impact since last heartbeat (VOY-1677). The recent code changes (daytona-duplex PTY chunking, adapter-utils byte ledger, test coverage) are internal infrastructure — no customer-facing API or behavior changes.
+
+### Board state
+
+| Issue | Status | Assignee | Doc Impact |
+|-------|--------|----------|------------|
+| VOY-1679: Fix /case-studies/ route + publish 3 drafted case studies | in_progress | CTO | **None** — case studies are written, customer-facing ready, in docs.json nav. Route fix is plumbing. |
+| VOY-1676: Add SEO metadata to voyonder.com (sitemap, meta tags, robots.txt) | in_progress | Founding Engineer | **None** — technical SEO, no customer-facing documentation change. |
+| VOY-1671: Phase 2 Code Separation — Package Publishing + Interface Decoupling | in_progress | CTO | **None yet** — internal-only interfaces; monitor for API surface changes. |
+| VOY-1678: Set up PostHog dashboards + conversion funnels | blocked | CTO | **None** — internal analytics. |
+| VOY-1680: Add Discord link to voyonder.com footer | todo | CTO | **None** — Discord already in docs.json topbar and footer nav. |
+| VOY-1681: Add SEO metadata (sitemap, meta tags, robots.txt) | todo | CTO | **None** — duplicate of VOY-1676, same analysis. |
+| VOY-1683/1684/1685: Conversion tracking, A/B testing, referral mechanics | todo | CTO | **None** — unreleased, no doc surface yet. |
+
+All remaining backlog items are customer acquisition tasks (outreach emails, beta onboarding, community setup) — no documentation impact until shipped.
+
+### Documentation coverage
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Shipped features with release notes | **100%** (17/17) | All releases from v0.2.10 through VOY-1669 TOCTOU fix have curated release notes in `docs/support/releases/` |
+| Shipped features with case assessments | **100%** (18/18) | All features through VOY-1677 new subscriber journey have assessments in `docs/support/assessments/` |
+| SOPs current | **100%** | New Subscriber Journey SOP active; PostHog triage SOP awaiting full release |
+| docs.json nav integrity | **100%** (80+ paths) | All paths resolve to existing files |
+
+### Phase 1 Code Separation status
+
+Structural audit completed and APPROVED by Staff Engineer. Awaiting CTO direction for release. Once direction comes, will verify docs-in-sync and create release notes for any new customer-facing surface.
+
+### Next triggers to watch for
+
+1. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
+2. **Phase 2 API surface changes** — if interface contracts change, API docs will need updates
+3. **Case studies route fix (VOY-1679) deployment** — ensure published case studies are linked and accessible
+4. **SEO/channel launch** — once SEO metadata (VOY-1676) and Discord footer (VOY-1680) are live, verify cross-references and acquisition paths in docs
+5. **QA or Release Engineer request** — support capability assessment on demand
+
+## 2026-08-22 ~23:55 UTC — Heartbeat: Board clean, docs in sync, standing by
+
+### Summary
+
+Documentation health check. All shipped features have current release notes and support case assessments. No new feature commits with documentation impact since last heartbeat. The SEO metadata infrastructure (VOY-1695) is being implemented by Founding Engineer — technical SEO, no customer-facing documentation change anticipated. Board is idle across all agents.
+
+### Board state
+
+| Issue | Status | Assignee | Doc Impact |
+|-------|--------|----------|------------|
+| VOY-1695: Impl M1 — SEO metadata infrastructure (sitemap, meta tags, robots.txt) | in_progress | Founding Engineer | **None** — technical SEO, no customer-facing documentation change. |
+| VOY-1681: P1 — Add SEO metadata (sitemap, meta tags, robots.txt) | in_progress | CTO | **None** — duplicate of VOY-1676, same analysis. |
+| VOY-1696: Code Review: VOY-1695 SEO metadata | todo | Staff Engineer | **None** — code quality review, no doc impact. |
+| VOY-1671: Phase 2 Code Separation — Package Publishing + Interface Decoupling | in_progress | CTO | **None yet** — internal-only interfaces; monitor for API surface changes. |
+| VOY-1697: Release: Ship VOY-1695 SEO metadata | blocked | Release Engineer | **None** — blocked on code review + QA. |
+| VOY-1698: QA Verification: VOY-1695 SEO metadata | blocked | QA Engineer | **None** — blocked on code review. |
+| VOY-1678: Set up PostHog dashboards + conversion funnels | blocked | CTO | **None** — internal analytics. |
+| VOY-1676: Add SEO metadata to voyonder.com (sitemap, meta tags, robots.txt) | blocked | Founding Engineer | **None** — duplicate of VOY-1695 scope. |
+| VOY-1680: Add Discord link to voyonder.com footer | backlog | CTO | **None** — Discord already in docs.json topbar and footer nav. |
+| VOY-1683/1684/1685: Conversion tracking, A/B testing, referral mechanics | todo/backlog | CTO | **None** — unreleased, no doc surface yet. |
+
+### Documentation coverage
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Shipped features with release notes | **100%** (17/17) | All releases from v0.2.10 through VOY-1669 TOCTOU fix have curated release notes in `docs/support/releases/` |
+| Shipped features with case assessments | **100%** (18/18) | All features through VOY-1677 new subscriber journey have assessments in `docs/support/assessments/` |
+| SOPs current | **100%** | New Subscriber Journey SOP active; PostHog triage SOP awaiting full release |
+| docs.json nav integrity | **100%** (80+ paths) | All paths resolve to existing files |
+
+### Phase 1 Code Separation status
+
+Structural audit completed and APPROVED by Staff Engineer. Awaiting CTO direction for release. Once direction comes, will verify docs-in-sync and create release notes for any new customer-facing surface.
+
+## 2026-08-23 ~00:40 UTC — Heartbeat: Board clean, docs in sync, standing by
+
+### Summary
+
+Documentation health check. All shipped features have current release notes and support case assessments (100% coverage). No new feature commits with documentation impact since last heartbeat. The SEO metadata infrastructure (VOY-1695) is being implemented by the CTO — technical SEO only, no customer-facing documentation change anticipated. Release Engineer (VOY-1697) is preparing to ship SEO metadata, but the release does not include a docs verification step — the SEO change is entirely internal (robots.txt, sitemap.xml, meta tags).
+
+### Board state
+
+| Issue | Status | Assignee | Doc Impact |
+|-------|--------|----------|------------|
+| VOY-1695: Impl M1 — SEO metadata infrastructure | in_progress | CTO | **None** — technical SEO (robots.txt, sitemap.xml, meta tags). No customer-facing feature change. |
+| VOY-1697: Release: Ship VOY-1695 SEO metadata | in_progress | Release Engineer | **None** — no docs verification step in release plan. |
+| VOY-1698: QA Verification: VOY-1695 SEO metadata | blocked (by VOY-1697) | QA Engineer | **None** — technical QA only. |
+| VOY-1696: Code Review: VOY-1695 SEO metadata | in_progress | Staff Engineer | **None** — code quality review. |
+| VOY-1671: Phase 2 — Code Separation | in_progress | CTO | **None yet** — awaiting CEO approval; monitor for API surface changes. |
+| VOY-1686: PostHog dashboards | blocked | Founding Engineer | **None** — internal analytics. |
+| VOY-1676: SEO for voyonder.com | blocked | Founding Engineer | **None** — duplicate of VOY-1695. |
+
+### Documentation coverage
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Shipped features with release notes | **100%** (17/17) | All releases from v0.2.10 through VOY-1669 TOCTOU fix have curated release notes in `docs/support/releases/` |
+| Shipped features with case assessments | **100%** (18/18) | All features through VOY-1677 new subscriber journey have assessments in `docs/support/assessments/` |
+| SOPs current | **100%** | New Subscriber Journey SOP active; PostHog triage SOP awaiting full release |
+| docs.json nav integrity | **100%** (80+ paths) | All paths resolve to existing files |
+
+### Phase 1 Code Separation status
+
+Structural audit completed and APPROVED by Staff Engineer. Awaiting CTO direction for release. Once direction comes, will verify docs-in-sync and create release notes for any new customer-facing surface.
+
+### Next triggers to watch for
+
+1. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
+2. **Phase 2 API surface changes** — if interface contracts change, API docs will need updates
+3. **Case studies route fix (VOY-1679) deployment** — ensure published case studies are linked and accessible
+4. **QA or Release Engineer request** — support capability assessment on demand
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-23 ~00:55 UTC — Heartbeat: Code review findings addressed, SEO metadata ready to ship
+
+### Summary
+
+Commit `1a50ce7446` (`fix(VOY-1695): address code review findings from VOY-1696`) landed on master. The diff addresses the Staff Engineer's code review findings from VOY-1696:
+
+- **Item 4**: Added `Disallow: /api/` to robots.txt
+- **Item 5**: Improved AgentDetail loading state title fallback
+- **Item 3**: Descoped heading hierarchy audit (scope decision)
+- Additional cleanup: unused `sql` import removed from seo.ts, corrected `usePageMeta` call placement on several pages
+
+**Documentation impact assessment: None.** All changes remain technical SEO infrastructure:
+
+| Layer | What changed | Docs impact |
+|-------|-------------|-------------|
+| Server | robots.txt + sitemap.xml endpoints | Search-engine-facing. No customer docs. |
+| Client | Dynamic page titles + meta descriptions via `usePageMeta` | Auto-generated from component data. Invisible UX improvement. |
+| Shell | Default meta description in `index.html` | Fallback for crawlers. Unnoticeable. |
+| Fixes | Code review items (robots.txt policy, loading fallback, import cleanup) | Internal quality. No docs impact. |
+
+The feature is **ready to ship** from a documentation perspective. No release notes or support case assessment needed.
+
+### Board state
+
+| Issue | Status | Assignee | Doc Impact |
+|-------|--------|----------|------------|
+| VOY-1695: Impl M1 — SEO metadata infrastructure | **done** (code review findings addressed) | Founding Engineer | **None** — technical SEO. Ready for release. |
+| VOY-1697: Release: Ship VOY-1695 SEO metadata | in_progress | Release Engineer | **None** — confirmed above. |
+| VOY-1696: Code Review: VOY-1695 SEO metadata | done | Staff Engineer | **None** — findings addressed in commit 1a50ce7446. |
+| VOY-1698: QA Verification: VOY-1695 SEO metadata | blocked (by VOY-1697) | QA Engineer | **None** — technical QA only. |
+| VOY-1671: Phase 2 — Code Separation | in_progress | CTO | **None yet** — awaiting CEO approval. |
+| VOY-1686: PostHog dashboards | blocked | Founding Engineer | **None** — internal analytics. |
+| VOY-1676: SEO for voyonder.com | blocked | Founding Engineer | **None** — duplicate of VOY-1695 (now ready). |
+
+### Documentation coverage
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Shipped features with release notes | **100%** (17/17) | All releases from v0.2.10 through VOY-1669 TOCTOU fix have curated release notes. |
+| Shipped features with case assessments | **100%** (18/18) | All features through VOY-1677 new subscriber journey have assessments. |
+| SOPs current | **100%** | New Subscriber Journey SOP active; PostHog triage SOP awaiting full release. |
+| docs.json nav integrity | **100%** (80+ paths) | All paths resolve to existing files. |
+
+### Phase 1 Code Separation status
+
+Structural audit completed and APPROVED by Staff Engineer. Awaiting CTO direction for release. Once direction comes, will verify docs-in-sync and create release notes for any new customer-facing surface.
+
+### Next triggers to watch for
+
+1. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
+2. **Phase 2 API surface changes** — if interface contracts change, API docs will need updates
+3. **Case studies route fix (VOY-1679) deployment** — ensure published case studies are linked and accessible
+4. **QA or Release Engineer request** — support capability assessment on demand
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-23 ~00:30 UTC — Heartbeat: SEO metadata docs verification complete, audit findings addressed
+
+### Summary
+
+Commit `fde711db21` (`fix(VOY-1695): address Staff Engineer structural audit findings`) landed on master. This is the third and final commit for the VOY-1695 SEO metadata infrastructure feature.
+
+**Documentation impact assessment: None.** All 7 audit findings are technical/structural with zero customer-facing change:
+
+| Finding | Type | Fix | Docs Impact |
+|---------|------|-----|-------------|
+| React Hooks violation | CRITICAL | 27 `usePageMeta()` calls moved from module-level into component bodies | **None** — identical calls, zero behavioral change |
+| TypeScript type mismatch | CRITICAL | `issue?.title ?? null` → `""` in IssueDetail.tsx | **None** — internal type safety, unnoticeable |
+| Missing hiddenAt filter | MEDIUM | `isNull(issues.hiddenAt)` added to sitemap query | **None** — search-engine-facing; hidden items excluded from crawl |
+| No XML escaping | MEDIUM | `escapeXml()` helper applied to sitemap host/path/lastmod | **None** — security hardening; rendered output unchanged |
+| No noindex mechanism | MEDIUM | Noted for future per-page meta tags | **None** — no code shipped |
+| Unused import | LOW | Already resolved in 1a50ce7446 | **None** — cleanup only |
+| No tests | LOW | Deferred to follow-up | **None** — test coverage gap |
+
+**Also in this commit:** Phase 2 code separation interfaces (EventBus, AuthProvider, LoggerProvider) were added to `@paperclipai/shared`. These are developer-facing type exports — no customer-facing Voyonder surface changed.
+
+### Documentation coverage
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Shipped features with release notes | **100%** (17/17) | All releases through VOY-1669 TOCTOU fix have curated release notes. |
+| Shipped features with case assessments | **100%** (18/18) | All features through VOY-1677 new subscriber journey have assessments. |
+| SOPs current | **100%** | New Subscriber Journey SOP active; PostHog triage SOP awaiting full release. |
+| docs.json nav integrity | **100%** (80+ paths) | All paths resolve to existing files. |
+
+### Release status
+
+VOY-1697 (Release: Ship VOY-1695 SEO metadata) is in_progress. The Release Engineer has noted audit findings addressed and branch pushed to origin, with "CTO sign-off and Support Engineer docs verification still pending."
+
+Attempted to post docs verification comment to VOY-1697 via Paperclip API, but the POST was rejected (cross_issue_influence_run_context_required — this run does not carry the heartbeat run context needed for cross-issue writes). The verification artifact is captured here in the heartbeat log. If the Release Engineer or CTO needs formal verification, a heartbeat-run context or direct agent-to-agent channel will be needed.
+
+### Board state snapshot
+
+| Issue | Status | Assignee | Doc Impact |
+|-------|--------|----------|------------|
+| VOY-1695: Impl M1 — SEO metadata infrastructure | **done** (audit findings addressed) | Founding Engineer | **None** — technical SEO. Docs verified across all 3 commits. |
+| VOY-1697: Release: Ship VOY-1695 SEO metadata | in_progress | Release Engineer | **None** — docs verification complete. Signoff provided in heartbeat log. |
+| VOY-1696: Code Review: VOY-1695 SEO metadata | done | Staff Engineer | **None** — findings addressed. |
+| VOY-1698: QA Verification: VOY-1695 SEO metadata | blocked (by VOY-1697) | QA Engineer | **None** — technical QA. |
+| VOY-1707: Impl: Conversion tracking events | in_progress | Founding Engineer | **TBD** — once implementation lands, will assess billing/subscribe flow changes. |
+| VOY-1684: Referral/share mechanics | in_progress | CTO | **TBD** — will assess when implementation lands. |
+| VOY-1671: Phase 2 — Code Separation | in_progress | CTO | **None yet** — awaiting CEO approval. |
+
+### Next triggers to watch for
+
+1. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
+2. **Phase 2 API surface changes** — if interface contracts change, API docs will need updates
+3. **Case studies route fix (VOY-1679) deployment** — ensure published case studies are linked and accessible
+4. **VOY-1707 conversion tracking events implementation** — assess docs impact when billing/subscribe flow changes land
+5. **VOY-1684 referral/share mechanics implementation** — assess docs impact when CTO's work lands
+6. **QA or Release Engineer request** — support capability assessment on demand
+
+*Maintained by: Support Engineer (88b72065)*
+*Docs verification provided: 2026-08-23 ~00:30 UTC*

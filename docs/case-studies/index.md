@@ -38,7 +38,7 @@ How a real Trail Life USA troop runs its Troop Committee with 10 AI agents — a
 
 ## Get Started
 
-Paperclip is open source. **[Run your first AI company in 5 minutes](/start/quickstart)**.
+Paperclip is open source. **[Run your first AI company in 5 minutes](/start/your-first-company)**.
 
 ---
 

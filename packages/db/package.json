@@ -1,6 +1,6 @@
 {
   "name": "@paperclipai/db",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "license": "MIT",
   "homepage": "https://github.com/paperclipai/paperclip",
   "bugs": {
@@ -32,10 +32,8 @@
     "types": "./dist/index.d.ts"
   },
   "files": [
-    "dist"
-  ],
-  "bundleDependencies": [
-    "embedded-postgres"
+    "dist",
+    "!dist/**/*.sql"
   ],
   "scripts": {
     "check:migrations": "tsx src/check-migration-numbering.ts && tsx src/check-migration-safety.ts",
@@ -44,7 +42,8 @@
     "typecheck": "pnpm run check:migrations && tsc --noEmit",
     "generate": "pnpm run check:migrations && pnpm run clean && tsc -p tsconfig.json && drizzle-kit generate",
     "migrate": "pnpm run check:migrations && tsx src/migrate.ts",
-    "seed": "tsx src/seed.ts"
+    "seed": "tsx src/seed.ts",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@paperclipai/shared": "workspace:*",

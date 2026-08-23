@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Pause, Play, RotateCcw } from "lucide-react";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   TASK_CHAT_STATE_LIST,
   type TaskChatStateId,
@@ -153,6 +154,7 @@ const BUBBLE_VARIANTS = [
 type BubbleVariantId = (typeof BUBBLE_VARIANTS)[number]["id"];
 
 export function TaskChatLab() {
+  usePageMeta("Task Chat UX Lab", "UX lab for task chat state visualizations.");
   const [selected, setSelected] = useState<TaskChatStateId>("agent-message");
   const [bubbleVariant, setBubbleVariant] = useState<BubbleVariantId>("");
   const [speed, setSpeed] = useState(1);

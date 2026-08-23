@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input";
 import { CaseCopyableToken } from "@/components/CaseIdentifierKey";
 import { hasBlockingShortcutDialog, isKeyboardShortcutTextInputTarget } from "@/lib/keyboardShortcuts";
 import { cn, relativeTime } from "@/lib/utils";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 type GroupBy = "type" | "project" | "status" | "none";
 type CaseColumn = "id" | "key" | "title" | "status" | "updated" | "created" | "type" | "project" | "parent";
@@ -740,6 +741,7 @@ function CasesEmptyHero() {
 }
 
 export function Cases() {
+  usePageMeta("Cases", "Browse and manage pipeline cases.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { keyboardShortcutsEnabled } = useGeneralSettings();

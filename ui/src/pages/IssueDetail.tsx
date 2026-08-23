@@ -1,3 +1,4 @@
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode, type Ref } from "react";
 import { pickTextColorForPillBg } from "@/lib/color-contrast";
 import { Link, useLocation, useNavigate, useNavigationType, useParams } from "@/lib/router";
@@ -1770,6 +1771,12 @@ export function IssueDetail() {
     }),
     enabled: !!issueId,
   });
+  usePageMeta(
+    issue?.title ?? "",
+    issue?.title
+      ? `Task ${issue.identifier}: ${issue.title}`
+      : "Task detail",
+  );
   const resolvedCompanyId = issue?.companyId ?? selectedCompanyId;
   const externalObjectsState = useIssueExternalObjects(issue?.id ?? null);
   // A closed isolated workspace no longer blocks the composer. The server reopens

@@ -15,6 +15,7 @@ import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useCompany } from "@/context/CompanyContext";
 import { queryKeys } from "@/lib/queryKeys";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 const TYPE_LABELS: Record<NotificationType, string> = {
   review_requested: "Review requested",
@@ -75,6 +76,7 @@ function buildInitialDigest(
 
 export function NotificationPreferences() {
   const { setBreadcrumbs } = useBreadcrumbs();
+  usePageMeta("Notification Preferences", "Configure your notification preferences.");
   const { selectedCompanyId } = useCompany();
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);

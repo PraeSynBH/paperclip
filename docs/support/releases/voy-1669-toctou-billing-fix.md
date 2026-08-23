@@ -2,17 +2,17 @@
 title: P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 version: voy-1669
 date: 2026-08-22
-commit: b840497fab + 151f0a2066
-status: PENDING — merged to custom branch, awaiting PR merge via VOY-1673
+commit: e71139c430 + 80e981f72c
+status: RELEASED — merged to master via PR #67
 ---
 
 # P1-2 TOCTOU Billing Fix — Concurrent Subscription & Usage Race Elimination
 
-**Release:** VOY-1669 / VOY-1673
-**Commits:** `b840497fab`, `cd74f15ca8`, `151f0a2066`
+**Release:** VOY-1669 / VOY-1645 / PR #67
+**Commits:** `e71139c430` (VOY-1645 TOCTOU fix), `80e981f72c` (P2 stripe cast fix)
 **Date:** 2026-08-22
-**Status:** PENDING — merged to custom branch, awaiting PR merge via VOY-1673
-**Related issues:** VOY-1669, VOY-1671, VOY-1687, VOY-1673, VOY-1682
+**Status:** RELEASED — merged to master via PR #67
+**Related issues:** VOY-1645, VOY-1669, VOY-1671, VOY-1687, VOY-1673, VOY-1682
 
 ## Summary
 
@@ -95,7 +95,7 @@ No new configuration options. Existing `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_S
 - [x] `handleInvoicePaymentFailed` and `handleSubscriptionDeleted` wrapped in `db.transaction()`
 - [x] VOY-1687: Idempotency key on `stripe.subscriptions.create()`
 - [x] Code reviewed by Staff Engineer, CTO approval gate
-- [ ] Merged to main via PR #63 (VOY-1673) — **BLOCKED** (CI infrastructure failures + missing formal GitHub reviews)
+- [x] Merged to master via PR #67 (admin merge per CEO authorization)
 
 ## Support Escalation Path
 

@@ -701,6 +701,7 @@ export const LIVE_EVENT_TYPES = [
     "plugin.worker.crashed",
     "plugin.worker.restarted",
     "subscription.status.updated",
+    "background_job.status",
 ];
 export const PRINCIPAL_TYPES = ["user", "agent"];
 export const MEMBERSHIP_STATUSES = ["pending", "active", "suspended", "archived"];

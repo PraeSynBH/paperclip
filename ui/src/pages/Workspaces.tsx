@@ -13,6 +13,7 @@ import { useCompany } from "../context/CompanyContext";
 import type { ProjectWorkspaceSummary } from "../lib/project-workspaces-tab";
 import { queryKeys } from "../lib/queryKeys";
 import { projectRouteRef } from "../lib/utils";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 type ProjectWorkspaceGroup = {
   projectId: string;
@@ -77,6 +78,7 @@ function buildProjectWorkspaceGroups(items: WorkspaceOverviewItem[]): ProjectWor
 }
 
 export function Workspaces() {
+  usePageMeta("Workspaces", "Manage execution and development workspaces.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const experimentalSettingsQuery = useQuery({

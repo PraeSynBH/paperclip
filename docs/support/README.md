@@ -17,7 +17,7 @@ This directory contains support case assessments for Paperclip features. Each do
 | Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
 | Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Aug 18, 2026 (PR #48) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
 | Knowledge Starter Packs — curated KB document bundles installed with company templates or via standalone API | v0.5.0 | Aug 18, 2026 (PR #48) | [Starter Packs](assessments/support-case-knowledge-starter-packs.md) + [API](/api/knowledge-starter-packs) |
-| Billing System — Stripe subscriptions, usage, invoices (trust boundary hardened) | v0.4.0+v0.5.0 | **Fork-only impl removed 2026-08-21; upstream-compatible restoration in progress (VOY-1590)** | [Billing](assessments/support-case-billing-system.md) + [API](/api/billing) — both flagged |
+| Billing System — Stripe subscriptions, usage, invoices (trust boundary hardened) | v0.4.0+v0.5.0 | **Upstream-compatible restoration complete (VOY-1611).** API contracts unchanged from fork-specific implementation. | [Billing](assessments/support-case-billing-system.md) + [API](/api/billing) |
 | Notification System — 5 types, 3 channels, digests, dedup (idempotency hardened) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Notification](assessments/support-case-notification-system.md) + [API](/docs/api/notifications) |
 | Company Templates — one-click company deploy (production-stable) | v0.4.0+v0.5.0 | Aug 18, 2026 (PR #48) | [Templates](assessments/support-case-company-templates.md) + [API](/docs/api/company-templates) |
 | VOY-1367 Security Hardening — billing trust boundary, memory indexes, notification dedup, marketplace auth, watchdog fix | v0.5.0 | Aug 18, 2026 (PR #48) | [Release note](releases/v0.5.0-phase-1.md) |
@@ -47,14 +47,15 @@ This directory contains support case assessments for Paperclip features. Each do
 | [Manager-Chain Issue Permissions](kb/authorization-manager-chain-grant.md) | Managers can comment on and mutate issues assigned to agents in their reporting subtree | `f09cf3bc6e` | VOY-1264 |
 | [Recovery Phantom-Park-and-Revalidate](kb/recovery-phantom-park-protocol.md) | Recovery system temporarily parks terminal issues for recovery action execution | `7f84af039b` | RBR-921/RBR-953 |
 | [Heartbeat Max Concurrent Runs Enforcement](kb/heartbeat-max-concurrent-runs.md) | `tickTimers` checks maxConcurrentRuns before enqueueing | `b9d5299816` | PRA-553 |
-| [Billing Downgrade-to-Free on Cancellation](kb/billing-cancellation-downgrade.md) | Subscription cancellation downgrades tier on next login — **fork-only impl removed 2026-08-21; restoration in progress (VOY-1590)** | `83a1cee` | VOY-944 |
+| [Billing Downgrade-to-Free on Cancellation](kb/billing-cancellation-downgrade.md) | Subscription cancellation downgrades tier on next login — **upstream-compatible restoration complete (VOY-1611)** | `83a1cee` | VOY-944 |
 | [Child-Only Blocker Reclassification](kb/blocker-attention-child-only-classification.md) | Blocked issues with only child blockers now show `needs_attention` | `6b0b118367`+`7f84af039b` | RBR-824 |
 | [DB Health Watchdog](kb/db-health-watchdog.md) | Embedded PG health probe behavior, restart gates, external-mode differences, and env-var configuration | `cd7f9d21db`+`36d152f5d2` | P0-B / PRA-1051 |
 
 ## Standard Operating Procedures
 
 | Document | Covers | Status |
-|---|---|---|
+|---------|--------|--------|
+| [New Subscriber Journey SOP](assessments/support-case-new-subscriber-journey.md) | **Primary SOP** — Complete support reference for the full user journey: signup → onboarding → first trip → subscription. Covers common issues, troubleshooting, escalation paths, acquisition channels, and feature availability by user type. | **Active** — v0.5.1 — Updated for public acquisition channels (VOY-1677) |
 | [PostHog Monitoring Triage](posthog-error-monitoring-triage-sop.md) | SOP for triaging PostHog error issues auto-created by the monitor + business event telemetry (approvals, notification digests) | Implementation landed (83db54a); business events landed (VOY-1420); awaiting full release |
 
 ## Planned Assessments
@@ -107,5 +108,4 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-22 ~07:55 UTC — VOY-1684 docs review complete: release note status updated to SHIPPED, support case assessment items 6-10 updated for P2-1 transaction wrapping, idempotency key, and concurrency test coverage. TOCTOU billing fix entry added to release notes table.*
-*Maintained by: Support Engineer (88b72065)*
+*Last updated: 2026-08-22 ~22:30 UTC — VOY-1677 docs update: New Subscriber SOP promoted to primary SOP with quick-reference guide, acquisition channels updated for public launch, quickstart reorganized cloud-first, case studies index link fixed. Support Engineer (88b72065).*

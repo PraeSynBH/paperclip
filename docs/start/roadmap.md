@@ -95,4 +95,5 @@ The full detailed roadmap (including community contribution policy and milestone
 
 - [Release Notes](/releases) — what shipped in each release
 - [FAQ](/start/faq) — frequently asked questions
-- [Quickstart](/start/quickstart) — get started in 5 minutes
+- [Quickstart](/start/quickstart) — self-hosted setup guide
+- **[Run Your First AI Company](/start/your-first-company)** — get started in 5 minutes (cloud)

@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   Dialog,
   DialogContent,
@@ -227,6 +228,7 @@ function RecoveryPreviewDialog({
 }
 
 export function InstanceExperimentalSettings() {
+  usePageMeta("Experimental Settings", "Configure experimental instance features.");
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);

@@ -35,6 +35,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { parsePlanMetadata } from "../lib/plan-metadata";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -69,6 +70,7 @@ function milestoneProgress(metadata: PlanMetadata | null): {
 // ─── Page ───────────────────────────────────────────────────────────────────
 
 export function Plans() {
+  usePageMeta("Plans", "View and manage plans and strategies.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const [search, setSearch] = useState("");

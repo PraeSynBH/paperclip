@@ -11,6 +11,7 @@ import { IssueStatusBadge } from "../components/StatusBadge";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { useCompany } from "../context/CompanyContext";
 import { queryKeys } from "../lib/queryKeys";
+import { usePageMeta } from "../hooks/usePageMeta";
 import {
   formatCents,
   formatDate,
@@ -195,6 +196,7 @@ function UsageList({
 }
 
 export function UserProfile() {
+  usePageMeta("User Profile", "View user profile and activity.");
   const { userSlug = "" } = useParams<{ userSlug: string }>();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

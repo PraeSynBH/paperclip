@@ -27,11 +27,12 @@ bus so the UI `BackgroundProcessTray` can reflect them in real time.
 
 | Endpoint | Returns | Notes |
 |---|---|---|
-| `POST /api/research/search` | `{ job }` | Creates a keyword-first search job; upgrades to semantic via SSE |
-| `POST /api/research/autoAssess` | `{ job }` | Fire-and-forget assessment job |
-| `POST /api/research/export` | `{ job }` | Creates PDF or ICS export job |
-| `GET /api/background-jobs` | `BackgroundJob[]` | List — `dataUri` stripped (see below) |
-| `GET /api/background-jobs/:id` | `BackgroundJob` | Full result including `dataUri` |
+| `POST /api/companies/:companyId/research/search` | `{ query, results, total, semanticJobId }` | Keyword-first search — synchronous. If `semanticUpgrade: true`, enqueues a `research.semantic_search` job and returns its ID |
+| `POST /api/companies/:companyId/research/auto-assess` | `{ job }` | Fire-and-forget assessment job |
+| `POST /api/companies/:companyId/research/export/pdf` | `{ job }` | Creates PDF export job |
+| `POST /api/companies/:companyId/research/export/ics` | `{ job }` | Creates ICS export job |
+| `GET /api/companies/:companyId/background-jobs` | `BackgroundJob[]` | List — `dataUri` stripped (see below) |
+| `GET /api/companies/:companyId/background-jobs/:id` | `BackgroundJob` | Full result including `dataUri` |
 
 ### Result projection (slim mode)
 
@@ -108,11 +109,12 @@ Five job types are registered:
 
 | `jobType` | Processor | Description |
 |---|---|---|
-| `research.activity_search` | `researchSearchService.searchKeywordFirst` | Keyword search over issues, documents, activity |
 | `research.semantic_search` | `researchSearchService.upgradeSemanticResults` | Semantic ranking upgrade on keyword results |
 | `research.auto_assess` | `researchSearchService.autoAssess` | AI assessment of research items |
 | `export.pdf` | Inline PDFKit renderer | Generates a PDF, stores result as base64 `dataUri` |
 | `export.ics` | Inline iCalendar builder | Generates ICS calendar text |
+
+> **Note**: `research.activity_search` was removed during Voyonder code separation (Phase 1). Keyword search now runs synchronously — only the semantic upgrade runs as a background job. The constant `BACKGROUND_JOB_TYPES.RESEARCH_ACTIVITY_SEARCH` still exists for backward compatibility but no route creates jobs of this type.
 
 Unknown job types are immediately failed with "No processor registered".
 
@@ -176,9 +178,11 @@ workers never process the same job.
 | 2 | No worker health endpoint | Current design | Monitor via `background_jobs` table or tray UI |
 | 3 | Processor timeout does not cancel underlying work | Current design | The timeout fails the job but the processor continues running until completion or next await |
 | 4 | Stale-job sweep only runs at worker start | Current design | Restart the worker if stale jobs accumulate (e.g. after a crash) |
+| 5 | `research.activity_search` constant exists but no route creates jobs of this type | Dead code | The constant `BACKGROUND_JOB_TYPES.RESEARCH_ACTIVITY_SEARCH` is kept for backward compatibility; no removal scheduled |
 
 ## Version history
 
 | Date | Version | Changes |
 |---|---|---|
+| 2026-08-22 | v7 | `research.activity_search` removed (search now synchronous); route paths updated for code separation; S2-S4 concurrency fixes; Zod validation error handling; recursive retry → loop |
 | 2026-08-20 | v6 | Document emitEvent guard (triple-wrap), stale-job startup sweep, result projection (slim mode), terminal status guard |

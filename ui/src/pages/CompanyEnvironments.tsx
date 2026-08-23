@@ -47,6 +47,7 @@ import { isPlatformManagedEnvironment } from "@/lib/managed-sandbox-environment"
 import { queryKeys } from "@/lib/queryKeys";
 import { Link, useNavigate, useParams } from "@/lib/router";
 import { buildSameOriginWebSocketUrl } from "@/lib/websocket-url";
+import { usePageMeta } from "../hooks/usePageMeta";
 import {
   Field,
   ToggleField,
@@ -1261,6 +1262,7 @@ function EnvironmentImageTemplatePanel({
 }
 
 export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps) {
+  usePageMeta("Environments", "Configure runtime environments for your company.");
   const { environmentId: routeEnvironmentId } = useParams<{ environmentId?: string }>();
   const navigate = useNavigate();
   const { selectedCompanyId } = useCompany();

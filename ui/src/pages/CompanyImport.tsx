@@ -67,6 +67,7 @@ import {
   writeStoredImportJob,
 } from "../lib/import-job-watch";
 import { Badge } from "@/components/ui/badge";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 // ── Import-specific helpers ───────────────────────────────────────────
 
@@ -842,6 +843,7 @@ async function watchImportJob(
 // ── Main page ─────────────────────────────────────────────────────────
 
 export function CompanyImport() {
+  usePageMeta("Import Company", "Import data into your company.");
   const {
     selectedCompanyId,
     selectedCompany,

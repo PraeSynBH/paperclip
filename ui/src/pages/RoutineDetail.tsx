@@ -62,6 +62,7 @@ import {
   ActivitySection,
   HistorySection,
 } from "../components/routine-sections/operate-sections";
+import { usePageMeta } from "../hooks/usePageMeta";
 import type {
   RoutineDetail as RoutineDetailType,
   RoutineEnvConfig,
@@ -154,6 +155,7 @@ function buildRoutineMutationPayload(input: RoutineEditDraft) {
 }
 
 export function RoutineDetail() {
+  usePageMeta("Routine Detail", "View routine details and execution history.");
   const { routineId, section: sectionParam } = useParams<{ routineId: string; section?: string }>();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
