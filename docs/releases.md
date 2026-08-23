@@ -2,12 +2,28 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-22
+last_updated: 2026-08-23
 ---
 
 # Release Notes
 
 Paperclip ships continuously. This page documents each release to the main branch with curated, customer-facing notes.
+
+---
+
+## SEO Metadata Infrastructure (v0.4.1) — August 23, 2026
+
+[Full release notes →](/support/releases/v0-4-1-seo-metadata)
+
+### Highlights
+
+- **Dynamic Sitemap at `/sitemap.xml`** — Paperclip now generates a live XML sitemap listing active companies and public issue pages, serving it with proper caching headers. Search engines discover your content automatically.
+- **Custom Robots.txt** — `/robots.txt` tells crawlers to index public content while blocking `/api/` paths, keeping internal APIs out of search results.
+- **Per-Page Titles and Meta Descriptions** — Every page now has a descriptive browser tab title (e.g., "Dashboard — Paperclip", "Agent Detail — Paperclip") and key pages include search-result summaries via `<meta name="description">`.
+- **No Configuration Required** — SEO improvements are automatic and server-side. Companies hosting on Paperclip get search-engine-friendly pages without any setup.
+- **Graceful Degradation** — If the database is temporarily unavailable, the sitemap returns an empty listing (HTTP 200) instead of an error, preventing crawler retry storms.
+
+[Full release notes →](/support/releases/v0-4-1-seo-metadata)
 
 ---
 
