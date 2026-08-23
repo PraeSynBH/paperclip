@@ -10,6 +10,8 @@
 - **VOY-1671**: Fix `reportUsage` read-then-write race — convert SELECT-then-INSERT/UPDATE to atomic `INSERT ... ON CONFLICT DO UPDATE` upsert on unique constraint `(subscription_id, metric, period_start, period_end)`.
 - Wrap 7 additional Stripe API calls with `withStripeRetry` exponential-backoff resilience (cancelSubscription, reactivateSubscription, syncInvoicesFromStripe, reportUsage, createOrUpdateSubscription create/update paths).
 - Add concurrent billing concurrency test suite (7 tests covering FOR UPDATE serialisation, ON CONFLICT upsert, ON CONFLICT DO NOTHING, 5-concurrent usage upserts, unique constraint safety net).
+- **VOY-1685/VOY-1888**: Add M5 A/B pricing experiment — deterministic variant assignment (SHA-256), config-driven via `PRICING_EXPERIMENT_CONFIG` env var, tier overrides for variant B, experiment-variant and experiment-results API routes, and pricing page UX enhancements.
+- Add migration 0230: `pricing_experiment_variant` and `pricing_experiment_enrolled_at` columns to `companies` table.
 
 ## 0.3.1
 
