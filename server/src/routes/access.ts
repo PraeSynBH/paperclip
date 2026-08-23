@@ -55,8 +55,7 @@ import {
   notFound,
   unauthorized,
   badRequest,
-  tooManyRequests,
-  paywall,
+  tooManyRequests
 } from "../errors.js";
 import { getHiddenSettings } from "../services/settings-visibility.js";
 

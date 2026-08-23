@@ -99,7 +99,7 @@ function registerModuleMocks() {
     agentInstructionsService: () => mockAgentInstructionsService,
     accessService: () => mockAccessService,
     approvalService: () => mockApprovalService,
-    builtInAgentService: () => mockBuiltInAgentService,
+    builtInAgentService: () => ({ ensureCompanyDefaultAgentGrants: vi.fn() }),
     companySkillService: () => mockCompanySkillService,
     budgetService: () => mockBudgetService,
     logActivity: vi.fn(),

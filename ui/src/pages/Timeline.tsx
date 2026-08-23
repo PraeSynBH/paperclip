@@ -303,7 +303,6 @@ function TimelineSummaryStats({
   );
 }
 
-  usePageMeta("Work Timeline", "View the work timeline and activity history.");
 export function Timeline() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

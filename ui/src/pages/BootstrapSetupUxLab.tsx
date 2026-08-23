@@ -3,7 +3,6 @@ import { Loader2, ShieldCheck, Terminal, TriangleAlert } from "lucide-react";
 import { BOOTSTRAP_FALLBACK_COMMAND } from "@/bootstrapSetup";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { usePageMeta } from "@/hooks/usePageMeta";
 
 type LabFixtureKey =
   | "signed-out-private"
