@@ -1576,6 +1576,34 @@ export async function startServer(): Promise<StartedServer> {
     }, backupIntervalMs);
   }
   
+  // Trial expiry reaper: check every 30 minutes for expired trials.
+  // Marks trial subscriptions as past_due so feature gating blocks paid features.
+  const TRIAL_REAPER_INTERVAL_MS = 30 * 60 * 1000;
+  setInterval(() => {
+    import("./services/billing.js").then(({ billingService: bs }) => {
+      bs(db as any).expireTrials().then((count) => {
+        if (count > 0) {
+          logger.info({ count }, "Trial reaper expired subscriptions");
+        }
+      }).catch((err) => {
+        logger.error({ err }, "Trial reaper failed");
+      });
+    }).catch((err) => {
+      logger.error({ err }, "Trial reaper import failed");
+    });
+  }, TRIAL_REAPER_INTERVAL_MS).unref();
+
+  // Run once on startup too
+  import("./services/billing.js").then(({ billingService: bs }) => {
+    bs(db as any).expireTrials().then((count) => {
+      if (count > 0) {
+        logger.info({ count }, "Trial reaper expired subscriptions on startup");
+      }
+    }).catch((err: unknown) => {
+      logger.warn({ err }, "Trial reaper startup sweep failed (non-fatal)");
+    });
+  });
+
   // Wait for external adapters to finish loading before accepting requests.
   // Without this, adapter type validation (assertKnownAdapterType) would
   // reject valid external adapter types during the startup loading window.
