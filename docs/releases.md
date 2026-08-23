@@ -11,6 +11,30 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
+## M5 A/B Pricing Experiment — August 23, 2026
+
+**Status: Implementation complete. Awaiting Code Review and QA.**
+
+### Highlights
+
+- **Server-side A/B pricing test** — Companies are deterministically assigned to control (current pricing) or treatment (adjusted lower pricing) on first visit to the pricing page. Assignment is persisted — the same company always sees the same variant.
+- **Variant B pricing** — Lower entry price: Adventurer $19/mo ($190/yr), Explorer $69/mo ($690/yr), Elite $179/mo ($1,790/yr). All tiers reduced by $10-20/mo to reduce signup friction.
+- **Env-var controlled** — Experiment is enabled/disabled via `PRICING_EXPERIMENT_CONFIG` JSON environment variable. No deploy needed to toggle.
+- **Stripe metadata tracking** — Checkout sessions include `pricingExperimentVariant` metadata for per-variant conversion analysis in Stripe dashboard.
+- **Graceful fallback** — When experiment is disabled, all companies see control pricing. If variant B tier overrides are not configured, variant B falls back to control prices.
+- **Board-only results endpoint** — `GET /billing/experiment-results` provides per-variant enrollment counts and conversion stats.
+
+### Implementation
+
+- Migration `0230_pricing_experiment_columns.sql` adds experiment columns to companies table
+- `pricing-experiment.ts` service handles deterministic assignment (SHA-256), config parsing, tier overrides
+- `GET /billing/experiment-variant` — variant lookup for any company member
+- `GET /billing/experiment-results` — board-only results summary
+- `POST /billing/create-checkout-session` includes variant in Stripe metadata
+- Full test suite: 14 unit tests + 14 integration tests
+
+---
+
 ## SEO Metadata Infrastructure (v0.4.1) — August 23, 2026
 
 [Full release notes →](/support/releases/v0-4-1-seo-metadata)

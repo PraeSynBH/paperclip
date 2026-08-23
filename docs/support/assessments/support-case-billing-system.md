@@ -6,9 +6,9 @@
 
 **Feature**: Stripe-integrated billing with subscription management, usage tracking, invoice syncing, and board-user-only mutation controls
 **Assessed by**: Support Engineer
-**Date**: 2026-08-22
-**Related**: VOY-1364, VOY-1367, VOY-944, VOY-896, VOY-905, VOY-1669, VOY-1673
-**Release**: v0.4.0-alpha (hotfix VOY-1367) + P1-2 TOCTOU fix (VOY-1669)
+**Date**: 2026-08-23
+**Related**: VOY-1364, VOY-1367, VOY-944, VOY-896, VOY-905, VOY-1669, VOY-1673, VOY-1685, VOY-1888
+**Release**: v0.4.0-alpha (hotfix VOY-1367) + P1-2 TOCTOU fix (VOY-1669) + M5 A/B pricing experiment (VOY-1685/VOY-1888)
 
 ## Feature Overview (User Perspective)
 
@@ -153,6 +153,42 @@ WHERE cs.company_id = '<company-id>';
 ```
 
 The `features` column is a JSONB array of feature keys. If the required feature key is missing, the gate fires.
+
+## A/B Pricing Experiment Support (M5)
+
+An A/B pricing experiment (VOY-1685/VOY-1888) has been implemented. Companies are deterministically assigned to variant A (control — current pricing) or variant B (treatment — adjusted lower pricing) on first interaction with the pricing system.
+
+### What Changed
+
+- **Two new endpoints**: `GET /billing/experiment-variant` (variant lookup, all members) and `GET /billing/experiment-results` (board-only results summary)
+- **Modified endpoint**: `GET /billing/tiers` now returns experiment-aware pricing when the experiment is active
+- **Stripe metadata**: Checkout sessions carry `pricingExperimentVariant` for per-variant conversion tracking in Stripe dashboard
+- **New env var**: `PRICING_EXPERIMENT_CONFIG` (JSON) controls experiment parameters — no deploy needed to toggle
+
+### Potential User Confusion Points
+
+1. **"I see different prices than my teammate"** — This is expected. The A/B experiment assigns different companies to different pricing variants deterministically. Both see prices appropriate to their assigned variant.
+
+2. **"The pricing changed on my page"** — The experiment is deterministic per company. Once assigned, a company always sees the same variant. Pricing doesn't change mid-session.
+
+3. **"I was in variant B but now I see variant A pricing"** — The experiment may have been disabled via config change. When disabled, all companies see control (variant A) pricing regardless of assignment.
+
+4. **"My Stripe checkout shows experiment metadata"** — This is intentional. `pricingExperimentVariant` is included in checkout session metadata for conversion analysis.
+
+### Known Limitations
+
+1. **Variant B overrides require valid tier IDs**: The `PRICING_EXPERIMENT_CONFIG` must reference valid subscription tier UUIDs in `tierOverrides`. Invalid tier IDs are silently ignored.
+2. **No mid-experiment rebalancing**: Once a company is assigned to a variant, they stay in that variant. There is no mechanism to rebalance mid-experiment.
+3. **Results endpoint is basic**: `GET /experiment-results` returns enrollment counts and conversion stats only. Detailed funnel analysis requires Stripe dashboard or PostHog.
+4. **Stale assignments after experiment ends**: Previously assigned companies retain their variant column value, but it has no effect when the experiment is disabled.
+
+### Support Escalation Path
+
+| Issue | Severity | Action |
+|---|---|---|
+| Experiment not activating (all seeing control pricing) | Medium | Verify `PRICING_EXPERIMENT_CONFIG` is set correctly with `"enabled": true`. Check server logs for config parse errors. |
+| Variant B shows same prices as variant A | Medium | Check `tierOverrides` in config — ensure tier IDs match the actual tier UUIDs from the DB. |
+| Experiment-results endpoint returns empty | Low | Results return data only after at least one company has been assigned a variant. |
 
 ## Live Events — Real-Time Subscription Status
 
