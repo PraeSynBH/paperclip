@@ -11,6 +11,7 @@ import {
   stripeWebhookEvents as stripeWebhookEventsTable,
 } from "@paperclipai/db";
 import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES } from "@paperclipai/shared";
+import { pricingExperimentService, type PricingExperimentService } from "./pricing-experiment.js";
 import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { publishLiveEvent } from "./live-events.js";
@@ -71,7 +72,7 @@ export function getStripeClient(): Stripe {
   });
 }
 
-export function billingService(db: Db) {
+export function billingService(db: Db, experiment?: PricingExperimentService) {
   const getTier = async (tierId: string) => {
     const tier = await db
       .select()
@@ -671,12 +672,20 @@ export function billingService(db: Db) {
   };
 
   return {
-    listTiers: async () => {
-      return db
+    listTiers: async (companyId?: string) => {
+      const tiers = await db
         .select()
         .from(subscriptionTiersTable)
         .where(eq(subscriptionTiersTable.isActive, true))
         .orderBy(subscriptionTiersTable.sortOrder);
+
+      // Apply A/B pricing experiment overrides when companyId is provided
+      if (companyId && experiment) {
+        const variant = await experiment.getOrAssignVariant(companyId);
+        return experiment.applyTierOverrides(tiers, variant) as typeof tiers;
+      }
+
+      return tiers;
     },
 
     getTier,
@@ -687,6 +696,18 @@ export function billingService(db: Db) {
 
     checkFeatureAccess,
     requireFeature,
+
+    /** Resolve the A/B pricing experiment variant for a company (exposed for routes). */
+    getExperimentVariant: async (companyId: string): Promise<string | null> => {
+      if (!experiment) return null;
+      return experiment.getOrAssignVariant(companyId);
+    },
+
+    /** Get A/B experiment results summary. */
+    getExperimentResults: async () => {
+      if (!experiment) return null;
+      return experiment.getResults();
+    },
 
     createCheckoutSession: async (
       companyId: string,
@@ -705,6 +726,12 @@ export function billingService(db: Db) {
 
       const { stripeCustomerId } = await getOrCreateStripeCustomer(companyId);
 
+      // Resolve experiment variant for metadata tracking
+      let experimentVariant: string | undefined;
+      if (experiment) {
+        experimentVariant = await experiment.getOrAssignVariant(companyId);
+      }
+
       const publicUrl = process.env.PAPERCLIP_PUBLIC_URL ?? "http://localhost:5173";
       const successUrl = data.successUrl ?? `${publicUrl}/boards/${companyId}`;
       const cancelUrl = data.cancelUrl ?? `${publicUrl}/pricing`;
@@ -718,6 +745,7 @@ export function billingService(db: Db) {
           paperclipCompanyId: companyId,
           paperclipTierId: data.tierId,
           billingPeriod: data.billingPeriod,
+          ...(experimentVariant ? { pricingExperimentVariant: experimentVariant } : {}),
         },
         success_url: successUrl,
         cancel_url: cancelUrl,
