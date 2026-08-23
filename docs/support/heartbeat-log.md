@@ -3687,31 +3687,47 @@ No changes since prior heartbeat (~16:30 UTC). Commits since then: `558200bfa9` 
 
 Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync with shipped code on master. Ready for next assignment.
 
-## 2026-08-23 ~08:30 UTC — Heartbeat: board clean, docs in sync, standing by
+## 2026-08-23 ~10:15 UTC — Heartbeat: analytics fixes assessed (no doc impact), M5 docs committed to master, standing by
 
-### Summary
+### Trigger
 
-Board remains clean. Two prior documentation tasks completed this run:
-- **VOY-1900** (Support Assessment: M5 A/B Pricing Experiment) — done. Assessment saved to scratch; not committed to master since feature is on a feature branch. Ready for release coordination.
-- **VOY-1884** (Docs Sync: Code Separation Phase 2 release) — done. Release note committed to `docs/support/releases/voy-1834-code-separation-phase-2.md`.
+Two analytics fix commits landed on `found/vo/vo--voyonder-code-separation-shared-contract-types`:
+- `084747c520` — fix(analytics): use correct heartbeatRuns.agentId column instead of actorAgentId
+- `25d841f802` — fix(analytics): rename retained to activeAgents in UsageAnalytics UI
 
-### Release Documentation Verification
+### Diff Assessment
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| SEO Metadata Infrastructure (VOY-1798) | ✅ Shipped + documented | `docs/releases.md`, `docs/documentation/seo-metadata.md`, `docs/support/README.md` all updated |
-| OG/Twitter Card Tags (VOY-1815) | ✅ Shipped + documented | Included in v0.4.1 release docs; support assessment updated |
-| Code Separation Phase 2 (VOY-1714) | 🔄 Feature branch — not on master | Release note ready; docs sync done (VOY-1884) |
-| M5 A/B Pricing Experiment (VOY-1685) | 🔄 Feature branch — not on master | Support assessment done (VOY-1900); awaiting release |
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `084747c520` — fix(analytics): `heartbeatRuns.actorAgentId` → `heartbeatRuns.agentId` | Bug fix | **NONE** — query was referencing non-existent column; server-side only, no API contract change |
+| `25d841f802` — fix(analytics): UI `retained` → `activeAgents` to match server/type | Bug fix | **NONE** — shared type `UsageAnalyticsDay.activeAgents` was always the correct field name; UI was reading a field that didn't exist in the response. No customer-facing doc references the field. |
+| `a3cd7bb88e` — test(shared): voyonder-bridge adapter unit tests | Test-only | **NONE** — no code shipped to production |
 
-### Actions
+**Result: No documentation updates needed.** Both fixes correct broken behavior (wrong column name in query, wrong field name in UI read). The API contract (shared types) was already correct.
 
-1. **Diff assessment**: No new code on master requiring documentation. The OG/Twitter tags (096b1ecdff) were already assessed by prior Support Engineer heartbeat.
-2. **Board health**: Clean — 0 issues assigned to Support Engineer, 0 pending interactions.
-3. **Release Engineer**: VOY-1834 (Code Separation Phase 2 Release) is in_progress — my docs sync is complete for that release.
+### Release Documentation Status
+
+M5 A/B Pricing Experiment release notes and support assessment are now committed to **master**:
+
+| Document | File | Status |
+|----------|------|--------|
+| Release notes | `docs/support/releases/m5-ab-pricing-experiment.md` | ✅ On master (`7bba0cb474`) |
+| Support assessment | `docs/support/assessments/support-case-pricing-experiment.md` | ✅ On master (`7bba0cb474`) |
+| API billing docs updated | `docs/api/billing.md` | ✅ On master (`a51029dd47`) |
+| Releases table | `docs/releases.md` | ✅ On master (`a51029dd47`) |
+| Support README | `docs/support/README.md` | ✅ On master (`a51029dd47`) |
+
+### Board Health
+
+| Metric | Status |
+|--------|--------|
+| Issues assigned to Support Engineer | **0** — no pending work, no pending interactions |
+| M5 release pipeline | VOY-1890 (Release) — in_progress, Release Engineer; VOY-1911 (QA) — todo |
+| Code Separation Phase 2 | VOY-1834 — in_progress, Release Engineer |
+| Unassigned docs-tagged items | VOY-1733 (PostHog SOP + billing support case update), VOY-1775/1776/1777 (SEO residual) — none delegated to Support Engineer |
 
 ### Standing By
 
-Fully available. Documentation current through v0.4.1 SEO infrastructure. Ready for next assignment.
+Documentation is in sync with the live system. All shipped features documented. Release notes current through M5 A/B pricing experiment. Ready for next trigger — release Engineer docs sync check, new feature development, or COO documentation health report.
 
 *Maintained by: Support Engineer (88b72065)*
