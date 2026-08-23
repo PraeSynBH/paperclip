@@ -832,6 +832,9 @@ export const BILLING_TYPES = [
 ] as const;
 export type BillingType = (typeof BILLING_TYPES)[number];
 
+export const BILLING_PERIODS = ["monthly", "yearly"] as const;
+export type BillingPeriod = (typeof BILLING_PERIODS)[number];
+
 export const COST_STATUSES = ["reported", "unpriced"] as const;
 export type CostStatus = (typeof COST_STATUSES)[number];
 

@@ -434,6 +434,12 @@ export const queryKeys = {
   activity: (companyId: string) => ["activity", companyId] as const,
   costs: (companyId: string, from?: string, to?: string) =>
     ["costs", companyId, from, to] as const,
+  billing: {
+    tiers: (companyId: string) => ["billing", companyId, "tiers"] as const,
+    subscription: (companyId: string) => ["billing", companyId, "subscription"] as const,
+    invoices: (companyId: string) => ["billing", companyId, "invoices"] as const,
+    overview: (companyId: string) => ["billing", companyId, "overview"] as const,
+  },
   usageByProvider: (companyId: string, from?: string, to?: string) =>
     ["usage-by-provider", companyId, from, to] as const,
   usageByBiller: (companyId: string, from?: string, to?: string) =>
