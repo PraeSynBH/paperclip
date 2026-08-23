@@ -303,6 +303,7 @@ export function PricingPage() {
   const isSubscribed = !!subscription && subscription.status !== "canceled";
   const isCancelScheduled = subscription?.cancelAtPeriodEnd === true;
 
+
   // ── Render ────────────────────────────────────────────────────────────────
 
   return (

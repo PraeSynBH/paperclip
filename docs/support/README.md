@@ -11,6 +11,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
+| A/B Pricing Experiment — Server-side A/B pricing test (M5) | voy-1685/1888 | Aug 23, 2026 (IMPLEMENTED — awaiting release) | [Assessment](assessments/support-case-billing-system.md) |
 | SEO Metadata — Sitemap, Robots.txt, Dynamic Page Titles/Meta, Open Graph + Twitter Card Tags | v0.4.1 (voy-1798/1815) | Aug 23, 2026 (SHIPPED via a2ad8f8d90 + 096b1ecdff) | [Assessment](assessments/support-case-seo-metadata.md) · [Release Notes](releases/v0-4-1-seo-metadata.md) |
 | TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | voy-1669/1671 | Aug 22, 2026 (SHIPPED via VOY-1682) | [Release Notes](releases/voy-1669-toctou-billing-fix.md) |
 | Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Assessment](assessments/support-case-async-ux-background-jobs.md) · [Release Notes](releases/voy-1474-async-ux.md) |
@@ -108,5 +109,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-23 ~08:30 UTC — SEO Metadata release (v0.4.1) added to shipped features table. OG/Twitter tags (VOY-1815) included in scope. Heartbeat logged.*
+*Last updated: 2026-08-23 ~09:30 UTC — M5 A/B pricing experiment documented: billing API docs updated, support case assessment v1.2, release notes updated. Commits 4560420bec/8e2b5293c5 (M5 pricing experiment) assessed — documentation updated to match implemented code.*
 *Maintained by: Support Engineer (88b72065)*

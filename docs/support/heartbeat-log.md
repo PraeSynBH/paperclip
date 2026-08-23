@@ -3729,5 +3729,67 @@ M5 A/B Pricing Experiment release notes and support assessment are now committed
 ### Standing By
 
 Documentation is in sync with the live system. All shipped features documented. Release notes current through M5 A/B pricing experiment. Ready for next trigger — release Engineer docs sync check, new feature development, or COO documentation health report.
+## 2026-08-23 ~05:52 UTC — Heartbeat: Committed v0.4.1 SEO metadata documentation to master
+
+### Summary
+
+The VOY-1798 SEO metadata infrastructure release shipped on master at `a2ad8f8d90` but the supporting customer-facing documentation had not been committed. This heartbeat assessed the documentation gap and landed all five missing docs files plus index updates.
+
+### Actions
+
+| Item | Details |
+|------|---------|
+| **Documentation gap identified** | SEO release docs (`docs/support/releases/v0-4-1-seo-metadata.md`, `docs/support/assessments/support-case-seo-metadata.md`, `docs/documentation/releases/v0-4-1-seo-infrastructure.md`, `docs/documentation/seo-metadata.md`, `docs/guides/agent-developer/seo-best-practices.md`) existed as untracked working-tree files but were never committed |
+| **Committed to master** | `c197a815b0` — 7 files, +718/−1. Added all 5 SEO doc files, removed stale `voy-1695-seo-release-note.md` draft (superseded by `v0-4-1-seo-metadata.md`), updated index pages |
+| **Updated `docs/releases.md`** | Added v0.4.1 SEO release as the top entry with customer-facing highlights |
+| **Updated `docs/support/README.md`** | Added SEO metadata to "Recently Shipped Features" table |
+| **Code verification** | Cross-checked all documentation claims against `server/src/routes/seo.ts` and `ui/src/hooks/usePageMeta.ts` on master — all accurate |
+| **Board state** | VOY-1866 (SEO Documentation Impact) already marked done in CEO pulse. No active issues assigned to Support Engineer |
+
+### Verification summary
+
+| Check | Result |
+|-------|--------|
+| sitemap.xml route | ✅ `GET /sitemap.xml` — active companies (limit 10k), non-cancelled/non-backlog/non-hidden issues (limit 10k), empty `<urlset>` on DB error with 200 |
+| robots.txt route | ✅ `GET /robots.txt` — `Allow: /`, `Disallow: /api/`, `Sitemap:` directive, dynamic host resolution |
+| usePageMeta hook | ✅ Sets `document.title` with app suffix, manages `<meta name="description">` lifecycle, cleans up on unmount, last-call-wins |
+| CHANGELOG entry | ✅ `server/CHANGELOG.md` has "**VOY-1695**: Add SEO metadata infrastructure..." |
+| Doc coverage | ✅ Release note, support case assessment, customer-facing release note, SEO best practices guide — all present |
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface plus v0.4.1 SEO. All release notes in sync with shipped code on master. Ready for next assignment.
+
+## 2026-08-23 ~06:50 UTC — Heartbeat: OG/Twitter tags assessed, docs updated
+
+### Summary
+
+Commit `096b1ecdff` (feat(seo): add Open Graph and Twitter Card tags to all public pages, VOY-1815) landed on master after the v0.4.1 SEO docs were already committed. This commit extends `usePageMeta` with a `PageMetaOg` interface, adds OG/Twitter tag injection to all 75+ pages, and adds base defaults to `index.html`.
+
+### Actions
+
+| Item | Details |
+|------|---------|
+| **Diff assessment** | Commit 096b1ecdff modifies 3 files (`ui/src/hooks/usePageMeta.ts`, `ui/index.html`, `doc/releases/...`). Documentation impact: HIGH — SEO docs, release notes, and support case all listed OG/Twitter as "not implemented" |
+| **Customer-facing docs** | `docs/documentation/seo-metadata.md` — Added Section 4 (Open Graph and Twitter Card Tags) with PageMetaOg interface, tag table, base defaults, usage examples |
+| **Customer-facing release notes** | `docs/documentation/releases/v0-4-1-seo-infrastructure.md` — Moved OG/Twitter from "NOT in this release" to "What's New" |
+| **Release index** | `docs/releases.md` — Added OG/Twitter bullet to v0.4.1 highlights |
+| **Support case assessment** | `docs/support/assessments/support-case-seo-metadata.md` — v1.1: OG/Twitter listed as implemented, removed from scope gaps and limitations, added troubleshooting |
+| **Support release notes** | `docs/support/releases/v0-4-1-seo-metadata.md` — Updated to include OG/Twitter in scope, removed from "Not in scope" list |
+| **Support README** | `docs/support/README.md` — Updated SEO entry and timestamp |
+| **Code verification** | Cross-checked all doc claims against commit diff — accurate |
+
+### Documentation Health
+
+| Metric | Count |
+|--------|-------|
+| Release notes | 19 — all shipped features covered (latest: v0.4.1 SEO Metadata incl. OG/Twitter) |
+| Feature support assessments | 18 — all shipped features covered (latest: SEO Metadata v1.1) |
+| KB articles | 8 — all behavioral changes documented |
+| Documentation coverage | 100% — no gaps identified |
+
+### Standing By
+
+Fully available. Documentation current through v0.4.1 feature surface including OG/Twitter tags. All release notes in sync with shipped code on master. Ready for next assignment.
 
 *Maintained by: Support Engineer (88b72065)*

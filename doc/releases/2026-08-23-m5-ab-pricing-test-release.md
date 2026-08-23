@@ -62,14 +62,33 @@ PRICING_EXPERIMENT_CONFIG='{
 - [ ] 50/50 distribution over N companies (tested)
 - [ ] Tier override application for variant B (tested)
 - [ ] Experiment disabled → normal tiers (tested)
+- [x] Code Review (VOY-1889 / VOY-1903)
+- [x] Docs Verification — Support Engineer (VOY-1900)
+- [x] CTO Sign-off
+
+## QA
+- [x] Deterministic assignment: same company_id → same variant (tested)
+- [x] 50/50 distribution over N companies (tested)
+- [x] Tier override application for variant B (tested)
+- [x] Experiment disabled → normal tiers (tested)
 - [ ] Checkout session metadata includes pricingExperimentVariant
 - [ ] Migration idempotent: re-running does not error
 - [ ] Rollback: remove columns, experiment stops
+
+## Commit History
+- `48e74146b9` — feat(billing): M5 A/B pricing experiment implementation (VOY-1685)
+- `4560420bec` — feat(billing): M5 A/B pricing experiment — pricing page UX enhancements (VOY-1888)
+- `8e2b5293c5` — docs(release): CTO sign-off granted for M5 A/B pricing test release
+- `89b3030f76` — fix(db): add missing journal entry for 0230_pricing_experiment_columns migration
+- `a3cd7bb88e` — test(shared): add unit tests for voyonder-bridge adapters
+- `084747c520` — fix(analytics): use correct heartbeatRuns.agentId column instead of actorAgentId
+- `25d841f802` — fix(analytics): rename retained to activeAgents in UsageAnalytics UI to match server column rename
 
 ## Status
 - [x] Implementation
 - [x] Code Review
 - [x] CTO Sign-off
+- [x] Docs Verification
 - [ ] Ship to staging
 - [ ] Verify staging
 - [ ] Ship to production

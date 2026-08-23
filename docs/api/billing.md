@@ -1,8 +1,8 @@
 ---
 title: Billing
-summary: Stripe-integrated subscription management with tier plans, usage tracking, invoices, and feature gating
+summary: Stripe-integrated subscription management with tier plans, usage tracking, invoices, feature gating, and A/B pricing experiments
 version: v0.5.0
-last_updated: 2026-08-21
+last_updated: 2026-08-23
 status: active
 ---
 
@@ -28,7 +28,7 @@ Requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` environment variables. 
 
 | Method | Path | Description | Access |
 |---|---|---|---|
-| `GET` | `/api/companies/{companyId}/billing/tiers` | List available subscription tiers | All members |
+| `GET` | `/api/companies/{companyId}/billing/tiers` | List available subscription tiers (experiment-aware when pricing experiment is active) | All members |
 | `GET` | `/api/companies/{companyId}/billing/subscription` | View current subscription | All members |
 | `POST` | `/api/companies/{companyId}/billing/subscription` | Create a new subscription (direct — admin use) | Board user only |
 | `PATCH` | `/api/companies/{companyId}/billing/subscription` | Update tier or billing period | Board user only |
@@ -40,6 +40,8 @@ Requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` environment variables. 
 | `GET` | `/api/companies/{companyId}/billing/invoices` | List invoices | All members |
 | `POST` | `/api/companies/{companyId}/billing/invoices/sync` | Sync invoices from Stripe | Board user only |
 | `GET` | `/api/companies/{companyId}/billing/overview` | Consolidated billing overview (subscription + usage + invoices) | All members |
+| `GET` | `/api/companies/{companyId}/billing/experiment-variant` | Get the A/B pricing experiment variant assigned to this company | All members |
+| `GET` | `/api/companies/{companyId}/billing/experiment-results` | Get A/B pricing experiment results summary | Board user only |
 | `POST` | `/api/billing/webhook` | Stripe webhook receiver | Stripe signature verification only |
 
 ## Create or Update Subscription
@@ -134,6 +136,87 @@ Billing routes are mounted only when `PAPERCLIP_BILLING_ENABLED=true`. In additi
 | `custom_plugins` | Marketplace plugin installation | Feature requires an upgraded plan |
 
 Feature-gated endpoints return `403` with `code: "PAYWALL"` in the error body, which the frontend can detect to show upgrade prompts.
+
+## A/B Pricing Experiment (M5)
+
+The system supports a server-side A/B pricing experiment. Companies are deterministically assigned to variant A (control — current pricing) or variant B (treatment — adjusted lower pricing) on first interaction with the pricing system.
+
+### How It Works
+
+1. A company visits the pricing page → `GET /billing/tiers`
+2. The server checks the company's `pricing_experiment_variant` column
+3. If unassigned, the company is deterministically assigned a variant (SHA-256 hash of company ID + salt)
+4. The variant is persisted on the companies table — the same company always sees the same variant
+5. Tier pricing is adjusted per variant before being returned
+
+### Configuration
+
+The experiment is controlled by the `PRICING_EXPERIMENT_CONFIG` environment variable (JSON):
+
+```json
+{
+  "enabled": true,
+  "trafficPercent": 50,
+  "variants": {
+    "B": {
+      "weight": 50,
+      "tierOverrides": {
+        "<tier-id>": { "priceMonthlyCents": 1900, "priceYearlyCents": 19000 }
+      }
+    }
+  },
+  "salt": "m5-pricing-experiment-v1"
+}
+```
+
+| Field | Description |
+|---|---|
+| `enabled` | Master switch — when `false`, all companies see control (variant A) pricing |
+| `trafficPercent` | Percentage of new (unassigned) traffic to include in the experiment |
+| `variants.B.weight` | Traffic weight for variant B within the experiment traffic |
+| `variants.B.tierOverrides` | Partial tier overrides — only specified fields change; unspecified fields use the DB tier defaults |
+| `salt` | Salt for deterministic assignment hash |
+
+### Endpoints
+
+#### Get Experiment Variant
+
+```text
+GET /api/companies/{companyId}/billing/experiment-variant
+```
+
+Returns the company's experiment variant and whether the experiment is enabled:
+
+```json
+{
+  "variant": "A",
+  "enabled": true
+}
+```
+
+`variant` is `"A"`, `"B"`, or `null` (not yet assigned). Access: All company members.
+
+#### Get Experiment Results
+
+```text
+GET /api/companies/{companyId}/billing/experiment-results
+```
+
+Returns per-variant enrollment counts and conversion stats. Access: Board users only.
+
+### Edge Cases
+
+| Scenario | Handling |
+|---|---|
+| Experiment disabled | Normal pricing, no variant assigned |
+| Company already assigned | Existing variant reused — no reassignment |
+| Variant B tier overrides not configured | No overrides applied; variant B sees control pricing |
+| New company after experiment ends | No variant assigned, normal pricing |
+| Checkout without variant metadata | Logged as warning; treated as variant A for reporting |
+
+### Stripe Metadata
+
+Checkout sessions created while the experiment is active include `pricingExperimentVariant` in Stripe metadata, enabling per-variant conversion analysis in the Stripe dashboard.
 
 ## Error Notes
 

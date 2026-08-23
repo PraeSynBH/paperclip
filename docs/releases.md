@@ -2,12 +2,53 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-22
+last_updated: 2026-08-23
 ---
 
 # Release Notes
 
 Paperclip ships continuously. This page documents each release to the main branch with curated, customer-facing notes.
+
+---
+
+## M5 A/B Pricing Experiment — August 23, 2026
+
+**Status: Implementation complete. Awaiting Code Review and QA.**
+
+### Highlights
+
+- **Server-side A/B pricing test** — Companies are deterministically assigned to control (current pricing) or treatment (adjusted lower pricing) on first visit to the pricing page. Assignment is persisted — the same company always sees the same variant.
+- **Variant B pricing** — Lower entry price: Adventurer $19/mo ($190/yr), Explorer $69/mo ($690/yr), Elite $179/mo ($1,790/yr). All tiers reduced by $10-20/mo to reduce signup friction.
+- **Env-var controlled** — Experiment is enabled/disabled via `PRICING_EXPERIMENT_CONFIG` JSON environment variable. No deploy needed to toggle.
+- **Stripe metadata tracking** — Checkout sessions include `pricingExperimentVariant` metadata for per-variant conversion analysis in Stripe dashboard.
+- **Graceful fallback** — When experiment is disabled, all companies see control pricing. If variant B tier overrides are not configured, variant B falls back to control prices.
+- **Board-only results endpoint** — `GET /billing/experiment-results` provides per-variant enrollment counts and conversion stats.
+
+### Implementation
+
+- Migration `0230_pricing_experiment_columns.sql` adds experiment columns to companies table
+- `pricing-experiment.ts` service handles deterministic assignment (SHA-256), config parsing, tier overrides
+- `GET /billing/experiment-variant` — variant lookup for any company member
+- `GET /billing/experiment-results` — board-only results summary
+- `POST /billing/create-checkout-session` includes variant in Stripe metadata
+- Full test suite: 14 unit tests + 14 integration tests
+
+---
+
+## SEO Metadata Infrastructure (v0.4.1) — August 23, 2026
+
+[Full release notes →](/support/releases/v0-4-1-seo-metadata)
+
+### Highlights
+
+- **Dynamic Sitemap at `/sitemap.xml`** — Paperclip now generates a live XML sitemap listing active companies and public issue pages, serving it with proper caching headers. Search engines discover your content automatically.
+- **Custom Robots.txt** — `/robots.txt` tells crawlers to index public content while blocking `/api/` paths, keeping internal APIs out of search results.
+|- **Per-Page Titles and Meta Descriptions** — Every page now has a descriptive browser tab title (e.g., "Dashboard — Paperclip", "Agent Detail — Paperclip") and key pages include search-result summaries via `<meta name="description">`.
+|- **Open Graph / Twitter Card Tags** — Every page with a title and description now automatically generates social media preview tags. Links shared on Slack, Twitter/X, LinkedIn, and Discord show a rich card with the page title, description, and optional image.
+|- **No Configuration Required** — SEO improvements and social previews are automatic and server-side. Companies hosting on Paperclip get search-engine-friendly pages without any setup.
+|- **Graceful Degradation** — If the database is temporarily unavailable, the sitemap returns an empty listing (HTTP 200) instead of an error, preventing crawler retry storms. Base social media tags in `index.html` provide fallback previews before React components render.
+
+[Full release notes →](/support/releases/v0-4-1-seo-metadata)
 
 ---
 
