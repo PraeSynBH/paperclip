@@ -13,8 +13,8 @@
  *   ✓ Unique index on (subscription_id, metric, period_start, period_end)
  *   ✓ Concurrent calls don't lose data or produce duplicates
  *
- * These tests connect to the running embedded Postgres instance directly
- * and roll back all mutations. No Stripe API calls are made.
+ * These tests use embedded Postgres so migrations are always applied
+ * and the database is self-contained. No Stripe API calls are made.
  */
 import { randomUUID } from "node:crypto";
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
@@ -28,45 +28,60 @@ import {
   stripeCustomers,
   type Db,
 } from "@paperclipai/db";
+import {
+  getEmbeddedPostgresTestSupport,
+  startEmbeddedPostgresTestDatabase,
+} from "./helpers/embedded-postgres.js";
 
-// ── Test database connection ─────────────────────────────────────────────────
-const DB_HOST = process.env.PAPERCLIP_TEST_PGHOST ?? "127.0.0.1";
-const DB_PORT = Number(process.env.PAPERCLIP_TEST_PGPORT ?? 54329);
-const DB_USER = process.env.PAPERCLIP_TEST_PGUSER ?? "paperclip";
-const DB_PASS = process.env.PAPERCLIP_TEST_PGPASSWORD ?? "paperclip";
-const DB_NAME = process.env.PAPERCLIP_TEST_PGDATABASE ?? "paperclip";
+const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
+const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
 
-const connectionString = `postgres://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
+if (!embeddedPostgresSupport.supported) {
+  console.warn(
+    `Skipping billing-concurrency tests on this host: ${embeddedPostgresSupport.reason ?? "unsupported environment"}`,
+  );
+}
 
 async function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-describe("Billing concurrency fixes [VOY-1669, VOY-1671]", () => {
+describeEmbeddedPostgres("Billing concurrency fixes [VOY-1669, VOY-1671]", () => {
   let db: Db;
+  let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
   let tierId: string;
-  let companyId: string;
 
   beforeAll(async () => {
-    db = createDb(connectionString);
+    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-billing-concurrency-");
+    db = createDb(tempDb.connectionString);
 
-    // Verify DB is reachable
-    const tierCount = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(subscriptionTiers)
-      .then((r) => r[0]?.count ?? 0);
-    if (tierCount === 0) {
-      throw new Error("No subscription tiers found — is the database seeded?");
-    }
-
-    // Use the first active tier for testing
+    // Seed a subscription tier for the test data
     const [tier] = await db
-      .select()
-      .from(subscriptionTiers)
-      .where(eq(subscriptionTiers.isActive, true))
-      .limit(1);
-    if (!tier) throw new Error("No active tier found");
+      .insert(subscriptionTiers)
+      .values({
+        name: "Test Tier",
+        description: "Seeded for concurrency tests",
+        priceMonthlyCents: 2900,
+        priceYearlyCents: 29000,
+        stripePriceMonthlyId: null,
+        stripePriceYearlyId: null,
+        stripeProductId: "prod_test_concurrency",
+        includedSeats: 2,
+        extraSeatPriceCents: 1000,
+        includedAgentRuns: 500,
+        extraAgentRunPriceCents: 10,
+        includedStorageGb: 5,
+        extraStorageGbPriceCents: 200,
+        features: ["test_feature"],
+        isActive: true,
+        sortOrder: 1,
+      })
+      .returning();
     tierId = tier.id;
+  });
+
+  afterAll(async () => {
+    await tempDb?.cleanup();
   });
 
   // ─────────────────────────────────────────────────────────────────────────────
