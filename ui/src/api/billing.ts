@@ -117,4 +117,25 @@ export const billingApi = {
     api.get<BillingOverview>(`/companies/${companyId}/billing/overview`),
   experimentVariant: (companyId: string) =>
     api.get<ExperimentVariantResponse>(`/companies/${companyId}/billing/experiment-variant`),
+
+  /**
+   * Get trial status information.
+   * Returns null if the company is not on a trial.
+   */
+  trialInfo: (companyId: string) =>
+    api.get<{
+      trialing: boolean;
+      trialEnd: string;
+      daysRemaining: number;
+      expired: boolean;
+    } | null>(`/companies/${companyId}/billing/trial-info`),
+
+  /**
+   * Start a trial for a company (idempotent).
+   */
+  startTrial: (companyId: string, data?: { trialDays?: number }) =>
+    api.post<{
+      subscription: CompanySubscription;
+      tier: SubscriptionTier;
+    }>(`/companies/${companyId}/billing/start-trial`, data ?? {}),
 };
