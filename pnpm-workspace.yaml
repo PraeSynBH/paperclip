@@ -14,3 +14,4 @@ packages:
   - cli
   # Voyonder product code — separate repo, same workspace for dev
   - ../voyonder
+  - ../voyonder/packages/*
