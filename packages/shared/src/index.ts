@@ -12,7 +12,6 @@ export type {
 export type { EventBus } from "./types/event-bus.js";
 export type { AuthProvider, AuthRequest, AuthActor } from "./types/auth-provider.js";
 export type { LoggerProvider } from "./types/logger.js";
-
 export { ADAPTER_AUTH_MISSING_CHECK_CODE } from "./adapter-auth-check-code.js";
 export {
   decisionEffectStalenessSchema,

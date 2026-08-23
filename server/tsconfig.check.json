@@ -10,8 +10,8 @@
     "baseUrl": ".",
     "paths": {
       "@paperclipai/shared": ["../packages/shared/src/index.ts"],
-      "@voyonder/types": ["../node_modules/@voyonder/types/src/index.ts"],
-      "@voyonder/product": ["../node_modules/@voyonder/product/dist/server/src/app.d.ts"]
+      "@voyonder/types": ["../../voyonder/dist/packages/types/src/index.d.ts"],
+      "@voyonder/product": ["../../voyonder/dist/server/src/app.d.ts"]
     }
   },
   "include": ["src/types/express.d.ts", "src/services/voyonder-bridge.ts"]
