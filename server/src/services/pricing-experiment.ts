@@ -12,7 +12,7 @@
  * - Tier overrides are shallow merges over the DB tier row
  */
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import { z } from "zod";
 import { companies as companiesTable } from "@paperclipai/db";
 import type { Db } from "@paperclipai/db";
@@ -203,8 +203,8 @@ export function pricingExperimentService(db: Db) {
       .from(companiesTable)
       .where(
         and(
-          companiesTable.pricingExperimentVariant.isNotNull(),
-          companiesTable.pricingExperimentVariant.in("A", "B"),
+          isNotNull(companiesTable.pricingExperimentVariant),
+          inArray(companiesTable.pricingExperimentVariant, ["A", "B"]),
         ),
       );
 
