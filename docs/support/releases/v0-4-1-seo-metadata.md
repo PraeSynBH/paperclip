@@ -1,22 +1,22 @@
 ---
 title: v0.4.1 — SEO Metadata Infrastructure
-version: voy-1695/voy-1798
+version: voy-1695/voy-1798/voy-1815
 date: 2026-08-23
-commit: 1a50ce7446 + fde711db21
+commit: 1a50ce7446 + fde711db21 + 096b1ecdff
 status: LIVE
 ---
 
 # v0.4.1 — SEO Metadata Infrastructure
 
-**Release:** VOY-1695 / VOY-1798
-**Commits:** `1a50ce7446` (code review fix), `fde711db21` (structural audit fix)
+**Release:** VOY-1695 / VOY-1798 / VOY-1815
+**Commits:** `1a50ce7446` (code review fix), `fde711db21` (structural audit fix), `096b1ecdff` (OG/Twitter tags)
 **Date:** 2026-08-23
 **Status:** LIVE
-**Related issues:** VOY-1695, VOY-1696, VOY-1798, VOY-1715, VOY-1866
+**Related issues:** VOY-1695, VOY-1696, VOY-1798, VOY-1715, VOY-1866, VOY-1815
 
 ## Summary
 
-This release adds SEO metadata infrastructure to Paperclip, enabling search engines to discover and index public content. The changes are entirely server-side and frontend hook-based — no API changes.
+This release adds SEO metadata infrastructure to Paperclip, enabling search engines to discover and index public content and producing rich link previews when pages are shared on social media. The changes are entirely server-side and frontend hook-based — no API changes.
 
 ## Changes
 
@@ -25,14 +25,15 @@ This release adds SEO metadata infrastructure to Paperclip, enabling search engi
 | File | Purpose |
 |---|---|
 | `server/src/routes/seo.ts` | Dynamic sitemap.xml + robots.txt routes |
-| `ui/src/hooks/usePageMeta.ts` | React hook for setting page title and meta description |
+| `ui/src/hooks/usePageMeta.ts` | React hook for setting page title, meta description, and OG/Twitter tags |
 
 ### Modified files
 
 | File | Change |
 |---|---|
 | `server/src/app.ts` | Registered `seoRoutes(db)` before SPA fallback (line 681) |
-| `ui/index.html` | Added base meta description tag |
+| `ui/index.html` | Added base meta description tag and OG/Twitter fallback defaults |
+| `ui/src/hooks/usePageMeta.ts` | Extended with `PageMetaOg` interface for OG/Twitter tag injection |
 | 75+ page components in `ui/src/pages/` | Added `usePageMeta()` calls |
 
 ### Server: sitemap.xml (`GET /sitemap.xml`)
@@ -51,11 +52,14 @@ This release adds SEO metadata infrastructure to Paperclip, enabling search engi
 
 ### Frontend: usePageMeta hook
 
-- Accepts `(title: string, description?: string)`
+- Accepts `(title: string, description?: string, og?: PageMetaOg)`
+- `PageMetaOg` interface: `type?`, `url?`, `image?`, `imageAlt?`
 - Appends " — Paperclip" to title automatically
 - Manages `<meta name="description">` lifecycle (create/update/remove)
+- Automatically injects `og:*` and `twitter:*` tags based on title, description, and optional og config
+- `twitter:card` defaults to `"summary"`
 - Last-call-wins: child routes override parent effects
-- Cleans up on unmount
+- Cleans up on unmount (restores previous title, removes description and OG/Twitter tags)
 
 ### Frontend: Page coverage
 
@@ -66,10 +70,20 @@ This release adds SEO metadata infrastructure to Paperclip, enabling search engi
 - Utility pages: export, invites, decisions, approvals
 - Legacy/Auth/Error pages: login, not-found, landing
 
+### Base HTML defaults (`index.html`)
+
+Fallback OG/Twitter tags for pages before React renders:
+```html
+<meta property="og:type" content="website" />
+<meta property="og:title" content="Paperclip" />
+<meta property="og:description" content="Paperclip — AI-powered issue tracking and project management for modern teams." />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="Paperclip" />
+<meta name="twitter:description" content="Paperclip — AI-powered issue tracking and project management for modern teams." />
+```
+
 ### Not in scope (descoped or future)
 
-- Open Graph tags — not implemented
-- Twitter Card tags — not implemented
 - JSON-LD structured data — not implemented
 - Heading hierarchy audit — descoped per Founding Engineer decision
 - Per-issue custom descriptions — not implemented
@@ -81,6 +95,8 @@ This release adds SEO metadata infrastructure to Paperclip, enabling search engi
 3. **`isNull(issues.hiddenAt)` filter**: Hidden issues are excluded from the sitemap. Admins can hide sensitive issues.
 4. **XML escaping**: Defense-in-depth against injection attacks via request headers.
 5. **Last-call-wins meta**: React's insertion order ensures the deepest child's meta tag wins, enabling hierarchical overrides.
+6. **OG/Twitter from existing params**: `og:title` and `twitter:title` derived automatically from the `title` parameter, same for description — no additional work needed for basic social previews on all 75+ pages.
+7. **Base defaults in index.html**: Pages that render before `usePageMeta` runs still have basic social metadata.
 
 ## QA Checklist
 
@@ -89,6 +105,8 @@ This release adds SEO metadata infrastructure to Paperclip, enabling search engi
 - [x] Meta tags render on all page components
 - [x] Hidden issues excluded from sitemap
 - [x] XML injection blocked via escapeXml
+- [x] Open Graph tags render on all public pages
+- [x] Twitter Card tags render on all public pages
 - [ ] CTO Sign-off
 
 ## Documentation

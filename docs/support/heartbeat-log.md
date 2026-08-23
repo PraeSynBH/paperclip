@@ -3665,4 +3665,36 @@ The VOY-1798 SEO metadata infrastructure release shipped on master at `a2ad8f8d9
 
 Fully available. Documentation current through v0.5.0 feature surface plus v0.4.1 SEO. All release notes in sync with shipped code on master. Ready for next assignment.
 
+## 2026-08-23 ~06:50 UTC — Heartbeat: OG/Twitter tags assessed, docs updated
+
+### Summary
+
+Commit `096b1ecdff` (feat(seo): add Open Graph and Twitter Card tags to all public pages, VOY-1815) landed on master after the v0.4.1 SEO docs were already committed. This commit extends `usePageMeta` with a `PageMetaOg` interface, adds OG/Twitter tag injection to all 75+ pages, and adds base defaults to `index.html`.
+
+### Actions
+
+| Item | Details |
+|------|---------|
+| **Diff assessment** | Commit 096b1ecdff modifies 3 files (`ui/src/hooks/usePageMeta.ts`, `ui/index.html`, `doc/releases/...`). Documentation impact: HIGH — SEO docs, release notes, and support case all listed OG/Twitter as "not implemented" |
+| **Customer-facing docs** | `docs/documentation/seo-metadata.md` — Added Section 4 (Open Graph and Twitter Card Tags) with PageMetaOg interface, tag table, base defaults, usage examples |
+| **Customer-facing release notes** | `docs/documentation/releases/v0-4-1-seo-infrastructure.md` — Moved OG/Twitter from "NOT in this release" to "What's New" |
+| **Release index** | `docs/releases.md` — Added OG/Twitter bullet to v0.4.1 highlights |
+| **Support case assessment** | `docs/support/assessments/support-case-seo-metadata.md` — v1.1: OG/Twitter listed as implemented, removed from scope gaps and limitations, added troubleshooting |
+| **Support release notes** | `docs/support/releases/v0-4-1-seo-metadata.md` — Updated to include OG/Twitter in scope, removed from "Not in scope" list |
+| **Support README** | `docs/support/README.md` — Updated SEO entry and timestamp |
+| **Code verification** | Cross-checked all doc claims against commit diff — accurate |
+
+### Documentation Health
+
+| Metric | Count |
+|--------|-------|
+| Release notes | 19 — all shipped features covered (latest: v0.4.1 SEO Metadata incl. OG/Twitter) |
+| Feature support assessments | 18 — all shipped features covered (latest: SEO Metadata v1.1) |
+| KB articles | 8 — all behavioral changes documented |
+| Documentation coverage | 100% — no gaps identified |
+
+### Standing By
+
+Fully available. Documentation current through v0.4.1 feature surface including OG/Twitter tags. All release notes in sync with shipped code on master. Ready for next assignment.
+
 *Maintained by: Support Engineer (88b72065)*

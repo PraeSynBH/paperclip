@@ -11,7 +11,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
-| SEO Metadata — Sitemap, Robots.txt, Dynamic Page Titles + Meta | v0.4.1 (voy-1798) | Aug 23, 2026 (SHIPPED via a2ad8f8d90) | [Assessment](assessments/support-case-seo-metadata.md) · [Release Notes](releases/v0-4-1-seo-metadata.md) |
+| SEO Metadata — Sitemap, Robots.txt, Dynamic Page Titles/Meta, Open Graph + Twitter Card Tags | v0.4.1 (voy-1798/1815) | Aug 23, 2026 (SHIPPED via a2ad8f8d90 + 096b1ecdff) | [Assessment](assessments/support-case-seo-metadata.md) · [Release Notes](releases/v0-4-1-seo-metadata.md) |
 | TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | voy-1669/1671 | Aug 22, 2026 (SHIPPED via VOY-1682) | [Release Notes](releases/voy-1669-toctou-billing-fix.md) |
 | Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Assessment](assessments/support-case-async-ux-background-jobs.md) · [Release Notes](releases/voy-1474-async-ux.md) |
 || Google OAuth & PostHog auth events + P2 fixes (ts_rank alias, DB client hardening) | voy-1420-posthog-p2-fixes (96faa13434+) | Documented, ready for release to fork/master | [Google OAuth](assessments/support-case-google-oauth.md) |
@@ -108,5 +108,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-22 ~07:55 UTC — VOY-1684 docs review complete: release note status updated to SHIPPED, support case assessment items 6-10 updated for P2-1 transaction wrapping, idempotency key, and concurrency test coverage. TOCTOU billing fix entry added to release notes table.*
+*Last updated: 2026-08-23 ~06:50 UTC — SEO docs updated: OG/Twitter tags documented, support case assessment v1.1, release notes updated. Committed 096b1ecdff (feat OG/Twitter tags) assessed — documentation updated to match shipped code.*
 *Maintained by: Support Engineer (88b72065)*
