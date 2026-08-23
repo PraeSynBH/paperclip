@@ -7,6 +7,7 @@ import { agentService } from "./agents.js";
 import { budgetService } from "./budgets.js";
 import { notifyHireApproved } from "./hire-hook.js";
 import { instanceSettingsService } from "./instance-settings.js";
+import { ga4AnalyticsService, buildApprovalEvent, buildApprovalRejectedEvent } from "./ga4-analytics.js";
 
 export function approvalService(db: Db) {
   const agentsSvc = agentService(db);
@@ -207,6 +208,12 @@ export function approvalService(db: Db) {
         }
       }
 
+      if (applied) {
+        void ga4AnalyticsService.send(
+          buildApprovalEvent(id, updated.type, updated.companyId),
+        ).catch(() => {});
+      }
+
       return { approval: updated, applied };
     },
 
@@ -224,6 +231,12 @@ export function approvalService(db: Db) {
         if (payloadAgentId) {
           await agentsSvc.terminate(payloadAgentId);
         }
+      }
+
+      if (applied) {
+        void ga4AnalyticsService.send(
+          buildApprovalRejectedEvent(id, updated.type, updated.companyId),
+        ).catch(() => {});
       }
 
       return { approval: updated, applied };

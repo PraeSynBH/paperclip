@@ -89,6 +89,7 @@ Added to `packages/db/src/schema/companies.ts`:
 6. **Experiment config changes require re-deploy** — Changing the config requires updating the environment variable and re-deploying the server. No hot-reload.
 7. **GA4 is not pre-configured** — The GA4 service is included in the codebase but requires explicit environment variable configuration to activate. It is off by default.
 8. **Deterministic but not perfectly balanced** — At low company counts, the variant split may deviate from configured weights. Balance improves as sample size grows.
+9. **Variant B price overrides require Stripe price IDs** — Setting `priceMonthlyCents` or `priceYearlyCents` in `variants.B.tierOverrides` without also setting the corresponding `stripePriceMonthlyId` and `stripePriceYearlyId` **will cause checkout session creation to fail** for that tier. The server logs a warning at startup (`applyTierOverrides`) if this mismatch is detected, but the error only surfaces when a user attempts to subscribe.
 
 ## Troubleshooting
 
@@ -98,6 +99,12 @@ Added to `packages/db/src/schema/companies.ts`:
 3. If `'A'`, they see control pricing (expected unless they should be in the treatment group)
 4. If `'B'`, check that tier overrides are correctly configured in `PRICING_EXPERIMENT_CONFIG`
 5. Verify the environment variable is set and valid JSON, and the server was re-deployed after setting it
+
+### Checkout session creation fails for a tier in variant B
+1. Check server logs for `"Variant B tier override sets price without corresponding Stripe price ID"` warning
+2. If present, add the missing `stripePriceMonthlyId` and `stripePriceYearlyId` fields to the tier override config
+3. The tier's Stripe price IDs can be found in the Stripe Dashboard under Products → [product] → [price] → "ID" field (prefixed with `price_`)
+4. Re-deploy the server after updating the config
 
 ### Experiment appears disabled for all companies
 1. Check that `PRICING_EXPERIMENT_CONFIG` environment variable is set
@@ -140,6 +147,7 @@ Added to `packages/db/src/schema/companies.ts`:
 | Issue | First Response | Escalation |
 |---|---|---|
 | Incorrect pricing displayed | Support Engineer verifies variant assignment and tier config | CTO — pricing service logic review |
+| Checkout session fails for variant B tier | Support Engineer checks server logs for Stripe price ID warnings | CTO — verify Stripe product configuration and tier override schema |
 | Experiment cannot be enabled | Support Engineer checks env var and server deployment | Release Engineer — verify deployment and restart |
 | Strange experiment results (e.g., all companies in one variant) | Support Engineer checks per-variant counts via API | CTO — data integrity / assignment logic review |
 | Stripe checkout metadata issues | Support Engineer confirms variant was persisted in DB | CTO — billing integration review |

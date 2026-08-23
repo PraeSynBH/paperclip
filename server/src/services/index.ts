@@ -186,6 +186,7 @@ export {
 } from "./activity-log.js";
 export { summarySlotService, SUMMARIZER_BUILT_IN_KEY } from "./summary-slots.js";
 export { notifyHireApproved, type NotifyHireApprovedInput } from "./hire-hook.js";
+export { notifyHeartbeatFailure, type HeartbeatFailurePayload } from "./heartbeat-failure-webhook.js";
 export { publishLiveEvent, subscribeCompanyLiveEvents } from "./live-events.js";
 export {
   reconcileCodexLocalManagedHomesOnStartup,
@@ -193,4 +194,5 @@ export {
 } from "./codex-auth-reconciliation.js";
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
-export { ga4AnalyticsService, getGa4AnalyticsService, resolveGa4ConfigFromEnv, type Ga4AnalyticsService, type Ga4Config, type Ga4Event, type Ga4Payload } from "./ga4-analytics.js";
+export { ga4AnalyticsService, getGa4AnalyticsService, resolveGa4ConfigFromEnv, buildSignupEvent, buildOnboardingCompletedEvent, buildTrialStartEvent, buildApprovalEvent, buildApprovalRejectedEvent, type Ga4AnalyticsService, type Ga4Config, type Ga4Event, type Ga4Payload } from "./ga4-analytics.js";
+export { onboardingService } from "./onboarding.js";

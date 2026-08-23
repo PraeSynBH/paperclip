@@ -1,13 +1,16 @@
 ---
 title: Onboarding API
-summary: Self-service company creation with default agents
-version: v0.5.0
-last_updated: 2026-08-18
+summary: Self-service company creation and role-based onboarding wizard
+version: v0.5.0 + M6
+last_updated: 2026-08-23
 ---
 
 # Onboarding API
 
-The Onboarding API provides a self-service endpoint for creating a new company with all the scaffolding needed to start working immediately: default agents, a company-level goal, an onboarding project, and a starter task.
+The Onboarding API provides endpoints for creating a new company and setting up its initial structure. Two flows are available:
+
+1. **Quick-start onboarding** (`POST /api/start`) — One-shot company creation with default agents, goal, project, and task. Requires board-level access.
+2. **Guided onboarding wizard** (`/api/companies/:companyId/onboarding/*`) — Step-by-step role selection for new self-serve signups. Integrated with the M6 trial flow.
 
 ## Endpoints
 
@@ -145,3 +148,133 @@ Activity log entries are recorded for each created entity.
 - [Agents API](/api/agents) — agent lifecycle and management
 - [Companies API](/api/companies) — company lifecycle and memberships
 - [Company Templates API](/api/company-templates) — one-click company deployment with knowledge packs
+
+---
+
+## Guided Onboarding Wizard (M6)
+
+The guided onboarding wizard is presented to new self-serve signups after registration. It provides step-by-step role selection, with the option to skip and land on an empty dashboard.
+
+### Check onboarding status
+
+```
+GET /api/companies/:companyId/onboarding/status
+```
+
+Returns the current onboarding state for a company.
+
+**Authorization:** Company access (`assertCompanyAccess`).
+
+**Response (200):**
+```json
+{
+  "status": "pending",
+  "selectedRole": null,
+  "completedAt": null,
+  "canSelectRole": true
+}
+```
+
+**Status values:**
+| Status | Meaning | canSelectRole |
+|--------|---------|---------------|
+| `pending` | Onboarding not yet started | `true` |
+| `completed` | Role was selected | `false` |
+| `skipped` | User skipped onboarding | `false` |
+
+**Errors:**
+| Status | Meaning |
+|--------|---------|
+| `400` | Company not found |
+
+### Select a role
+
+```
+POST /api/companies/:companyId/onboarding/role
+```
+
+Select a role during onboarding. Creates an agent, company-level goal, project, and first task in a single transaction with `SELECT ... FOR UPDATE` row locking to prevent concurrent selection conflicts.
+
+**Authorization:** Company access (`assertCompanyAccess`).
+
+**Request body:**
+```json
+{
+  "role": "cto"
+}
+```
+
+**Valid roles:** `ceo`, `cto`, `engineer`, `pm`, `designer`, `product`, `founder`, `operator`, `marketing`, `support`, `sales`, `hr`, `finance`, `legal`, `operations`
+
+**Response (200):**
+```json
+{
+  "companyId": "uuid",
+  "role": "cto",
+  "applied": true,
+  "agentId": "uuid",
+  "projectId": "uuid",
+  "goalId": "uuid",
+  "issueId": "uuid"
+}
+```
+
+**Errors:**
+| Status | Meaning |
+|--------|---------|
+| `400` | Company not found or invalid role |
+| `409` | Onboarding already completed or skipped |
+
+**Idempotency:** The first task is created with an `idempotencyKey` (`onboarding-role:{companyId}:{role}`). The `409` conflict prevents re-execution if the role was already selected.
+
+### Skip onboarding
+
+```
+POST /api/companies/:companyId/onboarding/skip
+```
+
+Skip the onboarding wizard and land on the empty dashboard. Only allowed when status is `pending`.
+
+**Authorization:** Company access (`assertCompanyAccess`).
+
+**Request body:** None (empty body or `{}`).
+
+**Response (200):**
+```json
+{
+  "companyId": "uuid",
+  "skipped": true
+}
+```
+
+**Errors:**
+| Status | Meaning |
+|--------|---------|
+| `400` | Company not found |
+| `409` | Onboarding already completed or skipped |
+
+### What the wizard creates
+
+When a role is selected, the following entities are created atomically:
+
+1. **Company-level goal** — Title matches the role label (e.g., "CTO"), status `active`
+2. **"Onboarding" project** — Linked to the goal, status `in_progress`
+3. **Agent** — Named after the role label, `general` role (or `ceo` for CEO role), `claude_local` adapter
+4. **First task** — "Get started with {RoleLabel}", assigned to the new agent, status `todo`
+
+The company's `onboarding_status` is set to `completed` with `onboarding_selected_role` and `onboarding_completed_at` populated.
+
+### Activity Logging
+
+- `company.onboarding_role_selected` — details include role, agentId, projectId, goalId, issueId
+- `company.onboarding_skipped` — empty details
+
+### DB Schema
+
+The `companies` table has three additional columns (migration 0231):
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `onboarding_status` | `text` | `'pending'` | Current state: `pending`, `completed`, or `skipped` |
+| `onboarding_selected_role` | `text` | `null` | The role selected during onboarding |
+| `onboarding_completed_at` | `timestamp with time zone` | `null` | When onboarding was completed or skipped |

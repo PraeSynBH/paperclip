@@ -139,3 +139,19 @@ export function buildApprovalRejectedEvent(approvalId: string, approvalType: str
     events: [{ name: "approval_rejected", params: { approval_id: approvalId, approval_type: approvalType, company_id: companyId } }],
   };
 }
+
+export function buildOnboardingCompletedEvent(companyId: string, role: string): Ga4Payload {
+  return {
+    client_id: companyId,
+    user_id: companyId,
+    events: [{ name: "onboarding_completed", params: { role, company_id: companyId } }],
+  };
+}
+
+export function buildTrialStartEvent(companyId: string, tierId: string, billingPeriod: string): Ga4Payload {
+  return {
+    client_id: companyId,
+    user_id: companyId,
+    events: [{ name: "trial_started", params: { tier_id: tierId, billing_period: billingPeriod, company_id: companyId } }],
+  };
+}

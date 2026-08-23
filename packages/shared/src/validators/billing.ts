@@ -17,6 +17,12 @@ export const createCheckoutSessionSchema = z.object({
 
 export type CreateCheckoutSession = z.infer<typeof createCheckoutSessionSchema>;
 
+export const createPortalSessionSchema = z.object({
+  returnUrl: z.string().url().optional(),
+});
+
+export type CreatePortalSession = z.infer<typeof createPortalSessionSchema>;
+
 export const updateSubscriptionSchema = z.object({
   tierId: z.string().uuid(),
   billingPeriod: z.enum(BILLING_PERIODS).optional(),

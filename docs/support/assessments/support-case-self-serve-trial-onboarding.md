@@ -1,10 +1,10 @@
 # Support Case Assessment: M6 Self-Serve Trial Onboarding
 
-**Feature**: Self-serve trial sign-up and onboarding flow — new users can register, get a company created automatically, and start a 14-day free trial without human intervention. Trial expiry transitions through a 7-day grace period (`grace_period` status) before reaching `expired`, preserving user data throughout.
+**Feature**: Self-serve trial sign-up and onboarding flow — new users can register, get a company created automatically, and start a 14-day free trial without human intervention. Trial expiry transitions through a 7-day grace period (`grace_period` status) before reaching `expired`, preserving user data throughout. An onboarding wizard guides role selection (or skip) to set up the initial agent, goal, project, and task.
 **Assessed by**: Support Engineer
 **Date**: 2026-08-23
 **Related**: M6 — Self-Serve Trial Onboarding, Trial Grace Period (added alongside M5 billing enhancements)
-**Commits**: `d344d832e0`, `996136bc66`, `722b0c4cbd`, `042d68662d`, `b0d5b9c7ee` — plus trial grace period in server/src/services/billing.ts (unstaged on feat/clean-m5-pricing-pr)
+**Commits**: `d344d832e0`, `996136bc66`, `722b0c4cbd`, `042d68662d`, `b0d5b9c7ee`, `f4e882dc04` (onboarding wizard + migrations)
 **Branch**: `feat/m6-self-serve-trial-onboarding` (cherry-picked into `feat/clean-m5-pricing-pr`)
 
 ## Feature Overview (User Perspective)
@@ -15,18 +15,21 @@ Paperclip now offers a true self-serve onboarding experience. New users who sign
 
 1. **Sign up** — User creates an account via the Auth page
 2. **Auto-registration** — After sign-up, the system automatically creates a company (default name: "My Company"), starts a 14-day trial, and redirects the user into the app
-3. **Trial awareness** — A banner at the top of the layout tells the user how many trial days remain. A compact "Trial · Xd" badge appears in nav/header contexts
-4. **Expired state** — When the trial ends, the banner switches to an "expired" state with a link to /pricing to choose a plan
-5. **Choose a plan** — Users can upgrade to a paid tier at any time via /pricing (Stripe Checkout, requiring Stripe to be configured)
+3. **Onboarding wizard** — The user is guided through a role selection step (CEO, CTO, Engineer, PM, Designer, etc.) or may skip onboarding entirely. Selecting a role creates an initial agent, company-level goal, an "Onboarding" project, and a first task. Skipping lands on an empty dashboard.
+4. **Trial awareness** — A banner at the top of the layout tells the user how many trial days remain. A compact "Trial · Xd" badge appears in nav/header contexts
+5. **Expired state** — When the trial ends, the banner switches to an "expired" state with a link to /pricing to choose a plan
+6. **Choose a plan** — Users can upgrade to a paid tier at any time via /pricing (Stripe Checkout, requiring Stripe to be configured)
 
 ### Trial Tier Limits
 
 | Resource | Included |
 |----------|----------|
-| Seats | 1 seat |
+| Seats | 1 seat (configurable — migration seeds 5) |
 | Agent runs | 100 runs |
 | Storage | 1 GB |
-| Features | AI trip planning, basic itinerary, 1 agent |
+| Features | AI trip planning, basic itinerary, 1 agent (configurable — migration seeds Paperclip platform features) |
+
+> **Note:** The limits above reflect the intended Voyonder trial experience. The actual database seed (migration 0232) uses different values (5 seats, platform features). These should be aligned before production deployment. See the [Trial Tier Seed Data](#4-trial-tier-seed-data) section for details.
 
 ## What Changed
 
@@ -103,18 +106,20 @@ A background interval runs every 30 minutes that:
 
 ### 4. Trial Tier Seed Data
 
-A new `Trial` subscription tier is seeded into the database:
+A new `Trial` subscription tier is seeded into the database (migration 0232):
 
 | Field | Value |
 |-------|-------|
 | Name | `Trial` |
-| Description | "Free 14-day trial — explore Paperclip AI agents with basic features." |
+| Description | "14-day free trial with full access to all features" |
 | Price | Free ($0) |
-| Included seats | 1 |
+| Included seats | 5 (configurable) |
 | Included agent runs | 100 |
 | Included storage | 1 GB |
-| Features | `ai_trip_planning`, `basic_itinerary`, `1_agent` |
+| Features | `custom_plugins`, `advanced_agents`, `audit_logs`, `api_access` |
 | Sort order | 0 (lowest) |
+
+> **Note:** The migration seeds 5 seats and Paperclip platform-level features. The Voyonder trial experience (described in the Feature Overview table above) may use different limits depending on deployment configuration. If the Voyonder trial requires 1 seat and Voyonder-specific features (AI trip planning, basic itinerary, 1 agent), the migration seed data should be updated before deployment. See [Migration 0232](../../packages/db/src/migrations/0232_trial_tier_seed.sql) for the current seed values.
 
 ### 5. UI Components
 
@@ -144,6 +149,111 @@ A new `Trial` subscription tier is seeded into the database:
 
 `Auth.tsx` now calls `completeRegistration()` automatically after successful sign-up and redirects the user to the new company's onboarding page — no manual company creation step.
 
+### 8. Onboarding Wizard (Phase 2)
+
+Three new endpoints implement the guided onboarding wizard that appears after registration:
+
+| Endpoint | Method | Description | Auth |
+|----------|--------|-------------|------|
+| `/api/companies/:companyId/onboarding/status` | GET | Returns current onboarding state | Company access |
+| `/api/companies/:companyId/onboarding/role` | POST | Select a role — creates agent, goal, project, first task | Company access |
+| `/api/companies/:companyId/onboarding/skip` | POST | Skip onboarding — land on empty dashboard | Company access |
+
+#### GET /api/companies/:companyId/onboarding/status
+
+Returns the current onboarding state for a company.
+
+**Response (200):**
+```json
+{
+  "status": "pending",
+  "selectedRole": null,
+  "completedAt": null,
+  "canSelectRole": true
+}
+```
+
+**Possible status values:**
+- `pending` — Onboarding not yet started. User can select a role or skip.
+- `completed` — Role was selected. Onboarding is done.
+- `skipped` — User chose to skip onboarding.
+
+**`canSelectRole`** is `true` only when `status` is `pending`.
+
+#### POST /api/companies/:companyId/onboarding/role
+
+Select a role for the company. Creates the following in a single transaction:
+
+1. **Company-level goal** — Title matches the role label (e.g., "CTO")
+2. **"Onboarding" project** — Linked to the goal, status `in_progress`
+3. **Agent** — Created with the role's label as name, `general` role (or `ceo` for CEO role), `claude_local` adapter
+4. **First task** — "Get started with {RoleLabel}", assigned to the new agent, status `todo`
+5. **Company status update** — `onboarding_status` set to `completed`, `onboarding_selected_role` set, `onboarding_completed_at` timestamped
+
+The entire operation is wrapped in a transaction with a `SELECT ... FOR UPDATE` row lock on the company row to prevent TOCTOU races between concurrent `selectRole`/`skip` calls.
+
+**Request:**
+```json
+{
+  "role": "cto"
+}
+```
+
+**Valid roles:** `ceo`, `cto`, `engineer`, `pm`, `designer`, `product`, `founder`, `operator`, `marketing`, `support`, `sales`, `hr`, `finance`, `legal`, `operations` (from the `AGENT_ROLES` constant)
+
+**Response (200):**
+```json
+{
+  "companyId": "uuid",
+  "role": "cto",
+  "applied": true,
+  "agentId": "uuid",
+  "projectId": "uuid",
+  "goalId": "uuid",
+  "issueId": "uuid"
+}
+```
+
+**Errors:**
+- `400` — Company not found or invalid role
+- `409` — Onboarding already completed or skipped (includes `currentStatus` field)
+
+**Idempotency:** The first task is created with an `idempotencyKey` (`onboarding-role:{companyId}:{role}`), preventing duplicate tasks on retry. If the role selection is called again, the 409 conflict prevents re-execution.
+
+#### POST /api/companies/:companyId/onboarding/skip
+
+Skip onboarding and land on the empty dashboard. Only allowed when status is `pending`.
+
+**Response (200):**
+```json
+{
+  "companyId": "uuid",
+  "skipped": true
+}
+```
+
+**Errors:**
+- `400` — Company not found
+- `409` — Onboarding already completed or skipped
+
+#### DB Schema Changes (Migration 0231)
+
+```sql
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "onboarding_status" text NOT NULL DEFAULT 'pending';
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "onboarding_selected_role" text;
+ALTER TABLE "companies" ADD COLUMN IF NOT EXISTS "onboarding_completed_at" timestamp with time zone;
+```
+
+#### Activity Logging
+
+Both role selection and skip operations create activity log entries:
+- `company.onboarding_role_selected` — includes role, agentId, projectId, goalId, issueId in details
+- `company.onboarding_skipped` — empty details
+
+#### UI Integration
+
+The onboarding wizard is presented to the user immediately after registration (before the main dashboard). The UI polls `GET /api/companies/:companyId/onboarding/status` to determine whether to show the role selection screen or the main dashboard. After role selection or skip, the status changes to `completed` or `skipped` and the main dashboard is displayed.
+
 ## Known Limitations & Edge Cases
 
 | Limitation | Details | Workaround |
@@ -156,6 +266,9 @@ A new `Trial` subscription tier is seeded into the database:
 | **TrialDays max 90** | The `trialDays` field is limited to 90 days by the Zod schema | For longer trials, admins can directly set up a subscription |
 || **Reaper delay** | The trial expiry reaper runs every 30 minutes. Expired trials may have up to 30 minutes of grace access | This is intentional — prevents hard cutoffs. The `past_due` status blocks paid features but doesn't delete data |
 || **Grace period vs. reaper race** | The reaper (sets `past_due` immediately) and `handlePostTrialStatus` (sets `grace_period` via Stripe webhook) may race. The grace period system is the preferred path; the reaper acts as a safety net | If a user reports they were blocked immediately after trial expiry, check the subscription status in the DB. If it's `past_due` instead of `grace_period`, the reaper fired before the Stripe webhook was processed. The data is still accessible — the user can upgrade via `/pricing` |
+|| **Onboarding already completed/skipped** | Once onboarding is completed (role selected) or skipped, the user cannot change their choice | No workaround — the company's onboarding status is final. If a role needs changing, create a new agent manually via the Agents API |
+|| **Onboarding role selection not retryable** | If role selection fails mid-transaction (e.g., agent creation), the entire transaction rolls back and the user can retry | The FOR UPDATE lock prevents partial state. The user sees an error and can select a role again |
+|| **Claude Local adapter default** | The onboarding wizard creates agents with `claude_local` adapter by default. If this adapter is unavailable, role selection fails | Ensure `claude_local` adapter is available, or update the onboarding service to use a different default adapter |
 
 ## Troubleshooting
 
@@ -189,6 +302,25 @@ A new `Trial` subscription tier is seeded into the database:
   2. The `past_due` status is properly integrated with feature gating
   3. The user may be within the 30-minute reaper window
 
+### Symptom: Onboarding wizard doesn't appear after registration
+
+1. Verify the company's onboarding status: `SELECT onboarding_status FROM companies WHERE id = '<companyId>';`
+2. If status is `pending`, the wizard should appear. Check the UI is polling `GET /api/companies/:companyId/onboarding/status`
+3. If status is `completed` or `skipped`, the user already finished onboarding and the wizard won't show
+4. Check browser console for errors on the onboarding status endpoint
+
+### Symptom: Role selection returns 409 Conflict
+
+1. The company's onboarding is already completed or skipped — check `SELECT onboarding_status FROM companies WHERE id = '<companyId>';`
+2. If the user wants a different role, they need to manually create a new agent via the Agents API
+3. No way to "re-do" onboarding — this is by design
+
+### Symptom: Role selection fails with 400
+
+1. Verify the role value is valid — check the `AGENT_ROLES` constant for accepted values
+2. The company must exist and be accessible
+3. Check server logs for transaction errors (agent creation, goal creation, etc.)
+
 ## Support Escalation Path
 
 | Issue | Escalate To | Contact |
@@ -197,6 +329,8 @@ A new `Trial` subscription tier is seeded into the database:
 | Stripe integration needed for upgrade | Engineering/DevOps | Slack #eng-infra |
 | Extending trial days (above 90) | Board operator / Admin | Direct DB update |
 | Bulk trial provisioning | COO / Sales | #sales channel |
+| Onboarding role selection failing | Engineering | Slack #eng-onboarding |
+| Onboarding stuck at pending | Engineering | Slack #eng-onboarding |
 
 ## Verification Checklist
 
@@ -210,3 +344,10 @@ A new `Trial` subscription tier is seeded into the database:
 - [ ] Existing company's `startTrial` returns existing subscription (idempotent)
 - [ ] No trial banner when subscription is not `trialing`
 - [ ] Pricing page is accessible from trial banner links
+- [ ] GET /onboarding/status returns `pending` for a new company
+- [ ] POST /onboarding/role creates agent, goal, project, task
+- [ ] POST /onboarding/role returns 409 after completion
+- [ ] POST /onboarding/skip marks company as `skipped`
+- [ ] POST /onboarding/skip returns 409 after role selection
+- [ ] Activity log entries created for role selection and skip
+- [ ] Onboarding status persists across page refreshes

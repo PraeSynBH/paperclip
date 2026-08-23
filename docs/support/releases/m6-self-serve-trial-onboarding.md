@@ -2,19 +2,20 @@
 title: M6 — Self-Serve Trial Onboarding
 version: m6-self-serve-trial
 date: 2026-08-23
-commits: d344d832e0, 996136bc66, 722b0c4cbd, 042d68662d, b0d5b9c7ee
-status: BRANCH — feat/m6-self-serve-trial-onboarding (not yet merged to main)
+commits: d344d832e0, 996136bc66, 722b0c4cbd, 042d68662d, b0d5b9c7ee, f4e882dc04
+status: BRANCH — feat/clean-m5-pricing-pr (cherry-picked from feat/m6-self-serve-trial-onboarding)
 ---
 
 # M6 — Self-Serve Trial Onboarding
 
-**Branch:** `feat/m6-self-serve-trial-onboarding`
+**Branch:** `feat/clean-m5-pricing-pr` (cherry-picked from `feat/m6-self-serve-trial-onboarding`)
 **Commits:**
 - `d344d832e0` — feat(m6): implement self-serve trial and onboarding flow
 - `996136bc66` — feat(m6): add trial expiry reaper — 30-minute interval sweep
 - `722b0c4cbd` — fix(m6): resolve merge conflict in complete-registration route
 - `042d68662d` — feat(m6): add trial status banner component
 - `b0d5b9c7ee` — feat(m6): add trialInfo and startTrial to billing API client + query keys
+- `f4e882dc04` — feat(m6): add onboarding wizard (role selection, status, skip) + migrations
 **Date:** 2026-08-23
 **Status:** Feature branch — ready for release to main
 **Related:** M6 Milestone — Self-Serve Trial Onboarding
@@ -23,7 +24,7 @@ status: BRANCH — feat/m6-self-serve-trial-onboarding (not yet merged to main)
 
 ## Summary
 
-Paperclip now supports self-serve trial onboarding. New users can sign up, get a company created automatically, and start a 14-day free trial — no sales call, no credit card, no manual provisioning. A trial banner keeps users informed of their remaining days, and expired trials gracefully degrade to limited access.
+Paperclip now supports self-serve trial onboarding. New users can sign up, get a company created automatically, and start a 14-day free trial — no sales call, no credit card, no manual provisioning. A trial banner keeps users informed of their remaining days, and expired trials gracefully degrade to limited access. A guided onboarding wizard helps users select their role and get started with an initial agent, goal, project, and task.
 
 ## What Changed
 
@@ -72,9 +73,39 @@ A background job runs every **30 minutes** (and once on startup) that:
 - `authApi.completeRegistration()` for the registration flow
 - `queryKeys.billing.trialInfo` for consistent React Query cache management
 
+### New: Onboarding Wizard (Role Selection)
+
+Three new endpoints guide users through company setup:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/companies/:companyId/onboarding/status` | GET | Returns current onboarding state (`pending`, `completed`, `skipped`) |
+| `/api/companies/:companyId/onboarding/role` | POST | Select a role — creates an agent, company-level goal, onboarding project, and first task |
+| `/api/companies/:companyId/onboarding/skip` | POST | Skip onboarding and land on the empty dashboard |
+
+The wizard is presented immediately after registration. Role selection is idempotent (TOCTOU-safe with `FOR UPDATE` locking) and creates:
+- An **agent** with the selected role's label
+- A **company-level goal** matching the role title
+- An **"Onboarding" project** linked to the goal
+- A **first task** ("Get started with {RoleLabel}") assigned to the new agent
+
+Once completed or skipped, the choice is final (409 Conflict on reattempt).
+
+### New: DB Schema Changes
+
+- Migration **0231** — adds `onboarding_status`, `onboarding_selected_role`, and `onboarding_completed_at` columns to the `companies` table
+- Migration **0232** — seeds the `Trial` subscription tier (free, configurable limits)
+
+### New: Activity Logging
+
+- `company.onboarding_role_selected` — logged when a role is chosen
+- `company.onboarding_skipped` — logged when onboarding is skipped
+
 ## Migration Notes
 
-- **Database:** The `Trial` tier is seeded via `002_subscription_tiers.sql` — it's idempotent (`WHERE NOT EXISTS`), safe to run on existing databases
+- **Database Migrations:** Two new migrations are included:
+  - **0231** — adds onboarding status columns to `companies` table (idempotent, `ADD COLUMN IF NOT EXISTS`)
+  - **0232** — seeds the `Trial` subscription tier (idempotent, `ON CONFLICT (name) DO NOTHING`)
 - **No destructive changes:** Existing subscriptions and companies are unaffected
 - **Configuration:** Stripe setup is optional for trials but required for upgrade to paid plans
 

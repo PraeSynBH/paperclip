@@ -3,6 +3,7 @@ import type { Db } from "@paperclipai/db";
 import {
   createSubscriptionSchema,
   createCheckoutSessionSchema,
+  createPortalSessionSchema,
   updateSubscriptionSchema,
   reportUsageSchema,
 } from "@paperclipai/shared";
@@ -120,6 +121,26 @@ export function billingRoutes(db: Db) {
         assertCompanyAccess(req, companyId);
         requireBoardUser(req);
         const result = await billing.createCheckoutSession(companyId, req.body);
+        res.json(result);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
+
+  /**
+   * POST /api/companies/:companyId/billing/portal-link
+   * Create a Stripe billing portal session link for managing subscription
+   */
+  router.post(
+    "/companies/:companyId/billing/portal-link",
+    validate(createPortalSessionSchema),
+    async (req, res, next) => {
+      try {
+        const companyId = req.params.companyId as string;
+        assertCompanyAccess(req, companyId);
+        requireBoardUser(req);
+        const result = await billing.getBillingPortalLink(companyId, req.body.returnUrl);
         res.json(result);
       } catch (err) {
         next(err);

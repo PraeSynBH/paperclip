@@ -1,7 +1,7 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { companies } from "@paperclipai/db";
-import { AGENT_ROLES, type AgentRole } from "@paperclipai/shared";
+import { AGENT_ROLES, AGENT_ROLE_LABELS, ONBOARDING_FIRST_TASK_ORIGIN_KIND, type AgentRole } from "@paperclipai/shared";
 import type { OnboardingStatus } from "@paperclipai/shared";
 import { agentService } from "./agents.js";
 import { projectService } from "./projects.js";
@@ -9,6 +9,7 @@ import { goalService } from "./goals.js";
 import { issueService } from "./issues.js";
 import { logActivity, publishActivity, type ActivityPublication } from "./activity-log.js";
 import { badRequest, conflict } from "../errors.js";
+import { ga4AnalyticsService, buildOnboardingCompletedEvent } from "./ga4-analytics.js";
 
 export type OnboardingAuditActor = {
   actorType: "agent" | "user" | "system" | "plugin";
@@ -40,12 +41,7 @@ export function onboardingService(db: Db) {
   async function getStatus(companyId: string) {
     const state = await getCompanyOnboardingState(companyId);
     if (!state) {
-      return {
-        status: "pending" as OnboardingStatus,
-        selectedRole: null,
-        completedAt: null,
-        canSelectRole: true,
-      };
+      throw badRequest("Company not found");
     }
 
     const status = state.onboardingStatus as OnboardingStatus;
@@ -66,17 +62,6 @@ export function onboardingService(db: Db) {
     role: AgentRole,
     audit?: OnboardingAuditActor,
   ) {
-    const state = await getCompanyOnboardingState(companyId);
-    if (!state) {
-      throw badRequest("Company not found");
-    }
-
-    if (state.onboardingStatus !== "pending") {
-      throw conflict("Onboarding has already been completed or skipped", {
-        currentStatus: state.onboardingStatus,
-      });
-    }
-
     const publications: ActivityPublication[] = [];
 
     const result = await db.transaction(async (tx) => {
@@ -86,10 +71,36 @@ export function onboardingService(db: Db) {
       const goalSvc = goalService(dbx);
       const issueSvc = issueService(dbx);
 
+      // Lock the company row and check onboarding status inside the
+      // transaction to prevent a TOCTOU race with concurrent selectRole/skip.
+      await tx.execute(
+        sql`select ${companies.id} from ${companies} where ${companies.id} = ${companyId} for update`,
+      );
+
+      const [companyState] = await dbx
+        .select({
+          onboardingStatus: companies.onboardingStatus,
+          onboardingSelectedRole: companies.onboardingSelectedRole,
+          onboardingCompletedAt: companies.onboardingCompletedAt,
+        })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .then((rows) => rows);
+
+      if (!companyState) {
+        throw badRequest("Company not found");
+      }
+
+      if (companyState.onboardingStatus !== "pending") {
+        throw conflict("Onboarding has already been completed or skipped", {
+          currentStatus: companyState.onboardingStatus,
+        });
+      }
+
       // 1. Create a company-level goal
       const goal = await goalSvc.create(companyId, {
-        title: roleLabel(role),
-        description: `Onboarding goal for ${roleLabel(role)} role`,
+        title: AGENT_ROLE_LABELS[role],
+        description: `Onboarding goal for ${AGENT_ROLE_LABELS[role]} role`,
         level: "company",
         status: "active",
       });
@@ -102,13 +113,13 @@ export function onboardingService(db: Db) {
       });
 
       // 3. Create the initial agent based on the role
-      const agentName = roleLabel(role);
+      const agentName = AGENT_ROLE_LABELS[role];
       const agentRole = role === "ceo" ? "ceo" : "general";
 
       const agent = await agentSvc.create(companyId, {
         name: agentName,
         role: agentRole,
-        title: roleLabel(role),
+        title: AGENT_ROLE_LABELS[role],
         adapterType: "claude_local",
         adapterConfig: {},
         runtimeConfig: {},
@@ -120,12 +131,13 @@ export function onboardingService(db: Db) {
 
       // 4. Create a first task
       const issue = await issueSvc.create(companyId, {
-        title: `Get started with ${roleLabel(role)}`,
-        description: `Welcome! As our ${roleLabel(role)}, here are your first steps to get started.`,
+        title: `Get started with ${AGENT_ROLE_LABELS[role]}`,
+        description: `Welcome! As our ${AGENT_ROLE_LABELS[role]}, here are your first steps to get started.`,
         assigneeAgentId: agent.id,
         projectId: project.id,
         goalId: goal.id,
         status: "todo",
+        originKind: ONBOARDING_FIRST_TASK_ORIGIN_KIND,
         idempotencyKey: `onboarding-role:${companyId}:${role}`,
       });
 
@@ -174,6 +186,10 @@ export function onboardingService(db: Db) {
     });
 
     for (const publication of publications) publishActivity(publication);
+
+    // GA4 tracking: fire onboarding_completed event after successful role selection
+    ga4AnalyticsService.send(buildOnboardingCompletedEvent(companyId, role));
+
     return result;
   }
 
@@ -184,21 +200,35 @@ export function onboardingService(db: Db) {
     companyId: string,
     audit?: OnboardingAuditActor,
   ) {
-    const state = await getCompanyOnboardingState(companyId);
-    if (!state) {
-      throw badRequest("Company not found");
-    }
-
-    if (state.onboardingStatus !== "pending") {
-      throw conflict("Onboarding has already been completed or skipped", {
-        currentStatus: state.onboardingStatus,
-      });
-    }
-
     const publications: ActivityPublication[] = [];
 
     await db.transaction(async (tx) => {
       const dbx = tx as unknown as Db;
+
+      // Lock the company row and check onboarding status inside the
+      // transaction to prevent a TOCTOU race with concurrent selectRole/skip.
+      await tx.execute(
+        sql`select ${companies.id} from ${companies} where ${companies.id} = ${companyId} for update`,
+      );
+
+      const [companyState] = await dbx
+        .select({
+          onboardingStatus: companies.onboardingStatus,
+        })
+        .from(companies)
+        .where(eq(companies.id, companyId))
+        .then((rows) => rows);
+
+      if (!companyState) {
+        throw badRequest("Company not found");
+      }
+
+      if (companyState.onboardingStatus !== "pending") {
+        throw conflict("Onboarding has already been completed or skipped", {
+          currentStatus: companyState.onboardingStatus,
+        });
+      }
+
       const now = new Date();
       await dbx
         .update(companies)
@@ -236,23 +266,4 @@ export function onboardingService(db: Db) {
     selectRole,
     skip,
   };
-}
-
-function roleLabel(role: AgentRole): string {
-  const labels: Record<AgentRole, string> = {
-    ceo: "CEO",
-    cto: "CTO",
-    cmo: "CMO",
-    cfo: "CFO",
-    security: "Security",
-    engineer: "Engineer",
-    designer: "Designer",
-    pm: "PM",
-    qa: "QA",
-    devops: "DevOps",
-    researcher: "Researcher",
-    general: "General",
-    agent: "Agent",
-  };
-  return labels[role] ?? role;
 }

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Db } from "@paperclipai/db";
-import { selectOnboardingRoleSchema } from "@paperclipai/shared";
+import { selectOnboardingRoleSchema, skipOnboardingSchema } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { onboardingService } from "../services/onboarding.js";
 import { assertCompanyAccess, getActorInfo } from "./authz.js";
@@ -54,6 +54,7 @@ export function onboardingRoutes(db: Db) {
    */
   router.post(
     "/companies/:companyId/onboarding/skip",
+    validate(skipOnboardingSchema),
     async (req, res) => {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);

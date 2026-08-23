@@ -2566,10 +2566,28 @@ export {
 export {
   createSubscriptionSchema,
   createCheckoutSessionSchema,
+  createPortalSessionSchema,
   updateSubscriptionSchema,
   reportUsageSchema,
   type CreateSubscription,
   type CreateCheckoutSession,
+  type CreatePortalSession,
   type UpdateSubscription,
   type ReportUsage,
 } from "./validators/billing.js";
+
+export {
+  selectOnboardingRoleSchema,
+  skipOnboardingSchema,
+  type SelectOnboardingRoleInput,
+  type OnboardingStatus,
+  type OnboardingStatusResponse,
+} from "./validators/onboarding.js";
+
+export {
+  startTrialSchema,
+  convertTrialSchema,
+  type StartTrialInput,
+  type ConvertTrialInput,
+  type TrialStatusResponse,
+} from "./validators/trial.js";

@@ -18,6 +18,17 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "@/components/ui/alert-dialog";
 import { PaperclipLoading } from "@/components/AnimatedPaperclipIcon";
 import {
   Check,
@@ -28,6 +39,9 @@ import {
   Zap,
   Shield,
   Users,
+  ChevronDown,
+  ChevronUp,
+  Star,
 } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 
@@ -59,6 +73,73 @@ function ga4(
     // GA4 tracking is best-effort
   }
 }
+
+// ── Variant-aware copy system ──────────────────────────────────────────
+
+type VariantKey = "A" | "B";
+
+interface VariantCopy {
+  /** Primary page heading */
+  heading: string;
+  /** Subheading below the heading */
+  subheading: string;
+  /** Label for the call-to-action button on an available plan */
+  ctaLabel: string;
+  /** Label for the recommended/middle-tier CTA */
+  recommendedCtaLabel: string;
+  /** Label when the user is already on the plan */
+  currentPlanLabel: string;
+  /** Badge label on the recommended tier */
+  recommendedBadgeLabel: string;
+  /** Badge description detail */
+  recommendedBadgeDetail: string | null;
+  /** Label for the "compare plans" toggle */
+  compareLabel: string;
+  /** Urgency/reassurance line near CTAs */
+  urgencyLine: string;
+  /** Pricing sub-text */
+  priceSuffixNote: string | null;
+}
+
+const VARIANT_COPIES: Record<VariantKey, VariantCopy> = {
+  A: {
+    heading: "Choose Your Plan",
+    subheading:
+      "All plans include a 14-day free trial. No credit card required to start. Cancel anytime.",
+    ctaLabel: "Subscribe",
+    recommendedCtaLabel: "Subscribe",
+    currentPlanLabel: "Current Plan",
+    recommendedBadgeLabel: "Most Popular",
+    recommendedBadgeDetail: null,
+    compareLabel: "Compare all features",
+    urgencyLine: "Cancel anytime — no long-term contracts.",
+    priceSuffixNote: null,
+  },
+  B: {
+    heading: "Find the Right Plan for Your Team",
+    subheading:
+      "Start with a 14-day free trial. No credit card required. Cancel anytime.",
+    ctaLabel: "Get Started",
+    recommendedCtaLabel: "Start Free Trial",
+    currentPlanLabel: "Active Plan",
+    recommendedBadgeLabel: "Best Value",
+    recommendedBadgeDetail: "Most features per dollar",
+    compareLabel: "Full feature comparison",
+    urgencyLine: "Free for 14 days. No commitment. Cancel with one click.",
+    priceSuffixNote: "plus applicable taxes",
+  },
+};
+
+interface CtaStyle {
+  variant: "default" | "cta" | "secondary" | "outline";
+  icon: "arrow" | "card" | "none";
+  size: "default" | "lg";
+}
+
+const VARIANT_CTA_STYLES: Record<VariantKey, CtaStyle> = {
+  A: { variant: "default", icon: "card", size: "default" },
+  B: { variant: "cta", icon: "arrow", size: "lg" },
+};
 
 // ── Sub-components ─────────────────────────────────────────────────────
 
@@ -218,6 +299,182 @@ function BillingToggle({
   );
 }
 
+// ── Plan comparison table ──────────────────────────────────────────────
+
+function formatFeatureName(key: string): string {
+  return key
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+interface ComparisonRow {
+  /** Label shown in the left column */
+  label: string;
+  /** For each tier, the value to display (string, number, or boolean) */
+  getValue: (tier: SubscriptionTier) => string | number | boolean;
+}
+
+const COMPARISON_ROWS: ComparisonRow[] = [
+  {
+    label: "Base price",
+    getValue: (t) => formatCents(t.priceMonthlyCents) + "/mo",
+  },
+  {
+    label: "Annual price",
+    getValue: (t) =>
+      t.priceYearlyCents > 0
+        ? formatCents(t.priceYearlyCents) + "/yr"
+        : "N/A",
+  },
+  {
+    label: "Seats included",
+    getValue: (t) => t.includedSeats,
+  },
+  {
+    label: "Extra seat price",
+    getValue: (t) =>
+      t.extraSeatPriceCents > 0
+        ? formatCents(t.extraSeatPriceCents) + "/mo"
+        : "N/A",
+  },
+  {
+    label: "Agent runs / month",
+    getValue: (t) => t.includedAgentRuns.toLocaleString(),
+  },
+  {
+    label: "Extra agent run price",
+    getValue: (t) =>
+      t.extraAgentRunPriceCents > 0
+        ? formatCents(t.extraAgentRunPriceCents) + "/run"
+        : "N/A",
+  },
+  {
+    label: "Storage included",
+    getValue: (t) => `${t.includedStorageGb} GB`,
+  },
+  {
+    label: "Extra storage price",
+    getValue: (t) =>
+      t.extraStorageGbPriceCents > 0
+        ? formatCents(t.extraStorageGbPriceCents) + "/GB"
+        : "N/A",
+  },
+];
+
+function ComparisonTable({
+  tiers,
+  variant,
+  experimentEnabled,
+}: {
+  tiers: SubscriptionTier[];
+  variant: VariantKey;
+  experimentEnabled: boolean;
+}) {
+  const copy = VARIANT_COPIES[variant];
+  const [isOpen, setIsOpen] = useState(false);
+
+  if (tiers.length < 2) return null;
+
+  return (
+    <div className="mt-12">
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        className="mx-auto flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
+        {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        {isOpen ? "Hide comparison" : copy.compareLabel}
+      </button>
+
+      {isOpen && (
+        <div className="mt-6 overflow-x-auto rounded-lg border border-border">
+          <table className="w-full min-w-[600px] text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/30">
+                <th className="sticky left-0 z-10 bg-muted/30 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Feature
+                </th>
+                {tiers.map((tier) => (
+                  <th
+                    key={tier.id}
+                    className="px-4 py-3 text-center text-sm font-semibold"
+                  >
+                    {tier.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {/* Custom features from the tier (the JSONB array) */}
+              {tiers[0].features.length > 0 && (
+                <tr className="border-b border-border/50">
+                  <td
+                    colSpan={tiers.length + 1}
+                    className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 bg-muted/10"
+                  >
+                    Plan Features
+                  </td>
+                </tr>
+              )}
+              {tiers[0].features.map((feature) => (
+                <tr key={feature} className="border-b border-border/30">
+                  <td className="sticky left-0 z-10 bg-card px-4 py-2.5 text-sm font-medium">
+                    {formatFeatureName(feature)}
+                  </td>
+                  {tiers.map((tier) => {
+                    const has = tier.features.includes(feature);
+                    return (
+                      <td
+                        key={tier.id}
+                        className={`px-4 py-2.5 text-center ${
+                          has ? "text-primary" : "text-muted-foreground/40"
+                        }`}
+                      >
+                        {has ? (
+                          <Check className="mx-auto h-4 w-4" />
+                        ) : (
+                          <span className="text-lg leading-none">&mdash;</span>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+
+              {/* Usage and quota comparison */}
+              {COMPARISON_ROWS.length > 0 && (
+                <tr className="border-b border-border/50">
+                  <td
+                    colSpan={tiers.length + 1}
+                    className="px-4 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground/70 bg-muted/10"
+                  >
+                    Limits &amp; Quotas
+                  </td>
+                </tr>
+              )}
+              {COMPARISON_ROWS.map((row) => (
+                <tr key={row.label} className="border-b border-border/30">
+                  <td className="sticky left-0 z-10 bg-card px-4 py-2.5 text-sm font-medium">
+                    {row.label}
+                  </td>
+                  {tiers.map((tier) => (
+                    <td
+                      key={tier.id}
+                      className="px-4 py-2.5 text-center text-sm tabular-nums text-muted-foreground"
+                    >
+                      {String(row.getValue(tier))}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ──────────────────────────────────────────────────────
 
 export function PricingPage() {
@@ -227,6 +484,7 @@ export function PricingPage() {
   const companyId = selectedCompanyId;
 
   const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   // ── Queries ──────────────────────────────────────────────────────────
 
@@ -268,7 +526,7 @@ export function PricingPage() {
       ga4("checkout_started", companyId!, {
         tier_id: tierId,
         billing_period: period,
-        experiment_variant: experimentVariant?.variant ?? "A",
+        experiment_variant: rawVariant,
       });
       return result;
     },
@@ -335,9 +593,16 @@ export function PricingPage() {
 
   // ── Derived state ────────────────────────────────────────────────────
 
-  const variant: ExperimentVariantResponse["variant"] =
-    experimentVariant?.variant ?? "A";
+  const rawVariant: VariantKey = experimentVariant?.variant ?? "A";
   const experimentEnabled = experimentVariant?.enabled ?? false;
+  /**
+   * When the experiment is disabled, always serve the control (A) experience
+   * regardless of what the API returns — this matches the original gating
+   * pattern of `variant === "B" && experimentEnabled` throughout.
+   */
+  const effectiveVariant: VariantKey = experimentEnabled ? rawVariant : "A";
+  const copy = VARIANT_COPIES[effectiveVariant];
+  const ctaStyle = VARIANT_CTA_STYLES[effectiveVariant];
 
   const currentTierId = subscription?.tierId ?? null;
   const isSubscribed = !!subscription && subscription.status !== "canceled";
@@ -351,19 +616,17 @@ export function PricingPage() {
   const recommendedTierId = sortedTiers[recommendedIndex]?.id;
 
   const getCtaLabel = (tier: SubscriptionTier): string => {
-    if (tier.id === currentTierId && isSubscribed) return "Current Plan";
+    if (tier.id === currentTierId && isSubscribed) return copy.currentPlanLabel;
     if (checkoutMutation.isPending) return "Loading...";
-    if (variant === "B" && experimentEnabled) {
-      return tier.id === recommendedTierId ? "Start Free Trial" : "Get Started";
-    }
-    return "Subscribe";
+    if (tier.id === recommendedTierId) return copy.recommendedCtaLabel;
+    return copy.ctaLabel;
   };
 
   const getCtaVariant = (
     tier: SubscriptionTier,
-  ): "default" | "outline" | "secondary" => {
+  ): "default" | "outline" | "secondary" | "cta" => {
     if (tier.id === currentTierId && isSubscribed) return "outline";
-    if (tier.id === recommendedTierId) return "default";
+    if (tier.id === recommendedTierId) return ctaStyle.variant;
     return "secondary";
   };
 
@@ -374,24 +637,13 @@ export function PricingPage() {
     ga4("billing_period_toggle", companyId!, { period: next });
   };
 
-  const handleCancel = () => {
-    if (
-      confirm(
-        "Are you sure you want to cancel your subscription? It will remain active until the end of the billing period.",
-      )
-    ) {
-      cancelMutation.mutate();
-      ga4("subscription_cancellation_started", companyId!);
-    }
-  };
-
   const handleCtaClick = (tier: SubscriptionTier) => {
     checkoutMutation.mutate({ tierId: tier.id, period: billingPeriod });
     ga4("cta_clicked", companyId!, {
       tier_id: tier.id,
       tier_name: tier.name,
       billing_period: billingPeriod,
-      experiment_variant: variant,
+      experiment_variant: rawVariant,
     });
   };
 
@@ -418,14 +670,10 @@ export function PricingPage() {
       {/* Header */}
       <div className="mb-8 text-center sm:text-left">
         <h1 className="text-3xl font-bold tracking-tight">
-          {variant === "B" && experimentEnabled
-            ? "Find the Right Plan for Your Team"
-            : "Pricing"}
+          {copy.heading}
         </h1>
         <p className="mt-2 text-muted-foreground max-w-xl">
-          {variant === "B" && experimentEnabled
-            ? "Start with a 14-day free trial. No credit card required. Cancel anytime."
-            : "Choose the plan that fits your needs. All plans include a 14-day free trial."}
+          {copy.subheading}
         </p>
       </div>
 
@@ -489,14 +737,46 @@ export function PricingPage() {
                   Reactivate Subscription
                 </Button>
               ) : isSubscribed ? (
-                <Button
-                  variant="outline"
-                  onClick={handleCancel}
-                  disabled={cancelMutation.isPending}
-                  className="text-destructive hover:text-destructive"
+                <AlertDialog
+                  open={cancelDialogOpen}
+                  onOpenChange={setCancelDialogOpen}
                 >
-                  Cancel Subscription
-                </Button>
+                  <AlertDialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      disabled={cancelMutation.isPending}
+                      className="text-destructive hover:text-destructive"
+                    >
+                      Cancel Subscription
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Cancel subscription?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to cancel your subscription? It
+                        will remain active until the end of the billing period.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Keep subscription</AlertDialogCancel>
+                      <AlertDialogAction
+                        disabled={cancelMutation.isPending}
+                        onClick={() => {
+                          cancelMutation.mutate();
+                          ga4(
+                            "subscription_cancellation_started",
+                            companyId!,
+                          );
+                        }}
+                      >
+                        Yes, cancel
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               ) : null}
 
               {isSubscribed && !isCancelScheduled && sortedTiers.length > 1 && (
@@ -524,9 +804,6 @@ export function PricingPage() {
               ? formatAnnualSavings(tier.priceMonthlyCents, tier.priceYearlyCents)
               : 0;
 
-          const recommendedBadgeLabel =
-            variant === "B" && experimentEnabled ? "Best Value" : "Most Popular";
-
           return (
             <Card
               key={tier.id}
@@ -546,7 +823,7 @@ export function PricingPage() {
                     className="gap-1 px-3 py-1 text-xs font-semibold whitespace-nowrap"
                   >
                     <Sparkles className="h-3 w-3" />
-                    {recommendedBadgeLabel}
+                    {copy.recommendedBadgeLabel}
                   </Badge>
                 </div>
               )}
@@ -568,6 +845,13 @@ export function PricingPage() {
                 {tier.description && (
                   <CardDescription>{tier.description}</CardDescription>
                 )}
+                {/* Variant B: recommended badge detail line */}
+                {isRecommended && !isCurrentTier && copy.recommendedBadgeDetail && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                    <Star className="h-3 w-3 text-primary" />
+                    {copy.recommendedBadgeDetail}
+                  </p>
+                )}
               </CardHeader>
 
               <CardContent className="flex-1">
@@ -586,9 +870,15 @@ export function PricingPage() {
                         annually
                       </p>
                     )}
+                  {/* Variant B: tax note */}
+                  {copy.priceSuffixNote && (
+                    <p className="mt-1 text-[10px] text-muted-foreground/60">
+                      {copy.priceSuffixNote}
+                    </p>
+                  )}
                 </div>
 
-                {/* Feature list */}
+                {/* Feature list (compact badges variant B) */}
                 {features.length > 0 && (
                   <ul className="space-y-2.5 mb-4">
                     {features.map((feature) => (
@@ -598,9 +888,7 @@ export function PricingPage() {
                       >
                         <FeatureIcon feature={feature} />
                         <span>
-                          {feature
-                            .replace(/_/g, " ")
-                            .replace(/\b\w/g, (c) => c.toUpperCase())}
+                          {formatFeatureName(feature)}
                         </span>
                       </li>
                     ))}
@@ -625,33 +913,52 @@ export function PricingPage() {
                 {isCurrentTier ? (
                   <Button className="w-full" variant="outline" disabled>
                     <Check className="h-4 w-4 mr-2" />
-                    Current Plan
+                    {copy.currentPlanLabel}
                   </Button>
                 ) : (
                   <Button
                     className="w-full"
                     variant={getCtaVariant(tier)}
+                    size={isRecommended && !isCurrentTier ? ctaStyle.size : "default"}
                     onClick={() => handleCtaClick(tier)}
                     disabled={checkoutMutation.isPending}
                   >
-                    {variant === "B" && experimentEnabled ? (
+                    {ctaStyle.icon === "arrow" ? (
                       <>
                         {getCtaLabel(tier)}
                         <ArrowRight className="h-4 w-4 ml-2" />
                       </>
-                    ) : (
+                    ) : ctaStyle.icon === "card" ? (
                       <>
                         <CreditCard className="h-4 w-4 mr-2" />
                         {getCtaLabel(tier)}
                       </>
+                    ) : (
+                      getCtaLabel(tier)
                     )}
                   </Button>
+                )}
+
+                {/* Urgency / reassurance line */}
+                {!isCurrentTier && (
+                  <p className="text-[10px] text-center text-muted-foreground/60 leading-tight">
+                    {copy.urgencyLine}
+                  </p>
                 )}
               </CardFooter>
             </Card>
           );
         })}
       </div>
+
+      {/* Comparison table */}
+      {sortedTiers.length >= 2 && (
+        <ComparisonTable
+          tiers={sortedTiers}
+          variant={effectiveVariant}
+          experimentEnabled={experimentEnabled}
+        />
+      )}
 
       {/* Empty state */}
       {(!tiers || tiers.length === 0) && !tiersLoading && (
@@ -666,7 +973,7 @@ export function PricingPage() {
       {experimentEnabled && (
         <div className="mt-8 text-center">
           <span className="text-[10px] text-muted-foreground/50 uppercase tracking-wider">
-            Experiment variant {variant}
+            Experiment variant {rawVariant}
             &nbsp;&middot;&nbsp;{sortedTiers.length} tiers loaded
           </span>
         </div>

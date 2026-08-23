@@ -1,5 +1,5 @@
 import type { InteractionResolverGovernance } from "@paperclipai/shared";
-import { pgTable, uuid, text, integer, timestamp, boolean, jsonb, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, integer, timestamp, boolean, jsonb, index, uniqueIndex } from "drizzle-orm/pg-core";
 
 export const companies = pgTable(
   "companies",
@@ -34,10 +34,14 @@ export const companies = pgTable(
     brandColor: text("brand_color"),
     pricingExperimentVariant: text("pricing_experiment_variant"),
     pricingExperimentEnrolledAt: timestamp("pricing_experiment_enrolled_at", { withTimezone: true }),
+    onboardingStatus: text("onboarding_status").notNull().default("pending"),
+    onboardingSelectedRole: text("onboarding_selected_role"),
+    onboardingCompletedAt: timestamp("onboarding_completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => ({
     issuePrefixUniqueIdx: uniqueIndex("companies_issue_prefix_idx").on(table.issuePrefix),
+    onboardingStatusIdx: index("companies_onboarding_status_idx").on(table.onboardingStatus),
   }),
 );

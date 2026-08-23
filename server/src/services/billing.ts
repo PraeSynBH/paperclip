@@ -10,10 +10,10 @@ import {
   subscriptionInvoices as subscriptionInvoicesTable,
   stripeWebhookEvents as stripeWebhookEventsTable,
 } from "@paperclipai/db";
-import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES } from "@paperclipai/shared";
+import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES, type TrialStatusResponse } from "@paperclipai/shared";
 import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { publishLiveEvent } from "./live-events.js";
-import { getGa4AnalyticsService } from "./ga4-analytics.js";
+import { getGa4AnalyticsService, buildTrialStartEvent } from "./ga4-analytics.js";
 import type { PricingExperimentVariant, PricingExperimentService } from "./pricing-experiment.js";
 import { logger } from "../middleware/logger.js";
 
@@ -34,8 +34,8 @@ export function getStripeClient(): Stripe {
 
 /** Max attempts for Stripe API retries in webhook handler contexts. */
 const STRIPE_RETRY_MAX_ATTEMPTS = 3;
-/** Base delay in ms for exponential backoff (1st retry: 200ms, 2nd: 400ms). */
-const STRIPE_RETRY_BASE_DELAY_MS = 200;
+/** Base delay in ms for exponential backoff (1st retry: ~1s, 2nd: ~2s). */
+const STRIPE_RETRY_BASE_DELAY_MS = 1000;
 
 /**
  * Wrap a Stripe API call with exponential-backoff retry.
@@ -62,7 +62,7 @@ async function withStripeRetry<T>(fn: () => Promise<T>, ctx?: string): Promise<T
         throw err;
       }
 
-      const delay = STRIPE_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      const delay = STRIPE_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1) + Math.floor(Math.random() * 500);
       logger.warn(
         { attempt, maxAttempts: STRIPE_RETRY_MAX_ATTEMPTS, delayMs: delay, ctx },
         "Stripe API call failed — retrying",
@@ -263,11 +263,21 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     const tierId = stripeSub.metadata?.paperclipTierId;
 
     await db.transaction(async (tx) => {
-      const existing = await tx
+      // Search by stripe_subscription_id first, then fallback to companyId for
+      // trial rows that have stripe_subscription_id = NULL (P0 fix).
+      let existing = await tx
         .select()
         .from(companySubscriptionsTable)
         .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id))
         .then((r) => r[0] ?? null);
+
+      if (!existing) {
+        existing = await tx
+          .select()
+          .from(companySubscriptionsTable)
+          .where(eq(companySubscriptionsTable.companyId, companyId))
+          .then((r) => r[0] ?? null);
+      }
 
       if (existing) {
         await tx
@@ -278,10 +288,11 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
             currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
             cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
             updatedAt: new Date(),
+            stripeSubscriptionId: existing.stripeSubscriptionId ?? stripeSub.id,
             ...(stripeSub.canceled_at ? { canceledAt: new Date(stripeSub.canceled_at * 1000) } : {}),
             ...(stripeSub.trial_end ? { trialEnd: new Date(stripeSub.trial_end * 1000) } : {}),
           })
-          .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
+          .where(eq(companySubscriptionsTable.id, existing.id));
 
         publishLiveEvent({
           companyId,
@@ -336,11 +347,17 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
             ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
             NOW(), NOW()
           )
-          ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
+          ON CONFLICT ("company_id") DO UPDATE SET
+            "tier_id" = EXCLUDED."tier_id",
+            "stripe_customer_id" = EXCLUDED."stripe_customer_id",
             "status" = EXCLUDED."status",
+            "billing_period" = EXCLUDED."billing_period",
             "current_period_start" = EXCLUDED."current_period_start",
             "current_period_end" = EXCLUDED."current_period_end",
+            "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
+            "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
             "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
+            "trial_end" = EXCLUDED."trial_end",
             "updated_at" = NOW()
         `);
 
@@ -397,6 +414,12 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
             tierId,
           },
         });
+
+        // GA4 tracking: fire trial_started when a new subscription with a trial is created
+        if (stripeSub.trial_end && stripeSub.trial_end * 1000 > Date.now()) {
+          const billingPeriod = stripeSub.metadata?.billingPeriod ?? "monthly";
+          getGa4AnalyticsService().send(buildTrialStartEvent(companyId, tierId, billingPeriod));
+        }
       }
     });
 
@@ -408,21 +431,46 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
   };
 
   const handleSubscriptionDeleted = async (stripeSub: Stripe.Subscription) => {
-    // Fetch current subscription record to get companyId before deleting
-    const existing = await db
+    const companyId = stripeSub.metadata?.paperclipCompanyId;
+
+    // Fetch current subscription record to get companyId before deleting.
+    // Search by stripe_subscription_id first, then fallback to companyId for
+    // trial rows that have stripe_subscription_id = NULL.
+    let existing = await db
       .select()
       .from(companySubscriptionsTable)
       .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id))
       .then((r) => r[0] ?? null);
 
-    await db
-      .update(companySubscriptionsTable)
-      .set({
-        status: "canceled",
-        canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
+    if (!existing && companyId) {
+      existing = await db
+        .select()
+        .from(companySubscriptionsTable)
+        .where(eq(companySubscriptionsTable.companyId, companyId))
+        .then((r) => r[0] ?? null);
+    }
+
+    const whereId = existing?.id ?? null;
+    if (whereId) {
+      await db
+        .update(companySubscriptionsTable)
+        .set({
+          status: "canceled",
+          canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(companySubscriptionsTable.id, whereId));
+    } else {
+      // Fallback: try matching by stripe_subscription_id directly
+      await db
+        .update(companySubscriptionsTable)
+        .set({
+          status: "canceled",
+          canceledAt: stripeSub.canceled_at ? new Date(stripeSub.canceled_at * 1000) : new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
+    }
 
     logger.info({ stripeSubscriptionId: stripeSub.id }, "Subscription canceled via Stripe");
 
@@ -476,15 +524,58 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     // Use a single transaction with upsert to handle at-least-once Stripe delivery
     // and TOCTOU races between checkout.session.completed and customer.subscription.updated.
     await db.transaction(async (tx) => {
-      // Check if subscription already exists inside the transaction
-      const existing = await tx
+      // Check if subscription already exists inside the transaction.
+      // Search by stripe_subscription_id first, then fallback to companyId for
+      // trial rows that have stripe_subscription_id = NULL (P0 fix).
+      let existing = await tx
         .select()
         .from(companySubscriptionsTable)
         .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
         .then((r) => r[0] ?? null);
 
+      if (!existing) {
+        existing = await tx
+          .select()
+          .from(companySubscriptionsTable)
+          .where(eq(companySubscriptionsTable.companyId, companyId))
+          .then((r) => r[0] ?? null);
+      }
+
       if (existing) {
-        logger.info({ stripeSubscriptionId: subId }, "Subscription already exists — ensuring usage records");
+        // ── Subscription row exists (either found by stripe_subscription_id or
+        //     companyId fallback for trial rows with NULL stripe_subscription_id).
+        //     Ensure usage records exist, and update stripe_subscription_id if the
+        //     trial row was found via companyId and doesn't have it set yet. ──
+        const needsStripeIdUpdate = !existing.stripeSubscriptionId;
+
+        if (needsStripeIdUpdate) {
+          // Trial→paid conversion: update the existing row with the real
+          // Stripe subscription details and set stripe_subscription_id.
+          const stripeSubItemId = stripeSub.items.data[0]?.id ?? null;
+          await tx
+            .update(companySubscriptionsTable)
+            .set({
+              stripeSubscriptionId: subId,
+              stripeSubscriptionItemId: stripeSubItemId,
+              status: stripeSub.status,
+              currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
+              currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
+              cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+              trialEnd: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : existing.trialEnd,
+              updatedAt: new Date(),
+            })
+            .where(eq(companySubscriptionsTable.id, existing.id));
+
+          logger.info(
+            { companyId, stripeSubscriptionId: subId, tierId },
+            "Trial→paid conversion: updated subscription row with Stripe details",
+          );
+        }
+
+        logger.info(
+          { stripeSubscriptionId: subId },
+          "Subscription already exists — ensuring usage records",
+        );
 
         // Idempotent usage metric creation via ON CONFLICT DO NOTHING
         const tier = await getTier(existing.tierId);
@@ -509,6 +600,18 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
             ON CONFLICT ("subscription_id", "metric", "period_start", "period_end") DO NOTHING
           `);
         }
+
+        publishLiveEvent({
+          companyId,
+          type: "subscription.status.updated",
+          payload: {
+            status: stripeSub.status,
+            stripeSubscriptionId: subId,
+            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+            tierId,
+          },
+        });
+
         return;
       }
 
@@ -529,8 +632,10 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       const tier = await getTier(tierId);
       const stripeSubItemId = stripeSub.items.data[0]?.id ?? null;
 
-      // Upsert: INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE
-      // Handles at-least-once delivery from Stripe (race-free with the UNIQUE index).
+      // Upsert: INSERT ... ON CONFLICT (company_id) DO UPDATE
+      // Handles at-least-once delivery from Stripe and trial→paid conversion
+      // where the trial row has stripe_subscription_id = NULL (P0 fix: use
+      // company_id UNIQUE constraint instead of stripe_subscription_id index).
       await tx.execute(sql`
         INSERT INTO "company_subscriptions"
           ("company_id", "tier_id", "stripe_customer_id", "status", "billing_period",
@@ -547,11 +652,17 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
           NOW(), NOW()
         )
-        ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
+        ON CONFLICT ("company_id") DO UPDATE SET
+          "tier_id" = EXCLUDED."tier_id",
+          "stripe_customer_id" = EXCLUDED."stripe_customer_id",
           "status" = EXCLUDED."status",
+          "billing_period" = EXCLUDED."billing_period",
           "current_period_start" = EXCLUDED."current_period_start",
           "current_period_end" = EXCLUDED."current_period_end",
+          "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
+          "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
           "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
+          "trial_end" = EXCLUDED."trial_end",
           "updated_at" = NOW()
       `);
 
@@ -650,6 +761,17 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         })
         .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
     }
+
+    publishLiveEvent({
+      companyId,
+      type: "subscription.status.updated",
+      payload: {
+        stripeSubscriptionId: stripeSub.id,
+        trialEnd: trialEnd?.toISOString(),
+        gracePeriodEnd: gracePeriodEnd?.toISOString(),
+        event: "trial_will_end",
+      },
+    });
   };
 
   /**
@@ -869,6 +991,209 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
 
     getOrCreateStripeCustomer,
 
+    /**
+     * Start a self-serve trial for a company.
+     *
+     * Creates or reuses a Stripe customer and provisions a trial subscription
+     * with the Trial tier. Idempotent: returns the existing subscription if
+     * one already exists for this company.
+     *
+     * Does NOT require board-level access — this is the self-serve entry point.
+     */
+    startTrial: async (companyId: string, data: { billingPeriod: "monthly" | "yearly" }) => {
+      // Check for existing subscription — idempotent: if the company already
+      // has a subscription (trial or paid), return it as-is.
+      const existingSub = await db
+        .select()
+        .from(companySubscriptionsTable)
+        .where(eq(companySubscriptionsTable.companyId, companyId))
+        .then((r) => r[0] ?? null);
+
+      if (existingSub) {
+        const tier = await getTier(existingSub.tierId);
+        return {
+          subscriptionId: existingSub.id,
+          tierId: existingSub.tierId,
+          tierName: tier?.name ?? null,
+          status: existingSub.status,
+          trialEnd: existingSub.trialEnd?.toISOString() ?? null,
+          currentPeriodEnd: existingSub.currentPeriodEnd?.toISOString() ?? null,
+          alreadyExisted: true,
+        };
+      }
+
+      // Look up the Trial tier
+      const [trialTier] = await db
+        .select()
+        .from(subscriptionTiersTable)
+        .where(eq(subscriptionTiersTable.name, "Trial"))
+        .then((r) => r);
+
+      if (!trialTier) {
+        throw notFound("Trial tier not found. Run migration 0232_trial_tier_seed to create it.");
+      }
+
+      // Create or get Stripe customer
+      const { id: stripeCustomerId, stripeCustomerId: stripeCustId } =
+        await getOrCreateStripeCustomer(companyId);
+
+      // Determine the trial duration: 14 days from now.
+      const now = new Date();
+      const trialEnd = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+      const { periodStart, periodEnd } = currentPeriodRange(data.billingPeriod);
+
+      // Create a subscription record directly. The trial is handled locally
+      // without requiring a Stripe subscription — we track trialEnd locally
+      // and the feature gate checks the "trialing" status.
+      // If Stripe is configured, also create a trial subscription in Stripe
+      // so it can handle payment collection at trial end.
+      const stripe = getStripeClient();
+      const stripePriceId = data.billingPeriod === "yearly"
+        ? (trialTier.stripePriceYearlyId ?? trialTier.stripePriceMonthlyId)
+        : (trialTier.stripePriceMonthlyId ?? trialTier.stripePriceYearlyId);
+
+      let stripeSubscriptionId: string | null = null;
+      let stripeSubscriptionItemId: string | null = null;
+      let stripeStatus: string = "trialing";
+
+      if (stripePriceId) {
+        try {
+          const stripeSub = await withStripeRetry(
+            () => stripe.subscriptions.create({
+              customer: stripeCustId,
+              items: [{ price: stripePriceId }],
+              trial_period_days: 14,
+              metadata: {
+                paperclipCompanyId: companyId,
+                paperclipTierId: trialTier.id,
+                billingPeriod: data.billingPeriod,
+              },
+              proration_behavior: "create_prorations",
+              trial_settings: {
+                end_behavior: {
+                  missing_payment_method: "cancel",
+                },
+              },
+            }),
+            "startTrial",
+          );
+          stripeSubscriptionId = stripeSub.id;
+          stripeSubscriptionItemId = stripeSub.items.data[0]?.id ?? null;
+          stripeStatus = stripeSub.status;
+        } catch (err) {
+          logger.warn(
+            { companyId, err },
+            "Failed to create Stripe trial subscription — falling back to local-only trial",
+          );
+        }
+      }
+
+      const created = await db
+        .insert(companySubscriptionsTable)
+        .values({
+          companyId,
+          tierId: trialTier.id,
+          stripeCustomerId,
+          status: stripeStatus,
+          billingPeriod: data.billingPeriod,
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: periodEnd,
+          stripeSubscriptionId: stripeSubscriptionId,
+          stripeSubscriptionItemId,
+          cancelAtPeriodEnd: false,
+          trialEnd,
+        })
+        .returning()
+        .then((r) => r[0]!);
+
+      // Create initial usage records for the trial tier
+      const usageMetrics: Array<{ metric: string; included: number }> = [
+        { metric: "seats", included: trialTier.includedSeats },
+        { metric: "agent_runs", included: trialTier.includedAgentRuns },
+        { metric: "storage_gb", included: trialTier.includedStorageGb },
+      ];
+
+      for (const m of usageMetrics) {
+        await db.insert(subscriptionUsageTable).values({
+          companyId,
+          subscriptionId: created.id,
+          metric: m.metric,
+          usage: 0,
+          included: m.included,
+          overage: 0,
+          overageCents: 0,
+          periodStart,
+          periodEnd,
+        });
+      }
+
+      logger.info(
+        { companyId, tierId: trialTier.id, trialEnd: trialEnd.toISOString() },
+        "Self-serve trial started",
+      );
+
+      publishLiveEvent({
+        companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: stripeStatus,
+          stripeSubscriptionId,
+          cancelAtPeriodEnd: false,
+          tierId: trialTier.id,
+        },
+      });
+
+      // GA4 tracking: fire trial_started event
+      getGa4AnalyticsService().send(buildTrialStartEvent(companyId, trialTier.id, data.billingPeriod));
+
+      return {
+        subscriptionId: created.id,
+        tierId: trialTier.id,
+        tierName: trialTier.name,
+        status: stripeStatus,
+        trialEnd: trialEnd.toISOString(),
+        currentPeriodEnd: periodEnd.toISOString(),
+        alreadyExisted: false,
+      };
+    },
+
+    /**
+     * Get the current trial status for a company.
+     */
+    getTrialStatus: async (companyId: string): Promise<TrialStatusResponse> => {
+      const subscription = await db
+        .select()
+        .from(companySubscriptionsTable)
+        .where(eq(companySubscriptionsTable.companyId, companyId))
+        .then((r) => r[0] ?? null);
+
+      if (!subscription || !subscription.trialEnd) {
+        return {
+          isTrialing: false,
+          trialEnd: null,
+          tierId: null,
+          tierName: null,
+          daysRemaining: null,
+          status: subscription?.status ?? null,
+        };
+      }
+
+      const tier = await getTier(subscription.tierId);
+      const now = new Date();
+      const daysRemaining = subscription.trialEnd.getTime() > now.getTime()
+        ? Math.ceil((subscription.trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000))
+        : 0;
+
+      return {
+        isTrialing: subscription.status === "trialing" || daysRemaining > 0,
+        trialEnd: subscription.trialEnd.toISOString(),
+        tierId: subscription.tierId,
+        tierName: tier?.name ?? null,
+        daysRemaining,
+        status: subscription.status,
+      };
+    },
+
     getSubscription: getSubscriptionInternal,
 
     checkFeatureAccess,
@@ -900,6 +1225,13 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           mode: "subscription",
           customer: stripeCustomerId,
           line_items: [{ price: stripePriceId, quantity: 1 }],
+          subscription_data: {
+            trial_settings: {
+              end_behavior: {
+                missing_payment_method: "cancel",
+              },
+            },
+          },
           metadata: {
             paperclipCompanyId: companyId,
             paperclipTierId: data.tierId,

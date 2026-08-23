@@ -87,8 +87,6 @@ export function initSentry(): void {
       tracesSampleRate: process.env.NODE_ENV === "production" ? 0.25 : 0.0,
       // Profile rate (optional, Sentry profiling)
       profilesSampleRate: process.env.NODE_ENV === "production" ? 0.1 : 0.0,
-      // Enable performance instrumentation
-      enableTracing: true,
     });
 
     Sentry.setTag("paperclip.version", process.env.PAPERCLIP_VERSION || "unknown");

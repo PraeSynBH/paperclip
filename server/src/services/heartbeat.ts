@@ -85,6 +85,7 @@ import {
 // git-credentials module became its canonical home; existing importers keep working.
 export { scrubGitCredentialText };
 import { publishLiveEvent } from "./live-events.js";
+import { notifyHeartbeatFailure } from "./heartbeat-failure-webhook.js";
 import { normalizeResponsibleUserDenialCode } from "./responsible-user-denial-run-outcomes.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
 import { getServerAdapter, listAdapterModelProfiles, runningProcesses } from "../adapters/index.js";
@@ -13779,6 +13780,19 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       if (!finalizedRun) finalizedRun = await getRun(run.id);
       if (!finalizedRun) continue;
       finalizedRun = await classifyAndPersistRunLiveness(finalizedRun, parseObject(finalizedRun.resultJson)) ?? finalizedRun;
+
+      void notifyHeartbeatFailure({
+        event: "heartbeat.failed",
+        timestamp: now.toISOString(),
+        runId: run.id,
+        agentId: run.agentId,
+        agentName: null,
+        companyId: run.companyId,
+        errorCode: "process_lost",
+        error: shouldRetry ? `${baseMessage}; retrying once` : baseMessage,
+        previousStatus: run.status,
+      });
+
       await releaseEnvironmentLeasesForRun({
         runId: finalizedRun.id,
         companyId: finalizedRun.companyId,
@@ -14156,6 +14170,17 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       });
       const failedRun = await getRun(runId);
       if (failedRun) await releaseIssueExecutionAndPromote(failedRun);
+      void notifyHeartbeatFailure({
+        event: "heartbeat.failed",
+        timestamp: new Date().toISOString(),
+        runId: run.id,
+        agentId: run.agentId,
+        agentName: null,
+        companyId: run.companyId,
+        errorCode: "agent_not_found",
+        error: "Agent not found",
+        previousStatus: run.status,
+      });
       return;
     }
 
@@ -16786,6 +16811,18 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
             lastError: message,
           });
         }
+
+        void notifyHeartbeatFailure({
+          event: "heartbeat.failed",
+          timestamp: new Date().toISOString(),
+          runId: failedRun.id,
+          agentId: agent.id,
+          agentName: agent.name ?? null,
+          companyId: agent.companyId,
+          errorCode: failureErrorCode,
+          error: message,
+          previousStatus: run.status,
+        });
       }
 
       await finalizeAgentStatus(agent.id, "failed", message, {
@@ -16902,6 +16939,17 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
                 );
               });
             }
+            void notifyHeartbeatFailure({
+              event: "heartbeat.failed",
+              timestamp: new Date().toISOString(),
+              runId: livenessRun.id,
+              agentId: run.agentId,
+              agentName: failedAgent?.name ?? null,
+              companyId: livenessRun.companyId,
+              errorCode: setupFailureErrorCode,
+              error: message,
+              previousStatus: run.status,
+            });
             await releaseIssueExecutionAndPromote(livenessRun).catch((releaseError) => {
               logger.error(
                 { err: releaseError, runId },

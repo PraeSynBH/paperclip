@@ -27,6 +27,8 @@ The service includes built-in helpers for standard events:
 | Event | Helper | Parameters |
 |---|---|---|
 | `signup` | `buildSignupEvent(userId, email?)` | `method`, `email_domain` (if email provided) |
+| `onboarding_completed` | `buildOnboardingCompletedEvent(companyId, role)` | `role`, `company_id` |
+| `trial_started` | `buildTrialStartEvent(companyId, tierId, billingPeriod)` | `tier_id`, `billing_period`, `company_id` |
 | `approval` | `buildApprovalEvent(approvalId, approvalType, companyId)` | `approval_id`, `approval_type`, `company_id` |
 | `approval_rejected` | `buildApprovalRejectedEvent(approvalId, approvalType, companyId)` | `approval_id`, `approval_type`, `company_id` |
 | `begin_checkout` | Inline in billing service | `company_id`, `tier_id`, `billing_period`, `value`, `currency` |
@@ -54,9 +56,12 @@ When `GA4_DEBUG=true`, events are sent to `https://www.google-analytics.com/debu
 | Service export from index.ts | **Committed** | `server/src/services/index.ts` line 196 — `getGa4AnalyticsService`, `buildApprovalEvent`, `buildApprovalRejectedEvent` exported |
 | Checkout event tracking | **Committed** | `server/src/services/billing.ts` — `trackPricingEvent` helper available for route handlers |
 | .env.example configuration | **Committed** | Four GA4 env vars documented (GA4_MEASUREMENT_ID, GA4_API_SECRET, GA4_ENABLED, GA4_DEBUG) |
-| Approval event wiring | **In development** | VOY-1967 — CTO wiring approval events |
-| Signup event wiring | **In development** | CTO to wire signup events (tracked under VOY-1941) |
-| Monitoring/health check | **In development** | VOY-1969 — CTO creating monitoring script |
+| Approval event wiring | **Committed** | `server/src/routes/approvals.ts` — wired on approve/reject |
+| Signup event wiring | **Committed** | `server/src/services/onboarding-seed.ts` — wired in `apply()` |
+| Onboarding completion event wiring | **Committed** | `server/src/services/onboarding.ts` — wired in `selectRole()` |
+| Trial start event wiring | **Committed** | `server/src/services/billing.ts` — wired in `handleSubscriptionUpdated()` |
+| Monitoring/health check | **Committed** | `scripts/ga4-health-check.sh` — full check script |
+| Frontend gtag.js tracking | **Committed** | `ui/src/lib/analytics.ts` — conditional gtag.js load |
 
 ## What It Replaces (PostHog Comparison)
 
@@ -95,8 +100,9 @@ When `GA4_DEBUG=true`, events are sent to `https://www.google-analytics.com/debu
 
 ## Related Issues
 
-- **VOY-1941**: GA Fallback Planning (PostHog Contingency) — parent issue
-- **VOY-1966**: Export ga4-analytics from server/src/services/index.ts — **Done** (committed in `80086c5937`)
-- **VOY-1967**: Wire approval events in server/src/routes/approvals.ts — pending
-- **VOY-1968**: Add configuration variables to .env.example — **Done** (four GA4 vars present)
-- **VOY-1969**: Create monitoring/health-check script — pending
+- **VOY-2009**: Implement GA4 Tracking (PostHog Contingency) — parent implementation issue
+- **VOY-1719**: PostHog Dashboards — BLOCKED (needs founder credentials) — parent contingency driver
+- **VOY-1966**: Export ga4-analytics from server/src/services/index.ts — **Done**
+- **VOY-1967**: Wire approval events in server/src/routes/approvals.ts — **Done**
+- **VOY-1968**: Add configuration variables to .env.example — **Done**
+- **VOY-1969**: Create monitoring/health-check script — **Done**

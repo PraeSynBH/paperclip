@@ -24,6 +24,7 @@ check-*.mjs
 !.github/scripts/check-*.mjs
 !.github/scripts/tests/check-*.mjs
 !scripts/check-*.mjs
+!scripts/__tests__/check-*.mjs
 new-agent*.json
 newcompany.json
 seed-*.mjs
@@ -71,3 +72,4 @@ tests/storybook-visual/playwright-report/
 .claude/worktrees/
 .worktrees/
 .herenow
+.gstack/

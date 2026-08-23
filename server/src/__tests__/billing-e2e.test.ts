@@ -11,6 +11,7 @@ import {
   stripeCustomers,
   subscriptionTiers,
   subscriptionInvoices,
+  subscriptionUsage,
   stripeWebhookEvents as stripeWebhookEventsTable,
 } from "@paperclipai/db";
 import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES } from "@paperclipai/shared";
@@ -316,6 +317,92 @@ describeEmbeddedPostgres("Stripe billing E2E flow (service layer)", () => {
       expect(subRecord.status).toBe(stripeSub.status);
       expect(subRecord.tierId).toBe(adventurerTierId);
       expect(subRecord.stripeSubscriptionId).toBe(stripeSub.id);
+
+      await stripe.subscriptions.cancel(stripeSub.id, { invoice_now: false });
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 4b. Webhook race: handleSubscriptionUpdated before handleCheckoutSessionCompleted
+  // ─────────────────────────────────────────────────────────────────────────────
+  (hasStripeKeys ? it : it.skip)(
+    "handleSubscriptionUpdated creates usage records when racing ahead of handleCheckoutSessionCompleted",
+    async () => {
+      const { getStripeClient } = await import("../services/billing.js");
+      const stripe = getStripeClient();
+
+      const tempCompanyId = randomUUID();
+      const now = new Date();
+      await db.insert(companies).values({
+        id: tempCompanyId,
+        name: `Race-Test ${tempCompanyId.slice(0, 6)}`,
+        status: "active",
+        issuePrefix: "RACE",
+        updatedAt: now,
+      });
+
+      const cust = await billing.getOrCreateStripeCustomer(tempCompanyId);
+
+      // Create subscription with Stripe directly
+      const stripeSub = await createTestSubscription(
+        stripe,
+        cust.stripeCustomerId,
+        "price_1U6xzsK6Q827UREsvNgIzmPh",
+        {
+          paperclipCompanyId: tempCompanyId,
+          paperclipTierId: adventurerTierId,
+        },
+      );
+
+      expect(stripeSub.id).toBeDefined();
+
+      // Step 1: handleSubscriptionUpdated fires first (race condition)
+      await billing.handleSubscriptionUpdated(stripeSub as any);
+
+      // Verify subscription record was created
+      const subAfterUpdate = await billing.getSubscription(tempCompanyId);
+      expect(subAfterUpdate).not.toBeNull();
+      expect(subAfterUpdate!.stripeSubscriptionId).toBe(stripeSub.id);
+
+      // Verify usage records were created by handleSubscriptionUpdated
+      const usageAfterUpdate = await billing.getUsage(tempCompanyId);
+      expect(usageAfterUpdate.length).toBe(3);
+      const metrics = usageAfterUpdate.map((u: any) => u.metric);
+      expect(metrics.sort()).toEqual(["agent_runs", "seats", "storage_gb"]);
+      // Each usage record should start at zero with the tier's included amounts
+      const seatsUsage = usageAfterUpdate.find((u: any) => u.metric === "seats");
+      expect(seatsUsage.usage).toBe(0);
+      expect(seatsUsage.included).toBe(2); // Adventurer tier has includedSeats: 2
+
+      // Step 2: handleCheckoutSessionCompleted fires second (should skip + heal)
+      await billing.handleCheckoutSessionCompleted({
+        id: `cs_test_${randomUUID()}`,
+        mode: "subscription",
+        subscription: stripeSub.id,
+        customer: cust.stripeCustomerId,
+        metadata: {
+          paperclipCompanyId: tempCompanyId,
+          paperclipTierId: adventurerTierId,
+          billingPeriod: "monthly",
+        },
+      } as any);
+
+      // Verify no duplicate subscription record
+      const subs = await db
+        .select()
+        .from(companySubscriptions)
+        .where(eq(companySubscriptions.stripeSubscriptionId, stripeSub.id));
+      expect(subs.length).toBe(1);
+
+      // Verify no duplicate usage records (still exactly 3, not 6)
+      const usageAfterBoth = await billing.getUsage(tempCompanyId);
+      expect(usageAfterBoth.length).toBe(3);
+
+      // Verify usage records are idempotent: calling handleSubscriptionUpdated
+      // again should not create duplicates
+      await billing.handleSubscriptionUpdated(stripeSub as any);
+      const usageAfterDedup = await billing.getUsage(tempCompanyId);
+      expect(usageAfterDedup.length).toBe(3);
 
       await stripe.subscriptions.cancel(stripeSub.id, { invoice_now: false });
     },
@@ -874,4 +961,190 @@ describeEmbeddedPostgres("Stripe billing E2E flow (service layer)", () => {
     expect(updated!.status).toBe("expired");
     expect(updated!.canceledAt).toBeDefined();
   });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 18. Trial→paid conversion via checkout.session.completed
+  // ─────────────────────────────────────────────────────────────────────────────
+  (hasStripeKeys ? it : it.skip)(
+    "handleCheckoutSessionCompleted updates trial row (stripe_subscription_id NULL → set) in-place",
+    async () => {
+      const { getStripeClient } = await import("../services/billing.js");
+      const stripe = getStripeClient();
+
+      const tempCompanyId = randomUUID();
+      const now = new Date();
+      await db.insert(companies).values({
+        id: tempCompanyId,
+        name: `Trial-Paid-Test ${tempCompanyId.slice(0, 6)}`,
+        status: "active",
+        issuePrefix: "TPC",
+        updatedAt: now,
+      });
+
+      // Create real Stripe customer and subscription first
+      const cust = await billing.getOrCreateStripeCustomer(tempCompanyId);
+      const stripeSub = await createTestSubscription(
+        stripe,
+        cust.stripeCustomerId,
+        "price_1U6xzsK6Q827UREsvNgIzmPh",
+        {
+          paperclipCompanyId: tempCompanyId,
+          paperclipTierId: adventurerTierId,
+          billingPeriod: "monthly",
+        },
+      );
+
+      // Create a local subscription row WITH stripe_subscription_id = NULL
+      // and status "trialing" — simulating a trial that was initiated outside
+      // the normal checkout flow (e.g. via an admin action or self-serve signup).
+      const [tier] = await db
+        .select()
+        .from(subscriptionTiers)
+        .where(eq(subscriptionTiers.name, "Adventurer"))
+        .limit(1);
+
+      const localCust = await db
+        .select()
+        .from(stripeCustomers)
+        .where(eq(stripeCustomers.companyId, tempCompanyId))
+        .then((r) => r[0]!);
+
+      const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+      const trialEndDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      // Remove any auto-created subscription (from checkout if any)
+      await db
+        .delete(companySubscriptions)
+        .where(eq(companySubscriptions.companyId, tempCompanyId));
+
+      const [trialRow] = await db
+        .insert(companySubscriptions)
+        .values({
+          companyId: tempCompanyId,
+          tierId: tier.id,
+          stripeCustomerId: localCust.id,
+          status: "trialing",
+          billingPeriod: "monthly",
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: trialEndDate,
+          trialEnd: trialEndDate,
+          // stripe_subscription_id deliberately left NULL
+        })
+        .returning();
+
+      expect(trialRow.stripeSubscriptionId).toBeNull();
+      expect(trialRow.status).toBe("trialing");
+
+      // Simulate checkout.session.completed webhook — this was the P0 crash path
+      await billing.handleCheckoutSessionCompleted({
+        id: `cs_test_${randomUUID()}`,
+        mode: "subscription",
+        subscription: stripeSub.id,
+        customer: cust.stripeCustomerId,
+        metadata: {
+          paperclipCompanyId: tempCompanyId,
+          paperclipTierId: adventurerTierId,
+          billingPeriod: "monthly",
+        },
+      } as any);
+
+      // Verify: the existing trial row was updated in-place (not a new row)
+      const subs = await db
+        .select()
+        .from(companySubscriptions)
+        .where(eq(companySubscriptions.companyId, tempCompanyId));
+      // Only one row should exist (no duplicate)
+      expect(subs.length).toBe(1);
+
+      const updated = subs[0];
+      expect(updated.id).toBe(trialRow.id);
+      expect(updated.stripeSubscriptionId).toBe(stripeSub.id);
+      expect(updated.status).toBe(stripeSub.status);
+
+      await stripe.subscriptions.cancel(stripeSub.id, { invoice_now: false });
+    },
+  );
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 19. Trial→paid conversion via customer.subscription.updated webhook
+  // ─────────────────────────────────────────────────────────────────────────────
+  (hasStripeKeys ? it : it.skip)(
+    "handleSubscriptionUpdated updates trial row (stripe_subscription_id NULL → set) in-place",
+    async () => {
+      const { getStripeClient } = await import("../services/billing.js");
+      const stripe = getStripeClient();
+
+      const tempCompanyId = randomUUID();
+      const now = new Date();
+      await db.insert(companies).values({
+        id: tempCompanyId,
+        name: `Sub-Updated-Test ${tempCompanyId.slice(0, 6)}`,
+        status: "active",
+        issuePrefix: "SUP",
+        updatedAt: now,
+      });
+
+      // Create Stripe customer
+      const cust = await billing.getOrCreateStripeCustomer(tempCompanyId);
+
+      // Create a trial row with NULL stripe_subscription_id
+      const [tier] = await db
+        .select()
+        .from(subscriptionTiers)
+        .where(eq(subscriptionTiers.name, "Adventurer"))
+        .limit(1);
+
+      const localCust = await db
+        .select()
+        .from(stripeCustomers)
+        .where(eq(stripeCustomers.companyId, tempCompanyId))
+        .then((r) => r[0]!);
+
+      const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+      const trialEndDate = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+
+      const [trialRow] = await db
+        .insert(companySubscriptions)
+        .values({
+          companyId: tempCompanyId,
+          tierId: tier.id,
+          stripeCustomerId: localCust.id,
+          status: "trialing",
+          billingPeriod: "monthly",
+          currentPeriodStart: periodStart,
+          currentPeriodEnd: trialEndDate,
+          trialEnd: trialEndDate,
+        })
+        .returning();
+
+      // Create a real Stripe subscription
+      const stripeSub = await createTestSubscription(
+        stripe,
+        cust.stripeCustomerId,
+        "price_1U6xzsK6Q827UREsvNgIzmPh",
+        {
+          paperclipCompanyId: tempCompanyId,
+          paperclipTierId: adventurerTierId,
+          billingPeriod: "monthly",
+        },
+      );
+
+      // Simulate customer.subscription.updated webhook
+      await billing.handleSubscriptionUpdated(stripeSub as any);
+
+      // Verify: the existing trial row was updated in-place (not a new row)
+      const subs = await db
+        .select()
+        .from(companySubscriptions)
+        .where(eq(companySubscriptions.companyId, tempCompanyId));
+      expect(subs.length).toBe(1);
+
+      const updated = subs[0];
+      expect(updated.id).toBe(trialRow.id);
+      expect(updated.stripeSubscriptionId).toBe(stripeSub.id);
+      expect(updated.status).toBe(stripeSub.status);
+
+      await stripe.subscriptions.cancel(stripeSub.id, { invoice_now: false });
+    },
+  );
 });

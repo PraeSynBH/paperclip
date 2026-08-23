@@ -8,6 +8,7 @@ import { projectService } from "./projects.js";
 import { issueService } from "./issues.js";
 import { readBuiltInAgentMarker } from "./built-in-agent-metadata.js";
 import { logActivity, publishActivity, type ActivityPublication } from "./activity-log.js";
+import { ga4AnalyticsService, buildSignupEvent } from "./ga4-analytics.js";
 
 /**
  * The project the seeded first task lands in, matching the name the tenant's
@@ -408,6 +409,12 @@ export function onboardingSeedService(db: Db) {
     });
 
     for (const publication of publications) publishActivity(publication);
+
+    // GA4 tracking: fire signup event when the seed was applied (not a no-op replay)
+    if (result.changed) {
+      ga4AnalyticsService.send(buildSignupEvent(companyId));
+    }
+
     return result;
   }
 

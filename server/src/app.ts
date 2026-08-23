@@ -21,6 +21,7 @@ import {
 import { companyTransferRunService } from "./services/company-transfer-runs.js";
 import { healthRoutes } from "./routes/health.js";
 import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
+import { startTrialReaperScheduler } from "./services/trial-reaper.js";
 import { cloudRoutes } from "./routes/cloud.js";
 import { companyRoutes } from "./routes/companies.js";
 import { companySkillRoutes } from "./routes/company-skills.js";
@@ -54,6 +55,7 @@ import { executionWorkspaceRoutes } from "./routes/execution-workspaces.js";
 import { goalRoutes } from "./routes/goals.js";
 import { onboardingSeedRoutes } from "./routes/onboarding-seed.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
+import { trialRoutes } from "./routes/trial.js";
 import { boardChatRoutes } from "./routes/board-chat.js";
 import { approvalRoutes } from "./routes/approvals.js";
 import { secretRoutes } from "./routes/secrets.js";
@@ -554,6 +556,7 @@ export async function createApp(
   api.use(goalRoutes(db));
   api.use(onboardingSeedRoutes(db));
   api.use(onboardingRoutes(db));
+  api.use(trialRoutes(db));
   api.use(boardChatRoutes(db, { deploymentMode: opts.deploymentMode }));
   api.use(approvalRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(secretRoutes(db));
@@ -903,6 +906,12 @@ export async function createApp(
   void toolDispatcher.initialize().catch((err) => {
     logger.error({ err }, "Failed to initialize plugin tool dispatcher");
   });
+  // Trial reaper: periodic sweep for expired subscription trials.
+  // Only runs when billing is enabled.
+  let trialReaperDisposer: (() => void) | null = null;
+  if (process.env.PAPERCLIP_BILLING_ENABLED === "true") {
+    trialReaperDisposer = startTrialReaperScheduler({ db });
+  }
   const devWatcher = createPluginDevWatcher(
     lifecycle,
     async (pluginId) => (await pluginRegistry.getById(pluginId))?.packagePath ?? null,
@@ -970,6 +979,10 @@ export async function createApp(
       if (importTransferSweepTimer) {
         clearInterval(importTransferSweepTimer);
         importTransferSweepTimer = null;
+      }
+      if (trialReaperDisposer) {
+        trialReaperDisposer();
+        trialReaperDisposer = null;
       }
       devWatcher?.close();
       viteHtmlRenderer?.dispose();

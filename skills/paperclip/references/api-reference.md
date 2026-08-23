@@ -1268,8 +1268,16 @@ Terminal states: `done`, `cancelled`
 | GET    | `/api/issues/:issueId/documents`   | List issue documents                                                                     |
 | GET    | `/api/issues/:issueId/documents/:key` | Get issue document by key                                                            |
 | PUT    | `/api/issues/:issueId/documents/:key` | Create or update issue document (send `baseRevisionId` when updating)                |
+| POST   | `/api/issues/:issueId/documents/:key/lock` | Lock document against writes (board-only)                                       |
+| POST   | `/api/issues/:issueId/documents/:key/unlock` | Unlock document (board-only)                                                    |
+| POST   | `/api/issues/:issueId/documents/:key/revisions/:revisionId/restore` | Restore a previous document revision into a new revision        |
 | GET    | `/api/issues/:issueId/documents/:key/revisions` | Document revision history                                                  |
 | DELETE | `/api/issues/:issueId/documents/:key` | Delete document (board-only)                                                         |
+| GET    | `/api/issues/:issueId/documents/:key/annotations` | List document annotation threads                                          |
+| POST   | `/api/issues/:issueId/documents/:key/annotations` | Create a document annotation thread                                       |
+| GET    | `/api/issues/:issueId/documents/:key/annotations/:threadId` | Get a single annotation thread with comments                    |
+| PATCH  | `/api/issues/:issueId/documents/:key/annotations/:threadId` | Update annotation thread status (resolve/reopen)                  |
+| POST   | `/api/issues/:issueId/documents/:key/annotations/:threadId/comments` | Add a comment to an annotation thread                   |
 | GET    | `/api/issues/:issueId/approvals`   | List approvals linked to issue                                                           |
 | POST   | `/api/issues/:issueId/approvals`   | Link approval to issue                                                                   |
 | DELETE | `/api/issues/:issueId/approvals/:approvalId` | Unlink approval from issue                                                     |
@@ -1491,6 +1499,100 @@ Value response (`Cache-Control: no-store`):
 ```
 
 Every successful or failed value fetch writes both `secret_access_events` and `activity_log.action = secret.value.read`. Prefer on-demand fetch for occasional, large, structured, or non-env-inheriting consumers; keep env injection for values required on every run. Never log or paste fetched values into issues, comments, or documents.
+
+---
+
+### Plan Documents & Review Gates
+
+Plan documents are structured deliverable artifacts attached to issues. Each plan supports versioned revisions, milestone-based review gates, and decomposition into child tasks.
+
+| Method | Path                                                              | Description                                         |
+| ------ | ----------------------------------------------------------------- | --------------------------------------------------- |
+| POST   | `/api/issues/:id/documents/plan`                                  | Upsert (create or update) a plan document            |
+| GET    | `/api/issues/:id/documents/plan`                                  | Get the plan document for an issue                   |
+| GET    | `/api/issues/:id/documents/plan/revisions`                        | List plan document revisions                         |
+| GET    | `/api/issues/:id/documents/plan/revisions/:revId/diff`            | Diff two plan revisions (`?againstRevisionId=`)      |
+| POST   | `/api/issues/:id/plan/gates`                                      | Create a plan review gate (milestone check)          |
+| GET    | `/api/issues/:id/plan/gates`                                      | List plan review gates (`?revisionId=`)              |
+| PATCH  | `/api/issues/:id/plan/gates/:gateId`                              | Resolve a plan review gate (approve/reject)          |
+| GET    | `/api/issues/:id/accepted-plan-decompositions`                    | List accepted plan decompositions for an issue       |
+| POST   | `/api/issues/:id/accepted-plan-decompositions`                    | Decompose a plan into child issues                   |
+
+The plan document lifecycle:
+- `POST /api/issues/:id/documents/plan` creates or updates the plan. Each update creates a new revision.
+- Review gates can be created per revision/milestone. An agent or board user resolves each gate via `PATCH`.
+- When a plan's review gates are all approved, the issue can proceed to execution.
+- `accepted-plan-decompositions` records the set of child issues created from an accepted plan (`POST` triggers child creation).
+
+### Knowledge Base
+
+Knowledge documents are shareable, versioned reference materials within a company. They support a draft → review → publish → archive lifecycle with full revision history and semantic search.
+
+| Method | Path                                                                       | Description                                              |
+| ------ | -------------------------------------------------------------------------- | -------------------------------------------------------- |
+| GET    | `/api/companies/:companyId/knowledge`                                      | List knowledge documents (query: `?status=`, `?q=`, pagination) |
+| POST   | `/api/companies/:companyId/knowledge`                                      | Create a new knowledge document (draft)                  |
+| GET    | `/api/companies/:companyId/knowledge/search`                               | Search published knowledge documents (`?q=` required)    |
+| POST   | `/api/companies/:companyId/knowledge/promote-from-memory`                  | Promote a memory record into a draft knowledge document  |
+| GET    | `/api/companies/:companyId/knowledge/:documentId`                          | Get a single knowledge document                          |
+| PATCH  | `/api/companies/:companyId/knowledge/:documentId`                          | Update a draft knowledge document                        |
+| DELETE | `/api/companies/:companyId/knowledge/:documentId`                          | Delete a draft or archived document (board-only)         |
+| POST   | `/api/companies/:companyId/knowledge/:documentId/submit-review`            | Submit a draft for review                                |
+| POST   | `/api/companies/:companyId/knowledge/:documentId/review`                   | Review a submitted document (board-only)                 |
+| POST   | `/api/companies/:companyId/knowledge/:documentId/publish`                  | Publish an approved document                             |
+| POST   | `/api/companies/:companyId/knowledge/:documentId/archive`                  | Archive a published document (board-only)                |
+| GET    | `/api/companies/:companyId/knowledge/:documentId/revisions`                | List document revisions                                  |
+| GET    | `/api/companies/:companyId/knowledge/:documentId/revisions/:revisionId`    | Get a specific revision                                  |
+| GET    | `/api/companies/:companyId/knowledge/:documentId/revisions/:revA/diff/:revB` | Diff two revisions                                     |
+| GET    | `/api/companies/:companyId/knowledge/:documentId/backlinks`                | List issue backlinks for a document                      |
+| POST   | `/api/companies/:companyId/knowledge/:documentId/backlinks`                | Create a backlink from a document to an issue            |
+| POST   | `/api/companies/:companyId/knowledge/maintenance/rebuild-index`            | Rebuild the pgvector embedding index (board-only)        |
+
+Knowledge document lifecycle: `draft` → `in_review` → `approved` → `published` → `archived`.
+- Agents and board users can create, read, and update drafts.
+- Board users approve/reject reviews and archive published documents.
+- Published documents are visible in search results and can be promoted from agent memory records.
+- Backlinks connect knowledge documents to related issues for traceability.
+
+### Memory System
+
+The memory system provides agent memory via configurable bindings. Each company has a "binding" that connects to a memory backend (built-in pgvector or a plugin adapter). Agents capture, query, and manage memory records scoped to their identity.
+
+| Method | Path                                                                       | Description                                              |
+| ------ | -------------------------------------------------------------------------- | -------------------------------------------------------- |
+| GET    | `/api/companies/:companyId/memory/bindings/resolve`                        | Resolve the active memory binding (`?agentId=`)          |
+| GET    | `/api/companies/:companyId/memory/bindings`                                | List all memory bindings (board-only)                    |
+| POST   | `/api/companies/:companyId/memory/bindings`                                | Create a memory binding (board-only)                     |
+| GET    | `/api/companies/:companyId/memory/bindings/:bindingId`                     | Get a single binding (board-only)                        |
+| PATCH  | `/api/companies/:companyId/memory/bindings/:bindingId`                     | Update a memory binding (board-only)                     |
+| DELETE | `/api/companies/:companyId/memory/bindings/:bindingId`                     | Delete a memory binding (board-only)                     |
+| GET    | `/api/companies/:companyId/memory/bindings/:bindingId/capabilities`        | Get resolved capabilities for a binding (board-only)     |
+| GET    | `/api/companies/:companyId/memory/targets`                                 | List memory binding targets (board-only)                 |
+| POST   | `/api/companies/:companyId/memory/targets`                                 | Create a memory binding target (board-only)              |
+| DELETE | `/api/companies/:companyId/memory/targets/:targetId`                       | Delete a memory binding target (board-only)              |
+| GET    | `/api/companies/:companyId/memory/agents/:agentId/config`                  | Get resolved memory config for an agent                  |
+| POST   | `/api/companies/:companyId/memory/capture`                                 | Capture text into memory (auto, 30-day TTL)              |
+| POST   | `/api/companies/:companyId/memory/records`                                 | Upsert curated memory records                            |
+| GET    | `/api/companies/:companyId/memory/query`                                   | Search memory records (semantic + full-text hybrid)      |
+| GET    | `/api/companies/:companyId/memory/records`                                 | List memory records with cursor pagination               |
+| GET    | `/api/companies/:companyId/memory/records/:recordId`                       | Get a single memory record                               |
+| DELETE | `/api/companies/:companyId/memory/records`                                 | Forget memory records by handle                          |
+| GET    | `/api/companies/:companyId/memory/operations`                              | List recent memory operations (board-only)               |
+| GET    | `/api/companies/:companyId/memory/extraction-jobs`                         | List memory extraction jobs (`?status=`, board-only)     |
+| POST   | `/api/companies/:companyId/memory/extraction-jobs/:jobId/retry`            | Retry a failed extraction job (board-only)               |
+
+Memory query parameters (`GET /api/companies/:companyId/memory/query`):
+- `q` — search text
+- `scope` — JSON scope filter (e.g., `{"agentId":"agent-42"}`)
+- `topK` — max results (default/builtin adapter: ~10)
+- `bindingKey` — optional target binding key
+
+Memory records parameters (`GET /api/companies/:companyId/memory/records`):
+- `scope` — JSON scope filter
+- `cursor` — pagination cursor
+- `limit` — page size
+
+Agent scope enforcement: Agents can only read/write memory scoped to their own agent ID. Board users have full access.
 
 ---
 

@@ -30,6 +30,7 @@ import {
   agentBubbleDateLabel,
 } from "../components/AgentBubbleActionRow";
 import { AgentIcon } from "../components/AgentIconPicker";
+import { ResolutionCard, type BoardResolutionAction } from "../components/ResolutionCard";
 import { cn, formatDateTime } from "../lib/utils";
 import type { FeedbackVoteValue } from "@paperclipai/shared";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -192,6 +193,7 @@ export function BoardChat() {
   const [boardIssueId, setBoardIssueId] = useState<string | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
   const [optimisticMessage, setOptimisticMessage] = useState<string | null>(null);
+  const [actionEvents, setActionEvents] = useState<BoardResolutionAction[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const hasRestoredScrollRef = useRef(false);
@@ -556,6 +558,7 @@ export function BoardChat() {
       setStreamingText("");
       setErrorText("");
       setStatusText("Connecting...");
+      setActionEvents([]);
 
       try {
         const controller = new AbortController();
@@ -609,6 +612,8 @@ export function BoardChat() {
                     "The board assistant couldn't respond. Please try again.",
                 );
                 setStatusText("");
+              } else if (event.type === "action" && event.action) {
+                setActionEvents((prev) => [...prev, event.action]);
               } else if (event.type === "done") {
                 if (event.issueId) {
                   queryClient.invalidateQueries({
@@ -865,6 +870,18 @@ export function BoardChat() {
                 );
               })}
 
+              {/* Resolution cards below the last persisted assistant comment
+                  — visible after the stream ends and the comment is persisted. */}
+              {!streamingText && actionEvents.length > 0 && (
+                <div className="flex flex-col items-start">
+                  <div className="mt-1 flex flex-col gap-2 pl-1 w-full max-w-[85%]">
+                    {actionEvents.map((action, i) => (
+                      <ResolutionCard key={i} action={action} />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Optimistic user message — shows instantly before server persists */}
               {optimisticMessage && (
                 <div className="flex justify-end">
@@ -893,6 +910,13 @@ export function BoardChat() {
                   >
                     <MarkdownBody className={BOARD_CHAT_MARKDOWN_CLASS}>{streamingText}</MarkdownBody>
                   </div>
+                  {actionEvents.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-2 pl-1 w-full max-w-[85%]">
+                      {actionEvents.map((action, i) => (
+                        <ResolutionCard key={i} action={action} />
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
 

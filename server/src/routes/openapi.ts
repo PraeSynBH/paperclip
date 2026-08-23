@@ -232,6 +232,8 @@ import {
   claudeSetupTokenSessionOwnerResponseSchema,
   claudeSetupTokenCompletionResponseSchema,
   claudeOAuthTokenStatusResponseSchema,
+  selectOnboardingRoleSchema,
+  skipOnboardingSchema,
 } from "@paperclipai/shared";
 import {
   COMPANY_IMPORT_TRANSFERS_API_PATH,
@@ -4940,6 +4942,39 @@ registry.registerPath({
   summary: "Apply the onboarding seed Paperclip Cloud collected at signup",
   request: { params: z.object({ companyId: z.string() }) },
   responses: { 200: r.ok(), 401: r.unauthorized, 422: r.unprocessable },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/companies/{companyId}/onboarding/status",
+  tags: ["companies"],
+  summary: "Get onboarding status for a company",
+  request: { params: z.object({ companyId: z.string() }) },
+  responses: { 200: r.ok(), 401: r.unauthorized, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/companies/{companyId}/onboarding/role",
+  tags: ["companies"],
+  summary: "Select an onboarding role for a company",
+  request: {
+    params: z.object({ companyId: z.string() }),
+    body: jsonBody(selectOnboardingRoleSchema),
+  },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 409: r.conflict },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/companies/{companyId}/onboarding/skip",
+  tags: ["companies"],
+  summary: "Skip onboarding for a company",
+  request: {
+    params: z.object({ companyId: z.string() }),
+    body: jsonBody(skipOnboardingSchema),
+  },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized, 409: r.conflict },
 });
 
 registry.registerPath({
