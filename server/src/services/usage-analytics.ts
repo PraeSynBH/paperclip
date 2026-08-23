@@ -1,4 +1,4 @@
-import { and, gte, sql } from "drizzle-orm";
+import { gte, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { authUsers, companies, companyMemberships, agents, heartbeatRuns, issues } from "@paperclipai/db";
 import type { UsageAnalyticsDay, UsageAnalyticsFunnel, UsageAnalyticsResponse, UsageAnalyticsSnapshot, UsageAnalyticsWindow } from "@paperclipai/shared";
@@ -78,7 +78,6 @@ export function usageAnalyticsService(db: Db) {
         GROUP BY date
         ORDER BY date
       `)) as unknown as Iterable<{ date: string; count: number | string }>;
-
       // ── Daily active agents: agents that had a heartbeat run on that day ──
       const activeAgentRows = (await db.execute(sql`
         SELECT
@@ -133,15 +132,12 @@ export function usageAnalyticsService(db: Db) {
         .where(gte(agents.createdAt, windowStart))
         .then((rows) => Number(rows[0]?.count ?? 0));
 
-      // Active users in the last 7 days (retained)
+      // Active agents in the last 7 days (retained)
       const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
       const activeUsers = await db
-        .select({ count: sql<number>`count(DISTINCT ${heartbeatRuns.actorAgentId})` })
+        .select({ count: sql<number>`count(DISTINCT ${heartbeatRuns.agentId})` })
         .from(heartbeatRuns)
-        .where(and(
-          gte(heartbeatRuns.createdAt, sevenDaysAgo),
-          sql`${heartbeatRuns.actorAgentId} IS NOT NULL`,
-        ))
+        .where(gte(heartbeatRuns.createdAt, sevenDaysAgo))
         .then((rows) => Number(rows[0]?.count ?? 0));
 
       // ── Snapshot: point-in-time totals ──
