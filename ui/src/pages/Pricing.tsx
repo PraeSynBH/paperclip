@@ -3,6 +3,7 @@ import { useCompany } from "@/context/CompanyContext";
 import { billingApi, type SubscriptionTier, type CompanySubscription } from "@/api/billing";
 import { queryKeys } from "@/lib/queryKeys";
 import { Button } from "@/components/ui/button";
+import { usePageMeta } from "../hooks/usePageMeta";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { PaperclipLoading } from "@/components/AnimatedPaperclipIcon";
@@ -56,6 +57,7 @@ function StatusPill({ subscription }: { subscription: CompanySubscription | null
 }
 
 export function PricingPage() {
+  usePageMeta("Pricing", "Paperclip pricing plans and subscription details.");
   const { selectedCompanyId } = useCompany();
   const queryClient = useQueryClient();
   const { pushToast } = useToast();

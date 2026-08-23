@@ -46,6 +46,7 @@ import { DecisionDateChips, type AttentionCustomRange } from "../components/Deci
 import { IssueGroupHeader } from "../components/IssueGroupHeader";
 import { Button } from "../components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 /**
  * Queue page. A single queue's pending
@@ -60,6 +61,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popove
  */
 export function DecisionQueuePage() {
   const { selectedCompanyId } = useCompany();
+  usePageMeta("Decision Queue", "Review and manage decision queue items.");
   const { setBreadcrumbs } = useBreadcrumbs();
   const { pushToast } = useToastActions();
   const queryClient = useQueryClient();

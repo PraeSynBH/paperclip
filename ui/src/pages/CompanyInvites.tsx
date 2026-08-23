@@ -11,6 +11,7 @@ import { Link } from "@/lib/router";
 import { queryKeys } from "@/lib/queryKeys";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { Badge } from "@/components/ui/badge";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 const inviteRoleOptions = [
   {
@@ -46,6 +47,7 @@ function isInviteHistoryRow(value: unknown): value is Awaited<ReturnType<typeof 
   return "id" in value && "state" in value && "createdAt" in value;
 }
 
+  usePageMeta("Company Invites", "Manage pending company invitations.");
 export function CompanyInvites() {
   const { selectedCompany, selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

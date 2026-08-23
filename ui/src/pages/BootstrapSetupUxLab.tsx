@@ -3,6 +3,7 @@ import { Loader2, ShieldCheck, Terminal, TriangleAlert } from "lucide-react";
 import { BOOTSTRAP_FALLBACK_COMMAND } from "@/bootstrapSetup";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 type LabFixtureKey =
   | "signed-out-private"
@@ -206,6 +207,7 @@ const FIXTURE_BODIES: Record<LabFixtureKey, ReactElement> = {
 };
 
 export function BootstrapSetupUxLab() {
+  usePageMeta("Bootstrap Setup UX Lab", "UX lab for bootstrap setup flows.");
   return (
     <div className="bg-background min-h-screen pb-16">
       <header className="border-b border-border bg-muted/20">
