@@ -4,11 +4,11 @@
 >
 > **Upstream-compatible restoration** (VOY-1611, commit `1fb17b8f18`): The billing implementation has been restored with upstream-compatible code. API contracts are unchanged from the previous fork-specific implementation. This assessment has been updated to reflect the restored code.
 
-**Feature**: Stripe-integrated billing with subscription management, usage tracking, invoice syncing, and board-user-only mutation controls
+**Feature**: Stripe-integrated billing with subscription management, usage tracking, invoice syncing, board-user-only mutation controls, Stripe Customer Portal session management, and trial grace period handling
 **Assessed by**: Support Engineer
 **Date**: 2026-08-23
-**Related**: VOY-1364, VOY-1367, VOY-944, VOY-896, VOY-905, VOY-1733
-**Release**: v0.4.0-alpha (hotfix VOY-1367) — Updated with pricing funnel analytics (VOY-1733/GA4 conversion tracking)
+**Related**: VOY-1364, VOY-1367, VOY-944, VOY-896, VOY-905, VOY-1733, VOY-1888
+**Release**: v0.4.0-alpha (hotfix VOY-1367) — Updated with pricing funnel analytics (VOY-1733/GA4 conversion tracking), billing portal session, and trial grace period
 
 ## Feature Overview (User Perspective)
 
@@ -41,6 +41,7 @@ The Billing System provides Stripe-integrated subscription management for Voyond
 | `PATCH` | `/api/companies/:companyId/billing/subscription` | Board user only | Update tier/billing period |
 | `POST` | `/api/companies/:companyId/billing/subscription/cancel` | Board user only | Cancel subscription |
 | `POST` | `/api/companies/:companyId/billing/subscription/reactivate` | Board user only | Reactivate cancelled subscription |
+| `POST` | `/api/companies/:companyId/billing/portal-link` | Board user only | Create a Stripe Customer Portal session for subscription self-management |
 | `GET` | `/api/companies/:companyId/billing/usage` | Any company member | View billing-period usage |
 | `POST` | `/api/companies/:companyId/billing/usage` | Board user only | Report usage (seats, agent_runs, storage_gb) |
 | `GET` | `/api/companies/:companyId/billing/invoices` | Any company member | List invoices |
@@ -55,6 +56,17 @@ The Billing System provides Stripe-integrated subscription management for Voyond
 The response returns `{ "url": "...", "sessionId": "..." }`; the client redirects the user to `url`. Stripe handles card collection, then fires `checkout.session.completed`, which creates the subscription in the database. If the user cancels checkout, they are returned to `cancelUrl` (defaults to `{PAPERCLIP_PUBLIC_URL}/pricing`) and no subscription is created.
 
 Supported request fields: `tierId` (required), `billingPeriod` (optional, defaults to `monthly`), `successUrl` and `cancelUrl` (optional URLs).
+
+### Billing Portal Session
+
+`POST /api/companies/:companyId/billing/portal-link` creates a Stripe Customer Portal session for subscription self-management. The Customer Portal allows board users to manage their subscription, update payment methods, view invoices, and perform other billing actions — all hosted by Stripe.
+
+The response returns `{ "url": "..." }`; the client redirects the user to `url` where Stripe hosts the billing portal.
+
+Supported request fields:
+- `returnUrl` (optional, defaults to `{PAPERCLIP_PUBLIC_URL}/boards/{companyId}`) — Where the user returns after Stripe portal session ends
+
+**Auth:** Board user only.
 
 ### Pricing Funnel Analytics
 
@@ -171,6 +183,53 @@ WHERE cs.company_id = '<company-id>';
 
 The `features` column is a JSONB array of feature keys. If the required feature key is missing, the gate fires.
 
+## Trial Grace Period
+
+When a free trial ends and the company has not provided a payment method, the system enters a **7-day grace period** rather than immediately blocking all access. This ensures users retain access to their data while they choose a plan.
+
+### Grace Period Lifecycle
+
+| Step | Trigger | Status | Behavior |
+|------|---------|--------|----------|
+| **Trial ending (3 days before)** | Stripe webhook `customer.subscription.trial_will_end` | `trialing` | System logs the impending expiry and flags it. No user-facing change yet. |
+| **Trial expires, no payment method** | Stripe subscription status transitions to `incomplete` or `past_due` | `grace_period` | Paid features are denied via feature gating. Data is retained. Company has 7 days to subscribe. |
+| **Grace period elapses (7 days)** | `handlePostTrialStatus` detects elapsed grace period | `expired` | Subscription marked as expired. Data preserved for reactivation. All paid features blocked. |
+| **Grace period — user pays during window** | User completes Stripe Checkout | Transitions to `active` | Normal active subscription resumes, grace period ends. |
+
+### How support should handle inquiries
+
+| Scenario | Response |
+|----------|----------|
+| "My trial ended, can I still access my data?" | Yes — subscriptions in `grace_period` status retain all data. Paid features are blocked but data is preserved. The user has 7 days to upgrade via `/pricing`. |
+| "I upgraded during the grace period, now what?" | The checkout completes → webhook transitions subscription to `active` → full access restored. |
+| "My trial expired more than a week ago and I can't log in" | The subscription is in `expired` status. Data is preserved. The user can subscribe at `/pricing` to reactivate. If the pricing page shows no subscription, a board user can create one via the API. |
+| "When does the trial_will_end webhook fire?" | Stripe sends `customer.subscription.trial_will_end` approximately 3 days before the trial ends. The system does not send proactive email notifications — users discover expiry via the trial banner in the UI. |
+
+### Subscription status values (extended)
+
+| Status | Description |
+|--------|-------------|
+| `active` | Subscription is active and in good standing |
+| `trialing` | Company is in a free trial period |
+| `incomplete` | First payment failed or payment method missing |
+| `past_due` | A payment has failed and is past due |
+| `grace_period` | Trial expired without payment — 7-day data retention window |
+| `canceled` | Subscription was cancelled (cancelAtPeriodEnd or immediate) |
+| `expired` | Grace period elapsed — data preserved, paid features fully blocked |
+| `unpaid` | Invoice is unpaid |
+
+### Detection
+
+Support can check a subscription's status and trial end date:
+
+```sql
+SELECT status, trial_end, current_period_end
+FROM company_subscriptions
+WHERE company_id = '<company-id>';
+```
+
+Subscriptions in `grace_period` with `trial_end` in the past are within the 7-day grace window. Subscriptions with status `expired` have exceeded it.
+
 ## Live Events — Real-Time Subscription Status
 
 The billing system emits `subscription.status.updated` live events whenever a subscription's status changes. These events are delivered to the UI via WebSocket (no polling needed) and cause the subscription and billing-overview views to refresh automatically.
@@ -216,9 +275,12 @@ The billing system emits `subscription.status.updated` live events whenever a su
 1. **P1: Webhook idempotency** — ✅ **FIXED** (committed `1fb17b8f18`). Migration 0228 adds `stripe_webhook_events` dedup table with `UNIQUE(stripe_event_id)`. Webhook handler inserts event ID before processing; 23505 duplicate violation → silently skip. UNIQUE indexes on `stripe_invoice_id` and `stripe_customers.company_id` also applied.
 2. **P1: Race in handleSubscriptionUpdated / handleCheckoutSessionCompleted** — ✅ **FIXED** (committed `1fb17b8f18`). Uses `INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE SET` — concurrent Stripe events are idempotent.
 3. **P2: Zero test coverage** on webhook handlers, checkout flow, cancel/reactivate, invoice sync.
-4. ✅ **P2: No real-time subscription status propagation** — **RESOLVED** (committed `b8732268f2`). All 8 subscription state transitions now emit `subscription.status.updated` live events via `publishLiveEvent`. The UI handler in `LiveUpdatesProvider` invalidates subscription and overview caches on receipt, so the UI updates immediately without manual refresh. See [Live Events Reference](#live-events) below.
+4. ✅ **P2: No real-time subscription status propagation** — **RESOLVED** (committed `b8732268f2`). All subscription state transitions now emit `subscription.status.updated` live events via `publishLiveEvent`. The UI handler in `LiveUpdatesProvider` invalidates subscription and overview caches on receipt, so the UI updates immediately without manual refresh. See [Live Events Reference](#live-events) below.
 5. **No subscription tier seed data** in committed code — tiers must be seeded manually or via a bootstrap script.
 6. **Feature-flagged** — All billing routes are gated behind `PAPERCLIP_BILLING_ENABLED=true` (disabled by default).
+7. **Trial grace period is best-effort** — The `handlePostTrialStatus` function runs in response to Stripe webhooks. If the webhook delivery is delayed or missed, the grace period transition may not occur at the exact moment the trial expires. The trial expiry reaper acts as a safety net but runs on a 30-minute interval.
+8. **No email notification for trial ending** — When `customer.subscription.trial_will_end` fires (3 days before trial end), the system logs the event but does not send an email. Users discover expiry via the UI trial banner.
+9. **Portal-link requires existing Stripe customer** — `POST /billing/portal-link` creates a Stripe Customer Portal session, but it requires the company to have a Stripe customer record. If `getOrCreateStripeCustomer` fails (e.g., Stripe misconfiguration), the portal link cannot be generated.
 
 ## Support Escalation Path
 
@@ -232,6 +294,9 @@ The billing system emits `subscription.status.updated` live events whenever a su
 | Agent receives 403 on billing mutations | Low | Expected behavior — agents cannot mutate billing. Educate user that a board user must perform billing actions |
 | "Missing raw body for webhook verification" | High | Webhook endpoint expects `rawBody` to be available on the request object. Ensure the Express raw body parser is configured before the webhook route |
 | Usage reporting discrepancy | Medium | Verify the billing period alignment and metric name. Usage is reset at the start of each billing period |
+| Portal link returns error | Medium | Check that Stripe customer exists for the company; verify `STRIPE_SECRET_KEY` has portal session creation permissions |
+| User reports trial ended but can't upgrade | Medium | Check subscription status: `grace_period` means they're in the 7-day window and can upgrade; `expired` means the window has passed — data is preserved but manual subscription creation may be needed |
+| `trial_will_end` webhook not firing | Low | Stripe sends this 3 days before trial end. If the trial was created with less than 3 days remaining, this webhook won't fire. Verify Stripe dashboard webhook logs |
 
 ## Related Documentation
 

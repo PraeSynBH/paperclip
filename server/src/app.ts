@@ -53,6 +53,7 @@ import { environmentRoutes } from "./routes/environments.js";
 import { executionWorkspaceRoutes } from "./routes/execution-workspaces.js";
 import { goalRoutes } from "./routes/goals.js";
 import { onboardingSeedRoutes } from "./routes/onboarding-seed.js";
+import { onboardingRoutes } from "./routes/onboarding.js";
 import { boardChatRoutes } from "./routes/board-chat.js";
 import { approvalRoutes } from "./routes/approvals.js";
 import { secretRoutes } from "./routes/secrets.js";
@@ -318,6 +319,8 @@ export async function createApp(
     managedPluginAutoInstall?: readonly string[] | null;
     /** Test override for the bundled plugin catalog root. */
     bundledPluginCatalogRoot?: string;
+    /** Comma-separated list of allowed CORS origins from PAPERCLIP_CORS_ORIGINS env var. */
+    corsOrigins: string[];
   },
 ) {
   const app = express();
@@ -341,6 +344,29 @@ export async function createApp(
   }));
   app.use("/api", apiCompression());
   app.use(httpLogger);
+
+  // CORS support — gated behind PAPERCLIP_CORS_ORIGINS env var.
+  // Voyonder typically proxies through its own backend, so this is optional.
+  // When set, allows the specified origins to make cross-origin requests.
+  if (opts.corsOrigins.length > 0) {
+    const corsOrigins = opts.corsOrigins;
+    app.use("/api", (req, res, next) => {
+      const origin = req.headers.origin;
+      if (origin && corsOrigins.includes(origin)) {
+        res.setHeader("Access-Control-Allow-Origin", origin);
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        res.setHeader("Access-Control-Allow-Credentials", "true");
+        res.setHeader("Vary", "Origin");
+        if (req.method === "OPTIONS") {
+          res.status(204).end();
+          return;
+        }
+      }
+      next();
+    });
+  }
+
   const privateHostnameGateEnabled = shouldEnablePrivateHostnameGuard({
     deploymentMode: opts.deploymentMode,
     deploymentExposure: opts.deploymentExposure,
@@ -527,6 +553,7 @@ export async function createApp(
   api.use(executionWorkspaceRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(goalRoutes(db));
   api.use(onboardingSeedRoutes(db));
+  api.use(onboardingRoutes(db));
   api.use(boardChatRoutes(db, { deploymentMode: opts.deploymentMode }));
   api.use(approvalRoutes(db, { pluginWorkerManager: workerManager }));
   api.use(secretRoutes(db));

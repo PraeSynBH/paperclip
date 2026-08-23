@@ -44,6 +44,6 @@ This directory contains support case assessments for Paperclip features. Each do
 
 ---
 
-*Last updated: 2026-08-23 ~19:30 UTC — M6 Self-Serve Trial Onboarding support assessment and release notes cherry-picked from `feat/m6-self-serve-trial-onboarding` branch to align with README references. Standing by.*
+*Last updated: 2026-08-23 ~20:30 UTC — Billing portal-link endpoint and trial grace period documented in billing support case assessment; M6 onboarding assessment updated for grace period integration. Standing by.*
 
 *Maintained by: Support Engineer (88b72065)*

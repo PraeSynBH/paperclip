@@ -1,11 +1,11 @@
 # Support Case Assessment: M6 Self-Serve Trial Onboarding
 
-**Feature**: Self-serve trial sign-up and onboarding flow — new users can register, get a company created automatically, and start a 14-day free trial without human intervention
+**Feature**: Self-serve trial sign-up and onboarding flow — new users can register, get a company created automatically, and start a 14-day free trial without human intervention. Trial expiry transitions through a 7-day grace period (`grace_period` status) before reaching `expired`, preserving user data throughout.
 **Assessed by**: Support Engineer
 **Date**: 2026-08-23
-**Related**: M6 — Self-Serve Trial Onboarding
-**Commits**: `d344d832e0`, `996136bc66`, `722b0c4cbd`, `042d68662d`, `b0d5b9c7ee`
-**Branch**: `feat/m6-self-serve-trial-onboarding`
+**Related**: M6 — Self-Serve Trial Onboarding, Trial Grace Period (added alongside M5 billing enhancements)
+**Commits**: `d344d832e0`, `996136bc66`, `722b0c4cbd`, `042d68662d`, `b0d5b9c7ee` — plus trial grace period in server/src/services/billing.ts (unstaged on feat/clean-m5-pricing-pr)
+**Branch**: `feat/m6-self-serve-trial-onboarding` (cherry-picked into `feat/clean-m5-pricing-pr`)
 
 ## Feature Overview (User Perspective)
 
@@ -89,13 +89,17 @@ Response when not on trial (including expired):
 null
 ```
 
-### 3. Trial Expiry Reaper
+### 3. Trial Expiry Reaper & Grace Period
 
 A background interval runs every 30 minutes that:
 - Queries all subscriptions with status `trialing` whose `trial_end` is in the past
 - Sets their status to `past_due` — this blocks access to paid-tier features via the existing feature-gating infrastructure
 - Publishes a `subscription.status.updated` live event for each expired subscription
 - Also runs once on server startup
+
+**Grace period integration:** When Stripe reports the subscription as `incomplete` or `past_due` after trial expiry, the `handlePostTrialStatus` function (called from the `customer.subscription.updated` webhook handler) transitions the subscription to a **7-day grace period** (`grace_period` status) instead of immediately blocking access. This preserves user data during the grace window. After 7 days, the subscription transitions to `expired` (data preserved, paid features fully blocked). See [Trial Grace Period](support-case-billing-system.md#trial-grace-period) in the Billing System assessment for details.
+
+**Note:** The reaper and `handlePostTrialStatus` operate independently. The reaper sets `past_due` immediately on detecting an expired trial, while `handlePostTrialStatus` responds to Stripe webhooks and enters the grace period. If both fire, the last write wins — the grace period transition is idempotent and preserves data access.
 
 ### 4. Trial Tier Seed Data
 
@@ -150,7 +154,8 @@ A new `Trial` subscription tier is seeded into the database:
 | **Single-trial enforcement** | There is no mechanism to prevent the same email from starting multiple trials across different sessions | The idempotency check (user company membership) prevents duplicates for the same user, but a different email could create a second trial |
 | **Trial-to-paid conversion** | There is no automated conversion flow. Users must manually visit /pricing and subscribe via Stripe Checkout | Future feature — automated conversion on trial end |
 | **TrialDays max 90** | The `trialDays` field is limited to 90 days by the Zod schema | For longer trials, admins can directly set up a subscription |
-| **Reaper delay** | The trial expiry reaper runs every 30 minutes. Expired trials may have up to 30 minutes of grace access | This is intentional — prevents hard cutoffs. The `past_due` status blocks paid features but doesn't delete data |
+|| **Reaper delay** | The trial expiry reaper runs every 30 minutes. Expired trials may have up to 30 minutes of grace access | This is intentional — prevents hard cutoffs. The `past_due` status blocks paid features but doesn't delete data |
+|| **Grace period vs. reaper race** | The reaper (sets `past_due` immediately) and `handlePostTrialStatus` (sets `grace_period` via Stripe webhook) may race. The grace period system is the preferred path; the reaper acts as a safety net | If a user reports they were blocked immediately after trial expiry, check the subscription status in the DB. If it's `past_due` instead of `grace_period`, the reaper fired before the Stripe webhook was processed. The data is still accessible — the user can upgrade via `/pricing` |
 
 ## Troubleshooting
 

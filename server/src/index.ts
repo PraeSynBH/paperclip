@@ -860,6 +860,7 @@ export async function startServer(): Promise<StartedServer> {
     pluginWorkerManager,
     decisionServiceOptions,
     managedPluginAutoInstall,
+    corsOrigins: config.corsOrigins,
   });
   const server = createServer(app as unknown as Parameters<typeof createServer>[0]);
 
@@ -1688,6 +1689,7 @@ export async function startServer(): Promise<StartedServer> {
         migrationSummary,
         heartbeatSchedulerEnabled: config.heartbeatSchedulerEnabled,
         heartbeatSchedulerIntervalMs: config.heartbeatSchedulerIntervalMs,
+        heartbeatFailureWebhookUrl: config.heartbeatFailureWebhookUrl,
         databaseBackupEnabled: config.databaseBackupEnabled,
         databaseBackupIntervalMinutes: config.databaseBackupIntervalMinutes,
         databaseBackupRetentionDays: config.databaseBackupRetentionDays,
