@@ -77,6 +77,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -946,6 +947,7 @@ function CreateDocumentDialog({
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
+  usePageMeta("Knowledge", "Browse and search company knowledge base.");
 export function KnowledgeBrowser() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

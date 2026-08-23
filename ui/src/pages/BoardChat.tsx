@@ -34,6 +34,7 @@ import { ResolutionCard, type BoardResolutionAction } from "../components/Resolu
 import { cn, formatDateTime } from "../lib/utils";
 import type { FeedbackVoteValue } from "@paperclipai/shared";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 /**
  * Board Concierge Chat — a chat interface powered by the board-member skill.
@@ -101,6 +102,7 @@ function TypingBubble() {
   );
 }
 
+  usePageMeta("Board Chat", "Chat with your board concierge to manage your company.");
 export function BoardChat() {
   const { selectedCompanyId, selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
