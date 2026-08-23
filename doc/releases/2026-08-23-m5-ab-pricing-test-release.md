@@ -68,8 +68,8 @@ PRICING_EXPERIMENT_CONFIG='{
 
 ## Status
 - [x] Implementation
-- [ ] Code Review
-- [ ] CTO Sign-off
+- [x] Code Review
+- [x] CTO Sign-off
 - [ ] Ship to staging
 - [ ] Verify staging
 - [ ] Ship to production
