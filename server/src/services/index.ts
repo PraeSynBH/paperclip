@@ -193,4 +193,4 @@ export {
 } from "./codex-auth-reconciliation.js";
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
-export { getGa4AnalyticsService, buildApprovalEvent, buildApprovalRejectedEvent, type Ga4AnalyticsService } from "./ga4-analytics.js";
+export { ga4AnalyticsService, getGa4AnalyticsService, resolveGa4ConfigFromEnv, type Ga4AnalyticsService, type Ga4Config, type Ga4Event, type Ga4Payload } from "./ga4-analytics.js";

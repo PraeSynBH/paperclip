@@ -65,6 +65,18 @@ export interface CheckoutSessionResult {
   sessionId: string;
 }
 
+export interface ExperimentVariantResponse {
+  variant: "A" | "B";
+  enabled: boolean;
+}
+
+export interface ExperimentResultsResponse {
+  enabled: boolean;
+  totalAssigned: number;
+  variantA: { count: number };
+  variantB: { count: number };
+}
+
 export interface BillingOverview {
   companyId: string;
   subscription: CompanySubscription | null;
@@ -110,4 +122,8 @@ export const billingApi = {
     api.get<SubscriptionInvoice[]>(`/companies/${companyId}/billing/invoices`),
   overview: (companyId: string) =>
     api.get<BillingOverview>(`/companies/${companyId}/billing/overview`),
+  experimentVariant: (companyId: string) =>
+    api.get<ExperimentVariantResponse>(`/companies/${companyId}/billing/experiment-variant`),
+  experimentResults: (companyId: string) =>
+    api.get<ExperimentResultsResponse>(`/companies/${companyId}/billing/experiment-results`),
 };

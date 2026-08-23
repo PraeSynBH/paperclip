@@ -18,9 +18,11 @@ import {
   logActivity,
   secretService,
   getGa4AnalyticsService,
+} from "../services/index.js";
+import {
   buildApprovalEvent,
   buildApprovalRejectedEvent,
-} from "../services/index.js";
+} from "../services/ga4-analytics.js";
 import { assertBoard, assertCompanyAccess, getAccessibleResource, getActorInfo, hasCompanyAccess } from "./authz.js";
 import { redactEventPayload } from "../redaction.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";

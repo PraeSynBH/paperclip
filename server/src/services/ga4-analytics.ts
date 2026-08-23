@@ -117,6 +117,8 @@ export function getGa4AnalyticsService(): Ga4AnalyticsService {
   return sharedService;
 }
 
+export const ga4AnalyticsService: Ga4AnalyticsService = getGa4AnalyticsService();
+
 export function buildSignupEvent(userId: string, email?: string): Ga4Payload {
   return {
     client_id: userId, user_id: userId,

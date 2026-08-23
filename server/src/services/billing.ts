@@ -14,6 +14,7 @@ import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES } from "@paperclipai/shared
 import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { publishLiveEvent } from "./live-events.js";
 import { getGa4AnalyticsService } from "./ga4-analytics.js";
+import type { PricingExperimentVariant, PricingExperimentService } from "./pricing-experiment.js";
 import { logger } from "../middleware/logger.js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
@@ -46,7 +47,7 @@ function currentPeriodRange(billingPeriod: "monthly" | "yearly", now = new Date(
   return { periodStart, periodEnd };
 }
 
-export function billingService(db: Db) {
+export function billingService(db: Db, experiment?: PricingExperimentService) {
   const getTier = async (tierId: string) => {
     const tier = await db
       .select()

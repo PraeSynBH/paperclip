@@ -38,38 +38,6 @@ export function billingWebhookRoute(db: Db) {
     }
   });
 
-  /**
-   * GET /api/companies/:companyId/billing/experiment-variant
-   * Get the A/B pricing experiment variant assigned to this company.
-   */
-  router.get("/companies/:companyId/billing/experiment-variant", async (req, res, next) => {
-    try {
-      const companyId = req.params.companyId as string;
-      assertCompanyAccess(req, companyId);
-      const variant = await billing.getExperimentVariant(companyId);
-      const config = experiment.loadConfig();
-      res.json({ variant, enabled: config.enabled });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  /**
-   * GET /api/companies/:companyId/billing/experiment-results
-   * Get experiment results summary (board-only).
-   */
-  router.get("/companies/:companyId/billing/experiment-results", async (req, res, next) => {
-    try {
-      const companyId = req.params.companyId as string;
-      assertCompanyAccess(req, companyId);
-      requireBoardUser(req);
-      const results = await billing.getExperimentResults();
-      res.json(results);
-    } catch (err) {
-      next(err);
-    }
-  });
-
   return router;
 }
 

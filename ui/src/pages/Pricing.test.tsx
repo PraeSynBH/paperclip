@@ -18,6 +18,7 @@ const mockBillingApi = vi.hoisted(() => ({
   createCheckoutSession: vi.fn(),
   cancelSubscription: vi.fn(),
   reactivateSubscription: vi.fn(),
+  experimentVariant: vi.fn(),
 }));
 const mockPushToast = vi.hoisted(() => vi.fn());
 const originalLocation = globalThis.location;
@@ -126,9 +127,18 @@ describe("PricingPage", () => {
     mockBillingApi.createCheckoutSession.mockReset();
     mockBillingApi.cancelSubscription.mockReset();
     mockBillingApi.reactivateSubscription.mockReset();
+    mockBillingApi.experimentVariant.mockReset();
     mockPushToast.mockReset();
+    mockBillingApi.experimentVariant.mockResolvedValue({
+      variant: "A",
+      enabled: false,
+    });
     Object.defineProperty(globalThis, "location", {
-      value: { ...originalLocation, origin: "https://voyonder.example", href: "https://voyonder.example/pricing" },
+      value: {
+        ...originalLocation,
+        origin: "https://voyonder.example",
+        href: "https://voyonder.example/pricing",
+      },
       writable: true,
     });
   });
@@ -140,9 +150,9 @@ describe("PricingPage", () => {
 
   it("renders all 3 subscription tiers from the API", async () => {
     mockBillingApi.tiers.mockResolvedValue([
-      createTier({ id: "tier-1", name: "Adventurer", priceMonthlyCents: 2900 }),
-      createTier({ id: "tier-2", name: "Explorer", priceMonthlyCents: 7900 }),
-      createTier({ id: "tier-3", name: "Elite", priceMonthlyCents: 49900 }),
+      createTier({ id: "tier-1", name: "Adventurer", priceMonthlyCents: 2900, sortOrder: 1 }),
+      createTier({ id: "tier-2", name: "Explorer", priceMonthlyCents: 7900, sortOrder: 2 }),
+      createTier({ id: "tier-3", name: "Elite", priceMonthlyCents: 49900, sortOrder: 3 }),
     ]);
     mockBillingApi.subscription.mockResolvedValue(null);
 
@@ -162,23 +172,24 @@ describe("PricingPage", () => {
 
   it("renders feature list from tier.features JSONB", async () => {
     mockBillingApi.tiers.mockResolvedValue([
-      createTier({ id: "tier-1", features: ["advanced_agents", "audit_logs"] }),
+      createTier({ id: "tier-1", features: ["advanced_agents", "audit_logs"], sortOrder: 1 }),
     ]);
     mockBillingApi.subscription.mockResolvedValue(null);
 
     const { container, root } = renderPricing();
 
     await waitForAssertion(() => {
-      expect(container.textContent).toContain("advanced agents");
-      expect(container.textContent).toContain("audit logs");
+      expect(container.textContent).toContain("Advanced Agents");
+      expect(container.textContent).toContain("Audit Logs");
     });
 
     act(() => root.unmount());
   });
 
-  it("subscribe button creates a checkout session and redirects", async () => {
-    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1" })]);
+  it("subscribe button creates a checkout session with monthly billing and redirects", async () => {
+    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1", sortOrder: 1 })]);
     mockBillingApi.subscription.mockResolvedValue(null);
+    mockBillingApi.experimentVariant.mockResolvedValue({ variant: "A", enabled: false });
     mockBillingApi.createCheckoutSession.mockResolvedValue({
       url: "https://checkout.stripe.com/c/pay/cs_test_123",
       sessionId: "cs_test_123",
@@ -190,6 +201,7 @@ describe("PricingPage", () => {
       expect(container.textContent).toContain("Subscribe");
     });
 
+    // Find the Subscribe button (not the billing toggle role="switch")
     const subscribeButton = Array.from(container.querySelectorAll("button")).find((b) =>
       b.textContent?.includes("Subscribe"),
     );
@@ -200,7 +212,7 @@ describe("PricingPage", () => {
       expect(mockBillingApi.createCheckoutSession).toHaveBeenCalledWith("company-1", {
         tierId: "tier-1",
         billingPeriod: "monthly",
-        successUrl: "https://voyonder.example/pricing",
+        successUrl: "https://voyonder.example/pricing?success=true",
         cancelUrl: "https://voyonder.example/pricing",
       });
       expect(globalThis.location.href).toBe("https://checkout.stripe.com/c/pay/cs_test_123");
@@ -210,7 +222,7 @@ describe("PricingPage", () => {
   });
 
   it("shows active subscription status pill with tier name", async () => {
-    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1" })]);
+    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1", sortOrder: 1 })]);
     mockBillingApi.subscription.mockResolvedValue(
       createSubscription({ tier: createTier({ id: "tier-1", name: "Adventurer" }) }),
     );
@@ -228,7 +240,7 @@ describe("PricingPage", () => {
   });
 
   it("cancel button calls the cancel endpoint", async () => {
-    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1" })]);
+    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1", sortOrder: 1 })]);
     mockBillingApi.subscription.mockResolvedValue(createSubscription());
     mockBillingApi.cancelSubscription.mockResolvedValue(
       createSubscription({ cancelAtPeriodEnd: true }),
@@ -254,7 +266,7 @@ describe("PricingPage", () => {
   });
 
   it("shows reactivate button when cancellation is scheduled", async () => {
-    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1" })]);
+    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1", sortOrder: 1 })]);
     mockBillingApi.subscription.mockResolvedValue(
       createSubscription({ status: "active", cancelAtPeriodEnd: true }),
     );
@@ -264,6 +276,117 @@ describe("PricingPage", () => {
     await waitForAssertion(() => {
       expect(container.textContent).toContain("Reactivate Subscription");
       expect(container.textContent).toContain("Canceling");
+    });
+
+    act(() => root.unmount());
+  });
+
+  it("renders yearly billing toggle and shows savings badge", async () => {
+    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1", sortOrder: 1 })]);
+    mockBillingApi.subscription.mockResolvedValue(null);
+
+    const { container, root } = renderPricing();
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain("Monthly");
+      expect(container.textContent).toContain("Yearly");
+    });
+
+    // Click the billing toggle switch
+    const toggle = container.querySelector('button[role="switch"]');
+    expect(toggle).toBeTruthy();
+    act(() => toggle!.click());
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain("Save");
+      expect(container.textContent).toContain("/year");
+    });
+
+    act(() => root.unmount());
+  });
+
+  it("fetches experiment variant on render", async () => {
+    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1", sortOrder: 1 })]);
+    mockBillingApi.subscription.mockResolvedValue(null);
+
+    const { container, root } = renderPricing();
+
+    await waitForAssertion(() => {
+      expect(mockBillingApi.experimentVariant).toHaveBeenCalledWith("company-1");
+    });
+
+    act(() => root.unmount());
+  });
+
+  it("shows variant B specific messaging when experiment returns variant B enabled", async () => {
+    mockBillingApi.tiers.mockResolvedValue([
+      createTier({ id: "tier-1", name: "Adventurer", priceMonthlyCents: 2900, sortOrder: 1 }),
+      createTier({ id: "tier-2", name: "Explorer", priceMonthlyCents: 7900, sortOrder: 2 }),
+      createTier({ id: "tier-3", name: "Elite", priceMonthlyCents: 49900, sortOrder: 3 }),
+    ]);
+    mockBillingApi.subscription.mockResolvedValue(null);
+    mockBillingApi.experimentVariant.mockResolvedValue({ variant: "B", enabled: true });
+
+    const { container, root } = renderPricing();
+
+    await waitForAssertion(() => {
+      // Variant B should show "Find the Right Plan" header
+      expect(container.textContent).toContain("Find the Right Plan for Your Team");
+      // Variant B should show "Best Value" badge on middle tier
+      expect(container.textContent).toContain("Best Value");
+      // Variant B CTA should be "Get Started" or "Start Free Trial"
+      expect(container.textContent).toContain("Get Started");
+      expect(container.textContent).toContain("Start Free Trial");
+    });
+
+    act(() => root.unmount());
+  });
+
+  it("shows annual savings percentage on price card when yearly is selected", async () => {
+    const tier = createTier({
+      id: "tier-1",
+      name: "Adventurer",
+      priceMonthlyCents: 2900,
+      priceYearlyCents: 29000, // ~17% savings
+      sortOrder: 1,
+    });
+    mockBillingApi.tiers.mockResolvedValue([tier]);
+    mockBillingApi.subscription.mockResolvedValue(null);
+
+    const { container, root } = renderPricing();
+
+    // Toggle to yearly
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain("Yearly");
+    });
+    const toggle = container.querySelector('button[role="switch"]');
+    act(() => toggle!.click());
+
+    await waitForAssertion(() => {
+      // $290 annual = $290/year displayed
+      expect(container.textContent).toContain("$290");
+      expect(container.textContent).toContain("/year");
+    });
+
+    act(() => root.unmount());
+  });
+
+  it("shows Most Popular badge for middle tier by default (variant A)", async () => {
+    mockBillingApi.tiers.mockResolvedValue([
+      createTier({ id: "tier-1", name: "Starter", sortOrder: 1 }),
+      createTier({ id: "tier-2", name: "Pro", sortOrder: 2 }),
+      createTier({ id: "tier-3", name: "Enterprise", sortOrder: 3 }),
+    ]);
+    mockBillingApi.subscription.mockResolvedValue(null);
+    mockBillingApi.experimentVariant.mockResolvedValue({ variant: "A", enabled: false });
+
+    const { container, root } = renderPricing();
+
+    await waitForAssertion(() => {
+      // Middle tier (Pro) should have "Most Popular" badge
+      const badges = Array.from(container.querySelectorAll("[data-variant='default']"));
+      const badgeTexts = badges.map((b) => b.textContent).join("");
+      expect(badgeTexts).toContain("Most Popular");
     });
 
     act(() => root.unmount());
