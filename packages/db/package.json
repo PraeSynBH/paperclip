@@ -23,7 +23,7 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       },
-      "./*": {
+      "/*": {
         "types": "./dist/*.d.ts",
         "import": "./dist/*.js"
       }
@@ -32,7 +32,8 @@
     "types": "./dist/index.d.ts"
   },
   "files": [
-    "dist"
+    "dist",
+    "!dist/**/*.sql"
   ],
   "bundleDependencies": [
     "embedded-postgres"
@@ -44,7 +45,8 @@
     "typecheck": "pnpm run check:migrations && tsc --noEmit",
     "generate": "pnpm run check:migrations && pnpm run clean && tsc -p tsconfig.json && drizzle-kit generate",
     "migrate": "pnpm run check:migrations && tsx src/migrate.ts",
-    "seed": "tsx src/seed.ts"
+    "seed": "tsx src/seed.ts",
+    "prepublishOnly": "pnpm run build"
   },
   "dependencies": {
     "@paperclipai/shared": "workspace:*",
