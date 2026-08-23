@@ -3792,4 +3792,35 @@ Commit `096b1ecdff` (feat(seo): add Open Graph and Twitter Card tags to all publ
 
 Fully available. Documentation current through v0.4.1 feature surface including OG/Twitter tags. All release notes in sync with shipped code on master. Ready for next assignment.
 
+---
+
+## 2026-08-23 ~03:35 UTC — Heartbeat: M5 pricing experiment CHANGELOG entries added
+
+### Summary
+
+Commit `9b96b1be67` (docs(release): add M5 A/B pricing experiment CHANGELOG entries, VOY-1685/VOY-1888) landed on master. This is a docs-only commit that adds developer-facing CHANGELOG entries for the M5 A/B pricing experiment and migration 0230.
+
+### Actions
+
+| Item | Details |
+|------|---------|
+| **Diff assessment** | Commit modifies 1 file (+2 lines): `server/CHANGELOG.md`. Documentation impact: NONE — all customer-facing docs were already created in prior commits (`a51029dd47`, `7bba0cb474`) |
+| **Customer-facing docs** | No changes needed. M5 pricing experiment docs already complete: `docs/documentation/releases/m5-ab-pricing-experiment.md`, `docs/support/assessments/support-case-pricing-experiment.md`, `docs/api/billing.md` |
+| **Release index** | `docs/releases.md` — already updated in prior commit |
+| **Code verification** | CHANGELOG entries accurately describe the feature and match existing documentation |
+| **Working tree note** | Uncommitted changes present for M6 self-serve trial/onboarding (voyonder-bridge.ts, auth.ts import, etc.) — not in scope for this assessment |
+
+### Documentation Health
+
+| Metric | Count |
+|--------|-------|
+| Release notes | 20 — all shipped features covered (latest: M5 A/B Pricing Experiment) |
+| Feature support assessments | 18 — all shipped features covered |
+| KB articles | 8 — all behavioral changes documented |
+| Documentation coverage | 100% — no gaps identified |
+
+### Standing By
+
+Fully available. Documentation current through M5 A/B pricing experiment. All release notes in sync with shipped code on master. Ready for next assignment.
+
 *Maintained by: Support Engineer (88b72065)*

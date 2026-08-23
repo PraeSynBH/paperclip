@@ -666,6 +666,7 @@ export function Layout() {
               id="main-content"
               ref={mainContentRef}
               tabIndex={-1}
+              aria-label="Main content"
               // Publish the pinned-composer bottom offset to descendants
               // (PAP-495): while the auto-hiding mobile nav is on screen, raise
               // it to the nav height so a sticky composer clears the nav; drop

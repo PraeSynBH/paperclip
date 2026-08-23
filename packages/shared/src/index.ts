@@ -1,4 +1,18 @@
 export { agentAdapterTypeSchema, optionalAgentAdapterTypeSchema } from "./adapter-type.js";
+
+// ── Background job types (generic Paperclip contract) ──
+export { type BackgroundJobStatus, BACKGROUND_JOB_TYPES } from "./background-job-types.js";
+export type {
+  BackgroundJob,
+  CreateBackgroundJobRequest,
+  BackgroundJobEvent,
+} from "./types/background-job.js";
+
+// ── Decoupling interfaces (Voyonder Code Separation Phase 2) ──
+export type { EventBus } from "./types/event-bus.js";
+export type { AuthProvider, AuthRequest, AuthActor } from "./types/auth-provider.js";
+export type { LoggerProvider } from "./types/logger.js";
+
 export { ADAPTER_AUTH_MISSING_CHECK_CODE } from "./adapter-auth-check-code.js";
 export {
   decisionEffectStalenessSchema,

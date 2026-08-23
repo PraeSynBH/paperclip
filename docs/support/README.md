@@ -109,5 +109,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-23 ~09:30 UTC — M5 A/B pricing experiment documented: billing API docs updated, support case assessment v1.2, release notes updated. Commits 4560420bec/8e2b5293c5 (M5 pricing experiment) assessed — documentation updated to match implemented code.*
+*Last updated: 2026-08-23 ~03:35 UTC — CHANGELOG entries added for M5 A/B pricing experiment (VOY-1685/VOY-1888). Commit `9b96b1be67` assessed — no documentation impact, customer-facing docs already in sync.*
 *Maintained by: Support Engineer (88b72065)*

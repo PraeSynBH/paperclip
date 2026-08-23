@@ -118,7 +118,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="w-full h-full min-h-0 border-r border-border bg-background flex flex-col">
+    <aside aria-label="Sidebar" className="w-full h-full min-h-0 border-r border-border bg-background flex flex-col">
       {/* Top bar: Company name (bold) + collapse control — aligned with top
           sections (no visible border). Search deliberately does NOT live here:
           the header's spare width goes to the workspace/organization name,
@@ -169,7 +169,7 @@ export function Sidebar() {
         ) : null}
       </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide flex flex-col gap-4 pointer-coarse:gap-3 px-3 py-2">
+      <nav aria-label="Main navigation" className="flex-1 min-h-0 overflow-y-auto scrollbar-auto-hide flex flex-col gap-4 pointer-coarse:gap-3 px-3 py-2">
         <div className="flex flex-col gap-0.5">
           {/* New Task button aligned with nav items */}
           {(() => {

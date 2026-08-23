@@ -117,6 +117,12 @@ import { createCachedViteHtmlRenderer } from "./vite-html-renderer.js";
 import { DEFAULT_JSON_BODY_LIMIT, PORTABLE_JSON_BODY_LIMIT } from "./http/body-limits.js";
 import { COMPANY_IMPORT_API_PATH } from "./routes/company-import-paths.js";
 import { apiCompression } from "./middleware/api-compression.js";
+import {
+  createPaperclipEventBus,
+  createPaperclipAuthProvider,
+  createPaperclipLogger,
+} from "./services/voyonder-bridge.js";
+import type { VoyonderOptions } from "@voyonder/product";
 
 type UiMode = "none" | "static" | "vite-dev";
 const FEEDBACK_EXPORT_FLUSH_INTERVAL_MS = 5_000;
@@ -697,6 +703,33 @@ export async function createApp(
       authPublicBaseUrl: opts.authPublicBaseUrl,
     }),
   );
+
+  // ── Voyonder routes ─────────────────────────────────────────────────────
+  // Mount the Voyonder sub-app (research search, auto-assessment, export, and
+  // background jobs) under the company scope. The Voyonder app uses its own
+  // internal Express sub-app; Paperclip passes its EventBus, AuthProvider, and
+  // LoggerProvider adapters so Voyonder routes delegate to Paperclip's
+  // live-events, auth, and logging infrastructure.
+  let voyonderRouter: Router | null = null;
+  try {
+    const { createVoyonderApp } = await import("@voyonder/product");
+    const voyonderOpts: VoyonderOptions = {
+      eventBus: createPaperclipEventBus(),
+      authProvider: createPaperclipAuthProvider(),
+      logger: createPaperclipLogger(),
+    };
+    voyonderRouter = createVoyonderApp(db, voyonderOpts);
+    logger.info("Voyonder routes mounted");
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      "Voyonder routes not available; skipping mount",
+    );
+  }
+  if (voyonderRouter) {
+    api.use("/companies/:companyId", voyonderRouter);
+  }
+
   app.use("/api", api);
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "API route not found" });

@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { authUsers, companies as companiesTable } from "@paperclipai/db";
 import {
@@ -119,20 +119,31 @@ export function authRoutes(db: Db) {
       const body = req.body as CompleteRegistration;
       const userId = req.actor.userId;
 
-      // Check if user already has a company — idempotent
-      const existingCompanies = await db
-        .select({ id: companiesTable.id, name: companiesTable.name })
-        .from(companiesTable)
-        .limit(1);
+      // Check if user is already a member of a company — idempotent
+      const membershipCheck = await db.execute<{ companyId: string }>(sql`
+        SELECT cm."company_id" as "companyId"
+        FROM "company_memberships" cm
+        WHERE cm."member_type" = 'user'
+          AND cm."member_id" = ${userId}
+          AND cm."status" = 'active'
+        LIMIT 1
+      `);
+      const existingMembership = membershipCheck.rows?.[0] ?? null;
 
-      if (existingCompanies.length > 0) {
+      if (existingMembership) {
         logger.info(
-          { userId, companyId: existingCompanies[0].id },
+          { userId, companyId: existingMembership.companyId },
           "Registration skipped — user already has a company",
         );
+        // Fetch the company name for the response
+        const existing = await db
+          .select({ id: companiesTable.id, name: companiesTable.name })
+          .from(companiesTable)
+          .where(eq(companiesTable.id, existingMembership.companyId))
+          .then((r) => r[0] ?? null);
         res.json({
-          companyId: existingCompanies[0].id,
-          companyName: existingCompanies[0].name,
+          companyId: existing?.id ?? existingMembership.companyId,
+          companyName: existing?.name ?? "My Company",
           created: false,
         });
         return;
