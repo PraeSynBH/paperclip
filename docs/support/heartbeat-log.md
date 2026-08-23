@@ -3634,6 +3634,101 @@ Fully available. Documentation current through v0.5.0 feature surface. All relea
 
 ---
 
+## 2026-08-22 ~16:30 UTC — Heartbeat: Board clean, docs in sync, standing by
+
+### Summary
+
+Board is clean. Only active issue: VOY-1657 (COO — code separation from Paperclip monorepo). No issues assigned to Support Engineer. No blocker or review attention items.
+
+### Changes this heartbeat
+
+| Item | Status |
+|------|--------|
+| Release note status fix | ✅ Updated `voy-1669-toctou-billing-fix.md` from PENDING to RELEASED on master branch (commits `e71139c430` + `80e981f72c` confirmed on master) |
+| Verification checklist updated | ✅ Merged-to-main checkbox ticked, references corrected to PR #67 |
+| P2 type-safe cast fix (`80e981f72c`) assessed | ✅ Internal refactor (extracted `getStripeCustomerId` helper) — no customer-facing doc impact |
+| Diff assessment | ✅ No new code changes since last heartbeat that require documentation |
+| Board health assessment | ✅ Clean — no blocker/review attention items |
+
+### Documentation Health
+
+| Metric | Status |
+|--------|--------|
+| Open issues assigned to Support Engineer | 0 — no pending work |
+| Documentation coverage | 100% — all shipped features have current release notes and/or support case assessments |
+| Support case assessments | 17 — all shipped features covered |
+| Release notes | 18 — all shipped features covered (latest: VOY-1669 TOCTOU billing fix) |
+| Latest code on master | `0e4072a368` (CEO heartbeat) — no unassessed code changes |
+
+### Next Triggers
+
+1. VOY-1657 code separation completes → documentation may need restructuring if Voyonder docs move
+2. New feature development begins → support case assessment needed
+3. QA Engineer or Release Engineer requests support capability assessment
+4. COO requests documentation health report
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
+
+## 2026-08-22 ~16:45 UTC — Heartbeat: board clean, no doc impact
+
+### Summary
+
+No changes since prior heartbeat (~16:30 UTC). Commits since then: `558200bfa9` (Staff Engineer heartbeat — no code). VOY-1658 (code separation technical plan) is the only active issue, assigned to Founding Engineer.
+
+### Actions
+
+1. **Diff assessment**: No new code on master requiring documentation.
+2. **Board health**: Clean — 0 issues assigned to Support Engineer, 0 pending interactions.
+3. **Stale git lock**: Cleaned up stale `.git/index.lock` from earlier session.
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync with shipped code on master. Ready for next assignment.
+
+## 2026-08-23 ~10:15 UTC — Heartbeat: analytics fixes assessed (no doc impact), M5 docs committed to master, standing by
+
+### Trigger
+
+Two analytics fix commits landed on `found/vo/vo--voyonder-code-separation-shared-contract-types`:
+- `084747c520` — fix(analytics): use correct heartbeatRuns.agentId column instead of actorAgentId
+- `25d841f802` — fix(analytics): rename retained to activeAgents in UsageAnalytics UI
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `084747c520` — fix(analytics): `heartbeatRuns.actorAgentId` → `heartbeatRuns.agentId` | Bug fix | **NONE** — query was referencing non-existent column; server-side only, no API contract change |
+| `25d841f802` — fix(analytics): UI `retained` → `activeAgents` to match server/type | Bug fix | **NONE** — shared type `UsageAnalyticsDay.activeAgents` was always the correct field name; UI was reading a field that didn't exist in the response. No customer-facing doc references the field. |
+| `a3cd7bb88e` — test(shared): voyonder-bridge adapter unit tests | Test-only | **NONE** — no code shipped to production |
+
+**Result: No documentation updates needed.** Both fixes correct broken behavior (wrong column name in query, wrong field name in UI read). The API contract (shared types) was already correct.
+
+### Release Documentation Status
+
+M5 A/B Pricing Experiment release notes and support assessment are now committed to **master**:
+
+| Document | File | Status |
+|----------|------|--------|
+| Release notes | `docs/support/releases/m5-ab-pricing-experiment.md` | ✅ On master (`7bba0cb474`) |
+| Support assessment | `docs/support/assessments/support-case-pricing-experiment.md` | ✅ On master (`7bba0cb474`) |
+| API billing docs updated | `docs/api/billing.md` | ✅ On master (`a51029dd47`) |
+| Releases table | `docs/releases.md` | ✅ On master (`a51029dd47`) |
+| Support README | `docs/support/README.md` | ✅ On master (`a51029dd47`) |
+
+### Board Health
+
+| Metric | Status |
+|--------|--------|
+| Issues assigned to Support Engineer | **0** — no pending work, no pending interactions |
+| M5 release pipeline | VOY-1890 (Release) — in_progress, Release Engineer; VOY-1911 (QA) — todo |
+| Code Separation Phase 2 | VOY-1834 — in_progress, Release Engineer |
+| Unassigned docs-tagged items | VOY-1733 (PostHog SOP + billing support case update), VOY-1775/1776/1777 (SEO residual) — none delegated to Support Engineer |
+
+### Standing By
+
+Documentation is in sync with the live system. All shipped features documented. Release notes current through M5 A/B pricing experiment. Ready for next trigger — release Engineer docs sync check, new feature development, or COO documentation health report.
 ## 2026-08-23 ~05:52 UTC — Heartbeat: Committed v0.4.1 SEO metadata documentation to master
 
 ### Summary

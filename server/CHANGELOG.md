@@ -4,12 +4,18 @@
 
 ### Patch Changes
 
+- **Code Separation Phase 2**: Mount Voyonder routes dynamically under Paperclip with safe fallback when `@voyonder/product` package is unavailable. Includes Paperclip implementations of EventBus, AuthProvider, and LoggerProvider interfaces (`voyonder-bridge` service).
+- **Shared Package Updates**: Define and export EventBus, AuthProvider, LoggerProvider, BackgroundJob, and UsageAnalytics types from `@paperclipai/shared`. Align `BackgroundJobEvent` type with `LiveEvent` wire format. Bump shared and db packages to 0.3.2.
+- **Usage Analytics**: Add server-side usage analytics service + route + UI dashboard for instance operators. Fix column name in analytics query (`agentId` vs `actorAgentId`).
+- Add `@voyonder/product` and `@voyonder/types` as workspace dependencies for local development (dynamic import with safe fallback when packages unavailable).
 - Bound full-tree workspace Git scans with process-wide concurrency, queue, timeout, cancellation, coalescing, and short-lived changed-file caching. Saturated or timed-out changed-file requests now return a retryable degraded response, and hidden file-browser panels no longer initiate scans.
 - **VOY-1695**: Add SEO metadata infrastructure — `sitemap.xml` (dynamic, queries active companies + public issues), `robots.txt` (disallow `/api/`), and per-page `<title>` + `<meta name="description">` tags via `usePageMeta` hook.
 - **VOY-1669/VOY-1671**: Fix TOCTOU race in `createOrUpdateSubscription` — use `INSERT ... ON CONFLICT (company_id) DO NOTHING` with orphan Stripe cancellation on race loss, and `FOR UPDATE` row lock inside `db.transaction()` for serialised concurrent access.
 - **VOY-1671**: Fix `reportUsage` read-then-write race — convert SELECT-then-INSERT/UPDATE to atomic `INSERT ... ON CONFLICT DO UPDATE` upsert on unique constraint `(subscription_id, metric, period_start, period_end)`.
 - Wrap 7 additional Stripe API calls with `withStripeRetry` exponential-backoff resilience (cancelSubscription, reactivateSubscription, syncInvoicesFromStripe, reportUsage, createOrUpdateSubscription create/update paths).
 - Add concurrent billing concurrency test suite (7 tests covering FOR UPDATE serialisation, ON CONFLICT upsert, ON CONFLICT DO NOTHING, 5-concurrent usage upserts, unique constraint safety net).
+- **VOY-1685/VOY-1888**: Add M5 A/B pricing experiment — deterministic variant assignment (SHA-256), config-driven via `PRICING_EXPERIMENT_CONFIG` env var, tier overrides for variant B, experiment-variant and experiment-results API routes, and pricing page UX enhancements.
+- Add migration 0230: `pricing_experiment_variant` and `pricing_experiment_enrolled_at` columns to `companies` table.
 
 ## 0.3.1
 

@@ -53,6 +53,15 @@ PRICING_EXPERIMENT_CONFIG='{
 
 ## Review
 - [x] Implementation (VOY-1685 / VOY-1886 / VOY-1887)
+- [ ] Code Review (VOY-1889 / VOY-1903) — PENDING
+- [ ] Docs Verification — Support Engineer (VOY-1900)
+- [ ] CTO Sign-off
+
+## QA
+- [ ] Deterministic assignment: same company_id → same variant (tested)
+- [ ] 50/50 distribution over N companies (tested)
+- [ ] Tier override application for variant B (tested)
+- [ ] Experiment disabled → normal tiers (tested)
 - [x] Code Review (VOY-1889 / VOY-1903)
 - [x] Docs Verification — Support Engineer (VOY-1900)
 - [x] CTO Sign-off

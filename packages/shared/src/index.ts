@@ -118,6 +118,7 @@ export {
   type ResponsibleUserDenialCopy,
   type ResponsibleUserDenialTone,
 } from "./responsible-user-denial.js";
+export { ATTENTION_SOURCE_KINDS } from "./types/attention.js";
 export type {
   AttentionDecisionVerb,
   AttentionDetailImage,
@@ -137,7 +138,20 @@ export type {
   AttentionTriageAttribution,
   AttentionWorkspaceRef,
 } from "./types/attention.js";
-export { ATTENTION_SOURCE_KINDS } from "./types/attention.js";
+
+// ── Background job types (generic Paperclip contract) ──
+export { type BackgroundJobStatus } from "./background-job-types.js";
+export type {
+  BackgroundJob,
+  CreateBackgroundJobRequest,
+  BackgroundJobEvent,
+} from "./types/background-job.js";
+
+// ── Decoupling interfaces (Voyonder Code Separation Phase 2) ──
+export type { EventBus } from "./types/event-bus.js";
+export type { AuthProvider, AuthRequest, AuthActor } from "./types/auth-provider.js";
+export type { LoggerProvider } from "./types/logger.js";
+
 export type {
   DecisionQueue,
   DecisionQueueItem,
@@ -1145,6 +1159,11 @@ export type {
   LiveEvent,
   DashboardRunActivityDay,
   DashboardSummary,
+  UsageAnalyticsDay,
+  UsageAnalyticsFunnel,
+  UsageAnalyticsSnapshot,
+  UsageAnalyticsResponse,
+  UsageAnalyticsWindow,
   TimelineActorType,
   TimelineEventKind,
   TimelineEdgeKind,

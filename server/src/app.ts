@@ -60,6 +60,7 @@ import { smokeLabRoutes } from "./routes/smoke-lab.js";
 import { costRoutes } from "./routes/costs.js";
 import { activityRoutes } from "./routes/activity.js";
 import { dashboardRoutes } from "./routes/dashboard.js";
+import { usageAnalyticsRoutes } from "./routes/usage-analytics.js";
 import { attentionRoutes } from "./routes/attention.js";
 import { decisionTrainingRoutes } from "./routes/decision-training.js";
 import { decisionRoutes } from "./routes/decisions.js";
@@ -88,6 +89,8 @@ import { seoRoutes } from "./routes/seo.js";
 import { readBrandedStaticIndexHtml } from "./static-index-html.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
+import { createPaperclipEventBus, createPaperclipAuthProvider, createPaperclipLogger } from "./services/voyonder-bridge.js";
+import type { VoyonderOptions } from "@voyonder/product";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader, type PluginLoader } from "./services/plugin-loader.js";
 import {
   SELF_HOSTED_AUTO_INSTALL_KEYS,
@@ -543,6 +546,7 @@ export async function createApp(
   }
   api.use(activityRoutes(db));
   api.use(dashboardRoutes(db));
+  api.use(usageAnalyticsRoutes(db));
   api.use(attentionRoutes(db));
   api.use(decisionTrainingRoutes(db));
   api.use(decisionRoutes(db, opts.decisionServiceOptions));
@@ -644,6 +648,31 @@ export async function createApp(
     },
   );
   runtimePluginLoader = loader;
+  // ── Voyonder routes ─────────────────────────────────────────────────────
+  // Mount the Voyonder sub-app (research search, auto-assessment, export, and
+  // background jobs) under the company scope. The Voyonder app uses its own
+  // internal Express sub-app; Paperclip passes its EventBus, AuthProvider, and
+  // LoggerProvider adapters so Voyonder routes delegate to Paperclip's
+  // live-events, auth, and logging infrastructure.
+  let voyonderRouter: Router | null = null;
+  try {
+    const { createVoyonderApp } = await import("@voyonder/product");
+    const voyonderOpts: VoyonderOptions = {
+      eventBus: createPaperclipEventBus(),
+      authProvider: createPaperclipAuthProvider(),
+      logger: createPaperclipLogger(),
+    };
+    voyonderRouter = createVoyonderApp(db, voyonderOpts);
+    logger.info("Voyonder routes mounted");
+  } catch (err) {
+    logger.warn(
+      { err: err instanceof Error ? err.message : String(err) },
+      "Voyonder routes not available; skipping mount",
+    );
+  }
+  if (voyonderRouter) {
+    api.use("/companies/:companyId", voyonderRouter);
+  }
   api.use(
     toolGatewayRoutes(db, toolGateway),
   );

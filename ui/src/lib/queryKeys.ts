@@ -527,4 +527,5 @@ export const queryKeys = {
     search: (companyId: string, q: string) =>
       ["knowledge", companyId, "search", q] as const,
   },
+  usageAnalytics: (window: string) => ["usage-analytics", window] as const,
 };

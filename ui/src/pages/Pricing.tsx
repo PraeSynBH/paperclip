@@ -171,6 +171,19 @@ export function PricingPage() {
 
   const isVariantB = experiment?.enabled === true && experiment?.variant === "B";
 
+  // Internal user detection (instance admins & company admins/owners)
+  const { data: boardAccess } = useQuery({
+    queryKey: queryKeys.access.currentBoardAccess,
+    queryFn: () => accessApi.getCurrentBoardAccess(),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+  const isInternalUser =
+    boardAccess?.isInstanceAdmin === true ||
+    boardAccess?.memberships?.some(
+      (m) => m.membershipRole === "owner" || m.membershipRole === "admin",
+    ) === true;
+
   // ── Mutations ────────────────────────────────────────────────────────────
 
   const checkoutMutation = useMutation({
@@ -290,7 +303,6 @@ export function PricingPage() {
   const isSubscribed = !!subscription && subscription.status !== "canceled";
   const isCancelScheduled = subscription?.cancelAtPeriodEnd === true;
 
-  const isInternalUser = false; // Simplified — in practice, check accessApi.self()
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -322,12 +334,17 @@ export function PricingPage() {
       <div className="mb-8">
         <div className="flex items-center gap-3">
           <h1 className="text-3xl font-bold tracking-tight">Pricing</h1>
-          {isVariantB && (
+          {experiment?.enabled && isInternalUser && experiment?.variant ? (
+            <Badge variant="secondary" className="gap-1">
+              <Beaker className="h-3 w-3" />
+              Experiment: Variant {experiment.variant}
+            </Badge>
+          ) : isVariantB ? (
             <Badge variant="secondary" className="gap-1">
               <Beaker className="h-3 w-3" />
               Variant B
             </Badge>
-          )}
+          ) : null}
         </div>
         <p className="mt-2 text-muted-foreground">
           Choose the plan that fits your needs. All plans include a 14-day free trial.
@@ -441,15 +458,23 @@ export function PricingPage() {
                   {/* Yearly savings badge for variant B */}
                   {isVariantB && billingPeriod === "yearly" && savingsPct > 0 && (
                     <Badge variant="success" className="ml-2 align-middle">
-                      Save {savingsPct}%
+                      save {savingsPct}%
                     </Badge>
                   )}
                 </div>
 
-                {/* Show yearly vs monthly comparison for variant B */}
+                {/* Yearly savings hint in monthly view (variant B) */}
                 {isVariantB && billingPeriod === "monthly" && savingsPct > 0 && (
                   <p className="mb-4 text-sm text-muted-foreground">
-                    Save {savingsPct}% with yearly billing
+                    save {savingsPct}% with yearly billing
+                  </p>
+                )}
+
+                {/* Yearly vs monthly comparison for variant B */}
+                {isVariantB && billingPeriod === "yearly" && (
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {formatCents(tier.priceMonthlyCents)}/month normally &middot;{" "}
+                    {formatCents(tier.priceYearlyCents)}/year
                   </p>
                 )}
 

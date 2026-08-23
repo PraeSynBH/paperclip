@@ -179,3 +179,4 @@ usePageMeta(title: string, description?: string, og?: PageMetaOg): void
 |---|---|---|
 | 2026-08-23 | v1.1 | Updated with Open Graph / Twitter Card tags support (VOY-1815) |
 | 2026-08-23 | v1.0 | Initial assessment based on VOY-1695 / VOY-1798 implementation |
+| 2026-08-23 | v1.0 | Initial assessment based on VOY-1695 / VOY-1798 implementation |

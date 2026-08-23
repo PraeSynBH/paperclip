@@ -34,19 +34,14 @@ export function usePageMeta(
   useEffect(() => {
     const fullTitle = title ? `${title} — ${APP_NAME}` : APP_NAME;
     const prevTitle = document.title;
-    document.title = fullTitle;
+    document.title = title;
 
-    // Manage <meta name="description">
-    const META_SELECTOR = 'meta[name="description"]';
-    let metaEl = document.querySelector<HTMLMetaElement>(META_SELECTOR);
-
-    if (description && description.length > 0) {
-      if (metaEl) {
-        metaEl.setAttribute("content", description);
-      } else {
+    let metaEl: HTMLMetaElement | null = null;
+    if (description) {
+      metaEl = document.querySelector<HTMLMetaElement>('meta[name="description"]');
+      if (!metaEl) {
         metaEl = document.createElement("meta");
         metaEl.name = "description";
-        metaEl.content = description;
         document.head.appendChild(metaEl);
       }
     } else if (metaEl) {

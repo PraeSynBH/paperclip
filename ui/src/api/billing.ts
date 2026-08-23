@@ -93,7 +93,7 @@ export interface SubscriptionInvoice {
 }
 
 export interface ExperimentVariantResponse {
-  variant: string | null;
+variant: "A" | "B" | null;
   enabled: boolean;
 }
 
