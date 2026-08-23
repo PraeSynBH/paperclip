@@ -24,7 +24,7 @@ import {
 import { logger as paperclipLogger } from "../middleware/logger.js";
 
 // ── Decoupling interfaces (via @paperclipai/shared) ───────────────────
-import type { EventBus, AuthProvider, LoggerProvider } from "@paperclipai/shared";
+import type { EventBus, AuthProvider, AuthRequest, LoggerProvider } from "@paperclipai/shared";
 
 // ── C1: EventBus adapter ──────────────────────────────────────────────
 //
@@ -84,19 +84,25 @@ export function createPaperclipEventBus(): EventBus {
 // routes run, so the Voyonder local authz stubs also work — but this
 // adapter provides the explicit formal contract for future auth flows
 // that need to check permissions beyond basic company access.
+//
+// The `AuthRequest` type (from @paperclipai/shared) is intentionally
+// narrower than Express's full Request — it captures only `{ actor }`.
+// Voyonder's routes pass the full Express request at runtime, so the
+// cast to `Request` is safe.
 
 export function createPaperclipAuthProvider(): AuthProvider {
   return {
     async assertCompanyAccess(
-      req: Request,
+      req: AuthRequest,
       companyId: string,
     ): Promise<{ companyId: string; actorType: string; actorId: string }> {
-      assertAuthenticated(req);
-      assertCompanyAccess(req, companyId);
+      const expressReq = req as Request;
+      assertAuthenticated(expressReq);
+      assertCompanyAccess(expressReq, companyId);
       return {
         companyId,
-        actorType: req.actor.type,
-        actorId: req.actor.agentId ?? req.actor.userId ?? "unknown",
+        actorType: expressReq.actor.type,
+        actorId: expressReq.actor.agentId ?? expressReq.actor.userId ?? "unknown",
       };
     },
 
