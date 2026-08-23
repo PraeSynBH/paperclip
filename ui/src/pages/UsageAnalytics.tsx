@@ -33,7 +33,7 @@ const BAR_COLORS = {
   signups: "var(--hex-3b82f6)",       // blue
   activations: "var(--hex-10b981)",    // green
   conversions: "var(--hex-f59e0b)",    // amber
-  retained: "var(--hex-8b5cf6)",       // violet
+  activeAgents: "var(--hex-8b5cf6)",       // violet
 } as const;
 
 function barTooltip(entry: UsageAnalyticsDay): string {
@@ -42,7 +42,7 @@ function barTooltip(entry: UsageAnalyticsDay): string {
     `  Signups: ${entry.signups}`,
     `  Activations: ${entry.activations}`,
     `  Conversions: ${entry.conversions}`,
-    `  Retained: ${entry.retained}`,
+    `  Active Agents: ${entry.activeAgents}`,
   ].join("\n");
 }
 
@@ -230,7 +230,7 @@ export function UsageAnalytics() {
           <DailyBarChart data={daily} metric="conversions" color={BAR_COLORS.conversions} />
         </ChartCard>
         <ChartCard title="Retention" subtitle={`Active agents per day — last ${window}`}>
-          <DailyBarChart data={daily} metric="retained" color={BAR_COLORS.retained} />
+          <DailyBarChart data={daily} metric="activeAgents" color={BAR_COLORS.activeAgents} />
         </ChartCard>
       </div>
 
@@ -260,7 +260,7 @@ export function UsageAnalytics() {
             value={funnel.activeUsers}
             max={funnel.totalSignups}
             label="Active (7d)"
-            color={BAR_COLORS.retained}
+            color={BAR_COLORS.activeAgents}
           />
         </div>
       </Card>
