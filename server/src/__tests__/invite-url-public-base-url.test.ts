@@ -28,12 +28,6 @@ function registerModuleMocks() {
     logActivity: (...args: unknown[]) => logActivityMock(...args),
     notifyHireApproved: vi.fn(),
   }));
-  vi.doMock("../services/billing.js", () => ({
-    billingService: () => ({
-      requireFeature: vi.fn().mockResolvedValue({ allowed: true }),
-      checkFeatureAccess: vi.fn().mockResolvedValue({ allowed: true, reason: "free_feature" }),
-    }),
-  }));
 }
 
 function createDbStub() {

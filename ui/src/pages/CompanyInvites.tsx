@@ -11,7 +11,6 @@ import { Link } from "@/lib/router";
 import { queryKeys } from "@/lib/queryKeys";
 import { copyTextToClipboard } from "@/lib/clipboard";
 import { Badge } from "@/components/ui/badge";
-import { usePageMeta } from "../hooks/usePageMeta";
 
 const inviteRoleOptions = [
   {

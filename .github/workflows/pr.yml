@@ -49,19 +49,16 @@ jobs:
       - name: Validate Dockerfile deps stage
         run: node ./scripts/check-docker-deps-stage.mjs
 
-      - name: Validate migration journal consistency
-        # RBR-968: an orphaned .sql or a duplicate journal idx makes
-        # embedded-Postgres bootstrap throw inside beforeAll, which Vitest
-        # reports as a *skipped* suite rather than a failure. Check it here in
-        # the fast policy job — no install needed — so the offending filename
-        # surfaces in seconds instead of as silent-green test lanes.
-        run: node ./scripts/check-migration-journal.mjs
+      - name: Validate Node version policy
+        run: pnpm check:node-version
 
       - name: Reject git push in adapter/runtime code
         run: node ./scripts/check-no-git-push.mjs
 
       - name: Test no-git-push check
         run: node --test ./scripts/check-no-git-push.test.mjs
+      - name: Test PR quality-gate scripts
+        run: node --test '.github/scripts/tests/*.test.mjs'
 
       - name: Test migration journal guard
         run: node --test ./scripts/__tests__/check-migration-journal.test.mjs

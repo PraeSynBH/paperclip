@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { ResponsibleUserDenialNotice } from "@/components/ResponsibleUserDenialNotice";
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
-import { usePageMeta } from "@/hooks/usePageMeta";
 
 /**
  * UX lab for PAP-12462 (P7): run "on behalf of {user}" surfacing + responsible-user
@@ -108,7 +107,6 @@ function RunDetailHeader({ onBehalfOf, denial }: { onBehalfOf?: string | null; d
 }
 
 export function ResponsibleUserDenialUxLab() {
-  usePageMeta("Responsible User Denial UX Lab", "UX lab for responsible-user denial copy surfaces.");
   return (
     <div className="min-h-screen bg-muted/20 p-6">
       <div className="mx-auto max-w-5xl space-y-6">

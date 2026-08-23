@@ -43,11 +43,10 @@ import {
 import { useBreadcrumbs } from "@/context/BreadcrumbContext";
 import { useCompany } from "@/context/CompanyContext";
 import { useToast } from "@/context/ToastContext";
-import { isPlatformManagedEnvironment } from "@/lib/managed-sandbox-environment";
+import { environmentDisplayLabel, isPlatformManagedEnvironment } from "@/lib/managed-sandbox-environment";
 import { queryKeys } from "@/lib/queryKeys";
 import { Link, useNavigate, useParams } from "@/lib/router";
 import { buildSameOriginWebSocketUrl } from "@/lib/websocket-url";
-import { usePageMeta } from "../hooks/usePageMeta";
 import {
   Field,
   ToggleField,
@@ -1261,7 +1260,6 @@ function EnvironmentImageTemplatePanel({
   );
 }
 
-  usePageMeta("Environments", "Configure runtime environments for your company.");
 export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps) {
   const { environmentId: routeEnvironmentId } = useParams<{ environmentId?: string }>();
   const navigate = useNavigate();
@@ -1792,7 +1790,7 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
                 )}
                 {nonLocalEnvironments.map((environment) => (
                   <option key={environment.id} value={environment.id}>
-                    {environment.name} · {environment.driver}
+                    {environmentDisplayLabel(environment)}
                   </option>
                 ))}
               </select>
@@ -1823,7 +1821,10 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
                   <div className="space-y-1">
                     <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
                       <span>
-                        {environment.name} <span className="text-muted-foreground">· {environment.driver}</span>
+                        {environment.name}
+                        {isPlatformManagedEnvironment(environment) ? null : (
+                          <span className="text-muted-foreground"> · {environment.driver}</span>
+                        )}
                       </span>
                       {isPlatformManagedEnvironment(environment) ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs font-normal text-muted-foreground">
@@ -1844,6 +1845,13 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
                       <div className="text-xs text-muted-foreground">
                         {(() => {
                           const summary = summarizeSandboxConfig(environment.config as Record<string, unknown>);
+                          // The managed row's badge already says "Managed by
+                          // Paperclip"; repeating provider vocabulary like
+                          // "sandbox provider" next to the default environment
+                          // is noise the product avoids.
+                          if (isPlatformManagedEnvironment(environment)) {
+                            return summary ?? "Provisioned and maintained for you.";
+                          }
                           return `${sandboxProviderDisplayName} sandbox provider${summary ? ` · ${summary}` : ""}`;
                         })()}
                       </div>
@@ -1928,7 +1936,7 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
               </span>
             </div>
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              {editingEnvironment.description ?? "Your agent runs in a sandbox managed by Paperclip."}
+              {editingEnvironment.description ?? "Your agent runs on a computer managed by Paperclip."}
             </p>
             <p className="mt-1 max-w-3xl text-xs text-muted-foreground">
               This environment is provisioned and maintained for you. You can add environment
@@ -2178,7 +2186,7 @@ export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps)
                   )}
                   <ToggleField
                     label="Stream run logs"
-                    hint="Stream the agent CLI's output live while sandbox runs execute (recommended). Turn off to deliver output only when the run finishes."
+                    hint="Stream the agent CLI's output live while runs execute (recommended). Turn off to deliver output only when the run finishes."
                     checked={environmentForm.sandboxConfig.streamRunLogs !== false}
                     onChange={(checked) =>
                       setEnvironmentForm((current) => ({

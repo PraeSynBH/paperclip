@@ -127,7 +127,6 @@ import { extractIssueTimelineEvents } from "../lib/issue-timeline-events";
 import { applyLocalQueuedIssueCommentState, isQueuedIssueComment } from "../lib/optimistic-issue-comments";
 import type { IssueChatComment } from "../lib/issue-chat-messages";
 import { Badge } from "@/components/ui/badge";
-import { usePageMeta } from "../hooks/usePageMeta";
 
 type PipelineConversationActionableInteraction =
   | SuggestTasksInteraction

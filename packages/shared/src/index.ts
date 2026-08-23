@@ -637,6 +637,19 @@ export {
 } from "./validators/summary-slot.js";
 
 export {
+  generateSummarySlotSchema,
+  summarySlotKeySchema,
+  summarySlotQuerySchema,
+  summarySlotScopeKindSchema,
+  summarySlotScopeSelectorSchema,
+  summarySlotStatusSchema,
+  writeSummarySlotSchema,
+  type GenerateSummarySlotInput,
+  type SummarySlotScopeSelectorInput,
+  type WriteSummarySlotInput,
+} from "./validators/summary-slot.js";
+
+export {
   ALL_INTERFACES_BIND_HOST,
   LOOPBACK_BIND_HOST,
   inferBindModeFromHost,
@@ -2556,22 +2569,3 @@ export {
   isPaperclipDevRunnerCommand,
   rewriteUrlHostToLoopback,
 } from "./runtime-exposure/loopback-bind.js";
-
-export {
-  FEATURE_KEYS,
-  FREE_FEATURES,
-  ACTIVE_SUBSCRIPTION_STATUSES,
-  type FeatureKey,
-  type ActiveSubscriptionStatus,
-} from "./billing-features.js";
-
-export {
-  createSubscriptionSchema,
-  createCheckoutSessionSchema,
-  updateSubscriptionSchema,
-  reportUsageSchema,
-  type CreateSubscription,
-  type CreateCheckoutSession,
-  type UpdateSubscription,
-  type ReportUsage,
-} from "./validators/billing.js";

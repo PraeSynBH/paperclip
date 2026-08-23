@@ -106,13 +106,6 @@ vi.mock("../services/secrets.js", () => ({
   secretService: () => mockSecretService,
 }));
 
-vi.mock("../services/billing.js", () => ({
-  billingService: () => ({
-    requireFeature: vi.fn().mockResolvedValue({ allowed: true }),
-    checkFeatureAccess: vi.fn().mockResolvedValue({ allowed: true, reason: "free_feature" }),
-  }),
-}));
-
 vi.mock("../services/instance-settings.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../services/instance-settings.js")>()),
   instanceSettingsService: () => mockInstanceSettingsService,
