@@ -69,9 +69,11 @@
     "react-resizable-panels": "^4.12.2",
     "react-router-dom": "^7.18.2",
     "remark-gfm": "^4.0.1",
+    "@sentry/react": "^10.70.0",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
+    "@sentry/vite-plugin": "^5.4.0",
     "@storybook/addon-a11y": "10.5.8",
     "@storybook/addon-docs": "10.5.8",
     "@storybook/react-vite": "10.5.8",

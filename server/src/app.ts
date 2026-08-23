@@ -8,6 +8,7 @@ import { derivePaperclipViteHmrPort, type DeploymentExposure, type DeploymentMod
 import type { InspectDatabaseBackupHealthOptions } from "./services/database-backup-health.js";
 import type { StorageService } from "./storage/types.js";
 import { httpLogger, errorHandler } from "./middleware/index.js";
+import { setupExpressSentry } from "./sentry.js";
 import { actorMiddleware } from "./middleware/auth.js";
 import { boardMutationGuard } from "./middleware/board-mutation-guard.js";
 import { privateHostnameGuard, resolvePrivateHostnameAllowSet } from "./middleware/private-hostname-guard.js";
@@ -790,6 +791,9 @@ export async function createApp(
     });
     app.use(vite.middlewares);
   }
+
+  // Register Sentry request and error handlers. No-op when Sentry not initialized.
+  setupExpressSentry(app);
 
   app.use(errorHandler);
 

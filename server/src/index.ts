@@ -95,6 +95,7 @@ import { printStartupBanner } from "./startup-banner.js";
 import { getBoardClaimWarningUrl, initializeBoardClaimChallenge } from "./board-claim.js";
 import { maybePersistWorktreeRuntimePorts } from "./worktree-config.js";
 import { initTelemetry, getTelemetryClient } from "./telemetry.js";
+import { initSentry, closeSentry } from "./sentry.js";
 import { conflict } from "./errors.js";
 import { ensureDecisionSigningSecret } from "./services/decision-signing.js";
 import { createDecisionRetentionNotifyOriginAgent, createDecisionWakeOriginAgent } from "./services/decision-wakeup.js";
@@ -156,6 +157,9 @@ export async function startServer(): Promise<StartedServer> {
   // Tracing must be active (or have failed and logged) before the first DB
   // connection or the HTTP server exists — see instrumentation.ts.
   await instrumentationReady;
+  // Initialize Sentry before any services or routes so it can capture
+  // early errors. No-op when SENTRY_DSN is unset.
+  initSentry();
   ensureDecisionSigningSecret();
   let config = loadConfig();
   initTelemetry({ enabled: config.telemetryEnabled });
@@ -1743,6 +1747,9 @@ export async function startServer(): Promise<StartedServer> {
         telemetryClient.stop();
         await telemetryClient.flush();
       }
+
+      // Flush Sentry events before shutdown
+      await closeSentry();
 
       if (!skipHeartbeatDrain && drainHeartbeatRunsForShutdown) {
         try {
