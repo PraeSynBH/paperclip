@@ -621,6 +621,8 @@ export {
   type PluginBridgeErrorCode,
 } from "./constants.js";
 
+export type { BillingPeriod } from "./constants.js";
+
 export {
   generateSummarySlotSchema,
   summarySlotKeySchema,
