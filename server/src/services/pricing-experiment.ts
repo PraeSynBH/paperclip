@@ -187,6 +187,20 @@ export function pricingExperimentService(db: Db) {
     return tiers.map((tier) => {
       const override = overrides[tier.id];
       if (!override) return tier;
+
+      // Validate that Stripe price IDs are provided when price fields are overridden
+      if (
+        (override.priceMonthlyCents !== undefined || override.priceYearlyCents !== undefined) &&
+        !override.stripePriceMonthlyId &&
+        !override.stripePriceYearlyId
+      ) {
+        logger.warn(
+          { tierId: tier.id, tierName: tier.name, override },
+          "Variant B tier override sets price without corresponding Stripe price ID — " +
+          "checkout session creation will fail for this tier",
+        );
+      }
+
       return { ...tier, ...override };
     });
   };

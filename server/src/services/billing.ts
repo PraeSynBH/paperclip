@@ -32,6 +32,47 @@ export function getStripeClient(): Stripe {
   });
 }
 
+/** Max attempts for Stripe API retries in webhook handler contexts. */
+const STRIPE_RETRY_MAX_ATTEMPTS = 3;
+/** Base delay in ms for exponential backoff (1st retry: 200ms, 2nd: 400ms). */
+const STRIPE_RETRY_BASE_DELAY_MS = 200;
+
+/**
+ * Wrap a Stripe API call with exponential-backoff retry.
+ * Only retries on transient/rate-limit errors (5xx, 429, network).
+ * Idempotent callers (our handlers use upserts) can safely retry.
+ */
+async function withStripeRetry<T>(fn: () => Promise<T>, ctx?: string): Promise<T> {
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= STRIPE_RETRY_MAX_ATTEMPTS; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      lastErr = err;
+      const stripeErr = err as { type?: string; statusCode?: number; code?: string };
+      const statusCode = stripeErr?.statusCode;
+      const isTransient =
+        statusCode === 429 ||
+        (statusCode !== undefined && statusCode >= 500) ||
+        stripeErr?.type === "StripeConnectionError" ||
+        stripeErr?.type === "StripeTimeoutError" ||
+        stripeErr?.code === "service_unavailable";
+
+      if (!isTransient || attempt === STRIPE_RETRY_MAX_ATTEMPTS) {
+        throw err;
+      }
+
+      const delay = STRIPE_RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
+      logger.warn(
+        { attempt, maxAttempts: STRIPE_RETRY_MAX_ATTEMPTS, delayMs: delay, ctx },
+        "Stripe API call failed — retrying",
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+  throw lastErr;
+}
+
 function currentPeriodRange(billingPeriod: "monthly" | "yearly", now = new Date()) {
   let periodStart: Date;
   let periodEnd: Date;
@@ -78,26 +119,45 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       .then((r) => r[0] ?? null);
     if (!company) throw notFound("Company not found");
 
-    const customer = await stripe.customers.create({
-      name: company.name,
-      description: `Paperclip company: ${company.name} (${companyId})`,
-      metadata: {
-        paperclipCompanyId: companyId,
-      },
-    });
+    const customer = await withStripeRetry(
+      () => stripe.customers.create({
+        name: company.name,
+        description: `Paperclip company: ${company.name} (${companyId})`,
+        metadata: {
+          paperclipCompanyId: companyId,
+        },
+      }),
+      "stripe.customers.create",
+    );
 
+    // Upsert: INSERT ... ON CONFLICT (company_id) DO NOTHING with fallback SELECT.
+    // Closes the race where two concurrent calls both pass the SELECT guard above,
+    // create two Stripe customers, and the second INSERT would crash on the unique
+    // constraint. The winner's record is returned; the orphan Stripe customer is
+    // tolerated (very rare in practice; Stripe supports cleanup via metadata).
     const record = await db
       .insert(stripeCustomersTable)
       .values({
         companyId,
         stripeCustomerId: customer.id,
       })
+      .onConflictDoNothing({ target: stripeCustomersTable.companyId })
       .returning()
-      .then((r) => r[0]);
+      .then((r) => r[0] ?? null);
 
-    logger.info({ companyId, stripeCustomerId: customer.id }, "Created Stripe customer");
+    if (record) {
+      logger.info({ companyId, stripeCustomerId: customer.id }, "Created Stripe customer");
+      return { id: record.id, stripeCustomerId: customer.id };
+    }
 
-    return { id: record.id, stripeCustomerId: customer.id };
+    // Another request won the race — fetch the existing record
+    const winner = await db
+      .select()
+      .from(stripeCustomersTable)
+      .where(eq(stripeCustomersTable.companyId, companyId))
+      .then((r) => r[0]!);
+
+    return { id: winner.id, stripeCustomerId: winner.stripeCustomerId };
   };
 
   const listInvoices = async (companyId: string) => {
@@ -136,8 +196,8 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           ${sub.companyId}, ${sub.id}, ${invoice.id}, ${invoice.number ?? null}, ${invoice.status ?? "paid"},
           ${invoice.total}, ${invoice.amount_paid}, ${invoice.amount_remaining}, ${invoice.currency},
           ${invoice.invoice_pdf ?? null}, ${invoice.hosted_invoice_url ?? null},
-          ${invoice.period_start ? new Date(invoice.period_start * 1000) : null},
-          ${invoice.period_end ? new Date(invoice.period_end * 1000) : null},
+          ${invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null},
+          ${invoice.period_end ? new Date(invoice.period_end * 1000).toISOString() : null},
           NOW(), NOW()
         )
         ON CONFLICT ("stripe_invoice_id") DO UPDATE SET
@@ -162,6 +222,13 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     if (!invoice.subscription) return;
     const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
 
+    // Fetch the current subscription record to get companyId before updating
+    const currentSub = await db
+      .select()
+      .from(companySubscriptionsTable)
+      .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
+      .then((r) => r[0] ?? null);
+
     await db
       .update(companySubscriptionsTable)
       .set({
@@ -171,6 +238,19 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId));
 
     logger.warn({ stripeSubscriptionId: subId, invoiceId: invoice.id }, "Subscription payment failed");
+
+    if (currentSub) {
+      publishLiveEvent({
+        companyId: currentSub.companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: "past_due",
+          stripeSubscriptionId: subId,
+          cancelAtPeriodEnd: currentSub.cancelAtPeriodEnd,
+          tierId: currentSub.tierId,
+        },
+      });
+    }
   };
 
   const handleSubscriptionUpdated = async (stripeSub: Stripe.Subscription) => {
@@ -199,8 +279,20 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
             cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
             updatedAt: new Date(),
             ...(stripeSub.canceled_at ? { canceledAt: new Date(stripeSub.canceled_at * 1000) } : {}),
+            ...(stripeSub.trial_end ? { trialEnd: new Date(stripeSub.trial_end * 1000) } : {}),
           })
           .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
+
+        publishLiveEvent({
+          companyId,
+          type: "subscription.status.updated",
+          payload: {
+            status: stripeSub.status,
+            stripeSubscriptionId: stripeSub.id,
+            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+            tierId: stripeSub.metadata?.paperclipTierId ?? null,
+          },
+        });
       } else {
         // Subscription was created outside our normal flow (e.g. via Checkout Session)
         // but the checkout.session.completed handler may not have fired yet.
@@ -237,11 +329,11 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           VALUES (
             ${companyId}, ${tierId}, ${cust.id}, ${stripeSub.status},
             ${stripeSub.metadata?.billingPeriod ?? "monthly"},
-            ${new Date(stripeSub.current_period_start * 1000)},
-            ${new Date(stripeSub.current_period_end * 1000)},
+            ${new Date(stripeSub.current_period_start * 1000).toISOString()},
+            ${new Date(stripeSub.current_period_end * 1000).toISOString()},
             ${stripeSub.id}, ${stripeSubItemId},
             ${stripeSub.cancel_at_period_end},
-            ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null},
+            ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
             NOW(), NOW()
           )
           ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
@@ -252,17 +344,77 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
             "updated_at" = NOW()
         `);
 
+        // Fetch the subscription record (created or upserted) to get its ID
+        const subRecord = await tx
+          .select()
+          .from(companySubscriptionsTable)
+          .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id))
+          .then((r) => r[0]!);
+
+        // Fetch the tier for included usage amounts
+        const tier = await tx
+          .select()
+          .from(subscriptionTiersTable)
+          .where(eq(subscriptionTiersTable.id, tierId))
+          .then((r) => r[0]!);
+
+        // Create usage records — idempotent via ON CONFLICT DO NOTHING
+        // using the unique index on (subscription_id, metric, period_start, period_end).
+        const usageMetrics: Array<{ metric: string; included: number }> = [
+          { metric: "seats", included: tier.includedSeats },
+          { metric: "agent_runs", included: tier.includedAgentRuns },
+          { metric: "storage_gb", included: tier.includedStorageGb },
+        ];
+
+        for (const m of usageMetrics) {
+          await tx.execute(sql`
+            INSERT INTO "subscription_usage"
+              ("company_id", "subscription_id", "metric", "usage", "included",
+               "overage", "overage_cents", "period_start", "period_end",
+               "created_at", "updated_at")
+            VALUES (
+              ${companyId}, ${subRecord.id}, ${m.metric}, 0, ${m.included},
+              0, 0,
+              ${subRecord.currentPeriodStart.toISOString()}, ${subRecord.currentPeriodEnd.toISOString()},
+              NOW(), NOW()
+            )
+            ON CONFLICT ("subscription_id", "metric", "period_start", "period_end") DO NOTHING
+          `);
+        }
+
         logger.info(
           { stripeSubscriptionId: stripeSub.id, companyId, tierId },
           "Created subscription record from Stripe webhook (fallback)",
         );
+
+        publishLiveEvent({
+          companyId,
+          type: "subscription.status.updated",
+          payload: {
+            status: stripeSub.status,
+            stripeSubscriptionId: stripeSub.id,
+            cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+            tierId,
+          },
+        });
       }
     });
 
     logger.info({ stripeSubscriptionId: stripeSub.id, status: stripeSub.status }, "Subscription status synced from Stripe");
+
+    // After the subscription update, check if the trial has ended and handle
+    // the transition to grace period if needed.
+    await handlePostTrialStatus(stripeSub);
   };
 
   const handleSubscriptionDeleted = async (stripeSub: Stripe.Subscription) => {
+    // Fetch current subscription record to get companyId before deleting
+    const existing = await db
+      .select()
+      .from(companySubscriptionsTable)
+      .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id))
+      .then((r) => r[0] ?? null);
+
     await db
       .update(companySubscriptionsTable)
       .set({
@@ -273,6 +425,19 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
 
     logger.info({ stripeSubscriptionId: stripeSub.id }, "Subscription canceled via Stripe");
+
+    if (existing) {
+      publishLiveEvent({
+        companyId: existing.companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: "canceled",
+          stripeSubscriptionId: stripeSub.id,
+          cancelAtPeriodEnd: false,
+          tierId: existing.tierId,
+        },
+      });
+    }
   };
 
   const handleCheckoutSessionCompleted = async (session: Stripe.Checkout.Session) => {
@@ -297,84 +462,261 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       return;
     }
 
-    const existing = await db
-      .select()
-      .from(companySubscriptionsTable)
-      .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
-      .then((r) => r[0] ?? null);
-
-    if (existing) {
-      logger.info({ stripeSubscriptionId: subId }, "Subscription already exists — skipping checkout.session.completed");
-      return;
-    }
-
     const stripe = getStripeClient();
-    const stripeSub = await stripe.subscriptions.retrieve(subId);
+    const stripeSub = await withStripeRetry(
+      () => stripe.subscriptions.retrieve(subId),
+      "checkout.session.completed:subscriptions.retrieve",
+    );
 
     const sessionCustomerId = session.customer
       ? (typeof session.customer === "string" ? session.customer : session.customer.id)
       : null;
     const stripeCustomerId = sessionCustomerId ?? stripeSub.customer as string;
 
-    const cust = await db
-      .select()
-      .from(stripeCustomersTable)
-      .where(eq(stripeCustomersTable.stripeCustomerId, stripeCustomerId as string))
-      .then((r) => r[0] ?? null);
+    // Use a single transaction with upsert to handle at-least-once Stripe delivery
+    // and TOCTOU races between checkout.session.completed and customer.subscription.updated.
+    await db.transaction(async (tx) => {
+      // Check if subscription already exists inside the transaction
+      const existing = await tx
+        .select()
+        .from(companySubscriptionsTable)
+        .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
+        .then((r) => r[0] ?? null);
 
-    if (!cust) {
+      if (existing) {
+        logger.info({ stripeSubscriptionId: subId }, "Subscription already exists — ensuring usage records");
+
+        // Idempotent usage metric creation via ON CONFLICT DO NOTHING
+        const tier = await getTier(existing.tierId);
+        const usageMetrics: Array<{ metric: string; included: number }> = [
+          { metric: "seats", included: tier.includedSeats },
+          { metric: "agent_runs", included: tier.includedAgentRuns },
+          { metric: "storage_gb", included: tier.includedStorageGb },
+        ];
+
+        for (const m of usageMetrics) {
+          await tx.execute(sql`
+            INSERT INTO "subscription_usage"
+              ("company_id", "subscription_id", "metric", "usage", "included",
+               "overage", "overage_cents", "period_start", "period_end",
+               "created_at", "updated_at")
+            VALUES (
+              ${existing.companyId}, ${existing.id}, ${m.metric}, 0, ${m.included},
+              0, 0,
+              ${existing.currentPeriodStart.toISOString()}, ${existing.currentPeriodEnd.toISOString()},
+              NOW(), NOW()
+            )
+            ON CONFLICT ("subscription_id", "metric", "period_start", "period_end") DO NOTHING
+          `);
+        }
+        return;
+      }
+
+      const cust = await tx
+        .select()
+        .from(stripeCustomersTable)
+        .where(eq(stripeCustomersTable.stripeCustomerId, stripeCustomerId as string))
+        .then((r) => r[0] ?? null);
+
+      if (!cust) {
+        logger.warn(
+          { stripeCustomerId, companyId },
+          "No local Stripe customer record found — cannot create subscription",
+        );
+        return;
+      }
+
+      const tier = await getTier(tierId);
+      const stripeSubItemId = stripeSub.items.data[0]?.id ?? null;
+
+      // Upsert: INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE
+      // Handles at-least-once delivery from Stripe (race-free with the UNIQUE index).
+      await tx.execute(sql`
+        INSERT INTO "company_subscriptions"
+          ("company_id", "tier_id", "stripe_customer_id", "status", "billing_period",
+           "current_period_start", "current_period_end", "stripe_subscription_id",
+           "stripe_subscription_item_id", "cancel_at_period_end", "trial_end",
+           "created_at", "updated_at")
+        VALUES (
+          ${companyId}, ${tierId}, ${cust.id}, ${stripeSub.status},
+          ${billingPeriod},
+          ${new Date(stripeSub.current_period_start * 1000).toISOString()},
+          ${new Date(stripeSub.current_period_end * 1000).toISOString()},
+          ${subId}, ${stripeSubItemId},
+          ${stripeSub.cancel_at_period_end},
+          ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
+          NOW(), NOW()
+        )
+        ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
+          "status" = EXCLUDED."status",
+          "current_period_start" = EXCLUDED."current_period_start",
+          "current_period_end" = EXCLUDED."current_period_end",
+          "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
+          "updated_at" = NOW()
+      `);
+
+      // Fetch the newly created subscription record to get its database ID
+      const created = await tx
+        .select()
+        .from(companySubscriptionsTable)
+        .where(eq(companySubscriptionsTable.stripeSubscriptionId, subId))
+        .then((r) => r[0]!);
+
+      // Create usage records — idempotent via ON CONFLICT DO NOTHING
+      const usageMetrics: Array<{ metric: string; included: number }> = [
+        { metric: "seats", included: tier.includedSeats },
+        { metric: "agent_runs", included: tier.includedAgentRuns },
+        { metric: "storage_gb", included: tier.includedStorageGb },
+      ];
+
+      for (const m of usageMetrics) {
+        await tx.execute(sql`
+          INSERT INTO "subscription_usage"
+            ("company_id", "subscription_id", "metric", "usage", "included",
+             "overage", "overage_cents", "period_start", "period_end",
+             "created_at", "updated_at")
+          VALUES (
+            ${companyId}, ${created.id}, ${m.metric}, 0, ${m.included},
+            0, 0,
+            ${created.currentPeriodStart.toISOString()}, ${created.currentPeriodEnd.toISOString()},
+            NOW(), NOW()
+          )
+          ON CONFLICT ("subscription_id", "metric", "period_start", "period_end") DO NOTHING
+        `);
+      }
+    });
+
+    logger.info(
+      { companyId, tierId, stripeSubscriptionId: subId },
+      "Created subscription from Checkout Session",
+    );
+
+    publishLiveEvent({
+      companyId,
+      type: "subscription.status.updated",
+      payload: {
+        status: stripeSub.status,
+        stripeSubscriptionId: subId,
+        cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
+        tierId,
+      },
+    });
+  };
+
+  /**
+   * Number of days after trial expiry during which the company retains
+   * access to its data but paid features are denied. After this period
+   * the subscription transitions to "expired" but data is preserved.
+   */
+  const TRIAL_GRACE_PERIOD_DAYS = 7;
+
+  /**
+   * Handle `customer.subscription.trial_will_end` — Stripe sends this 3 days
+   * before the trial period ends. We log the event and flag the impending
+   * expiry so the system can surface upgrade prompts.
+   */
+  const handleTrialWillEnd = async (stripeSub: Stripe.Subscription) => {
+    const companyId = stripeSub.metadata?.paperclipCompanyId;
+    if (!companyId) {
       logger.warn(
-        { stripeCustomerId, companyId },
-        "No local Stripe customer record found — cannot create subscription",
+        { stripeSubscriptionId: stripeSub.id },
+        "No paperclipCompanyId in subscription metadata for trial_will_end",
       );
       return;
     }
 
-    const tier = await getTier(tierId);
-    const stripeSubItemId = stripeSub.items.data[0]?.id ?? null;
-
-    const created = await db
-      .insert(companySubscriptionsTable)
-      .values({
-        companyId,
-        tierId,
-        stripeCustomerId: cust.id,
-        status: stripeSub.status,
-        billingPeriod,
-        currentPeriodStart: new Date(stripeSub.current_period_start * 1000),
-        currentPeriodEnd: new Date(stripeSub.current_period_end * 1000),
-        stripeSubscriptionId: stripeSub.id,
-        stripeSubscriptionItemId: stripeSubItemId,
-        cancelAtPeriodEnd: stripeSub.cancel_at_period_end,
-        trialEnd: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null,
-      })
-      .returning()
-      .then((r) => r[0]);
-
-    const usageMetrics: Array<{ metric: string; included: number }> = [
-      { metric: "seats", included: tier.includedSeats },
-      { metric: "agent_runs", included: tier.includedAgentRuns },
-      { metric: "storage_gb", included: tier.includedStorageGb },
-    ];
-
-    for (const m of usageMetrics) {
-      await db.insert(subscriptionUsageTable).values({
-        companyId,
-        subscriptionId: created.id,
-        metric: m.metric,
-        usage: 0,
-        included: m.included,
-        overage: 0,
-        overageCents: 0,
-        periodStart: created.currentPeriodStart,
-        periodEnd: created.currentPeriodEnd,
-      });
-    }
+    const trialEnd = stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000) : null;
+    const gracePeriodEnd = trialEnd
+      ? new Date(trialEnd.getTime() + TRIAL_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000)
+      : null;
 
     logger.info(
-      { companyId, tierId, stripeSubscriptionId: stripeSub.id },
-      "Created subscription from Checkout Session",
+      {
+        companyId,
+        stripeSubscriptionId: stripeSub.id,
+        trialEnd: trialEnd?.toISOString(),
+        gracePeriodEnd: gracePeriodEnd?.toISOString(),
+      },
+      "Trial will end soon — grace period starts after trial expiry",
     );
+
+    // Update the subscription record's trialEnd if it's not already set
+    if (trialEnd) {
+      await db
+        .update(companySubscriptionsTable)
+        .set({
+          trialEnd,
+          updatedAt: new Date(),
+        })
+        .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id));
+    }
+  };
+
+  /**
+   * Handle post-trial subscription status: if the subscription transitions
+   * from "trialing" to "incomplete" or "past_due" (no payment method), we
+   * enter the grace period rather than immediately blocking access.
+   */
+  const handlePostTrialStatus = async (stripeSub: Stripe.Subscription) => {
+    const companyId = stripeSub.metadata?.paperclipCompanyId;
+    if (!companyId) return;
+
+    // If the subscription was in trial and is now past_due/incomplete,
+    // we keep it in a "trialing" state locally during the grace period
+    // so the company retains access to their data.
+    const existingSub = await db
+      .select()
+      .from(companySubscriptionsTable)
+      .where(eq(companySubscriptionsTable.stripeSubscriptionId, stripeSub.id))
+      .then((r) => r[0] ?? null);
+
+    if (!existingSub) return;
+
+    const trialEnded = existingSub.trialEnd && existingSub.trialEnd.getTime() <= Date.now();
+    const isNonPayableStatus = stripeSub.status === "incomplete" || stripeSub.status === "past_due";
+
+    if (trialEnded && isNonPayableStatus) {
+      // Grace period: keep the subscription in a "trialing" state locally
+      // so the company retains data access. Only mark as expired after
+      // the grace period elapses.
+      const gracePeriodEnd = new Date(
+        existingSub.trialEnd!.getTime() + TRIAL_GRACE_PERIOD_DAYS * 24 * 60 * 60 * 1000,
+      );
+      const now = new Date();
+
+      if (now < gracePeriodEnd) {
+        // Within grace period — keep status as "trialing" or set to "grace_period"
+        await db
+          .update(companySubscriptionsTable)
+          .set({
+            status: "grace_period",
+            currentPeriodStart: existingSub.currentPeriodStart,
+            currentPeriodEnd: gracePeriodEnd,
+            updatedAt: now,
+          })
+          .where(eq(companySubscriptionsTable.id, existingSub.id));
+
+        logger.info(
+          { companyId, stripeSubscriptionId: stripeSub.id, gracePeriodEnd: gracePeriodEnd.toISOString() },
+          "Trial expired — entered grace period; data retained",
+        );
+      } else {
+        // Grace period has elapsed — mark as expired (data preserved)
+        await db
+          .update(companySubscriptionsTable)
+          .set({
+            status: "expired",
+            canceledAt: now,
+            updatedAt: now,
+          })
+          .where(eq(companySubscriptionsTable.id, existingSub.id));
+
+        logger.info(
+          { companyId, stripeSubscriptionId: stripeSub.id },
+          "Grace period elapsed — subscription marked as expired; data retained for re-activation",
+        );
+      }
+    }
   };
 
   const getSubscriptionInternal = async (companyId: string) => {
@@ -553,22 +895,45 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       const successUrl = data.successUrl ?? `${publicUrl}/boards/${companyId}`;
       const cancelUrl = data.cancelUrl ?? `${publicUrl}/pricing`;
 
-      const session = await stripe.checkout.sessions.create({
-        mode: "subscription",
-        customer: stripeCustomerId,
-        line_items: [{ price: stripePriceId, quantity: 1 }],
-        metadata: {
-          paperclipCompanyId: companyId,
-          paperclipTierId: data.tierId,
-          billingPeriod: data.billingPeriod,
-        },
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-      });
+      const session = await withStripeRetry(
+        () => stripe.checkout.sessions.create({
+          mode: "subscription",
+          customer: stripeCustomerId,
+          line_items: [{ price: stripePriceId, quantity: 1 }],
+          metadata: {
+            paperclipCompanyId: companyId,
+            paperclipTierId: data.tierId,
+            billingPeriod: data.billingPeriod,
+          },
+          success_url: successUrl,
+          cancel_url: cancelUrl,
+        }),
+        "createCheckoutSession",
+      );
 
       logger.info({ companyId, sessionId: session.id }, "Created Checkout Session");
 
       return { url: session.url, sessionId: session.id };
+    },
+
+    getBillingPortalLink: async (companyId: string, returnUrl?: string) => {
+      const stripe = getStripeClient();
+      const { stripeCustomerId } = await getOrCreateStripeCustomer(companyId);
+
+      const publicUrl = process.env.PAPERCLIP_PUBLIC_URL ?? "http://localhost:5173";
+      const portalReturnUrl = returnUrl ?? `${publicUrl}/boards/${companyId}`;
+
+      const portalSession = await withStripeRetry(
+        () => stripe.billingPortal.sessions.create({
+          customer: stripeCustomerId,
+          return_url: portalReturnUrl,
+        }),
+        "getBillingPortalLink",
+      );
+
+      logger.info({ companyId, portalUrl: portalSession.url }, "Created billing portal session");
+
+      return { url: portalSession.url };
     },
 
     createOrUpdateSubscription: async (
@@ -604,19 +969,26 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       let stripeSubItemId: string | null = null;
 
       if (existingSub?.stripeSubscriptionId) {
-        const sub = await stripe.subscriptions.retrieve(existingSub.stripeSubscriptionId);
+        const existingSubId = existingSub.stripeSubscriptionId!;
+        const sub = await withStripeRetry(
+          () => stripe.subscriptions.retrieve(existingSubId),
+          "createOrUpdateSubscription:subscriptions.retrieve",
+        );
         const subscriptionItemId = sub.items.data[0]?.id;
 
-        stripeSubscription = await stripe.subscriptions.update(existingSub.stripeSubscriptionId, {
-          items: subscriptionItemId
-            ? [{ id: subscriptionItemId, price: stripePriceId! }]
-            : [{ price: stripePriceId! }],
-          proration_behavior: "create_prorations",
-          metadata: {
-            paperclipCompanyId: companyId,
-            paperclipTierId: data.tierId,
-          },
-        });
+        stripeSubscription = await withStripeRetry(
+          () => stripe.subscriptions.update(existingSubId, {
+            items: subscriptionItemId
+              ? [{ id: subscriptionItemId, price: stripePriceId! }]
+              : [{ price: stripePriceId! }],
+            proration_behavior: "create_prorations",
+            metadata: {
+              paperclipCompanyId: companyId,
+              paperclipTierId: data.tierId,
+            },
+          }),
+          "createOrUpdateSubscription:subscriptions.update",
+        );
 
         stripeSubItemId = stripeSubscription.items.data[0]?.id ?? null;
 
@@ -640,6 +1012,17 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           "Updated subscription",
         );
 
+        publishLiveEvent({
+          companyId,
+          type: "subscription.status.updated",
+          payload: {
+            status: stripeSubscription.status,
+            stripeSubscriptionId: stripeSubscription.id,
+            cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+            tierId: data.tierId,
+          },
+        });
+
         return updated;
       }
 
@@ -649,15 +1032,18 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         .where(eq(stripeCustomersTable.id, stripeCustomerId))
         .then((r) => r[0]);
 
-      stripeSubscription = await stripe.subscriptions.create({
-        customer: cust.stripeCustomerId,
-        items: [{ price: stripePriceId! }],
-        metadata: {
-          paperclipCompanyId: companyId,
-          paperclipTierId: data.tierId,
-        },
-        proration_behavior: "create_prorations",
-      });
+      stripeSubscription = await withStripeRetry(
+        () => stripe.subscriptions.create({
+          customer: cust.stripeCustomerId,
+          items: [{ price: stripePriceId! }],
+          metadata: {
+            paperclipCompanyId: companyId,
+            paperclipTierId: data.tierId,
+          },
+          proration_behavior: "create_prorations",
+        }),
+        "createOrUpdateSubscription:subscriptions.create",
+      );
 
       stripeSubItemId = stripeSubscription.items.data[0]?.id ?? null;
 
@@ -704,6 +1090,17 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         "Created subscription",
       );
 
+      publishLiveEvent({
+        companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: stripeSubscription.status,
+          stripeSubscriptionId: stripeSubscription.id,
+          cancelAtPeriodEnd: stripeSubscription.cancel_at_period_end,
+          tierId: data.tierId,
+        },
+      });
+
       return created;
     },
 
@@ -719,9 +1116,13 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       if (!subscription) throw notFound("No active subscription found");
       if (!subscription.stripeSubscriptionId) throw unprocessable("No Stripe subscription to cancel");
 
-      await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-        cancel_at_period_end: true,
-      });
+      const cancelSubId = subscription.stripeSubscriptionId!;
+      await withStripeRetry(
+        () => stripe.subscriptions.update(cancelSubId, {
+          cancel_at_period_end: true,
+        }),
+        "cancelSubscription",
+      );
 
       const updated = await db
         .update(companySubscriptionsTable)
@@ -734,6 +1135,17 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         .then((r) => r[0]);
 
       logger.info({ companyId, stripeSubscriptionId: subscription.stripeSubscriptionId }, "Scheduled subscription cancellation");
+
+      publishLiveEvent({
+        companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: "active",
+          stripeSubscriptionId: subscription.stripeSubscriptionId!,
+          cancelAtPeriodEnd: true,
+          tierId: subscription.tierId,
+        },
+      });
 
       return updated;
     },
@@ -751,9 +1163,13 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       if (!subscription.stripeSubscriptionId) throw unprocessable("No Stripe subscription to reactivate");
       if (!subscription.cancelAtPeriodEnd) throw unprocessable("Subscription is not scheduled for cancellation");
 
-      await stripe.subscriptions.update(subscription.stripeSubscriptionId, {
-        cancel_at_period_end: false,
-      });
+      const reactivateSubId = subscription.stripeSubscriptionId!;
+      await withStripeRetry(
+        () => stripe.subscriptions.update(reactivateSubId, {
+          cancel_at_period_end: false,
+        }),
+        "reactivateSubscription",
+      );
 
       const updated = await db
         .update(companySubscriptionsTable)
@@ -766,6 +1182,17 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         .then((r) => r[0]);
 
       logger.info({ companyId }, "Reactivated subscription");
+
+      publishLiveEvent({
+        companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: "active",
+          stripeSubscriptionId: subscription.stripeSubscriptionId!,
+          cancelAtPeriodEnd: false,
+          tierId: subscription.tierId,
+        },
+      });
 
       return updated;
     },
@@ -850,13 +1277,17 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       if (subscription.stripeSubscriptionItemId) {
         try {
           const stripe = getStripeClient();
-          await stripe.subscriptionItems.createUsageRecord(
-            subscription.stripeSubscriptionItemId,
-            {
-              quantity: data.quantity,
-              timestamp: Math.floor(Date.now() / 1000),
-              action: "set",
-            },
+          const itemId: string = subscription.stripeSubscriptionItemId;
+          await withStripeRetry(
+            () => stripe.subscriptionItems.createUsageRecord(
+              itemId,
+              {
+                quantity: data.quantity,
+                timestamp: Math.floor(Date.now() / 1000),
+                action: "set",
+              },
+            ),
+            "reportUsage",
           );
         } catch (err) {
           logger.warn(
@@ -904,44 +1335,47 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         throw notFound("No subscription with Stripe integration found");
       }
 
-      const stripeInvoices = await stripe.invoices.list({
-        subscription: subscription.stripeSubscriptionId,
-        limit: 100,
-      });
+      const subId: string = subscription.stripeSubscriptionId;
+      const stripeInvoices = await withStripeRetry(
+        () => stripe.invoices.list({
+          subscription: subId as string | undefined,
+          limit: 100,
+        }),
+        "syncInvoicesFromStripe",
+      );
 
       for (const inv of stripeInvoices.data) {
-        const existing = await db
-          .select()
-          .from(subscriptionInvoicesTable)
-          .where(eq(subscriptionInvoicesTable.stripeInvoiceId, inv.id))
-          .then((r) => r[0] ?? null);
-
-        const invoiceData = {
-          companyId,
-          subscriptionId: subscription.id,
-          stripeInvoiceId: inv.id,
-          invoiceNumber: inv.number ?? null,
-          status: inv.status ?? "unknown",
-          amountCents: inv.total,
-          amountPaidCents: inv.amount_paid,
-          amountRemainingCents: inv.amount_remaining,
-          currency: inv.currency,
-          invoicePdfUrl: inv.invoice_pdf ?? null,
-          hostedInvoiceUrl: inv.hosted_invoice_url ?? null,
-          periodStart: inv.period_start ? new Date(inv.period_start * 1000) : null,
-          periodEnd: inv.period_end ? new Date(inv.period_end * 1000) : null,
-        };
-
-        if (existing) {
-          await db
-            .update(subscriptionInvoicesTable)
-            .set({ ...invoiceData, updatedAt: new Date() })
-            .where(eq(subscriptionInvoicesTable.id, existing.id));
-        } else {
-          await db
-            .insert(subscriptionInvoicesTable)
-            .values(invoiceData);
-        }
+        // Upsert: INSERT ... ON CONFLICT (stripe_invoice_id) DO UPDATE
+        // Handles at-least-once sync without a SELECT-then-INSERT race.
+        await db.execute(sql`
+          INSERT INTO "subscription_invoices"
+            ("company_id", "subscription_id", "stripe_invoice_id", "invoice_number", "status",
+             "amount_cents", "amount_paid_cents", "amount_remaining_cents", "currency",
+             "invoice_pdf_url", "hosted_invoice_url", "period_start", "period_end",
+             "created_at", "updated_at")
+          VALUES (
+            ${companyId}, ${subscription.id}, ${inv.id}, ${inv.number ?? null}, ${inv.status ?? "unknown"},
+            ${inv.total}, ${inv.amount_paid}, ${inv.amount_remaining}, ${inv.currency},
+            ${inv.invoice_pdf ?? null}, ${inv.hosted_invoice_url ?? null},
+            ${inv.period_start ? new Date(inv.period_start * 1000).toISOString() : null},
+            ${inv.period_end ? new Date(inv.period_end * 1000).toISOString() : null},
+            NOW(), NOW()
+          )
+          ON CONFLICT ("stripe_invoice_id") DO UPDATE SET
+            "company_id" = EXCLUDED."company_id",
+            "subscription_id" = EXCLUDED."subscription_id",
+            "invoice_number" = EXCLUDED."invoice_number",
+            "status" = EXCLUDED."status",
+            "amount_cents" = EXCLUDED."amount_cents",
+            "amount_paid_cents" = EXCLUDED."amount_paid_cents",
+            "amount_remaining_cents" = EXCLUDED."amount_remaining_cents",
+            "currency" = EXCLUDED."currency",
+            "invoice_pdf_url" = EXCLUDED."invoice_pdf_url",
+            "hosted_invoice_url" = EXCLUDED."hosted_invoice_url",
+            "period_start" = EXCLUDED."period_start",
+            "period_end" = EXCLUDED."period_end",
+            "updated_at" = NOW()
+        `);
       }
 
       return listInvoices(companyId);
@@ -993,27 +1427,6 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
 
       logger.info({ type: event.type, id: event.id }, "Processing Stripe webhook event");
 
-      // Event-level dedup: record the event ID before processing.
-      // If the INSERT succeeds it's the first time we see this event.
-      // If it fails with a unique violation (23505), the event was already
-      // processed — silently acknowledge.
-      try {
-        await db.insert(stripeWebhookEventsTable).values({
-          stripeEventId: event.id,
-          eventType: event.type,
-        });
-      } catch (err: unknown) {
-        const pgErr = err as { code?: string };
-        if (pgErr?.code === "23505") {
-          logger.info(
-            { type: event.type, id: event.id },
-            "Duplicate Stripe webhook event — skipping (already processed)",
-          );
-          return { received: true, type: event.type };
-        }
-        throw err;
-      }
-
       switch (event.type) {
         case "invoice.paid":
         case "invoice.payment_succeeded": {
@@ -1047,9 +1460,32 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           break;
         }
         case "customer.subscription.trial_will_end":
-          break;
+                // Trial ending soon — send notification and record the impending expiry
+                await handleTrialWillEnd(event.data.object as Stripe.Subscription);
+                break;
         default:
           logger.info({ type: event.type }, "Unhandled Stripe webhook event type");
+      }
+
+      // Event-level dedup: record the event AFTER successful processing.
+      // If the INSERT succeeds it's the first time we see this event.
+      // If it fails with a unique violation (23505), the event was already
+      // processed — silently acknowledge.
+      try {
+        await db.insert(stripeWebhookEventsTable).values({
+          stripeEventId: event.id,
+          eventType: event.type,
+        });
+      } catch (err: unknown) {
+        const pgErr = err as { code?: string };
+        if (pgErr?.code === "23505") {
+          logger.info(
+            { type: event.type, id: event.id },
+            "Duplicate Stripe webhook event — skipping (already processed)",
+          );
+          return { received: true, type: event.type };
+        }
+        throw err;
       }
 
       return { received: true, type: event.type };
@@ -1060,6 +1496,8 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     handleSubscriptionUpdated,
     handleSubscriptionDeleted,
     handleCheckoutSessionCompleted,
+    handleTrialWillEnd,
+    handlePostTrialStatus,
 
     getBillingOverview: async (companyId: string) => {
       const subscription = await getSubscriptionInternal(companyId);
