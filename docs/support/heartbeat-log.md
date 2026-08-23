@@ -3823,4 +3823,44 @@ Commit `9b96b1be67` (docs(release): add M5 A/B pricing experiment CHANGELOG entr
 
 Fully available. Documentation current through M5 A/B pricing experiment. All release notes in sync with shipped code on master. Ready for next assignment.
 
+---
+
+## 2026-08-23 ~04:35 UTC — Heartbeat: M6 Self-Serve Trial Onboarding landed (5 commits)
+
+### Summary
+
+The M6 self-serve trial onboarding feature has been implemented across 5 commits on `feat/m6-self-serve-trial-onboarding`. This is a substantial feature that adds end-to-end trial provisioning: registration, company creation, trial subscription, expiry reaper, and UI indicators.
+
+### Commits Assessed
+
+| Commit | Scope | Documentation Impact |
+|--------|-------|---------------------|
+| `d344d832e0` | Self-serve trial + onboarding flow (server routes, service, seed, UI) | **High** — new API endpoints, new tier, new registration flow |
+| `996136bc66` | Trial expiry reaper — 30-minute interval | **Medium** — new background process, affects support troubleshooting |
+| `722b0c4cbd` | Merge conflict fix in complete-registration route + Voyonder bridge wiring | **Low** — bug fix + Voyonder integration (internal infrastructure) |
+| `042d68662d` | TrialBanner + TrialBadge UI components | **Medium** — new user-facing UI elements |
+| `b0d5b9c7ee` | billing API client + query keys | **Low** — client-side plumbing for above |
+
+### Actions Taken
+
+| Item | Details |
+|------|---------|
+| **Support case assessment** | Created `docs/support/assessments/support-case-self-serve-trial-onboarding.md` — covers all 5 commits, feature overview, API reference, known limitations, troubleshooting steps, escalation paths |
+| **Release notes** | Created `docs/support/releases/m6-self-serve-trial-onboarding.md` — curated customer-facing summary with migration notes and rollback instructions |
+| **README** | Updated with feature entry and link to new assessment |
+| **Code verification** | Reviewed all diffs against documentation for accuracy. API contracts, response shapes, and error handling documented match the implementation |
+
+### Documentation Health
+
+| Metric | Count |
+|--------|-------|
+| Release notes | 21 — all shipped features covered (latest: M6 Self-Serve Trial Onboarding) |
+| Feature support assessments | 19 — all shipped features covered (latest: M6 Self-Serve Trial Onboarding) |
+| KB articles | 8 — all behavioral changes documented |
+| Documentation coverage | 100% — no gaps identified |
+
+### Standing By
+
+Fully available. Documentation current through M6 self-serve trial onboarding feature surface. All release notes in sync with shipped code on the feature branch. Ready for next assignment.
+
 *Maintained by: Support Engineer (88b72065)*

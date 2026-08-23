@@ -10,8 +10,9 @@ This directory contains support case assessments for Paperclip features. Each do
 ## Recently Shipped Features
 
 | Feature | Version | Shipped | Assessment |
-|---|---|---|---|---|
-| A/B Pricing Experiment — Server-side A/B pricing test (M5) | voy-1685/1888 | Aug 23, 2026 (IMPLEMENTED — awaiting release) | [Assessment](assessments/support-case-billing-system.md) |
+|---------|---------|---------|------------|
+|| Self-Serve Trial Onboarding — Free 14-day trial with auto-registration, trial banner, expiry reaper (M6) | m6-self-serve-trial | Aug 23, 2026 (IMPLEMENTED — branch feat/m6-self-serve-trial-onboarding) | [Assessment](assessments/support-case-self-serve-trial-onboarding.md) · [Release Notes](releases/m6-self-serve-trial-onboarding.md) |
+|| A/B Pricing Experiment — Server-side A/B pricing test (M5) | voy-1685/1888 | Aug 23, 2026 (IMPLEMENTED — awaiting release) | [Assessment](assessments/support-case-billing-system.md) |
 | SEO Metadata — Sitemap, Robots.txt, Dynamic Page Titles/Meta, Open Graph + Twitter Card Tags | v0.4.1 (voy-1798/1815) | Aug 23, 2026 (SHIPPED via a2ad8f8d90 + 096b1ecdff) | [Assessment](assessments/support-case-seo-metadata.md) · [Release Notes](releases/v0-4-1-seo-metadata.md) |
 | TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | voy-1669/1671 | Aug 22, 2026 (SHIPPED via VOY-1682) | [Release Notes](releases/voy-1669-toctou-billing-fix.md) |
 | Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Assessment](assessments/support-case-async-ux-background-jobs.md) · [Release Notes](releases/voy-1474-async-ux.md) |
@@ -109,5 +110,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-23 ~03:35 UTC — CHANGELOG entries added for M5 A/B pricing experiment (VOY-1685/VOY-1888). Commit `9b96b1be67` assessed — no documentation impact, customer-facing docs already in sync.*
+*Last updated: 2026-08-23 ~04:35 UTC — M6 Self-Serve Trial Onboarding documented: support case assessment v1.0, release notes, README updated. Commits `d344d832e0`–`b0d5b9c7ee` (5 commits) assessed — documentation created to match implemented code.*
 *Maintained by: Support Engineer (88b72065)*
