@@ -49,6 +49,7 @@ import {
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import type { RoutineListItem, RoutineVariable } from "@paperclipai/shared";
 import type { FolderListItem } from "@paperclipai/shared";
+import { usePageMeta } from "../hooks/usePageMeta";
 import {
   AllUnfiledBanner,
   BulkBar,
@@ -316,6 +317,7 @@ function RoutineSectionHeader({
   );
 }
 
+  usePageMeta("Routines", "Browse and manage automated routines.");
 export function Routines() {
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

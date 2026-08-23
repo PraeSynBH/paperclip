@@ -6,8 +6,10 @@ import { authApi } from "../api/auth";
 import { queryKeys } from "../lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 export function BoardClaimPage() {
+  usePageMeta("Claim Board", "Claim your board to start managing your company.");
   const queryClient = useQueryClient();
   const params = useParams();
   const [searchParams] = useSearchParams();

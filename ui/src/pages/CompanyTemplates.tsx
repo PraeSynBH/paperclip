@@ -15,9 +15,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Loader2, Rocket, Building2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { usePageMeta } from "../hooks/usePageMeta";
 
 export function CompanyTemplates() {
   const { setBreadcrumbs } = useBreadcrumbs();
+  usePageMeta("Templates", "Manage reusable templates for your company.");
   const { pushToast } = useToastActions();
   const queryClient = useQueryClient();
 
