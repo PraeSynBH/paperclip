@@ -3632,4 +3632,37 @@ Board is clean. Two active issues: VOY-1645 (P0 TOCTOU race, Founding Engineer) 
 
 Fully available. Documentation current through v0.5.0 feature surface. All release notes in sync. Ready for next assignment.
 
+---
+
+## 2026-08-23 ~05:52 UTC — Heartbeat: Committed v0.4.1 SEO metadata documentation to master
+
+### Summary
+
+The VOY-1798 SEO metadata infrastructure release shipped on master at `a2ad8f8d90` but the supporting customer-facing documentation had not been committed. This heartbeat assessed the documentation gap and landed all five missing docs files plus index updates.
+
+### Actions
+
+| Item | Details |
+|------|---------|
+| **Documentation gap identified** | SEO release docs (`docs/support/releases/v0-4-1-seo-metadata.md`, `docs/support/assessments/support-case-seo-metadata.md`, `docs/documentation/releases/v0-4-1-seo-infrastructure.md`, `docs/documentation/seo-metadata.md`, `docs/guides/agent-developer/seo-best-practices.md`) existed as untracked working-tree files but were never committed |
+| **Committed to master** | `c197a815b0` — 7 files, +718/−1. Added all 5 SEO doc files, removed stale `voy-1695-seo-release-note.md` draft (superseded by `v0-4-1-seo-metadata.md`), updated index pages |
+| **Updated `docs/releases.md`** | Added v0.4.1 SEO release as the top entry with customer-facing highlights |
+| **Updated `docs/support/README.md`** | Added SEO metadata to "Recently Shipped Features" table |
+| **Code verification** | Cross-checked all documentation claims against `server/src/routes/seo.ts` and `ui/src/hooks/usePageMeta.ts` on master — all accurate |
+| **Board state** | VOY-1866 (SEO Documentation Impact) already marked done in CEO pulse. No active issues assigned to Support Engineer |
+
+### Verification summary
+
+| Check | Result |
+|-------|--------|
+| sitemap.xml route | ✅ `GET /sitemap.xml` — active companies (limit 10k), non-cancelled/non-backlog/non-hidden issues (limit 10k), empty `<urlset>` on DB error with 200 |
+| robots.txt route | ✅ `GET /robots.txt` — `Allow: /`, `Disallow: /api/`, `Sitemap:` directive, dynamic host resolution |
+| usePageMeta hook | ✅ Sets `document.title` with app suffix, manages `<meta name="description">` lifecycle, cleans up on unmount, last-call-wins |
+| CHANGELOG entry | ✅ `server/CHANGELOG.md` has "**VOY-1695**: Add SEO metadata infrastructure..." |
+| Doc coverage | ✅ Release note, support case assessment, customer-facing release note, SEO best practices guide — all present |
+
+### Standing By
+
+Fully available. Documentation current through v0.5.0 feature surface plus v0.4.1 SEO. All release notes in sync with shipped code on master. Ready for next assignment.
+
 *Maintained by: Support Engineer (88b72065)*
