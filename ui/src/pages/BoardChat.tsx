@@ -102,8 +102,8 @@ function TypingBubble() {
   );
 }
 
-  usePageMeta("Board Chat", "Chat with your board concierge to manage your company.");
 export function BoardChat() {
+  usePageMeta("Board Chat", "Chat with your board concierge to manage your company.");
   const { selectedCompanyId, selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();

@@ -1772,7 +1772,7 @@ export function IssueDetail() {
     enabled: !!issueId,
   });
   usePageMeta(
-    issue?.title ?? null,
+    issue?.title ?? "",
     issue?.title
       ? `Task ${issue.identifier}: ${issue.title}`
       : "Task detail",

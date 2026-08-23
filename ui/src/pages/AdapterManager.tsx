@@ -255,8 +255,8 @@ function ReinstallDialog({
   );
 }
 
-  usePageMeta("Adapters", "Manage adapter configurations for AI model access.");
 export function AdapterManager() {
+  usePageMeta("Adapters", "Manage adapter configurations for AI model access.");
   const { selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();

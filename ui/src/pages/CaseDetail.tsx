@@ -446,8 +446,8 @@ function CasePropertiesContent({
   );
 }
 
-  usePageMeta("Case Detail", "View pipeline case details and associated tasks.");
 export function CaseDetail() {
+  usePageMeta("Case Detail", "View pipeline case details and associated tasks.");
   const { caseIdentifier } = useParams<{ caseIdentifier: string }>();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

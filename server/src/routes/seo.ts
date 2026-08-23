@@ -1,5 +1,5 @@
 import { Router, type Request } from "express";
-import { and, eq, isNotNull, ne } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import { companies, issues } from "@paperclipai/db";
 import type { Db } from "@paperclipai/db";
 
@@ -73,6 +73,7 @@ export function seoRoutes(db: Db): Router {
             ne(issues.status, "cancelled"),
             ne(issues.status, "backlog"),
             isNotNull(issues.identifier),
+            isNull(issues.hiddenAt),
           ),
         )
         .limit(10_000);
@@ -164,8 +165,8 @@ function toDateStr(date: Date | string | null | undefined): string {
 function formatUrl(host: string, path: string, lastmod: string): string {
   return [
     "  <url>",
-    `    <loc>https://${host}${path}</loc>`,
-    `    <lastmod>${lastmod}</lastmod>`,
+    `    <loc>https://${escapeXml(host)}${escapeXml(path)}</loc>`,
+    `    <lastmod>${escapeXml(lastmod)}</lastmod>`,
     "    <changefreq>weekly</changefreq>",
     "  </url>",
   ].join("\n");
@@ -178,4 +179,17 @@ function buildSitemapXml(urls: string[]): string {
     ...urls,
     "</urlset>",
   ].join("\n");
+}
+
+/**
+ * Escape XML special characters to prevent injection via X-Forwarded-Host
+ * or other user-influenced values.
+ */
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
 }

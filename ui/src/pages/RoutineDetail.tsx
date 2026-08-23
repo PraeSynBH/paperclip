@@ -154,8 +154,8 @@ function buildRoutineMutationPayload(input: RoutineEditDraft) {
   };
 }
 
-  usePageMeta("Routine Detail", "View routine details and execution history.");
 export function RoutineDetail() {
+  usePageMeta("Routine Detail", "View routine details and execution history.");
   const { routineId, section: sectionParam } = useParams<{ routineId: string; section?: string }>();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

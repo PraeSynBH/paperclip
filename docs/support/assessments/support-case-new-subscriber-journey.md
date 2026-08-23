@@ -1,9 +1,30 @@
 ---
 title: Support Case Assessment — New Subscriber Journey
 summary: Consolidated SOP covering the full user journey from signup through first trip to subscription — common issues, troubleshooting, and escalation paths
-version: v0.5.0
+version: v0.5.1
 applies_to: Voyonder Cloud (voyonder.com) and self-hosted deployments with billing enabled
 last_updated: 2026-08-22
+---
+
+## Quick-Reference SOP for Support Agents
+
+When a user reports an issue, identify the journey stage and check the most common issues first:
+
+| Stage | Most Common Issues | First Check |
+|-------|-------------------|-------------|
+| **Sign Up** | Email already in use, verification not received, OAuth failed | Check auth method; resend verification; clear cookies |
+| **Onboarding** | 403 on start, agent creation fails, template deployment slow | Verify auth; check adapter config; retry deployment |
+| **First Trip** | CEO not firing, task stuck, pending approval not showing | Check agent status (Resume if paused); check budget; refresh approvals |
+| **Subscription** | PAYWALL errors, checkout not processing, missing invoices | Check tier features; verify Stripe keys; sync invoices |
+
+**Always check:**
+1. Is the user authenticated? (sign-in session valid)
+2. Is billing enabled? (`PAPERCLIP_BILLING_ENABLED=true`)
+3. What tier are they on? (check subscription features)
+4. What error code did they see? (403 = permissions, PAYWALL = tier limits)
+
+**Escalation:** If the issue involves Stripe integration, webhook failures, or backend errors, escalate to Founding Engineer / CTO with the error message, affected company ID, and relevant timestamps.
+
 ---
 
 # Support Case Assessment: New Subscriber Journey
@@ -60,18 +81,17 @@ Dashboard (empty)
                       └──► Subscription active — feature gates lift
 ```
 
-### Acquisition Channels (New)
+### Acquisition Channels (Current)
 
-Users are currently arriving at voyonder.com through:
+Users arrive at voyonder.com through these channels. Support should be familiar with each channel's documentation and user expectations:
 
-| Channel | Status | Documentation |
-|---------|--------|---------------|
-| **Direct / Organic** | Active — SEO metadata in progress (VOY-1676, VOY-1681) | N/A |
-| **Case Studies** | 4 published — Trail Life, Voyonder dogfooding, AI agents, autonomous economy | `/case-studies/` |
-| **Discord Community** | Discord server live (discord.gg/m4HZY7xNG3) — link in footer and nav | See COO outreach plan |
-| **Outreach / Beta** | Customer outreach materials drafted — demo scripts, launch posts | `docs/case-studies/` |
-| **Conversion Tracking** | PostHog funnels being configured (VOY-1678, VOY-1683) — not yet live | N/A |
-| **Pricing Page** | `/pricing` — tier comparison with upgrade CTAs | Covered in billing assessment |
+| Channel | Status | Documentation | Support Notes |
+|---------|--------|---------------|---------------|
+| **Direct / Organic** | Active — voyonder.com discoverable via search, SEO work in progress (VOY-1676, VOY-1681) | Landing page, Docs site | Primary entry point. Users arrive expecting self-service. |
+| **Case Studies** | 4 published — Trail Life, Voyonder dogfooding, AI agents, autonomous economy | `/case-studies/` | Users from case studies may have specific use-case expectations. Direct to Your First Company guide. |
+| **Discord Community** | Live — discord.gg/m4HZY7xNG3 — link in docs nav, footer, and onboarding docs | Community channels | Active support community. Users often referred from Discord for billing/auth issues. |
+| **Outreach / Direct Sales** | Outreach materials drafted — demo scripts, launch posts, email templates | Internal only (COO) | Beta prospects and outreach contacts may need assisted onboarding. Escalate to COO if needed. |
+| **Pricing Page** | Live — `/pricing` — tier comparison with upgrade CTAs | Billing setup guide | Users comparing plans. Expect clear feature breakdown. PAYWALL errors drive users here. |
 
 ---
 
@@ -225,4 +245,4 @@ WHERE b.company_id = '<company-id>';
 ---
 
 *Maintained by: Support Engineer (88b72065)*
-*Last updated: 2026-08-22 — initial consolidated new subscriber SOP*
+*Last updated: 2026-08-22 — consolidated new subscriber SOP with quick-reference guide, updated acquisition channels for public launch*

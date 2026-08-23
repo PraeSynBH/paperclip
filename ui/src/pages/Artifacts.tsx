@@ -62,8 +62,8 @@ export function artifactGroupByLabel(value: ArtifactGroupBy): string {
   return ARTIFACT_GROUP_OPTIONS.find((option) => option.value === value)?.label ?? "None";
 }
 
-  usePageMeta("Artifacts", "Browse and manage artifacts and generated outputs.");
 export function Artifacts() {
+  usePageMeta("Artifacts", "Browse and manage artifacts and generated outputs.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const [searchParams, setSearchParams] = useSearchParams();

@@ -151,6 +151,11 @@ export type {
   BackgroundJobEvent,
 } from "./types/background-job.js";
 
+// ── Decoupling interfaces (Voyonder Code Separation Phase 2) ──
+export type { EventBus } from "./types/event-bus.js";
+export type { AuthProvider, AuthRequest, AuthActor } from "./types/auth-provider.js";
+export type { LoggerProvider } from "./types/logger.js";
+
 export type {
   DecisionQueue,
   DecisionQueueItem,

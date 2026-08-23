@@ -947,8 +947,8 @@ function CreateDocumentDialog({
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
-  usePageMeta("Knowledge", "Browse and search company knowledge base.");
 export function KnowledgeBrowser() {
+  usePageMeta("Knowledge", "Browse and search company knowledge base.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();

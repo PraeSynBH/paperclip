@@ -1273,8 +1273,8 @@ function StageEventsList({
   );
 }
 
-  usePageMeta("Pipeline Settings", "Configure pipeline automation settings.");
 export function PipelineSettings() {
+  usePageMeta("Pipeline Settings", "Configure pipeline automation settings.");
   const { pipelineId } = useParams<{ pipelineId: string }>();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

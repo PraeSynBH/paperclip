@@ -1,8 +1,8 @@
 ---
 title: FAQ
 summary: Frequently asked questions about Paperclip setup, billing, notifications, and operation
-version: v0.5.0
-last_updated: 2026-08-21
+version: v0.5.1
+last_updated: 2026-08-22
 ---
 
 # Frequently Asked Questions
@@ -32,8 +32,6 @@ No — Paperclip uses an embedded PostgreSQL instance by default. For production
 ## Billing
 
 ### "How do I connect Stripe?"
-
-> ⚠️ *Fork-only billing implementation removed during upstream merge cleanup (commit `de8529fc03`). Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). The billing setup described below documents the old fork-specific implementation and may be partially or fully stale until restoration completes.*
 
 Set two environment variables: `STRIPE_SECRET_KEY` (your Stripe secret key) and `STRIPE_WEBHOOK_SECRET` (your Stripe webhook signing secret). See the [Billing Setup Guide](/guides/board-operator/billing-setup) for step-by-step instructions.
 

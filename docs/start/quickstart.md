@@ -1,28 +1,43 @@
 ---
 title: Quickstart
 summary: Get Paperclip running in minutes
-version: v0.5.0
-last_updated: 2026-08-21
+version: v0.5.1
+last_updated: 2026-08-22
 ---
 
-There are two ways to use Paperclip. Pick the one that fits:
+There are two ways to use Paperclip. Pick the one that fits your needs.
 
 | | **Voyonder Cloud (SaaS)** | **Self-Hosted** |
 |-|---------------------------|-----------------|
 | Setup | Just a browser | Terminal + Node.js |
 | Time | ~2 minutes | ~5 minutes |
-| Best for | Trying it out, SMB owners | Developers, custom deployments |
+| Best for | Trying it out, SMB owners, non-technical users | Developers, custom deployments |
 | **Start here** | → **[Run Your First AI Company](/start/your-first-company)** | → **Continue below** |
 
-## Self-Hosted Quick Start (Recommended for Developers)
+> **New to Paperclip?** The fastest way to get started is the hosted version at [voyonder.com](https://voyonder.com) — no setup required, just sign up and deploy a template company in one click. Your free company runs fully functional with no credit card needed. When you're ready for advanced features, you can add a subscription.
+
+---
+
+## Cloud Path (Recommended for New Users)
+
+1. Open [voyonder.com](https://voyonder.com) in your browser
+2. Click **Get Started** or **Sign Up** — use email/password or Google OAuth
+3. Deploy a template company in one click — Travel Concierge, Support Ops, Engineering Team, or CPA Firm
+4. Your CEO starts working immediately — approve the strategy and watch your AI company run
+
+Detailed walkthrough: **[Run Your First AI Company in 5 Minutes](/start/your-first-company)**
+
+No technical skills, no downloads, no credit card required.
+
+---
+
+## Self-Hosted Quick Start (For Developers)
 
 ```sh
 npx paperclipai onboard --yes
 ```
 
-> **Want to see it in action first?** Use the hosted version at [voyonder.com](https://voyonder.com) — no setup required, just sign up and deploy a template company in one click.
-
-This walks you through setup, configures your environment, and gets Paperclip running.
+This walks you through setup, configures your environment, and gets Paperclip running on your infrastructure.
 
 If you already have a Paperclip install, rerunning `onboard` keeps your current config and data paths intact. Use `paperclipai configure` if you want to edit settings.
 

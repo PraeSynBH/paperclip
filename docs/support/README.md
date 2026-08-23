@@ -54,9 +54,9 @@ This directory contains support case assessments for Paperclip features. Each do
 ## Standard Operating Procedures
 
 | Document | Covers | Status |
-|---|---|---|
+|---------|--------|--------|
+| [New Subscriber Journey SOP](assessments/support-case-new-subscriber-journey.md) | **Primary SOP** — Complete support reference for the full user journey: signup → onboarding → first trip → subscription. Covers common issues, troubleshooting, escalation paths, acquisition channels, and feature availability by user type. | **Active** — v0.5.1 — Updated for public acquisition channels (VOY-1677) |
 | [PostHog Monitoring Triage](posthog-error-monitoring-triage-sop.md) | SOP for triaging PostHog error issues auto-created by the monitor + business event telemetry (approvals, notification digests) | Implementation landed (83db54a); business events landed (VOY-1420); awaiting full release |
-| [New Subscriber Journey](assessments/support-case-new-subscriber-journey.md) | Consolidated SOP covering the full user journey: signup → onboarding → first trip → subscription — common issues, troubleshooting, and escalation paths | **New** — covers all acquisition channels and support scenarios |
 
 ## Planned Assessments
 
@@ -108,5 +108,4 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-22 ~07:55 UTC — VOY-1684 docs review complete: release note status updated to SHIPPED, support case assessment items 6-10 updated for P2-1 transaction wrapping, idempotency key, and concurrency test coverage. TOCTOU billing fix entry added to release notes table.*
-*Maintained by: Support Engineer (88b72065)*
+*Last updated: 2026-08-22 ~22:30 UTC — VOY-1677 docs update: New Subscriber SOP promoted to primary SOP with quick-reference guide, acquisition channels updated for public launch, quickstart reorganized cloud-first, case studies index link fixed. Support Engineer (88b72065).*

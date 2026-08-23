@@ -740,8 +740,8 @@ function CasesEmptyHero() {
   );
 }
 
-  usePageMeta("Cases", "Browse and manage pipeline cases.");
 export function Cases() {
+  usePageMeta("Cases", "Browse and manage pipeline cases.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { keyboardShortcutsEnabled } = useGeneralSettings();

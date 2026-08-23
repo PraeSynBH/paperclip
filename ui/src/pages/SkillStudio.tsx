@@ -268,8 +268,8 @@ function useIsMobile() {
 // Root
 // ---------------------------------------------------------------------------
 
-  usePageMeta("Skill Studio", "Create and edit AI skills for your agents.");
 export function SkillStudio() {
+  usePageMeta("Skill Studio", "Create and edit AI skills for your agents.");
   const { skillId = "" } = useParams<{ skillId: string }>();
   const location = useLocation();
   const [searchParams] = useSearchParams();

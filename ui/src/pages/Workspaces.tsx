@@ -77,8 +77,8 @@ function buildProjectWorkspaceGroups(items: WorkspaceOverviewItem[]): ProjectWor
   });
 }
 
-  usePageMeta("Workspaces", "Manage execution and development workspaces.");
 export function Workspaces() {
+  usePageMeta("Workspaces", "Manage execution and development workspaces.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const experimentalSettingsQuery = useQuery({

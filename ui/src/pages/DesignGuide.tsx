@@ -373,8 +373,8 @@ function Swatch({ name, cssVar }: { name: string; cssVar: string }) {
 /*  Page                                                               */
 /* ------------------------------------------------------------------ */
 
-  usePageMeta("Design Guide", "Design system reference and UI component guide.");
 export function DesignGuide() {
+  usePageMeta("Design Guide", "Design system reference and UI component guide.");
   const [status, setStatus] = useState("todo");
   const [priority, setPriority] = useState("medium");
   const [selectValue, setSelectValue] = useState("in_progress");

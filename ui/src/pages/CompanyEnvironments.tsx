@@ -1261,8 +1261,8 @@ function EnvironmentImageTemplatePanel({
   );
 }
 
-  usePageMeta("Environments", "Configure runtime environments for your company.");
 export function CompanyEnvironments({ mode = "list" }: CompanyEnvironmentsProps) {
+  usePageMeta("Environments", "Configure runtime environments for your company.");
   const { environmentId: routeEnvironmentId } = useParams<{ environmentId?: string }>();
   const navigate = useNavigate();
   const { selectedCompanyId } = useCompany();

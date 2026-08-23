@@ -364,8 +364,8 @@ function ProjectPluginOperationsList({
 
 /* ── Main project page ── */
 
-  usePageMeta("Project Detail", "View project details, tasks, and progress.");
 export function ProjectDetail() {
+  usePageMeta("Project Detail", "View project details, tasks, and progress.");
   const { companyPrefix, projectId, filter } = useParams<{
     companyPrefix?: string;
     projectId: string;

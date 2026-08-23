@@ -69,8 +69,8 @@ function milestoneProgress(metadata: PlanMetadata | null): {
 
 // ─── Page ───────────────────────────────────────────────────────────────────
 
-  usePageMeta("Plans", "View and manage plans and strategies.");
 export function Plans() {
+  usePageMeta("Plans", "View and manage plans and strategies.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const [search, setSearch] = useState("");

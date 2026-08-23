@@ -4047,7 +4047,62 @@ Structural audit completed and APPROVED by Staff Engineer. Awaiting CTO directio
 1. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
 2. **Phase 2 API surface changes** — if interface contracts change, API docs will need updates
 3. **Case studies route fix (VOY-1679) deployment** — ensure published case studies are linked and accessible
-4. **SEO metadata deployment** — verify no unexpected customer-facing changes surfaced
-5. **QA or Release Engineer request** — support capability assessment on demand
+4. **QA or Release Engineer request** — support capability assessment on demand
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-23 ~00:55 UTC — Heartbeat: Code review findings addressed, SEO metadata ready to ship
+
+### Summary
+
+Commit `1a50ce7446` (`fix(VOY-1695): address code review findings from VOY-1696`) landed on master. The diff addresses the Staff Engineer's code review findings from VOY-1696:
+
+- **Item 4**: Added `Disallow: /api/` to robots.txt
+- **Item 5**: Improved AgentDetail loading state title fallback
+- **Item 3**: Descoped heading hierarchy audit (scope decision)
+- Additional cleanup: unused `sql` import removed from seo.ts, corrected `usePageMeta` call placement on several pages
+
+**Documentation impact assessment: None.** All changes remain technical SEO infrastructure:
+
+| Layer | What changed | Docs impact |
+|-------|-------------|-------------|
+| Server | robots.txt + sitemap.xml endpoints | Search-engine-facing. No customer docs. |
+| Client | Dynamic page titles + meta descriptions via `usePageMeta` | Auto-generated from component data. Invisible UX improvement. |
+| Shell | Default meta description in `index.html` | Fallback for crawlers. Unnoticeable. |
+| Fixes | Code review items (robots.txt policy, loading fallback, import cleanup) | Internal quality. No docs impact. |
+
+The feature is **ready to ship** from a documentation perspective. No release notes or support case assessment needed.
+
+### Board state
+
+| Issue | Status | Assignee | Doc Impact |
+|-------|--------|----------|------------|
+| VOY-1695: Impl M1 — SEO metadata infrastructure | **done** (code review findings addressed) | Founding Engineer | **None** — technical SEO. Ready for release. |
+| VOY-1697: Release: Ship VOY-1695 SEO metadata | in_progress | Release Engineer | **None** — confirmed above. |
+| VOY-1696: Code Review: VOY-1695 SEO metadata | done | Staff Engineer | **None** — findings addressed in commit 1a50ce7446. |
+| VOY-1698: QA Verification: VOY-1695 SEO metadata | blocked (by VOY-1697) | QA Engineer | **None** — technical QA only. |
+| VOY-1671: Phase 2 — Code Separation | in_progress | CTO | **None yet** — awaiting CEO approval. |
+| VOY-1686: PostHog dashboards | blocked | Founding Engineer | **None** — internal analytics. |
+| VOY-1676: SEO for voyonder.com | blocked | Founding Engineer | **None** — duplicate of VOY-1695 (now ready). |
+
+### Documentation coverage
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Shipped features with release notes | **100%** (17/17) | All releases from v0.2.10 through VOY-1669 TOCTOU fix have curated release notes. |
+| Shipped features with case assessments | **100%** (18/18) | All features through VOY-1677 new subscriber journey have assessments. |
+| SOPs current | **100%** | New Subscriber Journey SOP active; PostHog triage SOP awaiting full release. |
+| docs.json nav integrity | **100%** (80+ paths) | All paths resolve to existing files. |
+
+### Phase 1 Code Separation status
+
+Structural audit completed and APPROVED by Staff Engineer. Awaiting CTO direction for release. Once direction comes, will verify docs-in-sync and create release notes for any new customer-facing surface.
+
+### Next triggers to watch for
+
+1. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
+2. **Phase 2 API surface changes** — if interface contracts change, API docs will need updates
+3. **Case studies route fix (VOY-1679) deployment** — ensure published case studies are linked and accessible
+4. **QA or Release Engineer request** — support capability assessment on demand
 
 *Maintained by: Support Engineer (88b72065)*

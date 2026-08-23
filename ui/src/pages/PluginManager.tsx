@@ -86,8 +86,8 @@ function ExperimentalBadge() {
  * @see PluginSettings — linked from the Settings icon on each plugin row.
  * @see doc/plugins/PLUGIN_SPEC.md §3 — Plugin Lifecycle for status semantics.
  */
-  usePageMeta("Plugin Manager", "Install, configure, and manage plugins.");
 export function PluginManager() {
+  usePageMeta("Plugin Manager", "Install, configure, and manage plugins.");
   const { selectedCompany } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();

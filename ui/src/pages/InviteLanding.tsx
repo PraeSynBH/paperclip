@@ -208,8 +208,8 @@ function AwaitingJoinApprovalPanel({
   );
 }
 
-  usePageMeta("Invite", "Accept or decline a company invitation.");
 export function InviteLandingPage() {
+  usePageMeta("Invite", "Accept or decline a company invitation.");
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const { setSelectedCompanyId } = useCompany();

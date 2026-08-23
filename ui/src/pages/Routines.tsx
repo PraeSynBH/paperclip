@@ -317,8 +317,8 @@ function RoutineSectionHeader({
   );
 }
 
-  usePageMeta("Routines", "Browse and manage automated routines.");
 export function Routines() {
+  usePageMeta("Routines", "Browse and manage automated routines.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();

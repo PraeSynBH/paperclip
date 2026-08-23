@@ -26,8 +26,8 @@ function buildAgentHref(agent: InstanceSchedulerHeartbeatAgent) {
   return `/${agent.companyIssuePrefix}/agents/${encodeURIComponent(agent.agentUrlKey)}`;
 }
 
-  usePageMeta("Instance Settings", "Manage instance configuration and preferences.");
 export function InstanceSettings() {
+  usePageMeta("Instance Settings", "Manage instance configuration and preferences.");
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);

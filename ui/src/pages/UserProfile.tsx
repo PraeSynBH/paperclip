@@ -195,8 +195,8 @@ function UsageList({
   );
 }
 
-  usePageMeta("User Profile", "View user profile and activity.");
 export function UserProfile() {
+  usePageMeta("User Profile", "View user profile and activity.");
   const { userSlug = "" } = useParams<{ userSlug: string }>();
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();

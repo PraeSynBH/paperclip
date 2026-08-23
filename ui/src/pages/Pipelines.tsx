@@ -343,8 +343,8 @@ function retryPrimaryActionLabel(plan: PipelineAutomationRetryPlan) {
   return plan.scope === "previous_stage" ? "Retry previous step" : "Re-run this step";
 }
 
-  usePageMeta("Pipelines", "Build and manage automation pipelines.");
 export function Pipelines() {
+  usePageMeta("Pipelines", "Build and manage automation pipelines.");
   const params = useParams<{ pipelineId?: string }>();
   const location = useLocation();
   const pipelineId = params.pipelineId ?? null;

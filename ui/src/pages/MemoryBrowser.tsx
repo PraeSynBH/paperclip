@@ -443,8 +443,8 @@ function OperationsTab({ companyId }: { companyId: string }) {
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
-  usePageMeta("Memory", "Browse agent and company memory entries.");
 export function MemoryBrowser() {
+  usePageMeta("Memory", "Browse agent and company memory entries.");
   const { selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();

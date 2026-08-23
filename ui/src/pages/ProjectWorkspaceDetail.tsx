@@ -245,8 +245,8 @@ function DetailRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
-  usePageMeta("Workspace Detail", "Manage workspace resources and configuration.");
 export function ProjectWorkspaceDetail() {
+  usePageMeta("Workspace Detail", "Manage workspace resources and configuration.");
   const { companyPrefix, projectId, workspaceId } = useParams<{
     companyPrefix?: string;
     projectId: string;

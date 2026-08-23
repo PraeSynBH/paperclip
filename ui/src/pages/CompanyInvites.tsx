@@ -47,8 +47,8 @@ function isInviteHistoryRow(value: unknown): value is Awaited<ReturnType<typeof 
   return "id" in value && "state" in value && "createdAt" in value;
 }
 
-  usePageMeta("Company Invites", "Manage pending company invitations.");
 export function CompanyInvites() {
+  usePageMeta("Company Invites", "Manage pending company invitations.");
   const { selectedCompany, selectedCompanyId } = useCompany();
   const { setBreadcrumbs } = useBreadcrumbs();
   const { pushToast } = useToast();

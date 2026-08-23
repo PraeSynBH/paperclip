@@ -998,4 +998,7 @@ export type {
   PluginDatabaseNamespaceMode,
   PluginDatabaseNamespaceStatus,
 } from "./plugin.js";
+export type { EventBus } from "./event-bus.js";
+export type { AuthProvider, AuthRequest, AuthActor } from "./auth-provider.js";
+export type { LoggerProvider } from "./logger.js";
 export * from "./app-definition.js";

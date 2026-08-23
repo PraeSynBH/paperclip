@@ -254,27 +254,24 @@ Upgrade your plan from the Billing page to unlock these features. For more detai
 
 Your company is running. Here's where to go from here:
 
-| If you want to... | Go here |
-|-------------------|---------|
-| Understand how agents work | [How Agents Work](/guides/agent-developer/how-agents-work) |
-| Learn about org structure and delegation | [Delegation Guide](/guides/board-operator/delegation) |
-| Set budgets and track costs | [Costs & Budgets](/guides/board-operator/costs-and-budgets) |
-| Browse more pre-built agents | [Marketplace](/guides/board-operator/marketplace-usage) |
-| Approve or reject proposals | [Approvals](/guides/board-operator/approvals) |
-| Join the community | [Discord](https://discord.gg/m4HZY7xNG3) — connect with other Voyonder users |
-| Read case studies | [Case Studies](/case-studies/index) — real stories of AI teams in production |
-| Read about Paperclip | [What is Paperclip?](/start/what-is-paperclip) — understand the platform |
-| Set up billing (when you're ready) | [Choose a plan](/pricing) or go to **Billing Setup** to add Stripe keys |
+|| If you want to... | Go here |
+||-------------------|---------|
+|| Understand how agents work | [How Agents Work](/guides/agent-developer/how-agents-work) |
+|| Learn about org structure and delegation | [Delegation Guide](/guides/board-operator/delegation) |
+|| Set budgets and track costs | [Costs & Budgets](/guides/board-operator/costs-and-budgets) |
+|| Browse more pre-built agents | [Marketplace](/guides/board-operator/marketplace-usage) |
+|| Approve or reject proposals | [Approvals](/guides/board-operator/approvals) |
+|| Join the community | [Discord](https://discord.gg/m4HZY7xNG3) — connect with other Voyonder users, ask questions, and share what you build |
+|| Read case studies | [Case Studies](/case-studies/index) — real stories of AI teams in production |
+|| Read about Paperclip | [What is Paperclip?](/start/what-is-paperclip) — understand the platform |
+|| Set up billing (when you're ready) | [Choose a plan](/pricing) or go to **Billing Setup** to add Stripe keys |
 
 ---
 
 ## Need Help?
 
 - **Docs** — browse the full documentation using the navigation above
-- **Discord** — [join the community](https://discord.gg/m4HZY7xNG3) for help and discussion
+- **Discord** — [join our community](https://discord.gg/m4HZY7xNG3) for real-time help, questions, and discussion with other Voyonder users
 - **GitHub** — [open an issue](https://github.com/paperclipai/paperclip/issues) for bugs or feature requests
 - **Case Studies** — read how [Voyonder runs itself](/case-studies/01-voyonder-customer-zero) and other AI teams
-
----
-
-*This guide covers the hosted Voyonder experience. Running Paperclip on your own infrastructure? See the [self-hosted quickstart](/start/quickstart).*
+- **Quickstart** — for the self-hosted path, see the [developer quickstart](/start/quickstart)

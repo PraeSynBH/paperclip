@@ -227,8 +227,8 @@ function RecoveryPreviewDialog({
   );
 }
 
-  usePageMeta("Experimental Settings", "Configure experimental instance features.");
 export function InstanceExperimentalSettings() {
+  usePageMeta("Experimental Settings", "Configure experimental instance features.");
   const { setBreadcrumbs } = useBreadcrumbs();
   const queryClient = useQueryClient();
   const [actionError, setActionError] = useState<string | null>(null);
