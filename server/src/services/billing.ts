@@ -14,6 +14,7 @@ import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES } from "@paperclipai/shared
 import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { publishLiveEvent } from "./live-events.js";
+import { captureMetric } from "./posthog.js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
@@ -198,6 +199,8 @@ export function billingService(db: Db) {
     if (!invoice.subscription) return;
     const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
 
+    let companyId: string | undefined;
+
     await db.transaction(async (tx) => {
       const sub = await tx
         .select()
@@ -209,6 +212,8 @@ export function billingService(db: Db) {
         logger.warn({ stripeSubscriptionId: subId }, "Received invoice for unknown subscription");
         return;
       }
+
+      companyId = sub.companyId;
 
       // Upsert: INSERT ... ON CONFLICT (stripe_invoice_id) DO UPDATE
       // Handles at-least-once delivery from Stripe (race-free with the UNIQUE index)
@@ -242,6 +247,17 @@ export function billingService(db: Db) {
           "updated_at" = NOW()
       `);
     });
+
+    // Fire subscription_activated conversion event (best-effort, never blocks)
+    if (companyId) {
+      captureMetric("pricing.subscription_activated", companyId, {
+        companyId,
+        stripeSubscriptionId: subId,
+        invoiceAmountCents: invoice.amount_paid ?? invoice.total ?? 0,
+        periodStart: invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null,
+        periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000).toISOString() : null,
+      });
+    }
   };
 
   const handleInvoicePaymentFailed = async (invoice: Stripe.Invoice) => {
@@ -284,6 +300,7 @@ export function billingService(db: Db) {
     }
 
     const tierId = stripeSub.metadata?.paperclipTierId;
+    let oldStatus: string | undefined;
 
     await db.transaction(async (tx) => {
       const existing = await tx
@@ -293,6 +310,7 @@ export function billingService(db: Db) {
         .then((r) => r[0] ?? null);
 
       if (existing) {
+        oldStatus = existing.status;
         await tx
           .update(companySubscriptionsTable)
           .set({
@@ -377,6 +395,19 @@ export function billingService(db: Db) {
 
     logger.info({ stripeSubscriptionId: stripeSub.id, status: stripeSub.status }, "Subscription status synced from Stripe");
 
+    // Fire trial_converted event when a trialing subscription becomes active
+    // (best-effort, never blocks)
+    if (oldStatus === "trialing" && stripeSub.status === "active") {
+      captureMetric("pricing.trial_converted", companyId, {
+        companyId,
+        stripeSubscriptionId: stripeSub.id,
+        tierId: tierId ?? null,
+        trialEnd: stripeSub.trial_end
+          ? new Date(stripeSub.trial_end * 1000).toISOString()
+          : null,
+      });
+    }
+
     publishLiveEvent({
       companyId,
       type: "subscription.status.updated",
@@ -391,6 +422,7 @@ export function billingService(db: Db) {
 
   const handleSubscriptionDeleted = async (stripeSub: Stripe.Subscription) => {
     const companyId = stripeSub.metadata?.paperclipCompanyId;
+    const tierId = stripeSub.metadata?.paperclipTierId ?? null;
 
     await db.transaction(async (tx) => {
       await tx
@@ -412,11 +444,24 @@ export function billingService(db: Db) {
             status: "canceled",
             stripeSubscriptionId: stripeSub.id,
             cancelAtPeriodEnd: false,
-            tierId: stripeSub.metadata?.paperclipTierId ?? null,
+            tierId,
           },
         });
       }
     });
+
+    // Fire subscription_canceled conversion event (best-effort, never blocks)
+    if (companyId) {
+      captureMetric("pricing.subscription_canceled", companyId, {
+        companyId,
+        stripeSubscriptionId: stripeSub.id,
+        tierId,
+        canceledAt: stripeSub.canceled_at
+          ? new Date(stripeSub.canceled_at * 1000).toISOString()
+          : new Date().toISOString(),
+        source: "stripe_webhook",
+      });
+    }
   };
 
   /**
@@ -527,6 +572,31 @@ export function billingService(db: Db) {
         "Created subscription from Checkout Session",
       );
     });
+
+    // Fire subscription_completed conversion event (best-effort, never blocks)
+    captureMetric("pricing.subscription_completed", companyId, {
+      companyId,
+      tierId,
+      billingPeriod,
+      stripeSubscriptionId: subId,
+      status: stripeSub.status,
+      trialEnd: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null,
+    });
+
+    // Fire trial_started conversion event when the subscription enters a trial
+    // (best-effort, never blocks)
+    if (stripeSub.trial_end) {
+      captureMetric("pricing.trial_started", companyId, {
+        companyId,
+        tierId,
+        billingPeriod,
+        stripeSubscriptionId: subId,
+        trialEnd: new Date(stripeSub.trial_end * 1000).toISOString(),
+        trialDurationDays: stripeSub.trial_start
+          ? Math.round((stripeSub.trial_end - stripeSub.trial_start) / 86400)
+          : null,
+      });
+    }
 
     publishLiveEvent({
       companyId,
@@ -671,12 +741,42 @@ export function billingService(db: Db) {
   };
 
   return {
-    listTiers: async () => {
-      return db
+    listTiers: async (companyId?: string) => {
+      const tiers = await db
         .select()
         .from(subscriptionTiersTable)
         .where(eq(subscriptionTiersTable.isActive, true))
         .orderBy(subscriptionTiersTable.sortOrder);
+
+      // Fire conversion-tracking event (best-effort, never blocks the response)
+      if (companyId) {
+        let hasExistingSubscription = false;
+        try {
+          const existing = await db
+            .select({ id: companySubscriptionsTable.id })
+            .from(companySubscriptionsTable)
+            .where(
+              and(
+                eq(companySubscriptionsTable.companyId, companyId),
+                sql`${companySubscriptionsTable.status} = ANY(${ACTIVE_SUBSCRIPTION_STATUSES}::text[])`,
+              ),
+            )
+            .limit(1)
+            .then((r) => r[0] ?? null);
+          hasExistingSubscription = existing !== null;
+        } catch {
+          // Best-effort — analytics failure never blocks the response.
+        }
+
+        captureMetric("pricing.page_view", companyId, {
+          companyId,
+          tierIds: tiers.map((t) => t.id),
+          tierNames: tiers.map((t) => t.name),
+          hasExistingSubscription,
+        });
+      }
+
+      return tiers;
     },
 
     getTier,
@@ -694,6 +794,18 @@ export function billingService(db: Db) {
     ) => {
       const stripe = getStripeClient();
       const tier = await getTier(data.tierId);
+
+      // Fire subscribe_click conversion event (best-effort, never blocks)
+      const priceCents = data.billingPeriod === "yearly"
+        ? tier.priceYearlyCents
+        : tier.priceMonthlyCents;
+      captureMetric("pricing.subscribe_click", companyId, {
+        companyId,
+        tierId: data.tierId,
+        tierName: tier.name,
+        billingPeriod: data.billingPeriod,
+        priceCents,
+      });
 
       const stripePriceId = data.billingPeriod === "yearly"
         ? (tier.stripePriceYearlyId ?? tier.stripePriceMonthlyId)
@@ -726,6 +838,14 @@ export function billingService(db: Db) {
       );
 
       logger.info({ companyId, sessionId: session.id }, "Created Checkout Session");
+
+      // Fire checkout_started conversion event (best-effort, never blocks)
+      captureMetric("pricing.checkout_started", companyId, {
+        companyId,
+        tierId: data.tierId,
+        billingPeriod: data.billingPeriod,
+        sessionId: session.id,
+      });
 
       return { url: session.url, sessionId: session.id };
     },
@@ -962,6 +1082,16 @@ export function billingService(db: Db) {
           cancelAtPeriodEnd: true,
           tierId: subscription.tierId,
         },
+      });
+
+      // Fire subscription_canceled conversion event (best-effort, never blocks)
+      captureMetric("pricing.subscription_canceled", companyId, {
+        companyId,
+        stripeSubscriptionId: subscription.stripeSubscriptionId,
+        tierId: subscription.tierId,
+        canceledAt: new Date().toISOString(),
+        cancelAtPeriodEnd: true,
+        source: "api",
       });
 
       return updated;
@@ -1238,8 +1368,29 @@ export function billingService(db: Db) {
           await handleCheckoutSessionCompleted(session);
           break;
         }
-        case "customer.subscription.trial_will_end":
+        case "customer.subscription.trial_will_end": {
+          const trialSub = event.data.object as Stripe.Subscription;
+          const trialCompanyId = trialSub.metadata?.paperclipCompanyId;
+          const trialTierId = trialSub.metadata?.paperclipTierId ?? null;
+          if (trialCompanyId) {
+            captureMetric("pricing.trial_will_end", trialCompanyId, {
+              companyId: trialCompanyId,
+              stripeSubscriptionId: trialSub.id,
+              tierId: trialTierId,
+              trialEnd: trialSub.trial_end
+                ? new Date(trialSub.trial_end * 1000).toISOString()
+                : null,
+              currentPeriodEnd: trialSub.current_period_end
+                ? new Date(trialSub.current_period_end * 1000).toISOString()
+                : null,
+            });
+          }
+          logger.info(
+            { stripeSubscriptionId: trialSub.id, companyId: trialCompanyId },
+            "Customer subscription trial will end",
+          );
           break;
+        }
         default:
           logger.info({ type: event.type }, "Unhandled Stripe webhook event type");
       }

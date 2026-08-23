@@ -53,8 +53,13 @@ Business events are sent to PostHog via `captureMetric()` to track key product o
 | `approval.approved` | `services/approvals.ts` | An approval (hire, strategy, plan gate) is approved | `companyId` | `approvalId`, `approvalType`, `decidedByUserId`, `applied`, `decisionNote` |
 | `approval.rejected` | `services/approvals.ts` | An approval is rejected | `companyId` | `approvalId`, `approvalType`, `decidedByUserId`, `applied`, `decisionNote` |
 | `notification.digest.sent` | `services/notifications.ts` | A batch of notification digests is delivered | `companyId` | `frequency` (daily/hourly), `notificationCount` |
-| `auth.signup_completed` | better-auth database hook (`user.create.after`) | A new user account is created (sign-up via email or Google OAuth) | `userId` | `login_method` ("google", "email", or "unknown") |
-| `auth.session_started` | better-auth database hook (`session.create.after`) | A new session is created (sign-in via email or Google OAuth) | `userId` (the logging-in user) | `login_method` ("google", "email", or "unknown") |
+| `auth.signup_completed` | better-auth database hook (`user.create.after`) | A new user account is created (sign-up via email or Google OAuth) | `userId` | `login_method` (&quot;google&quot;, &quot;email&quot;, or &quot;unknown&quot;) |
+| `auth.session_started` | better-auth database hook (`session.create.after`) | A new session is created (sign-in via email or Google OAuth) | `userId` (the logging-in user) | `login_method` (&quot;google&quot;, &quot;email&quot;, or &quot;unknown&quot;) |
+| `pricing.page_view` | `services/billing.ts` (`listTiers`) | Company views the pricing/subscription tiers page | `companyId` | `companyId`, `tierIds`, `tierNames`, `hasExistingSubscription` |
+| `pricing.subscribe_click` | `services/billing.ts` (`createCheckoutSession`) | Board user clicks Subscribe on a tier | `companyId` | `companyId`, `tierId`, `tierName`, `billingPeriod`, `priceCents` |
+| `pricing.checkout_started` | `services/billing.ts` (`createCheckoutSession`) | Stripe Checkout Session created for payment collection | `companyId` | `companyId`, `tierId`, `billingPeriod`, `sessionId` |
+| `pricing.subscription_completed` | `services/billing.ts` (`handleCheckoutSessionCompleted`) | Checkout completed — subscription created in database | `companyId` | `companyId`, `tierId`, `billingPeriod`, `stripeSubscriptionId`, `status`, `trialEnd` |
+| `pricing.subscription_activated` | `services/billing.ts` (`handleInvoicePaid`) | First invoice paid — subscription becomes active | `companyId` | `companyId`, `stripeSubscriptionId`, `invoiceAmountCents`, `periodStart`, `periodEnd` |
 
 ### distinctId Rule
 
@@ -89,15 +94,31 @@ Starting with VOY-1420, error events (`captureErrorEvent`) also use `companyId` 
 ```bash
 # Query PostHog for approval events (via PostHog API)
 curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=approval.approved" \
-  -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY"
+  -H "Authorization: Bearer $POSTH..._KEY"
 
 # Query PostHog for notification digest events
 curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=notification.digest.sent" \
-  -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY"
+  -H "Authorization: Bearer $POSTH..._KEY"
 
 # Check if a specific company's events are flowing
 curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=approval.approved&distinct_id={companyId}" \
-  -H "Authorization: Bearer $POSTHOG_PERSONAL_API_KEY"
+  -H "Authorization: Bearer $POSTH..._KEY"
+
+# Query pricing funnel events
+curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=pricing.page_view" \
+  -H "Authorization: Bearer $POSTH..._KEY"
+
+curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=pricing.subscribe_click" \
+  -H "Authorization: Bearer $POSTH..._KEY"
+
+curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=pricing.checkout_started" \
+  -H "Authorization: Bearer $POSTH..._KEY"
+
+curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=pricing.subscription_completed" \
+  -H "Authorization: Bearer $POSTH..._KEY"
+
+curl -s "https://us.posthog.com/api/projects/{project_id}/events/?event=pricing.subscription_activated" \
+  -H "Authorization: Bearer $POSTH..._KEY"
 ```
 
 ### Auth Hook Resilience
@@ -115,6 +136,12 @@ This design means:
 - **Zero counts in dashboards** — Business events rely on `companyId` as distinctId. If a company's events are not grouped correctly, verify the `captureMetric` call passes the correct `companyId`.
 - **PII in event properties** — Error events are auto-redacted by `sanitizeErrorForTelemetry()`. Business event properties are **not** blanket-redacted, but the `decisionNote` property on `approval.approved` and `approval.rejected` events is now scrubbed via `redactSensitiveText()` (VOY-1434 / d5b3510587). Event properties added in future instrumentation may still contain user PII — check for free-text fields before assuming they are safe. If a PII leak is found in a business event, escalate to the CTO.
 - **Auth events not appearing** — If `auth.signup_completed` or `auth.session_started` events stop appearing, check that PostHog is configured and that better-auth database hooks are registered (`server/src/auth/better-auth.ts` — `databaseHooks.user.create.after` and `databaseHooks.session.create.after`). These events fire regardless of login method (email or Google OAuth).
+- **Pricing funnel events not appearing** — If `pricing.page_view`, `pricing.subscribe_click`, `pricing.checkout_started`, `pricing.subscription_completed`, or `pricing.subscription_activated` events are missing from PostHog dashboards:
+  - Verify `POSTHOG_API_KEY` and `POSTHOG_HOST` env vars are set on the server — without them `captureMetric()` is a no-op
+  - For `page_view`: check that `GET /api/companies/:companyId/billing/tiers` is being called (triggers from `listTiers()`)
+  - For `subscribe_click`/`checkout_started`: verify the Checkout Session creation flow (`createCheckoutSession()`) — both events fire server-side, independent of UI
+  - For `subscription_completed`/`subscription_activated`: check Stripe webhook delivery — these fire on `checkout.session.completed` and `invoice.paid` webhooks respectively
+  - All events are best-effort and never block the response — transient PostHog failures cause silent drops
 
 ---
 

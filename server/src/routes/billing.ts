@@ -60,7 +60,7 @@ export function billingRoutes(db: Db) {
     try {
       const companyId = req.params.companyId as string;
       assertCompanyAccess(req, companyId);
-      const tiers = await billing.listTiers();
+      const tiers = await billing.listTiers(companyId);
       res.json(tiers);
     } catch (err) {
       next(err);

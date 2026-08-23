@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type Stripe from "stripe";
 import {
   companies,
@@ -18,6 +18,18 @@ import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
 } from "./helpers/embedded-postgres.js";
+
+// Mock captureMetric to verify conversion-tracking events fire without
+// affecting existing tests (no-op by default, same as real no-PostHog behavior).
+const mockCaptureMetric = vi.hoisted(() => vi.fn());
+vi.mock("../services/posthog.js", () => ({
+  captureMetric: mockCaptureMetric,
+  captureErrorEvent: vi.fn(),
+  initPostHog: vi.fn(),
+  isPostHogEnabled: vi.fn().mockReturnValue(false),
+  flush: vi.fn(),
+  shutdownPostHog: vi.fn(),
+}));
 
 // Load Stripe keys from the Paperclip instance .env before importing billing
 const envPath = join(process.env.HOME!, ".paperclip/instances/default/.env");
@@ -624,4 +636,211 @@ describeEmbeddedPostgres("Stripe billing E2E flow (service layer)", () => {
 
     await stripe.subscriptions.cancel(stripeSub.id, { invoice_now: false });
   });
+
+  // ─────────────────────────────────────────────────────────────────────────────
+  // 14. Conversion-tracking events
+  // ─────────────────────────────────────────────────────────────────────────────
+  beforeEach(() => {
+    mockCaptureMetric.mockClear();
+  });
+
+  it("listTiers fires pricing.page_view event when companyId is provided", async () => {
+    const tiers = await billing.listTiers(freeCompanyId);
+    expect(tiers.length).toBeGreaterThanOrEqual(2);
+
+    expect(mockCaptureMetric).toHaveBeenCalledTimes(1);
+    expect(mockCaptureMetric).toHaveBeenCalledWith(
+      "pricing.page_view",
+      freeCompanyId,
+      expect.objectContaining({
+        companyId: freeCompanyId,
+        tierIds: expect.arrayContaining([adventurerTierId, explorerTierId]),
+        tierNames: expect.arrayContaining(["Adventurer", "Explorer"]),
+        hasExistingSubscription: expect.any(Boolean),
+      }),
+    );
+  });
+
+  it("listTiers does not fire page_view event without companyId", async () => {
+    await billing.listTiers();
+    expect(mockCaptureMetric).not.toHaveBeenCalled();
+  });
+
+  (hasStripeKeys ? it : it.skip)(
+    "createCheckoutSession fires subscribe_click and checkout_started events",
+    async () => {
+      const tempCompanyId = randomUUID();
+      const now = new Date();
+      await db.insert(companies).values({
+        id: tempCompanyId,
+        name: `Conv-Test ${tempCompanyId.slice(0, 6)}`,
+        status: "active",
+        issuePrefix: "CONV",
+        updatedAt: now,
+      });
+
+      const sessionResult = await billing.createCheckoutSession(tempCompanyId, {
+        tierId: adventurerTierId,
+        billingPeriod: "monthly",
+      });
+
+      expect(sessionResult).toBeDefined();
+      expect(sessionResult.url).toMatch(/^https:\/\/checkout\.stripe\.com\//);
+
+      // subscribe_click fires at the start of createCheckoutSession
+      expect(mockCaptureMetric).toHaveBeenCalledWith(
+        "pricing.subscribe_click",
+        tempCompanyId,
+        expect.objectContaining({
+          companyId: tempCompanyId,
+          tierId: adventurerTierId,
+          tierName: "Adventurer",
+          billingPeriod: "monthly",
+          priceCents: 2900,
+        }),
+      );
+
+      // checkout_started fires after Stripe session is created
+      expect(mockCaptureMetric).toHaveBeenCalledWith(
+        "pricing.checkout_started",
+        tempCompanyId,
+        expect.objectContaining({
+          companyId: tempCompanyId,
+          tierId: adventurerTierId,
+          billingPeriod: "monthly",
+          sessionId: expect.stringMatching(/^cs_test_/),
+        }),
+      );
+    },
+  );
+
+  (hasStripeKeys ? it : it.skip)(
+    "handleCheckoutSessionCompleted fires subscription_completed event",
+    async () => {
+      const { getStripeClient } = await import("../services/billing.js");
+      const stripe = getStripeClient();
+
+      const tempCompanyId = randomUUID();
+      const now = new Date();
+      await db.insert(companies).values({
+        id: tempCompanyId,
+        name: `Comp-Test ${tempCompanyId.slice(0, 6)}`,
+        status: "active",
+        issuePrefix: "COMP",
+        updatedAt: now,
+      });
+
+      const cust = await billing.getOrCreateStripeCustomer(tempCompanyId);
+      const stripeSub = await createTestSubscription(
+        stripe,
+        cust.stripeCustomerId,
+        "price_1U6xzsK6Q827UREsvNgIzmPh",
+        {
+          paperclipCompanyId: tempCompanyId,
+          paperclipTierId: adventurerTierId,
+        },
+      );
+
+      await billing.handleCheckoutSessionCompleted({
+        id: `cs_test_${randomUUID()}`,
+        mode: "subscription",
+        subscription: stripeSub.id,
+        customer: cust.stripeCustomerId,
+        metadata: {
+          paperclipCompanyId: tempCompanyId,
+          paperclipTierId: adventurerTierId,
+          billingPeriod: "monthly",
+        },
+      } as any);
+
+      expect(mockCaptureMetric).toHaveBeenCalledWith(
+        "pricing.subscription_completed",
+        tempCompanyId,
+        expect.objectContaining({
+          companyId: tempCompanyId,
+          tierId: adventurerTierId,
+          billingPeriod: "monthly",
+          stripeSubscriptionId: stripeSub.id,
+          status: expect.any(String),
+          trialEnd: expect.any(String),
+        }),
+      );
+
+      await stripe.subscriptions.cancel(stripeSub.id, { invoice_now: false });
+    },
+  );
+
+  (hasStripeKeys ? it : it.skip)(
+    "handleInvoicePaid fires subscription_activated event",
+    async () => {
+      const { getStripeClient } = await import("../services/billing.js");
+      const stripe = getStripeClient();
+
+      const tempCompanyId = randomUUID();
+      const now = new Date();
+      await db.insert(companies).values({
+        id: tempCompanyId,
+        name: `Act-Test ${tempCompanyId.slice(0, 6)}`,
+        status: "active",
+        issuePrefix: "ACT",
+        updatedAt: now,
+      });
+
+      const cust = await billing.getOrCreateStripeCustomer(tempCompanyId);
+      const stripeSub = await createTestSubscription(
+        stripe,
+        cust.stripeCustomerId,
+        "price_1U6xzsK6Q827UREsvNgIzmPh",
+        {
+          paperclipCompanyId: tempCompanyId,
+          paperclipTierId: adventurerTierId,
+        },
+      );
+
+      await billing.handleCheckoutSessionCompleted({
+        id: `cs_test_${randomUUID()}`,
+        mode: "subscription",
+        subscription: stripeSub.id,
+        customer: cust.stripeCustomerId,
+        metadata: {
+          paperclipCompanyId: tempCompanyId,
+          paperclipTierId: adventurerTierId,
+          billingPeriod: "monthly",
+        },
+      } as any);
+
+      mockCaptureMetric.mockClear();
+
+      const mockInvoice = {
+        id: `in_test_${randomUUID()}`,
+        subscription: stripeSub.id,
+        number: `INV-${Date.now()}`,
+        status: "paid",
+        total: 2900,
+        amount_paid: 2900,
+        amount_remaining: 0,
+        currency: "usd",
+        invoice_pdf: null,
+        hosted_invoice_url: null,
+        period_start: Math.floor(Date.now() / 1000) - 2592000,
+        period_end: Math.floor(Date.now() / 1000),
+      } as any;
+
+      await billing.handleInvoicePaid(mockInvoice);
+
+      expect(mockCaptureMetric).toHaveBeenCalledWith(
+        "pricing.subscription_activated",
+        tempCompanyId,
+        expect.objectContaining({
+          companyId: tempCompanyId,
+          stripeSubscriptionId: stripeSub.id,
+          invoiceAmountCents: 2900,
+          periodStart: expect.any(String),
+          periodEnd: expect.any(String),
+        }),
+      );
+
+      await stripe.subscriptions.cancel(stripeSub.id, { invoice_now: false });
+    },
+  );
 });

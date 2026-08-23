@@ -56,6 +56,34 @@ The response returns `{ "url": "...", "sessionId": "..." }`; the client redirect
 
 Supported request fields: `tierId` (required), `billingPeriod` (optional, defaults to `monthly`), `successUrl` and `cancelUrl` (optional URLs).
 
+### Pricing Funnel Analytics
+
+The billing system now emits PostHog business events at five key points in the pricing and subscription flow, providing end-to-end funnel visibility. All events are **best-effort** — failures never block the response.
+
+| Event | Trigger | Properties |
+|---|---|---|
+| `pricing.page_view` | `GET /billing/tiers` — user views the pricing page | companyId, tierIds, tierNames, hasExistingSubscription |
+| `pricing.subscribe_click` | `POST /create-checkout-session` — user clicks Subscribe | companyId, tierId, tierName, billingPeriod, priceCents |
+| `pricing.checkout_started` | Stripe Checkout Session created | companyId, tierId, billingPeriod, sessionId |
+| `pricing.subscription_completed` | `checkout.session.completed` webhook — subscription created | companyId, tierId, billingPeriod, stripeSubscriptionId, status, trialEnd |
+| `pricing.subscription_activated` | `invoice.paid` webhook — first invoice paid | companyId, stripeSubscriptionId, invoiceAmountCents, periodStart, periodEnd |
+
+**Key properties:**
+- All events use `companyId` as the PostHog distinct ID — enabling per-company analytics
+- `hasExistingSubscription` on `page_view` tells you whether the user already has a plan before they browse tiers
+- `priceCents` on `subscribe_click` captures the exact price at click time
+- `sessionId` on `checkout_started` links the browser session to the Stripe session for cross-referencing
+- `trialEnd` on `subscription_completed` indicates trial subscriptions (where `subscription_activated` may fire days later on first payment)
+
+**When these don't fire:**
+- All events silently no-op when `POSTHOG_API_KEY` and `POSTHOG_HOST` env vars are not set — no error is raised
+- `page_view` only fires when `listTiers()` is called with a company context (the route handler passes the request's companyId)
+- `subscribe_click` and `checkout_started` fire server-side before the Stripe redirect — independent of the user's browser session
+- `subscription_completed` and `subscription_activated` fire on Stripe webhooks — they work even if the user closes their browser after checkout
+- PostHog being unreachable causes silent drops — events are queued in memory and flushed asynchronously by `posthog-node`
+
+See the [PostHog Monitoring Triage SOP](../../posthog-error-monitoring-triage-sop.md) for detailed debugging commands and troubleshooting guidance.
+
 ### Billing periods
 
 Subscriptions support two billing periods:
