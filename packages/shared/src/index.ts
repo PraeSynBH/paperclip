@@ -635,6 +635,8 @@ export {
   type PluginBridgeErrorCode,
 } from "./constants.js";
 
+export type { BillingPeriod } from "./constants.js";
+
 export {
   generateSummarySlotSchema,
   summarySlotKeySchema,
@@ -1157,6 +1159,11 @@ export type {
   LiveEvent,
   DashboardRunActivityDay,
   DashboardSummary,
+  UsageAnalyticsDay,
+  UsageAnalyticsFunnel,
+  UsageAnalyticsSnapshot,
+  UsageAnalyticsResponse,
+  UsageAnalyticsWindow,
   TimelineActorType,
   TimelineEventKind,
   TimelineEdgeKind,

@@ -998,4 +998,11 @@ export type {
   PluginDatabaseNamespaceMode,
   PluginDatabaseNamespaceStatus,
 } from "./plugin.js";
+export type {
+  UsageAnalyticsDay,
+  UsageAnalyticsFunnel,
+  UsageAnalyticsSnapshot,
+  UsageAnalyticsResponse,
+  UsageAnalyticsWindow,
+} from "./usage-analytics.js";
 export * from "./app-definition.js";

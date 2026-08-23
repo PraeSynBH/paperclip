@@ -92,6 +92,11 @@ export interface SubscriptionInvoice {
   updatedAt: string;
 }
 
+export interface ExperimentVariantResponse {
+  variant: "A" | "B" | null;
+  enabled: boolean;
+}
+
 export const billingApi = {
   tiers: (companyId: string) =>
     api.get<SubscriptionTier[]>(`/companies/${companyId}/billing/tiers`),
@@ -110,4 +115,6 @@ export const billingApi = {
     api.get<SubscriptionInvoice[]>(`/companies/${companyId}/billing/invoices`),
   overview: (companyId: string) =>
     api.get<BillingOverview>(`/companies/${companyId}/billing/overview`),
+  experimentVariant: (companyId: string) =>
+    api.get<ExperimentVariantResponse>(`/companies/${companyId}/billing/experiment-variant`),
 };

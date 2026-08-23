@@ -1,0 +1,30 @@
+{
+  "kind": "ask_user_questions",
+  "actorId": "7a2a259f-06ef-470c-8a06-a77e2c8b8833",
+  "continuationPolicy": "wake_assignee",
+  "targetAgentIds": ["88b72065-5f95-4e2b-a6df-48d04363f0d9"],
+  "payload": {
+    "version": 1,
+    "prompt": "Support Engineer: Please verify that the documentation is in sync with the Code Separation Phase 2 release.",
+    "questions": [
+      {
+        "id": "q1",
+        "prompt": "Are the release notes up to date with the Phase 2 changes?",
+        "selectionMode": "single",
+        "options": [
+          {"id": "q1_yes", "label": "Yes"},
+          {"id": "q1_no", "label": "No - needs updates"}
+        ]
+      },
+      {
+        "id": "q2",
+        "prompt": "Does any Voyonder documentation need updating for the new createVoyonderApp API?",
+        "selectionMode": "single",
+        "options": [
+          {"id": "q2_yes", "label": "Yes"},
+          {"id": "q2_no", "label": "No"}
+        ]
+      }
+    ]
+  }
+}

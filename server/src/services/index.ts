@@ -104,6 +104,7 @@ export {
 } from "./productivity-review.js";
 export { classifyIssueGraphLiveness, type IssueLivenessFinding } from "./recovery/index.js";
 export { dashboardService } from "./dashboard.js";
+export { usageAnalyticsService } from "./usage-analytics.js";
 export { sidebarBadgeService } from "./sidebar-badges.js";
 export { sidebarPreferenceService } from "./sidebar-preferences.js";
 export { resourceMembershipService, type ResourceMembershipPolicyHook } from "./resource-memberships.js";
@@ -193,4 +194,9 @@ export {
   type CodexAuthReconciliationSummary,
 } from "./codex-auth-reconciliation.js";
 export { reconcilePersistedRuntimeServicesOnStartup, restartDesiredRuntimeServicesOnStartup } from "./workspace-runtime.js";
+export {
+  createPaperclipEventBus,
+  createPaperclipAuthProvider,
+  createPaperclipLogger,
+} from "./voyonder-bridge.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";

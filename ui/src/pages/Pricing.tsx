@@ -1,18 +1,33 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCompany } from "@/context/CompanyContext";
 import { billingApi, type SubscriptionTier, type CompanySubscription } from "@/api/billing";
+import { accessApi } from "@/api/access";
 import { queryKeys } from "@/lib/queryKeys";
 import { Button } from "@/components/ui/button";
 import { usePageMeta } from "../hooks/usePageMeta";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { PaperclipLoading } from "@/components/AnimatedPaperclipIcon";
-import { Check, CreditCard, AlertCircle } from "lucide-react";
+import { Check, CreditCard, AlertCircle, Beaker } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
+import { useState } from "react";
+import type { BillingPeriod } from "@paperclipai/shared";
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(0)}`;
 }
+
+/** Calculate the yearly savings percentage vs monthly billing. */
+function yearlySavingsPercent(monthlyCents: number, yearlyCents: number): number {
+  if (monthlyCents <= 0 || yearlyCents <= 0) return 0;
+  const monthlyYearlyTotal = monthlyCents * 12;
+  if (monthlyYearlyTotal <= 0) return 0;
+  return Math.round(((monthlyYearlyTotal - yearlyCents) / monthlyYearlyTotal) * 100);
+}
+
+// ── Status Pill ──────────────────────────────────────────────────────────────
 
 function StatusPill({ subscription }: { subscription: CompanySubscription | null }) {
   if (!subscription) {
@@ -56,6 +71,67 @@ function StatusPill({ subscription }: { subscription: CompanySubscription | null
   );
 }
 
+// ── Checkout Confirmation Dialog ────────────────────────────────────────────
+
+function CheckoutConfirmationDialog({
+  tier,
+  billingPeriod,
+  onConfirm,
+  onCancel,
+  isPending,
+}: {
+  tier: SubscriptionTier;
+  billingPeriod: BillingPeriod;
+  onConfirm: () => void;
+  onCancel: () => void;
+  isPending: boolean;
+}) {
+  const price = billingPeriod === "yearly" ? tier.priceYearlyCents : tier.priceMonthlyCents;
+  const periodLabel = billingPeriod === "yearly" ? "year" : "month";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <Card className="mx-4 w-full max-w-md">
+        <CardHeader>
+          <CardTitle>Confirm Your Plan</CardTitle>
+          <CardDescription>
+            You're about to start the <strong>{tier.name}</strong> plan at{" "}
+            <strong>{formatCents(price)}/{periodLabel}</strong>. Your 14-day free
+            trial begins now — you won't be charged until it ends.
+          </CardDescription>
+        </CardHeader>
+        <CardFooter className="flex justify-end gap-3">
+          <Button variant="outline" onClick={onCancel} disabled={isPending}>
+            Cancel
+          </Button>
+          <Button onClick={onConfirm} disabled={isPending}>
+            {isPending ? "Processing..." : "Proceed to Checkout"}
+          </Button>
+        </CardFooter>
+      </Card>
+    </div>
+  );
+}
+
+// ── Hero CTA Bar ─────────────────────────────────────────────────────────────
+
+function HeroCtaBar({ onGetStarted }: { onGetStarted: () => void }) {
+  return (
+    <div className="mb-10 rounded-lg border border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-primary/5 p-6 text-center">
+      <h2 className="mb-2 text-2xl font-bold">Get Started Today</h2>
+      <p className="mb-4 text-muted-foreground">
+        Join thousands of teams using Paperclip to supercharge their workflows.
+        Start your free 14-day trial — no credit card required.
+      </p>
+      <Button size="lg" onClick={onGetStarted}>
+        Start Free Trial
+      </Button>
+    </div>
+  );
+}
+
+// ── Main Pricing Page ────────────────────────────────────────────────────────
+
 export function PricingPage() {
   usePageMeta("Pricing", "Paperclip pricing plans and subscription details.");
   const { selectedCompanyId } = useCompany();
@@ -63,6 +139,14 @@ export function PricingPage() {
   const { pushToast } = useToast();
 
   const companyId = selectedCompanyId;
+
+  // Billing period toggle (visible for variant B)
+  const [billingPeriod, setBillingPeriod] = useState<BillingPeriod>("monthly");
+
+  // Confirmation dialog state (variant B only)
+  const [pendingTier, setPendingTier] = useState<SubscriptionTier | null>(null);
+
+  // ── Queries ──────────────────────────────────────────────────────────────
 
   const { data: tiers, isLoading: tiersLoading } = useQuery({
     queryKey: queryKeys.billing.tiers(companyId!),
@@ -76,11 +160,43 @@ export function PricingPage() {
     enabled: !!companyId,
   });
 
+  const { data: experiment } = useQuery({
+    queryKey: queryKeys.billing.experimentVariant(companyId!),
+    queryFn: () => billingApi.experimentVariant(companyId!),
+    enabled: !!companyId,
+    // Experiment is non-critical — fail silently if the endpoint errors
+    retry: false,
+    staleTime: 5 * 60 * 1000, // 5 min — experiment assignment is stable per session
+  });
+
+  const isVariantB = experiment?.enabled === true && experiment?.variant === "B";
+
+  // Internal user detection (instance admins & company admins/owners)
+  const { data: boardAccess } = useQuery({
+    queryKey: queryKeys.access.currentBoardAccess,
+    queryFn: () => accessApi.getCurrentBoardAccess(),
+    retry: false,
+    staleTime: 5 * 60 * 1000,
+  });
+  const isInternalUser =
+    boardAccess?.isInstanceAdmin === true ||
+    boardAccess?.memberships?.some(
+      (m) => m.membershipRole === "owner" || m.membershipRole === "admin",
+    ) === true;
+
+  // ── Mutations ────────────────────────────────────────────────────────────
+
   const checkoutMutation = useMutation({
-    mutationFn: async (tierId: string) => {
+    mutationFn: async ({
+      tierId,
+      period,
+    }: {
+      tierId: string;
+      period: BillingPeriod;
+    }) => {
       const result = await billingApi.createCheckoutSession(companyId!, {
         tierId,
-        billingPeriod: "monthly",
+        billingPeriod: period,
         successUrl: `${window.location.origin}/pricing`,
         cancelUrl: `${window.location.origin}/pricing`,
       });
@@ -143,6 +259,34 @@ export function PricingPage() {
     },
   });
 
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  const handleSubscribe = (tier: SubscriptionTier) => {
+    if (isVariantB) {
+      // Variant B shows a confirmation dialog first
+      setPendingTier(tier);
+    } else {
+      // Variant A (control) goes directly to Stripe
+      checkoutMutation.mutate({ tierId: tier.id, period: billingPeriod });
+    }
+  };
+
+  const handleConfirmCheckout = () => {
+    if (!pendingTier) return;
+    checkoutMutation.mutate(
+      { tierId: pendingTier.id, period: billingPeriod },
+      {
+        onSettled: () => setPendingTier(null),
+      },
+    );
+  };
+
+  const handleCancelCheckout = () => {
+    setPendingTier(null);
+  };
+
+  // ── Loading / Empty State ─────────────────────────────────────────────────
+
   if (!companyId) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -159,10 +303,48 @@ export function PricingPage() {
   const isSubscribed = !!subscription && subscription.status !== "canceled";
   const isCancelScheduled = subscription?.cancelAtPeriodEnd === true;
 
+  // ── Render ────────────────────────────────────────────────────────────────
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
+      {/* Confirmation dialog overlay */}
+      {pendingTier && (
+        <CheckoutConfirmationDialog
+          tier={pendingTier}
+          billingPeriod={billingPeriod}
+          onConfirm={handleConfirmCheckout}
+          onCancel={handleCancelCheckout}
+          isPending={checkoutMutation.isPending}
+        />
+      )}
+
+      {/* Hero CTA bar for variant B when not subscribed */}
+      {isVariantB && !isSubscribed && (
+        <HeroCtaBar
+          onGetStarted={() => {
+            // Pick the first available tier as the default target
+            const firstTier = tiers?.[0];
+            if (firstTier) setPendingTier(firstTier);
+          }}
+        />
+      )}
+
+      {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold tracking-tight">Pricing</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-3xl font-bold tracking-tight">Pricing</h1>
+          {experiment?.enabled && isInternalUser && experiment?.variant ? (
+            <Badge variant="secondary" className="gap-1">
+              <Beaker className="h-3 w-3" />
+              Experiment: Variant {experiment.variant}
+            </Badge>
+          ) : isVariantB ? (
+            <Badge variant="secondary" className="gap-1">
+              <Beaker className="h-3 w-3" />
+              Variant B
+            </Badge>
+          ) : null}
+        </div>
         <p className="mt-2 text-muted-foreground">
           Choose the plan that fits your needs. All plans include a 14-day free trial.
         </p>
@@ -213,11 +395,42 @@ export function PricingPage() {
         </Card>
       )}
 
+      {/* Billing period toggle — shown for variant B */}
+      {isVariantB && (
+        <div className="mb-6 flex items-center justify-center gap-2">
+          <button
+            type="button"
+            className={`rounded-l-md px-4 py-2 text-sm font-medium transition-colors ${
+              billingPeriod === "monthly"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+            onClick={() => setBillingPeriod("monthly")}
+          >
+            Monthly
+          </button>
+          <button
+            type="button"
+            className={`rounded-r-md px-4 py-2 text-sm font-medium transition-colors ${
+              billingPeriod === "yearly"
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground hover:bg-muted/80"
+            }`}
+            onClick={() => setBillingPeriod("yearly")}
+          >
+            Yearly
+          </button>
+        </div>
+      )}
+
       {/* Tier cards */}
       <div className="grid gap-6 md:grid-cols-3">
         {(tiers ?? []).map((tier) => {
           const isCurrentTier = tier.id === currentTierId && isSubscribed;
           const features = Array.isArray(tier.features) ? tier.features : [];
+
+          const displayPrice = billingPeriod === "yearly" ? tier.priceYearlyCents : tier.priceMonthlyCents;
+          const savingsPct = yearlySavingsPercent(tier.priceMonthlyCents, tier.priceYearlyCents);
 
           return (
             <Card
@@ -236,9 +449,33 @@ export function PricingPage() {
               </CardHeader>
               <CardContent className="flex-1">
                 <div className="mb-6">
-                  <span className="text-4xl font-bold">{formatCents(tier.priceMonthlyCents)}</span>
-                  <span className="text-muted-foreground ml-1">/month</span>
+                  <span className="text-4xl font-bold">{formatCents(displayPrice)}</span>
+                  <span className="text-muted-foreground ml-1">
+                    /{billingPeriod === "yearly" ? "year" : "month"}
+                  </span>
+
+                  {/* Yearly savings badge for variant B */}
+                  {isVariantB && billingPeriod === "yearly" && savingsPct > 0 && (
+                    <Badge variant="success" className="ml-2 align-middle">
+                      save {savingsPct}%
+                    </Badge>
+                  )}
                 </div>
+
+                {/* Yearly savings hint in monthly view (variant B) */}
+                {isVariantB && billingPeriod === "monthly" && savingsPct > 0 && (
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    save {savingsPct}% with yearly billing
+                  </p>
+                )}
+
+                {/* Yearly vs monthly comparison for variant B */}
+                {isVariantB && billingPeriod === "yearly" && (
+                  <p className="mb-4 text-sm text-muted-foreground">
+                    {formatCents(tier.priceMonthlyCents)}/month normally &middot;{" "}
+                    {formatCents(tier.priceYearlyCents)}/year
+                  </p>
+                )}
 
                 {features.length > 0 && (
                   <ul className="space-y-2">
@@ -266,11 +503,15 @@ export function PricingPage() {
                 ) : (
                   <Button
                     className="w-full"
-                    onClick={() => checkoutMutation.mutate(tier.id)}
+                    onClick={() => handleSubscribe(tier)}
                     disabled={checkoutMutation.isPending}
                   >
                     <CreditCard className="h-4 w-4 mr-2" />
-                    {checkoutMutation.isPending ? "Loading..." : "Subscribe"}
+                    {checkoutMutation.isPending
+                      ? "Loading..."
+                      : isVariantB
+                        ? "Start Free Trial"
+                        : "Subscribe"}
                   </Button>
                 )}
               </CardFooter>

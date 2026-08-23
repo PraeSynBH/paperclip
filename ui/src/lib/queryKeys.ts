@@ -445,6 +445,7 @@ export const queryKeys = {
     subscription: (companyId: string) => ["billing", companyId, "subscription"] as const,
     invoices: (companyId: string) => ["billing", companyId, "invoices"] as const,
     overview: (companyId: string) => ["billing", companyId, "overview"] as const,
+    experimentVariant: (companyId: string) => ["billing", companyId, "experiment-variant"] as const,
   },
   usageByProvider: (companyId: string, from?: string, to?: string) =>
     ["usage-by-provider", companyId, from, to] as const,
@@ -526,4 +527,5 @@ export const queryKeys = {
     search: (companyId: string, q: string) =>
       ["knowledge", companyId, "search", q] as const,
   },
+  usageAnalytics: (window: string) => ["usage-analytics", window] as const,
 };

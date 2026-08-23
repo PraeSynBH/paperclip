@@ -4,6 +4,12 @@
 // instrumentationReady before opening DB connections or constructing the
 // HTTP server, so trace coverage does not depend on incidental timing.
 import { instrumentationReady, shutdownInstrumentation } from "./instrumentation.js";
+// ── Voyonder Bridge — adapters for C1 (EventBus) and C2 (AuthProvider) ──
+export {
+  createPaperclipEventBus,
+  createPaperclipAuthProvider,
+  createPaperclipLogger,
+} from "./services/voyonder-bridge.js";
 import { existsSync, readFileSync, rmSync } from "node:fs";
 import { createServer } from "node:http";
 import { resolve } from "node:path";
