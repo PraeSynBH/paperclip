@@ -44,6 +44,6 @@ This directory contains support case assessments for Paperclip features. Each do
 
 ---
 
-*Last updated: 2026-08-23 ~20:30 UTC — Billing portal-link endpoint and trial grace period documented in billing support case assessment; M6 onboarding assessment updated for grace period integration. Standing by.*
+*Last updated: 2026-08-23 ~22:20 UTC — Diff assessment of fix commit 1a00d7fe75: internal robustness changes only (Stripe retry wrapper, upsert patterns, live event propagation). No user-facing documentation impact. All shipped features remain documented and current. Standing by.*
 
 *Maintained by: Support Engineer (88b72065)*
