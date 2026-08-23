@@ -11,20 +11,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import type { LiveEvent } from "@paperclipai/shared";
 import type { EventBus, AuthProvider, LoggerProvider } from "@paperclipai/shared";
 
-// ── Mocks ────────────────────────────────────────────────────────────────────
+// ── Mocks (hoisted so vitest can reference them in factory functions) ────────
 
-const mockPublishLiveEvent = vi.fn();
-const mockSubscribeCompanyLiveEvents = vi.fn();
-const mockAssertAuthenticated = vi.fn();
-const mockAssertCompanyAccess = vi.fn();
+const mockPublishLiveEvent = vi.hoisted(() => vi.fn());
+const mockSubscribeCompanyLiveEvents = vi.hoisted(() => vi.fn());
+const mockAssertAuthenticated = vi.hoisted(() => vi.fn());
+const mockAssertCompanyAccess = vi.hoisted(() => vi.fn());
 
-// Logger mock (pino-style: first arg is object, second is message)
-const mockLoggerInfo = vi.fn();
-const mockLoggerWarn = vi.fn();
-const mockLoggerError = vi.fn();
-const mockLoggerDebug = vi.fn();
+const mockLoggerInfo = vi.hoisted(() => vi.fn());
+const mockLoggerWarn = vi.hoisted(() => vi.fn());
+const mockLoggerError = vi.hoisted(() => vi.fn());
+const mockLoggerDebug = vi.hoisted(() => vi.fn());
 
-// Hoist mocks so they're available before module imports
 vi.mock("../services/live-events.js", () => ({
   publishLiveEvent: mockPublishLiveEvent,
   subscribeCompanyLiveEvents: mockSubscribeCompanyLiveEvents,
@@ -291,6 +289,8 @@ describe("createPaperclipAuthProvider()", () => {
       mockAssertCompanyAccess.mockImplementation(() => {
         throw accessError;
       });
+      // Ensure assertAuthenticated does not throw for agent type
+      mockAssertAuthenticated.mockImplementation(() => undefined);
 
       const req = { actor: { type: "agent", agentId: "agent-1" } } as any;
 
