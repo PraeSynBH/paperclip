@@ -19,8 +19,33 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { initPluginBridge } from "./plugins/bridge-init";
 import { PluginLauncherProvider } from "./plugins/launchers";
 import { startPerfMeasureReaper } from "./lib/perf-measure-reaper";
+import * as Sentry from "@sentry/react";
 import "@mdxeditor/editor/style.css";
 import "./index.css";
+
+// Initialize Sentry as early as possible
+const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN || import.meta.env.SENTRY_DSN || "";
+if (SENTRY_DSN) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    environment: import.meta.env.MODE || "development",
+    release: import.meta.env.VITE_SENTRY_RELEASE || undefined,
+    // Sample rate: 1.0 in production, lower in dev
+    tracesSampleRate: import.meta.env.PROD ? 0.25 : 0.0,
+    profilesSampleRate: import.meta.env.PROD ? 0.1 : 0.0,
+    integrations: [
+      Sentry.browserTracingIntegration(),
+      Sentry.replayIntegration({
+        // Only capture replays for a sample of sessions
+        maskAllText: true,
+        blockAllMedia: true,
+      }),
+    ],
+    // Replays sampling
+    replaysSessionSampleRate: import.meta.env.PROD ? 0.01 : 0.0,
+    replaysOnErrorSampleRate: import.meta.env.PROD ? 0.1 : 0.0,
+  });
+}
 
 initPluginBridge(React, ReactDOM);
 

@@ -4,6 +4,7 @@ import { ZodError } from "zod";
 import { HttpError } from "../errors.js";
 import { trackErrorHandlerCrash } from "@paperclipai/shared/telemetry";
 import { getTelemetryClient } from "../telemetry.js";
+import { isSentryEnabled } from "../sentry.js";
 import { COMPANY_IMPORT_API_PATH } from "../routes/company-import-paths.js";
 import { logger } from "./logger.js";
 import {
@@ -79,6 +80,38 @@ function recordResponsibleUserDenialFromHttpError(
   });
 }
 
+function reportToSentry(err: unknown, req: Request): void {
+  if (!isSentryEnabled()) return;
+  try {
+    const Sentry = require("@sentry/node") as typeof import("@sentry/node");
+    Sentry.withScope((scope) => {
+      scope.setExtras({
+        method: req.method,
+        url: req.originalUrl,
+        query: req.query,
+        params: req.params,
+      });
+      if (req.actor) {
+        scope.setUser({
+          id: req.actor.agentId || req.actor.userId || undefined,
+          ...(req.actor.type ? { username: req.actor.type } : {}),
+        });
+        scope.setTag("actor_type", req.actor.type);
+        if (req.actor.companyId) scope.setTag("company_id", req.actor.companyId);
+        if (req.actor.runId) scope.setTag("run_id", req.actor.runId);
+      }
+      if (err instanceof Error) {
+        scope.setTag("error_code", (err as any).name || "UnknownError");
+        scope.setLevel("error");
+        if ((err as any).details) scope.setExtra("details", (err as any).details);
+      }
+      Sentry.captureException(err);
+    });
+  } catch {
+    // Best-effort — Sentry reporting must not break the app
+  }
+}
+
 export function errorHandler(
   err: unknown,
   req: Request,
@@ -149,6 +182,9 @@ export function errorHandler(
 
   const tc = getTelemetryClient();
   if (tc) trackErrorHandlerCrash(tc, { errorCode: rootError.name });
+
+  // Report unhandled errors to Sentry (no-op if Sentry not initialized)
+  reportToSentry(rootError, req);
 
   res.status(500).json({
     error: "Internal server error",

@@ -13,6 +13,7 @@ import {
 import { ACTIVE_SUBSCRIPTION_STATUSES, FREE_FEATURES } from "@paperclipai/shared";
 import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { publishLiveEvent } from "./live-events.js";
+import { getGa4AnalyticsService } from "./ga4-analytics.js";
 import { logger } from "../middleware/logger.js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
@@ -506,12 +507,19 @@ export function billingService(db: Db) {
   };
 
   return {
-    listTiers: async () => {
-      return db
+    listTiers: async (companyId?: string) => {
+      const tiers = await db
         .select()
         .from(subscriptionTiersTable)
         .where(eq(subscriptionTiersTable.isActive, true))
         .orderBy(subscriptionTiersTable.sortOrder);
+
+      // Apply pricing experiment tier overrides when companyId is provided
+      if (companyId && experiment) {
+        const variant = await experiment.getOrAssignVariant(companyId);
+        return experiment.applyTierOverrides(tiers, variant);
+      }
+      return tiers;
     },
 
     getTier,
@@ -936,6 +944,30 @@ export function billingService(db: Db) {
       }
 
       return listInvoices(companyId);
+    },
+
+    // ── Pricing experiment integration ─────────────────────────────────
+
+    getExperimentVariant: async (companyId: string): Promise<{ variant: PricingExperimentVariant; enabled: boolean }> => {
+      if (!experiment) {
+        return { variant: "A" as PricingExperimentVariant, enabled: false };
+      }
+      const variant = await experiment.getOrAssignVariant(companyId);
+      const config = experiment.loadConfig();
+      return { variant, enabled: config.enabled };
+    },
+
+    getExperimentResults: async () => {
+      if (!experiment) {
+        return { enabled: false, totalAssigned: 0, variantA: { count: 0 }, variantB: { count: 0 } };
+      }
+      return experiment.getResults();
+    },
+
+    // GA4 analytics helpers for pricing events
+    trackPricingEvent: (eventName: string, companyId: string, params?: Record<string, string | number | boolean | null | undefined>) => {
+      const ga4 = getGa4AnalyticsService();
+      ga4.event(eventName, { company_id: companyId, ...params });
     },
 
     handleWebhook: async (rawBody: string, signature: string) => {

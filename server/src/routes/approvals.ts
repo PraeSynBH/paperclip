@@ -17,6 +17,9 @@ import {
   issueApprovalService,
   logActivity,
   secretService,
+  getGa4AnalyticsService,
+  buildApprovalEvent,
+  buildApprovalRejectedEvent,
 } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getAccessibleResource, getActorInfo, hasCompanyAccess } from "./authz.js";
 import { redactEventPayload } from "../redaction.js";
@@ -396,6 +399,11 @@ export function approvalRoutes(
           : null,
         requestedByUserId: req.actor.userId ?? "board",
       });
+
+      // GA4 tracking
+      getGa4AnalyticsService().send(
+        buildApprovalEvent(approval.id, approval.type, approval.companyId),
+      );
     }
 
     res.json(redactApprovalPayload(approval));
@@ -431,6 +439,11 @@ export function approvalRoutes(
         lostIssueIds: lostReviewIssueIds,
         requestedByUserId: req.actor.userId ?? "board",
       });
+
+      // GA4 tracking
+      getGa4AnalyticsService().send(
+        buildApprovalRejectedEvent(approval.id, approval.type, approval.companyId),
+      );
     }
 
     res.json(redactApprovalPayload(approval));

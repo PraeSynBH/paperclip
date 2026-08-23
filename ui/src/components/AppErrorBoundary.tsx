@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
+import * as Sentry from "@sentry/react";
 
 type AppErrorBoundaryState = {
   error: Error | null;
@@ -12,8 +13,10 @@ type AppErrorBoundaryState = {
  * page with no way forward but knowing to hard-refresh. This boundary trades
  * that blank page for a reload prompt.
  *
- * Deliberately dependency-free: no router, no toast, no query client — the
+ * Deliberately minimal dependencies: no router, no toast, no query client — the
  * crash being handled may have originated inside any of those providers.
+ *
+ * Also reports the crash to Sentry when Sentry is active.
  */
 export class AppErrorBoundary extends Component<{ children: ReactNode }, AppErrorBoundaryState> {
   override state: AppErrorBoundaryState = { error: null };
@@ -24,6 +27,17 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, AppErro
 
   override componentDidCatch(error: unknown, info: ErrorInfo): void {
     console.error("App shell crashed", { error, componentStack: info.componentStack });
+
+    // Report to Sentry if initialized
+    try {
+      Sentry.withScope((scope) => {
+        scope.setTag("error_source", "app_shell");
+        scope.setExtra("componentStack", info.componentStack);
+        Sentry.captureException(error);
+      });
+    } catch {
+      // Best-effort
+    }
   }
 
   override render() {
