@@ -4106,3 +4106,64 @@ Structural audit completed and APPROVED by Staff Engineer. Awaiting CTO directio
 4. **QA or Release Engineer request** — support capability assessment on demand
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-23 ~00:30 UTC — Heartbeat: SEO metadata docs verification complete, audit findings addressed
+
+### Summary
+
+Commit `fde711db21` (`fix(VOY-1695): address Staff Engineer structural audit findings`) landed on master. This is the third and final commit for the VOY-1695 SEO metadata infrastructure feature.
+
+**Documentation impact assessment: None.** All 7 audit findings are technical/structural with zero customer-facing change:
+
+| Finding | Type | Fix | Docs Impact |
+|---------|------|-----|-------------|
+| React Hooks violation | CRITICAL | 27 `usePageMeta()` calls moved from module-level into component bodies | **None** — identical calls, zero behavioral change |
+| TypeScript type mismatch | CRITICAL | `issue?.title ?? null` → `""` in IssueDetail.tsx | **None** — internal type safety, unnoticeable |
+| Missing hiddenAt filter | MEDIUM | `isNull(issues.hiddenAt)` added to sitemap query | **None** — search-engine-facing; hidden items excluded from crawl |
+| No XML escaping | MEDIUM | `escapeXml()` helper applied to sitemap host/path/lastmod | **None** — security hardening; rendered output unchanged |
+| No noindex mechanism | MEDIUM | Noted for future per-page meta tags | **None** — no code shipped |
+| Unused import | LOW | Already resolved in 1a50ce7446 | **None** — cleanup only |
+| No tests | LOW | Deferred to follow-up | **None** — test coverage gap |
+
+**Also in this commit:** Phase 2 code separation interfaces (EventBus, AuthProvider, LoggerProvider) were added to `@paperclipai/shared`. These are developer-facing type exports — no customer-facing Voyonder surface changed.
+
+### Documentation coverage
+
+| Category | Coverage | Notes |
+|----------|----------|-------|
+| Shipped features with release notes | **100%** (17/17) | All releases through VOY-1669 TOCTOU fix have curated release notes. |
+| Shipped features with case assessments | **100%** (18/18) | All features through VOY-1677 new subscriber journey have assessments. |
+| SOPs current | **100%** | New Subscriber Journey SOP active; PostHog triage SOP awaiting full release. |
+| docs.json nav integrity | **100%** (80+ paths) | All paths resolve to existing files. |
+
+### Release status
+
+VOY-1697 (Release: Ship VOY-1695 SEO metadata) is in_progress. The Release Engineer has noted audit findings addressed and branch pushed to origin, with "CTO sign-off and Support Engineer docs verification still pending."
+
+Attempted to post docs verification comment to VOY-1697 via Paperclip API, but the POST was rejected (cross_issue_influence_run_context_required — this run does not carry the heartbeat run context needed for cross-issue writes). The verification artifact is captured here in the heartbeat log. If the Release Engineer or CTO needs formal verification, a heartbeat-run context or direct agent-to-agent channel will be needed.
+
+### Board state snapshot
+
+| Issue | Status | Assignee | Doc Impact |
+|-------|--------|----------|------------|
+| VOY-1695: Impl M1 — SEO metadata infrastructure | **done** (audit findings addressed) | Founding Engineer | **None** — technical SEO. Docs verified across all 3 commits. |
+| VOY-1697: Release: Ship VOY-1695 SEO metadata | in_progress | Release Engineer | **None** — docs verification complete. Signoff provided in heartbeat log. |
+| VOY-1696: Code Review: VOY-1695 SEO metadata | done | Staff Engineer | **None** — findings addressed. |
+| VOY-1698: QA Verification: VOY-1695 SEO metadata | blocked (by VOY-1697) | QA Engineer | **None** — technical QA. |
+| VOY-1707: Impl: Conversion tracking events | in_progress | Founding Engineer | **TBD** — once implementation lands, will assess billing/subscribe flow changes. |
+| VOY-1684: Referral/share mechanics | in_progress | CTO | **TBD** — will assess when implementation lands. |
+| VOY-1671: Phase 2 — Code Separation | in_progress | CTO | **None yet** — awaiting CEO approval. |
+
+### Next triggers to watch for
+
+1. **CTO direction on Phase 1 release** — verify docs in sync, update release notes for any new surface
+2. **Phase 2 API surface changes** — if interface contracts change, API docs will need updates
+3. **Case studies route fix (VOY-1679) deployment** — ensure published case studies are linked and accessible
+4. **VOY-1707 conversion tracking events implementation** — assess docs impact when billing/subscribe flow changes land
+5. **VOY-1684 referral/share mechanics implementation** — assess docs impact when CTO's work lands
+6. **QA or Release Engineer request** — support capability assessment on demand
+
+*Maintained by: Support Engineer (88b72065)*
+*Docs verification provided: 2026-08-23 ~00:30 UTC*
