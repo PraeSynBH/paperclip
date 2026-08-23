@@ -2,8 +2,9 @@
 
 **Service**: Google Analytics 4 Measurement Protocol integration
 **Committed**: `f95b738967` (2026-08-23)
-**Related**: VOY-1941 (GA Fallback Planning), VOY-1961 through VOY-1964 (GA4 wiring)
+**Related**: VOY-1941 (GA Fallback Planning), VOY-1966 through VOY-1969 (GA4 wiring child issues)
 **Status**: Code committed — service available but requires configuration to activate
+**Updated**: 2026-08-23 ~17:50 UTC — issue references refreshed to match CEO pulse (VOY-1966→1969)
 
 ## Overview
 
@@ -50,11 +51,12 @@ When `GA4_DEBUG=true`, events are sent to `https://www.google-analytics.com/debu
 | Component | Status | Notes |
 |---|---|---|
 | GA4 Analytics Service | **Committed** | `server/src/services/ga4-analytics.ts` — fully implemented |
-| Checkout event tracking | **Committed (working tree)** | `server/src/services/billing.ts` fires `begin_checkout` on checkout session creation |
-| Approval event wiring | **In development** | VOY-1962 — CTO wiring approval events |
-| Signup event wiring | **In development** | VOY-1961 — CTO exporting from service index |
-| Monitoring/health check | **In development** | VOY-1964 — CTO creating monitoring script |
-| .env.example configuration | **In development** | VOY-1963 — CTO adding env vars to example config |
+| Service export from index.ts | **Committed** | `server/src/services/index.ts` line 196 — `getGa4AnalyticsService`, `buildApprovalEvent`, `buildApprovalRejectedEvent` exported |
+| Checkout event tracking | **Committed** | `server/src/services/billing.ts` — `trackPricingEvent` helper available for route handlers |
+| .env.example configuration | **Committed** | Four GA4 env vars documented (GA4_MEASUREMENT_ID, GA4_API_SECRET, GA4_ENABLED, GA4_DEBUG) |
+| Approval event wiring | **In development** | VOY-1967 — CTO wiring approval events |
+| Signup event wiring | **In development** | CTO to wire signup events (tracked under VOY-1941) |
+| Monitoring/health check | **In development** | VOY-1969 — CTO creating monitoring script |
 
 ## What It Replaces (PostHog Comparison)
 
@@ -94,7 +96,7 @@ When `GA4_DEBUG=true`, events are sent to `https://www.google-analytics.com/debu
 ## Related Issues
 
 - **VOY-1941**: GA Fallback Planning (PostHog Contingency) — parent issue
-- **VOY-1961**: Export ga4-analytics from server/src/services/index.ts
-- **VOY-1962**: Wire approval events in server/src/routes/approvals.ts
-- **VOY-1963**: Add configuration variables to .env.example
-- **VOY-1964**: Create monitoring/health-check script
+- **VOY-1966**: Export ga4-analytics from server/src/services/index.ts — **Done** (committed in `80086c5937`)
+- **VOY-1967**: Wire approval events in server/src/routes/approvals.ts — pending
+- **VOY-1968**: Add configuration variables to .env.example — **Done** (four GA4 vars present)
+- **VOY-1969**: Create monitoring/health-check script — pending
