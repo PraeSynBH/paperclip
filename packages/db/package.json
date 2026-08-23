@@ -23,7 +23,7 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       },
-      "/*": {
+      "./*": {
         "types": "./dist/*.d.ts",
         "import": "./dist/*.js"
       }
@@ -34,9 +34,6 @@
   "files": [
     "dist",
     "!dist/**/*.sql"
-  ],
-  "bundleDependencies": [
-    "embedded-postgres"
   ],
   "scripts": {
     "check:migrations": "tsx src/check-migration-numbering.ts && tsx src/check-migration-safety.ts",
