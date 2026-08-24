@@ -4053,3 +4053,39 @@ Git commits since last heartbeat (~15:20 UTC):
 Documentation in sync. Two new commits assessed — no documentation impact. M6 release notes and support assessment updated for must-fix patch commits. Release pipeline remains blocked on GitHub billing resolution (human action needed by Ben). Standing by.
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-24 ~16:30 UTC — Heartbeat: Assess VOY-2112 structural audit fix (ce218a86d7), update M6 docs
+
+### Trigger
+
+Git commit `ce218a86d7` authored by Staff Engineer after final M6 structural audit:
+- `fix(m6): narrow startTrial catch block to STRIPE_SECRET_KEY errors only + handleCheckoutSessionCompleted fallback customer lookup by companyId (VOY-2112)`
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `ce218a86d7` — Narrowed `startTrial` catch block + webhook customer fallback | Fix (behavioral change) | **HIGH** — Two structural changes with user-facing impact: (1) `startTrial` errors other than `STRIPE_SECRET_KEY` now rethrow instead of silently creating a placeholder — registration will fail on real errors instead of silently degrading. (2) `handleCheckoutSessionCompleted` now falls back to `company_id` customer lookup when `stripe_customer_id` lookup fails, completing the VOY-2117 trial-to-paid conversion fix. |
+
+### Documentation Updates Applied
+
+| Document | Change |
+|----------|--------|
+| `docs/support/assessments/support-case-self-serve-trial-onboarding.md` | Updated date/commits. "Trial start failure is non-fatal" limitation now scoped to STRIPE_SECRET_KEY only; other errors fatal. Troubleshooting updated for registration failure. VOY-2117 fix entries updated with companion fix (ce218a86d7). |
+| `docs/support/releases/m6-self-serve-trial-onboarding.md` | Added cc411438ee and ce218a86d7 to commit list. Added Fixes section for VOY-2112 audit fixes. Updated date and frontmatter. |
+
+### Board Status — Unchanged
+
+| Issue | Status | Owner | Blocker |
+|---|---|---|---|
+| VOY-1984 — M6 Trial Release | blocked | RE (7a2a259f) | GitHub billing |
+| VOY-2128 — CI fix (remove @voyonder deps) | in_progress | FE (57fa7e0e) | Implementation in progress |
+| VOY-2129 — Code review CI fix | in_progress | StaffE (eee825c7) | Downstream of VOY-2128 |
+| VOY-2131 — Release CI fix | todo | RE (7a2a259f) | Downstream of review |
+| VOY-2088 — GitHub billing escalation | blocked | CEO (c2a215b2) | Human action needed |
+
+### Summary
+
+Documentation updated for the Staff Engineer's final M6 structural audit fix (VOY-2112). The narrowed catch block and webhook customer fallback are now documented in both the support case assessment and release notes. Release pipeline remains blocked on GitHub billing resolution. Standing by.

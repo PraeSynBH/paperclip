@@ -1,8 +1,8 @@
 ---
 title: M6 — Self-Serve Trial Onboarding
 |version: m6-self-serve-trial
-|date: 2026-08-23 (updated 2026-08-23 ~23:30 UTC)
-|commits: b9c4421d68, bfa59dca75, 8955560a1c, 91a2aded05, 3f21a3d6b2
+|date: 2026-08-24 (updated for VOY-2112 structural audit fixes + PostHog instrumentation)
+|commits: b9c4421d68, bfa59dca75, 8955560a1c, 91a2aded05, 3f21a3d6b2, d37fb3db22, 5dd66e815f, 10fb10a2e8, b5bc7e4d45, 3885b6b5f0, cc411438ee, ce218a86d7
 |status: PR #78 — OPEN, MERGEABLE (base: master)
 ---
 
@@ -19,8 +19,9 @@ title: M6 — Self-Serve Trial Onboarding
 - `5dd66e815f` — fix(m6): register trial expiry partial index + guard publishLiveEvent in expireTrials (VOY-2112, VOY-2113)
 - `10fb10a2e8` — fix(m6): correct partial index columns — index trial_end only, status is in WHERE clause (VOY-2112 followup)
 - `b5bc7e4d45` — fix(m6): remove CONCURRENTLY from trial expiry index migration — cannot run inside a transaction (VOY-2112 followup)
-- `3885b6b5f0` — fix(billing): change ON CONFLICT target from stripe_subscription_id to company_id for trial-to-paid conversion (VOY-2117)
-**Date:** 2026-08-24 (updated for must-fix patches + VOY-2117)
+- `cc411438ee` — feat(telemetry): add PostHog instrumentation service with signup/onboarding/approval/document events (VOY-2084)
+- `ce218a86d7` — fix(m6): narrow startTrial catch block to STRIPE_SECRET_KEY errors only + handleCheckoutSessionCompleted fallback customer lookup by companyId (VOY-2112)
+**Date:** 2026-08-24 (updated for VOY-2112 structural audit fixes + PostHog instrumentation)
 **Status:** PR #78 open (base: master) — mergeable, no conflicts
 **Related:** M6 Milestone — Self-Serve Trial Onboarding
 
@@ -102,3 +103,6 @@ To disable self-serve trial onboarding:
 - **VOY-2111: Concurrent registration race condition** (commit `d37fb3db22`) — Simultaneous sign-up requests could create duplicate companies for the same user. Fixed by adding `pg_advisory_xact_lock` to serialize concurrent registration attempts.
 - **VOY-2112 / VOY-2113: Trial expiry index + reaper resilience** (commits `5dd66e815f`, `10fb10a2e8`, `b5bc7e4d45`) — Added a partial index on `trial_end` for efficient reaper queries. Each `publishLiveEvent` call in the reaper loop is individually try/caught so a single failure doesn't abort the batch. Index creation corrected to run inside the migration transaction (removed `CONCURRENTLY`).
 - **VOY-2117: Trial-to-paid conversion crash** (commit `3885b6b5f0`) — Subscribing via Stripe Checkout while on a trial no longer crashes with a unique constraint violation. The upsert conflict target was changed from `stripe_subscription_id` to `company_id` because the trial row has `stripe_subscription_id = NULL`, and SQL NULL comparison semantics prevented the conflict match. Both `handleCheckoutSessionCompleted` and `handleSubscriptionUpdated` now correctly match the trial row and update it with Stripe subscription details.
+- **VOY-2112: startTrial catch block narrowed + webhook customer fallback** (commit `ce218a86d7`) — Two structural improvements identified in the Staff Engineer final audit:
+  - **Narrowed catch block**: `startTrial` now only catches `STRIPE_SECRET_KEY` errors (Stripe not configured) to create a local placeholder customer. Real errors (network, DB, Stripe API failures) are rethrown instead of silently swallowed, making failures visible during signup.
+  - **Webhook customer fallback**: `handleCheckoutSessionCompleted` now falls back to `company_id` lookup when the `stripe_customer_id` lookup fails. This handles the case where the trial placeholder customer has a synthetic Stripe ID like `trial-local-{companyId}`. The placeholder customer's `stripe_customer_id` is updated to the real Stripe ID for future lookups.

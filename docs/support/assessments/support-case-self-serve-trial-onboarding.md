@@ -2,9 +2,9 @@
 
 **Feature**: Self-serve trial sign-up and onboarding flow — new users can register, get a company created automatically, and start a 14-day free trial without human intervention
 **Assessed by**: Support Engineer
-**Date**: 2026-08-24 (updated for must-fix patches + VOY-2117)
+**Date**: 2026-08-24 (updated for VOY-2112 structural audit fixes — narrowed catch block + webhook customer fallback)
 **Related**: M6 — Self-Serve Trial Onboarding
-**Commits** (current branch hashes): `b9c4421d68`, `bfa59dca75`, `8955560a1c`, `91a2aded05`, `3f21a3d6b2`, `d37fb3db22`, `5dd66e815f`, `10fb10a2e8`, `b5bc7e4d45`, `3885b6b5f0`
+**Commits** (current branch hashes): `b9c4421d68`, `bfa59dca75`, `8955560a1c`, `91a2aded05`, `3f21a3d6b2`, `d37fb3db22`, `5dd66e815f`, `10fb10a2e8`, `b5bc7e4d45`, `3885b6b5f0`, `cc411438ee`, `ce218a86d7`
 **Branch**: `feat/m6-self-serve-trial-onboarding`
 **PR**: #78 — OPEN, mergeable (base: master)
 
@@ -146,11 +146,11 @@ A new `Trial` subscription tier is seeded into the database:
 | Limitation | Details | Workaround |
 |-----------|---------|------------|
 | **Stripe not required for trial** | The trial system works without Stripe configured — it creates a local placeholder customer. However, upgrading to a paid plan requires Stripe to be configured | Configure `STRIPE_SECRET_KEY` and related env vars before going live |
-| **Trial start failure is non-fatal** | If `startTrial()` fails during registration (e.g., DB error), the company is still created and the user is logged in — they just won't be on a trial | Check server logs for `"Failed to start trial (non-fatal)"` message. Support can manually start a trial via the API |
+| **Trial start failure is non-fatal (STRIPE_SECRET_KEY only)** | If `startTrial()` fails during registration due to Stripe not being configured (`STRIPE_SECRET_KEY` error), the company is still created and the user is logged in — they just won't be on a trial. **Other errors** (network, DB, Stripe API) are now **fatal** — they throw and the registration attempt fails. | For non-fatal errors (Stripe not configured): check server logs for `"Failed to start trial (non-fatal)"` message. Support can manually start a trial via the API. For fatal errors: check the server logs for the thrown exception and escalate to Engineering. |
 | **No email notifications** | The system does not send email reminders when a trial is about to expire or has expired | Users discover expiration when they see the banner or try to use a paid feature |
 | **Single-trial enforcement** | There is no mechanism to prevent the same email from starting multiple trials across different sessions | The idempotency check (user company membership) prevents duplicates for the same user, but a different email could create a second trial |
 | **Trial-to-paid conversion** | There is no automated conversion flow. Users must manually visit /pricing and subscribe via Stripe Checkout | Future feature — automated conversion on trial end |
-| **Trial-to-paid conversion crash** (VOY-2117, fixed in `3885b6b5f0`) | Before the fix, subscribing via Stripe Checkout while on a trial caused a database `unique constraint` error. The trial row has `stripe_subscription_id = NULL`; the upsert targeted `stripe_subscription_id`, and SQL NULL comparison semantics caused it to miss the trial row, attempting an INSERT for a second subscription row for the same company | Fixed by changing the upsert conflict target to `company_id`. Both webhook handlers now correctly match the trial row and update it with Stripe subscription details. If a user reports this error after the fix was deployed, escalate to CTO — it indicates a regression |
+| **Trial-to-paid conversion crash** (VOY-2117, fixed in `3885b6b5f0` + `ce218a86d7`) | Before the fix, subscribing via Stripe Checkout while on a trial caused a database `unique constraint` error. The trial row has `stripe_subscription_id = NULL`; the upsert targeted `stripe_subscription_id`, and SQL NULL comparison semantics caused it to miss the trial row, attempting an INSERT for a second subscription row for the same company. A **companion fix** (`ce218a86d7`) added a fallback customer lookup by `company_id` when the `stripe_customer_id` lookup fails — this handles the case where the trial placeholder customer has a synthetic Stripe ID like `trial-local-{companyId}`. | Fixed. Both webhook handlers now correctly match the trial row via `company_id` upsert. If a user reports this error after the fix was deployed, escalate to CTO — it indicates a regression. |
 | **TrialDays max 90** | The `trialDays` field is limited to 90 days by the Zod schema | For longer trials, admins can directly set up a subscription |
 | **Reaper delay** | The trial expiry reaper runs every 30 minutes. Expired trials may have up to 30 minutes of grace access | This is intentional — prevents hard cutoffs. The `past_due` status blocks paid features but doesn't delete data |
 
@@ -158,23 +158,27 @@ A new `Trial` subscription tier is seeded into the database:
 
 ### Symptom: User registers but doesn't get a trial
 
-1. Check server logs for `"Failed to start trial (non-fatal)"` — this indicates the trial creation failed but company was still created
-2. Verify the `Trial` tier exists: `SELECT * FROM subscription_tiers WHERE name = 'Trial';`
-3. Manually start a trial: `POST /api/companies/:companyId/billing/start-trial`
-4. Check if the trial was already started but the UI wasn't updated (refresh the page)
+1. Check server logs for `"Failed to start trial (non-fatal)"` — this indicates `STRIPE_SECRET_KEY` was not set and the trial was skipped (company still created). This is the expected behavior when Stripe is not configured.
+2. Check server logs for a thrown error during `startTrial` — real errors (network, DB, Stripe API) are now **rethrown** and will cause registration to fail entirely, not silently degrade.
+3. Verify the `Trial` tier exists: `SELECT * FROM subscription_tiers WHERE name = 'Trial';`
+4. Manually start a trial: `POST /api/companies/:companyId/billing/start-trial`
+5. Check if the trial was already started but the UI wasn't updated (refresh the page)
 
 ### Symptom: Trial-to-paid conversion fails with unique constraint error (VOY-2117)
 
-**Note:** This is fixed in commit `3885b6b5f0`. If a user reports this error after the fix was deployed, it indicates a regression.
+**Note:** This is fixed in commits `3885b6b5f0` (upsert conflict target fix) and `ce218a86d7` (fallback customer lookup by companyId). If a user reports this error after the fix was deployed, it indicates a regression.
 
 Before the fix, subscribing via Stripe Checkout while on a trial would crash with a database unique constraint error. The root cause: the trial row has `stripe_subscription_id = NULL`, and the upsert used `ON CONFLICT (stripe_subscription_id)`. SQL NULL comparison semantics mean `NULL = 'sub_abc'` evaluates to NULL (not TRUE), so the conflict didn't match the trial row, and the INSERT attempted to create a second subscription for the same company.
 
+A **companion fix** (`ce218a86d7`) addressed an additional wrinkle: the webhook looked up the Stripe customer by `stripe_customer_id`, but the trial placeholder customer has a synthetic ID like `trial-local-{companyId}`. The webhook now falls back to `company_id` lookup when the Stripe ID lookup fails, and updates the placeholder customer's `stripe_customer_id` to the real Stripe ID for future lookups.
+
 **If a user reports this error:**
 
-1. Verify the fix commit `3885b6b5f0` is deployed on the server
+1. Verify the fix commits `3885b6b5f0` and `ce218a86d7` are deployed on the server
 2. Check the server logs for PostgreSQL unique constraint violations on `company_subscriptions.company_id`
-3. If the fix is deployed and the error persists, escalate to CTO — it indicates a regression
-4. Temporarily resolve by updating the existing trial row directly:
+3. Check the server logs for `"Stripe customer not found"` — this indicates the fallback `company_id` lookup also failed, suggesting a deeper data integrity issue
+4. If the fixes are deployed and the error persists, escalate to CTO — it indicates a regression
+5. Temporarily resolve by updating the existing trial row directly:
    ```sql
    UPDATE company_subscriptions
    SET stripe_subscription_id = 'sub_<id>',
