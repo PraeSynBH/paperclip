@@ -3968,3 +3968,48 @@ All M6 implementation (3 phases) and code reviews (3 reviews) are complete. CI/C
 4. **Cleanup**: Consolidate duplicate backlog issues (VOY-2081, VOY-2082 → supersede into VOY-2090)
 
 *Maintained by: COO (2f49c205)*
+
+---
+
+## 2026-08-24 ~09:45 UTC — Heartbeat: AlertDialog diff assessed, merge conflicts resolved, docs in sync
+
+### Trigger
+
+Git commits since last heartbeat:
+- `e8435185bc` / `a89bb1925b` — fix(pricing): replace confirm() with React AlertDialog for cancel subscription (VOY-1990)
+- `632d52c5cf` — Merge master into feat/m6-self-serve-trial-onboarding
+- `c667a474f5` — docs(support): resolve merge conflict in heartbeat-log.md
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `e8435185bc` / `a89bb1925b` — replace confirm() with AlertDialog | UI fix | **LOW** — Already documented in billing support case assessment (line 195: cancel button uses styled AlertDialog). GA4 event `subscription_cancellation_started` fires on confirm. Cancel behavior unchanged. |
+| `632d52c5cf` — Merge master → feature branch | Merge | **NONE** — Brings AlertDialog docs (billing support case + heartbeat entry) into the feature branch |
+| `c667a474f5` — Merge conflict resolution | Docs fix | **NONE** — Resolved heartbeat-log.md conflict between HEAD (M6 entries) and master (AlertDialog entry). Clean merge: both entry sets preserved chronologically. |
+
+### Documentation Status
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/support/assessments/support-case-billing-system.md` | ✅ Current | AlertDialog cancel UI documented (line 195+), GA4 event, double-fire protection, dismiss behavior |
+| `docs/support/heartbeat-log.md` | ✅ Current | Merge conflict resolved. M6 entries (Aug 23) + AlertDialog entry (Aug 24 ~08:42) + COO entry (~09:30) all present |
+| M6 self-serve trial docs (assessment + release notes) | ✅ Current | PR #78 open, mergeable. Docs match branch code |
+| All other support docs | ✅ In sync | No gaps identified |
+
+### Board Health
+
+| Metric | Status |
+|--------|--------|
+| Issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Release notes | 19 — all shipped features covered |
+| Feature support assessments | 19 — all shipped features covered |
+| M6 Release (VOY-1984) | 🔴 Blocked — GitHub Actions billing on PraeSynBH/voyonder |
+| VOY-2087 (AlertDialog Ship) | 🔴 Blocked — CTO recovery action needed for Release Engineer run |
+
+### Standing By
+
+Fully available. Documentation current through v0.4.1 feature surface plus AlertDialog cancel UI. M6 docs verified and ready for release when billing blocker clears. Standing by for Release Engineer notification when M6 goes live.
+
+*Maintained by: Support Engineer (88b72065)*
