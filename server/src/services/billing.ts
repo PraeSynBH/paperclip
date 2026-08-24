@@ -474,11 +474,32 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     // stripe_subscription_id = NULL, and SQL NULL comparison semantics would cause
     // ON CONFLICT (stripe_subscription_id) to miss the match.
     await db.transaction(async (tx) => {
-      const cust = await tx
+      // First, try to find the customer by Stripe customer ID (normal path)
+      let cust = await tx
         .select()
         .from(stripeCustomersTable)
         .where(eq(stripeCustomersTable.stripeCustomerId, stripeCustomerId as string))
         .then((r) => r[0] ?? null);
+
+      // If not found, fall back to company_id lookup — handles the case where
+      // the trial placeholder customer (created when Stripe was not configured)
+      // has a synthetic stripe_customer_id like 'trial-local-{companyId}'.
+      if (!cust) {
+        cust = await tx
+          .select()
+          .from(stripeCustomersTable)
+          .where(eq(stripeCustomersTable.companyId, companyId))
+          .then((r) => r[0] ?? null);
+
+        // If we found the trial placeholder, update its stripe_customer_id
+        // to the real Stripe customer ID so future lookups work directly.
+        if (cust) {
+          await tx
+            .update(stripeCustomersTable)
+            .set({ stripeCustomerId: stripeCustomerId as string })
+            .where(eq(stripeCustomersTable.id, cust.id));
+        }
+      }
 
       if (!cust) {
         logger.warn(
@@ -1391,25 +1412,31 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         const cust = await getOrCreateStripeCustomer(companyId);
         stripeCustomerId = cust.id;
       } catch (err) {
-        // Stripe not configured — create a placeholder customer row
-        logger.warn(
-          { err, companyId },
-          "getOrCreateStripeCustomer failed — falling back to local trial-only customer row",
-        );
-        const [record] = await db.execute(sql`
-          INSERT INTO "stripe_customers"
-            ("company_id", "stripe_customer_id")
-          VALUES (${companyId}, ${`trial-local-${companyId}`})
-          ON CONFLICT ("company_id") DO NOTHING
-          RETURNING "id"
-        `);
-        stripeCustomerId = record?.id as string ?? (
-          await db
-            .select({ id: stripeCustomersTable.id })
-            .from(stripeCustomersTable)
-            .where(eq(stripeCustomersTable.companyId, companyId))
-            .then((r) => r[0]!.id)
-        );
+        // Differentiate between Stripe-not-configured errors and real failures
+        if (err instanceof Error && err.message.includes("STRIPE_SECRET_KEY")) {
+          // Stripe not configured — create a placeholder customer row
+          logger.warn(
+            { err, companyId },
+            "getOrCreateStripeCustomer failed — falling back to local trial-only customer row",
+          );
+          const [record] = await db.execute(sql`
+            INSERT INTO "stripe_customers"
+              ("company_id", "stripe_customer_id")
+            VALUES (${companyId}, ${`trial-local-${companyId}`})
+            ON CONFLICT ("company_id") DO NOTHING
+            RETURNING "id"
+          `);
+          stripeCustomerId = record?.id as string ?? (
+            await db
+              .select({ id: stripeCustomersTable.id })
+              .from(stripeCustomersTable)
+              .where(eq(stripeCustomersTable.companyId, companyId))
+              .then((r) => r[0]!.id)
+          );
+        } else {
+          // Real error — rethrow so it's not silently swallowed
+          throw err;
+        }
       }
 
       const now = new Date();
