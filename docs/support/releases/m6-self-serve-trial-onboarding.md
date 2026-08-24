@@ -15,8 +15,12 @@ title: M6 — Self-Serve Trial Onboarding
 - `8955560a1c` — fix(m6): resolve merge conflict in complete-registration route
 - `91a2aded05` — feat(m6): add trial status banner component
 - `3f21a3d6b2` — feat(m6): add trialInfo and startTrial to billing API client + query keys
+- `d37fb3db22` — fix(m6): add pg_advisory_xact_lock to serialize concurrent registration (VOY-2111)
+- `5dd66e815f` — fix(m6): register trial expiry partial index + guard publishLiveEvent in expireTrials (VOY-2112, VOY-2113)
+- `10fb10a2e8` — fix(m6): correct partial index columns — index trial_end only, status is in WHERE clause (VOY-2112 followup)
+- `b5bc7e4d45` — fix(m6): remove CONCURRENTLY from trial expiry index migration — cannot run inside a transaction (VOY-2112 followup)
 - `3885b6b5f0` — fix(billing): change ON CONFLICT target from stripe_subscription_id to company_id for trial-to-paid conversion (VOY-2117)
-**Date:** 2026-08-24 (updated for VOY-2117 fix)
+**Date:** 2026-08-24 (updated for must-fix patches + VOY-2117)
 **Status:** PR #78 open (base: master) — mergeable, no conflicts
 **Related:** M6 Milestone — Self-Serve Trial Onboarding
 
@@ -95,4 +99,6 @@ To disable self-serve trial onboarding:
 
 ## Fixes
 
+- **VOY-2111: Concurrent registration race condition** (commit `d37fb3db22`) — Simultaneous sign-up requests could create duplicate companies for the same user. Fixed by adding `pg_advisory_xact_lock` to serialize concurrent registration attempts.
+- **VOY-2112 / VOY-2113: Trial expiry index + reaper resilience** (commits `5dd66e815f`, `10fb10a2e8`, `b5bc7e4d45`) — Added a partial index on `trial_end` for efficient reaper queries. Each `publishLiveEvent` call in the reaper loop is individually try/caught so a single failure doesn't abort the batch. Index creation corrected to run inside the migration transaction (removed `CONCURRENTLY`).
 - **VOY-2117: Trial-to-paid conversion crash** (commit `3885b6b5f0`) — Subscribing via Stripe Checkout while on a trial no longer crashes with a unique constraint violation. The upsert conflict target was changed from `stripe_subscription_id` to `company_id` because the trial row has `stripe_subscription_id = NULL`, and SQL NULL comparison semantics prevented the conflict match. Both `handleCheckoutSessionCompleted` and `handleSubscriptionUpdated` now correctly match the trial row and update it with Stripe subscription details.

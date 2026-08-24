@@ -1390,8 +1390,12 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       try {
         const cust = await getOrCreateStripeCustomer(companyId);
         stripeCustomerId = cust.id;
-      } catch {
+      } catch (err) {
         // Stripe not configured — create a placeholder customer row
+        logger.warn(
+          { err, companyId },
+          "getOrCreateStripeCustomer failed — falling back to local trial-only customer row",
+        );
         const [record] = await db.execute(sql`
           INSERT INTO "stripe_customers"
             ("company_id", "stripe_customer_id")

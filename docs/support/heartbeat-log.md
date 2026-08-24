@@ -4013,3 +4013,43 @@ Git commits since last heartbeat:
 Fully available. Documentation current through v0.4.1 feature surface plus AlertDialog cancel UI. M6 docs verified and ready for release when billing blocker clears. Standing by for Release Engineer notification when M6 goes live.
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-24 ~15:42 UTC — Heartbeat: Two new commits assessed, release notes updated, docs in sync
+
+### Trigger
+
+Git commits since last heartbeat (~15:20 UTC):
+- `b5bc7e4d45` — fix(m6): remove CONCURRENTLY from trial expiry index migration (VOY-2112 followup)
+- `cc411438ee` — feat(telemetry): add PostHog instrumentation service (VOY-2084)
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `b5bc7e4d45` — remove CONCURRENTLY from index migration | DB fix | **NONE** — Pure database migration fix. `CREATE INDEX CONCURRENTLY` cannot run inside a transaction; removed `CONCURRENTLY`. No user-facing behavior change. |
+| `cc411438ee` — PostHog instrumentation service | Feature (analytics) | **NONE** — Already assessed at ~15:30 UTC (`c22988f546`). Backend analytics only, no-op when not configured. No user-facing behavior change. |
+
+### Documentation Updates Applied
+
+| Document | Change |
+|----------|--------|
+| `docs/support/releases/m6-self-serve-trial-onboarding.md` | Added must-fix patch commits (VOY-2111, VOY-2112/2113) to commit list, dates, and Fixes section |
+| `docs/support/assessments/support-case-self-serve-trial-onboarding.md` | Updated commit list to include all 10 current branch hashes |
+| `doc/support/2026-08-24-status-1540.md` | New status document — current assessment |
+
+### Board Status — Unchanged
+
+| Issue | Status | Owner | Blocker |
+|---|---|---|---|
+| VOY-1984 — M6 Trial Release | blocked | RE (7a2a259f) | GitHub billing |
+| VOY-1939 — Merge M6 to master | in_progress | RE (7a2a259f) | Downstream of billing fix |
+| VOY-2088 — GitHub billing escalation | blocked | CEO (c2a215b2) | Human action needed |
+| VOY-2090 — CEO escalation | blocked | CEO (c2a215b2) | Same root cause |
+
+### Summary
+
+Documentation in sync. Two new commits assessed — no documentation impact. M6 release notes and support assessment updated for must-fix patch commits. Release pipeline remains blocked on GitHub billing resolution (human action needed by Ben). Standing by.
+
+*Maintained by: Support Engineer (88b72065)*

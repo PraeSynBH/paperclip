@@ -2,9 +2,9 @@
 
 **Feature**: Self-serve trial sign-up and onboarding flow — new users can register, get a company created automatically, and start a 14-day free trial without human intervention
 **Assessed by**: Support Engineer
-**Date**: 2026-08-24 (updated for VOY-2117 fix)
+**Date**: 2026-08-24 (updated for must-fix patches + VOY-2117)
 **Related**: M6 — Self-Serve Trial Onboarding
-**Commits** (current branch hashes): `b9c4421d68`, `bfa59dca75`, `8955560a1c`, `91a2aded05`, `3f21a3d6b2`, `3885b6b5f0`
+**Commits** (current branch hashes): `b9c4421d68`, `bfa59dca75`, `8955560a1c`, `91a2aded05`, `3f21a3d6b2`, `d37fb3db22`, `5dd66e815f`, `10fb10a2e8`, `b5bc7e4d45`, `3885b6b5f0`
 **Branch**: `feat/m6-self-serve-trial-onboarding`
 **PR**: #78 — OPEN, mergeable (base: master)
 
