@@ -4775,3 +4775,29 @@ The Pricing.tsx still uses the `billingApi.experimentVariant()` API endpoint —
 **Action:** Standing by. Triggers remain active.
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-24 ~01:15 UTC — Diff assessment: trial router refactor + reaper rewrite
+
+**Assessed commits:** `eaba9ea1c8`, `5353666316`
+
+**What changed:**
+- `eaba9ea1c8` — feat(trial): add self-serve trial endpoints (start, status, convert) — dedicated trial router + improved reaper
+- `5353666316` — test(trial): add trial-reaper sweep tests (C1 expiry sweep)
+
+**Documentation impact:** CRITICAL — existing M6 trial docs described the OLD
+implementation. Updated both:
+1. `docs/support/releases/m6-self-serve-trial-onboarding.md`
+2. `docs/support/assessments/support-case-self-serve-trial-onboarding.md`
+
+**Discrepancies found and fixed:**
+| Area | Old (documented) | New (actual code) |
+|------|-----------------|-------------------|
+| API paths | `/billing/trial-info`, `/billing/start-trial` | `/trial/start`, `/trial/status`, `/trial/convert` |
+| Response shape | `{ trialing, expired, daysRemaining, trialEnd }` | `{ isTrialing, trialEnd, daysRemaining, tierId, tierName, status }` |
+| Reaper interval | 30 minutes | 1 hour (configurable) |
+| Reaper behavior | trialing → `past_due` (1 step) | trialing → `grace_period` → `expired` (2 steps) |
+| Auth required | Board user | Any authenticated user with company access |
+| startTrial params | `trialDays` (configurable) | `billingPeriod` (duration fixed 14 days) |
+| Log messages | `"Trial reaper expired subscriptions"` | `"Trial reaper: trial expired — entered grace period"` |
+
+**Status:** All docs current. Committed as a566e9295e.

@@ -44,6 +44,6 @@ This directory contains support case assessments for Paperclip features. Each do
 
 ---
 
-*Last updated: 2026-08-24 ~01:00 UTC — Reassessment complete. All docs current. Standing by.*
+*Last updated: 2026-08-24 ~01:15 UTC — Diff assessment: trial router refactor + reaper rewrite. Docs updated. All docs current.*
 
 *Maintained by: Support Engineer (88b72065)*
