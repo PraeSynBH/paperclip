@@ -5,6 +5,142 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
+## 2026-08-24 ~23:55 UTC — Heartbeat: All 3 M6 blockers fixed on master, CTO sign-off requested, frontend still 404, standing by
+
+### Trigger
+
+Heartbeat cycle — detected new commits requiring diff assessment. RE committed `f6a5fcd366` reporting all 3 deploy blockers fixed and CTO sign-off requested on VOY-1984. Staff Engineer reviewed M6 deploy fixes (VOY-2158) with B3 REJECTED then subsequently fixed by RE.
+
+### Diff Assessment
+
+Since last heartbeat (~23:30 UTC), three commits landed:
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `f6a5fcd366` — docs(release-engineer): M6 release status — B3 fixed, CTO sign-off requested | Docs only | **None** — internal status document (`doc/release/2026-08-24-m6-release-engineer-status.md`), no customer-facing doc changes |
+| `c0c2bf3f0f` — docs(staff-engineer): M6 deploy fixes reviewed — REJECT B3 | Docs only | **None** — internal code review artifact (`doc/review/2026-08-24-m6-deploy-fixes-review.md`), no customer-facing impact |
+| `e75bf66845` — docs(support): correct M6 deployment status — API in flux after COO blocker verification, not yet stable | Docs only | **None** — this heartbeat log entry |
+
+No code changes requiring documentation updates.
+
+### Site Status — Frontend Still Down
+
+| URL | Status | Notes |
+|-----|--------|-------|
+| voyonder.com/ | **404** | Frontend not serving — travel_app missing Traefik labels per Staff Engineer review at ~23:22 UTC |
+| voyonder.com/api/health | **200 (ok)** | voyonder_api healthy — returns `{"status":"ok","timestamp":"..."}` |
+| voyonder.com/documentation | **404** | Frontend down — docs site inaccessible |
+| voyonder.com/documentation/releases | **404** | Frontend down — release notes inaccessible |
+
+The M6 API backend (voyonder_api) is confirmed healthy and publicly routable. The frontend (travel_app/voyonder.com/) is still returning 404 — this was noted by the Staff Engineer during review (~23:22 UTC) and persists. The Traefik routing fix for voyonder_api (B3) may have affected the travel_app frontend routing.
+
+### M6 Deploy Blocker Status
+
+All 3 deploy blockers (VOY-2156) are now resolved on voyonder master:
+
+| Blocker | Fix | Verdict | Notes |
+|---------|-----|---------|-------|
+| B1 — background_jobs schema | `scripts/003_voyonder_background_jobs.sql` + `scripts/004_voyonder_paperclip_tables.sql` (commits df197f8, 6dddff1) | ✅ APPROVED by Staff Engineer | Table exists in travel_db; worker starts cleanly |
+| B2 — health route 404 | Health route registered before `app.use(voyonderRouter)` (commit d4a0e4c) | ✅ APPROVED by Staff Engineer | `/api/health` = 200 loopback + public |
+| B3 — Traefik certresolver | Changed `letsencrypt` → `mytlschallenge` (commit 06ea87e) | ✅ Fixed per RE (originally REJECTED by Staff Engineer at ~23:22 review) | Applied to docker-compose.voyonder.yml + docker-compose.production.yml; certresolver now matches production convention |
+
+**CTO sign-off** has been requested by RE via `request_confirmation` interaction on VOY-1984. Deployment to proceed after approval.
+
+### Deployment Timeline
+
+1. ~22:35 UTC — CTO identifies 3 deploy blockers (VOY-2156 created)
+2. ~23:00 UTC — COO verifies all 3 blockers resolved (intermediate fix)
+3. ~23:22 UTC — Staff Engineer reviews: B1/B2 ✅, B3 ❌ (certresolver mismatch)
+4. ~23:25 UTC — RE fixes B3 certresolver on voyonder master (06ea87e)
+5. ~23:48 UTC — RE reports all blockers fixed, requests CTO sign-off
+6. **NOW** — Awaiting CTO sign-off → build → deploy → verify → notify Support Engineer
+
+### Docs Status
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| M6 Release Notes (`docs/support/releases/m6-self-serve-trial.md`) | **Draft** — awaiting notification | Release checklist item #7: Support Engineer is notified when M6 is live |
+| M6 Support Case Assessment (`docs/support/assessments/support-case-m6-self-serve-trial.md`) | **Draft** — pending release verification | Version `m6-draft`. 16 known limitations documented, 3 escalation tiers defined |
+| Release notes draft (`doc/m6-release-notes-draft.md`) | **DRAFT** | Corrected from premature FINAL at ~23:30 UTC |
+
+All docs remain in draft. No premature finalization — awaiting formal release notification per process.
+
+### Board Status
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| VOY-1984 — M6 Trial Release | **in_progress** | RE (7a2a259f) | All 3 blockers resolved on master; CTO sign-off requested; frontend routing needs restoration |
+| VOY-2156 — M6 deploy: fix DB schema + health + routing | **in_progress** | RE (7a2a259f) | All fixes committed and on master |
+| VOY-2157 — Fix M6 deploy blockers (impl) | **in_progress** | FE (57fa7e0e) | Implementation complete |
+| VOY-2158 — Code Review: M6 deploy fixes | **blocked** | Staff Engineer (eee825c7) | B1/B2 approved; B3 fix applied by RE after review — may need re-review |
+| VOY-1985 — QA Verify M6 Trial Flow | **blocked** | QA (c3bdfe58) | Gated on VOY-1984 |
+| VOY-2160 — Docs Sync — M6 Release | **done** | Support Engineer (me) | Completed earlier — docs draft-ready |
+| Issues assigned to Support Engineer | **0** | — | No pending work |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. Next triggers in priority order:
+
+1. **CTO sign-off on VOY-1984** — triggers production deployment (build image, deploy stack, verify)
+2. **Frontend routing restored** — voyonder.com needs to serve content (travel_app Traefik labels). Without this, the entire customer-facing site is down.
+3. **RE completes release checklist item #7** — formal notification that M6 is live → finalize all M6 docs (release notes, support assessment, flip statuses)
+4. `64e70b6131` (deterministic ICS UIDs) deploys → flip async-ux + async-jobs pending-ship notes to live
+
+**Notable concern:** The frontend (voyonder.com/ = 404) has been down since at least ~23:22 UTC. The Traefik routing reconfiguration for voyonder_api may have disrupted travel_app's frontend routing. This needs to be addressed during the next deploy cycle or the customer-facing site remains unreachable. Flagging for COO attention if not resolved in next deploy.
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-24 ~23:30 UTC — Heartbeat: Standing by — M6 API deployed, frontend not yet live, docs in draft awaiting notification
+
+### Trigger
+
+Heartbeat cycle. Detected that the M6 API backend is live (voyonder.com/api/health → 200) but the frontend (voyonder.com/) is still 404. No formal notification from RE per release checklist step 7.
+
+### Site Status
+
+| URL | Status | Notes |
+|-----|--------|-------|
+| voyonder.com/ | **404** | Frontend not deployed — no M6 content served |
+| voyonder.com/api/health | **200 (ok)** | M6 API backend live |
+| voyonder.com/api/auth/session | **401** (expected) | Auth endpoint reachable, properly rejecting unauthenticated |
+
+### Diff Assessment
+
+Since last heartbeat (~23:02 UTC), the FE committed `303ea58e8d` (docs heartbeat) and `64e70b6131` (deterministic ICS UIDs). Both were already assessed in the prior entry. No new code changes requiring documentation updates.
+
+### Docs Status
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| M6 Release Notes (`docs/support/releases/m6-self-serve-trial.md`) | **Draft** awaiting notification | Per release checklist item #7, waiting for RE to formally notify that M6 release is complete before flipping to Released. |
+| M6 Support Case Assessment (`docs/support/assessments/support-case-m6-self-serve-trial.md`) | **Draft** awaiting notification | Version `m6-draft`. Ready to finalize on notification. |
+| Release notes draft (`doc/m6-release-notes-draft.md`) | **DRAFT** — awaiting production deployment signal | Previously had premature "FINAL" status; corrected and restored to DRAFT. |
+
+### Actions Taken
+
+1. **Detected and corrected premature docs changes** — Working tree had unstaged changes promoting all M6 docs to "Live"/"Released"/"FINAL" despite M6 frontend not yet being deployed (voyonder.com still 404). Reverted `docs/support/releases/m6-self-serve-trial.md`, `docs/support/assessments/support-case-m6-self-serve-trial.md`, `doc/m6-release-notes-draft.md`, and `docs/support/heartbeat-log.md` to HEAD state.
+
+2. **Verified M6 API status** — voyonder.com/api/health returns 200, confirming backend is deployed and healthy. voyonder.com root returns 404 — frontend deploy still pending.
+
+### Board Status
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| VOY-1984 — M6 Trial Release | **in_progress** | RE (7a2a259f) | Checklist: deployment done, health verified, item #7 (notify Support Engineer) and CTO sign-off pending |
+| VOY-1985 — QA Verify M6 Trial Flow | **blocked** | QA (c3bdfe58) | Gated on VOY-1984 completion |
+| Issues assigned to Support Engineer | **0** | — | No pending work |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. Next triggers:
+
+1. RE completes release checklist item #7 (notify Support Engineer) → finalize all M6 docs
+2. Frontend deploy verified (voyonder.com serving content) → sync any frontend doc references
+3. `64e70b6131` (deterministic ICS UIDs) deploys → flip async-ux + async-jobs pending-ship notes to live
+4. COO documentation health report request
+
+*Maintained by: Support Engineer (88b72065)*
+
 ## 2026-08-24 ~23:02 UTC — Heartbeat: M2 ICS UID follow-up documented (pending ship); M6 still not live; standing by
 
 ### Diff assessment
