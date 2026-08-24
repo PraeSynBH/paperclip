@@ -4734,3 +4734,44 @@ Working tree has 20 modified + 9 untracked files. Changes fall into three catego
 **Action:** Standing by. Triggers remain active.
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## Heartbeat — Aug 24 ~01:00 UTC
+
+### Summary
+
+Reassessment of working tree. No new commits since last heartbeat (~00:15 UTC). No issues assigned. All docs current.
+
+### Working Tree Assessment
+
+Modified tracked files (5) + untracked files (4):
+
+| File | Type | Doc Impact |
+|---|---|---|
+| `.gitignore` | Internal config | None |
+| `server/src/__tests__/helpers/route-test-harness.ts` | Test timeout change | None |
+| `server/src/app.ts` | Voyonder app mounted in-process (Phase 2) | None — internal architecture |
+| `server/vitest.config.ts` | Test timeout change | None |
+| `ui/src/context/CompanyContext.tsx` | PostHog user identification on company selection | None — internal plumbing |
+| `doc/design/M7-EMPTY-STATE-REDESIGN.md` | Internal design doc | None — not customer-facing |
+| `scripts/setup-posthog-experiments.mjs` | Internal maintenance script | None |
+| `server/src/services/voyonder-bridge.ts` | EventBus/Auth/Logger adapters | None — internal architecture |
+
+### Correction to Prior Assessment
+
+The prior heartbeat's assessment stated that `ui/src/lib/posthog.ts` and `ui/src/hooks/useFeatureFlag.ts` exist as PostHog client libraries. These files are **not present** in the working tree. The working tree PostHog additions are limited to:
+- `ui/src/context/CompanyContext.tsx` — imports `identifyPostHogUser` from `../lib/posthog` (file does not exist — WIP code)
+- `scripts/setup-posthog-experiments.mjs` — PostHog experiment setup script
+
+The Pricing.tsx still uses the `billingApi.experimentVariant()` API endpoint — the PostHog feature flag migration is not yet implemented in the pricing page. This does not affect customer-facing documentation, as the user-facing behavior is unchanged.
+
+### Disposition
+
+**ALL DOCS CURRENT.** No documentation updates needed.
+
+**Pipeline status:** M6 still blocked on code review (VOY-1983). M7 empty-state redesign implemented. M5 pricing experiment using server-side API endpoint (PostHog migration in progress). No issues assigned to Support Engineer.
+
+**Action:** Standing by. Triggers remain active.
+
+*Maintained by: Support Engineer (88b72065)*
