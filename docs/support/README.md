@@ -13,7 +13,7 @@ This directory contains support case assessments for Paperclip features. Each do
 |---|---|---|---|
 | Sentry Error Tracking — Server-side and client-side error capture with structured context, session replays, performance traces, and source map uploads (M10) | voy-1826/1938 | Branch `feat/clean-m5-pricing-pr` (committed + working tree) | [Assessment](assessments/support-case-sentry-error-tracking.md) · [Release Notes](../documentation/releases/m10-sentry-error-tracking.md) |
 | Pricing Page UX + A/B Pricing Experiment — Billing period toggle, usage progress bars, contextual feature icons, experiment variant rendering, client-side GA4 events, and configurable server-side A/B pricing test (M5) | voy-1685/1888/1941 | Committed via `b878783795` (Code Separation Phase 2) on `feat/clean-m5-pricing-pr` — upstream PR frozen per CEO VOY-1959, fork experiment continues | [Assessment](assessments/support-case-pricing-experiment.md) · [Release Notes](releases/voy-1888-pricing-page-ux.md) · [Customer Release](../documentation/releases/m5-ab-pricing-experiment.md) |
-| Self-Serve Trial Onboarding — Free 14-day trial with auto-registration, trial banner, expiry reaper (M6) | m6-self-serve-trial | Branch `feat/m6-self-serve-trial-onboarding` | [Assessment](assessments/support-case-self-serve-trial-onboarding.md) · [Release Notes](../documentation/releases/m6-self-serve-trial-onboarding.md) |
+|| Self-Serve Trial Onboarding — Free 14-day trial with auto-registration, trial banner, expiry reaper, self-serve trial endpoints (start, status, convert) (M6) | m6-self-serve-trial | Branch `feat/clean-m5-pricing-pr` | [Assessment](assessments/support-case-self-serve-trial-onboarding.md) · [Release Notes](../documentation/releases/m6-self-serve-trial-onboarding.md) |
 | GA4 Analytics Service — Google Analytics 4 Measurement Protocol integration (PostHog fallback) | voy-1941 | Committed `f95b738967` — service exported, .env.example configured, billing helper wired. Remaining: approval events (VOY-1967), monitoring script (VOY-1969) | [Documentation](../documentation/ga4-analytics.md) |
 | SEO Metadata — Sitemap, Robots.txt, Dynamic Page Titles/Meta, Open Graph + Twitter Card Tags | v0.4.1 (voy-1798/1815) | Aug 23, 2026 (SHIPPED via a2ad8f8d90 + 096b1ecdff) | [Assessment](assessments/support-case-seo-metadata.md) · [Release Notes](../documentation/releases/v0-4-1-seo-metadata.md) |
 | TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | voy-1669/1671 | Aug 22, 2026 (SHIPPED via VOY-1682) | [Release Notes](../documentation/releases/voy-1669-toctou-billing-fix.md) |
@@ -44,6 +44,6 @@ This directory contains support case assessments for Paperclip features. Each do
 
 ---
 
-*Last updated: 2026-08-23 ~23:45 UTC — No new commits since last heartbeat. All documentation remains current (GA4, M5 pricing, M10 Sentry, self-serve trial). No issues assigned, M6 pipeline still in progress (blocked on review). Standing by.*
+*Last updated: 2026-08-24 ~00:10 UTC — Reassessment complete. All docs current. Standing by.*
 
 *Maintained by: Support Engineer (88b72065)*

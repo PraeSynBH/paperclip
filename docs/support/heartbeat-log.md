@@ -4618,4 +4618,59 @@ Uncommitted changes on `feat/clean-m5-pricing-pr`:
 3. COO or Release Engineer requests support assessment or health report
 4. New commits to tracked branches → assess diff for documentation impact
 
+## 2026-08-23 ~23:55 UTC — Diff Assessment: eaba9ea1c8 (Self-Serve Trial Endpoints + Reaper Redesign)
+
+**Commit:** `eaba9ea1c8` — "feat(trial): add self-serve trial endpoints (start, status, convert)"
+**Branch:** `feat/clean-m5-pricing-pr`
+
+### Change Summary
+
+New self-serve trial endpoints mounted on main API router (not behind requireBoardUser):
+- `POST /api/companies/:companyId/trial/start` — 14-day trial, idempotent
+- `GET /api/companies/:companyId/trial/status` — trial status, days remaining, tier info
+- `POST /api/companies/:companyId/trial/convert` — Stripe checkout for trial→paid
+
+Trial reaper redesigned: two-phase sweeper (trialing→grace_period→expired), 7-day grace window, 1-hour interval (was 30-min, single-phase past_due).
+
+Billing service changes: `startTrial()`/`getTrialStatus()` on billing service, ON CONFLICT changed to company_id (P0 fix for trial→paid conversion), Stripe retry backoff tuning, GA4 `trial_started` event, live events on subscription updates.
+
+### Documentation Impact Assessment
+
+| Document | Change Required | Status |
+|----------|----------------|--------|
+| `docs/support/assessments/support-case-self-serve-trial-onboarding.md` | Updated section 2 (Self-Serve Trial API), section 3 (Reaper redesign), added GA4/billing service sections, updated troubleshooting, known limitations, verification checklist | ✅ Updated |
+| `docs/support/releases/m6-self-serve-trial-onboarding.md` | Updated endpoint table, reaper description, known issues | ✅ Updated |
+| `docs/api/billing.md` | Added Self-Serve Trial API section, updated status values (grace_period, expired), updated webhook section with trial→paid conversion and reaper reference | ✅ Updated |
+| `docs/support/README.md` | Updated feature description, branch reference, timestamp | ✅ Updated |
+| `docs/support/heartbeat-log.md` | This entry | ✅ Updated |
+
+### Disposition
+
+**DOCUMENTATION UPDATED.** All impacted documents synced to current code. No further standing-by actions — triggers remain active.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## Heartbeat — Aug 24 ~00:10 UTC — reassessment complete, standing by
+
+**Commit assessed:** `eaba9ea1c8` — feat(trial): add self-serve trial endpoints (start, status, convert)
+
+**Reassessment:** Diff re-evaluated. No new documentation gaps found since the previous assessment at ~23:45 UTC.
+
+**Documentation Health:**
+- `docs/support/assessments/support-case-self-serve-trial-onboarding.md` — Current. Covers all 3 trial endpoints, trial reaper, GA4 events, P0 fix, billing service changes.
+- `docs/support/releases/m6-self-serve-trial-onboarding.md` — Current. Covers full feature set.
+- `docs/support/README.md` — Current. Timestamp reflects latest update.
+- `docs/api/billing.md` — Current. Includes self-serve trial API section.
+
+**Notable findings:**
+- `server/src/seed/002_subscription_tiers.sql` — Adventurer/Explorer/Elite seed data. Already documented in `voy-1413-docs-deploy.md`.
+- `createPortalSessionSchema` export — Already documented in `support-case-billing-system.md`.
+- `"agent"` role added to `AGENT_ROLES` — Minor internal change, no customer-facing documentation impact.
+
+**Pipeline status:** M6 still blocked on code review (VOY-1983). No issues assigned to Support Engineer.
+
+**Action:** Standing by. Triggers remain active.
+
 *Maintained by: Support Engineer (88b72065)*
