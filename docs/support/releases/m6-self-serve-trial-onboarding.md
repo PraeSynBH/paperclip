@@ -1,22 +1,22 @@
 ---
 title: M6 — Self-Serve Trial Onboarding
-version: m6-self-serve-trial
-date: 2026-08-23
-commits: d344d832e0, 996136bc66, 722b0c4cbd, 042d68662d, b0d5b9c7ee
-status: BRANCH — feat/m6-self-serve-trial-onboarding (not yet merged to main)
+|version: m6-self-serve-trial
+|date: 2026-08-23 (updated 2026-08-23 ~23:30 UTC)
+|commits: b9c4421d68, bfa59dca75, 8955560a1c, 91a2aded05, 3f21a3d6b2
+|status: PR #78 — OPEN, MERGEABLE (base: master)
 ---
 
 # M6 — Self-Serve Trial Onboarding
 
 **Branch:** `feat/m6-self-serve-trial-onboarding`
-**Commits:**
-- `d344d832e0` — feat(m6): implement self-serve trial and onboarding flow
-- `996136bc66` — feat(m6): add trial expiry reaper — 30-minute interval sweep
-- `722b0c4cbd` — fix(m6): resolve merge conflict in complete-registration route
-- `042d68662d` — feat(m6): add trial status banner component
-- `b0d5b9c7ee` — feat(m6): add trialInfo and startTrial to billing API client + query keys
+**Commits (current branch hashes):**
+- `b9c4421d68` — feat(m6): implement self-serve trial and onboarding flow
+- `bfa59dca75` — feat(m6): add trial expiry reaper — 30-minute interval sweep
+- `8955560a1c` — fix(m6): resolve merge conflict in complete-registration route
+- `91a2aded05` — feat(m6): add trial status banner component
+- `3f21a3d6b2` — feat(m6): add trialInfo and startTrial to billing API client + query keys
 **Date:** 2026-08-23
-**Status:** Feature branch — ready for release to main
+**Status:** PR #78 open (base: master) — mergeable, no conflicts
 **Related:** M6 Milestone — Self-Serve Trial Onboarding
 
 ---

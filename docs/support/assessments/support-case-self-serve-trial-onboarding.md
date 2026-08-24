@@ -4,8 +4,9 @@
 **Assessed by**: Support Engineer
 **Date**: 2026-08-23
 **Related**: M6 — Self-Serve Trial Onboarding
-**Commits**: `d344d832e0`, `996136bc66`, `722b0c4cbd`, `042d68662d`, `b0d5b9c7ee`
+**Commits** (current branch hashes): `b9c4421d68`, `bfa59dca75`, `8955560a1c`, `91a2aded05`, `3f21a3d6b2`
 **Branch**: `feat/m6-self-serve-trial-onboarding`
+**PR**: #78 — OPEN, mergeable (base: master)
 
 ## Feature Overview (User Perspective)
 

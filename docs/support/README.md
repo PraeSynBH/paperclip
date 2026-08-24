@@ -11,7 +11,7 @@ This directory contains support case assessments for Paperclip features. Each do
 
 | Feature | Version | Shipped | Assessment |
 |---------|---------|---------|------------|
-|| Self-Serve Trial Onboarding — Free 14-day trial with auto-registration, trial banner, expiry reaper (M6) | m6-self-serve-trial | Aug 23, 2026 (IMPLEMENTED — branch feat/m6-self-serve-trial-onboarding) | [Assessment](assessments/support-case-self-serve-trial-onboarding.md) · [Release Notes](releases/m6-self-serve-trial-onboarding.md) |
+|| Self-Serve Trial Onboarding — Free 14-day trial with auto-registration, trial banner, expiry reaper (M6) | m6-self-serve-trial | Aug 23, 2026 (PR #78 open, mergeable — base: master) | [Assessment](assessments/support-case-self-serve-trial-onboarding.md) · [Release Notes](releases/m6-self-serve-trial-onboarding.md) |
 || A/B Pricing Experiment — Server-side A/B pricing test (M5) | voy-1685/1888 | Aug 23, 2026 (IMPLEMENTED — awaiting release) | [Assessment](assessments/support-case-billing-system.md) |
 | SEO Metadata — Sitemap, Robots.txt, Dynamic Page Titles/Meta, Open Graph + Twitter Card Tags | v0.4.1 (voy-1798/1815) | Aug 23, 2026 (SHIPPED via a2ad8f8d90 + 096b1ecdff) | [Assessment](assessments/support-case-seo-metadata.md) · [Release Notes](releases/v0-4-1-seo-metadata.md) |
 | TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | voy-1669/1671 | Aug 22, 2026 (SHIPPED via VOY-1682) | [Release Notes](releases/voy-1669-toctou-billing-fix.md) |
