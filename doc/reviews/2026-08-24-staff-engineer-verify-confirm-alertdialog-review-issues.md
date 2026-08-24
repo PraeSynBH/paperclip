@@ -74,25 +74,21 @@ The `typeof window !== "undefined"` was removed. The codebase is now consistent 
 
 ### Finding 4 (Minor): No type declaration for `window.gtag`
 
-**Status: STILL OPEN (low severity)**
+**Status: FIXED ✓ (this commit)**
 
-`window.gtag(...)` is called at line 307 without a type declaration. Compiles only because `skipLibCheck: true` masks the missing type. Consider adding `@types/gtag.js` or a local ambient declaration. Non-blocking.
+Added `Window.gtag` type declaration in `ui/src/vite-env.d.ts`. The type is now properly declared as optional, so runtime checks (`typeof window.gtag === "function"`) work correctly at the type level. This also removes the dependency on `skipLibCheck: true` masking the missing type.
 
 ### Finding 5 (Minor): Test leaks `globalThis.gtag` across suites
 
-**Status: STILL OPEN (low severity)**
+**Status: FIXED ✓ (this commit)**
 
-The test sets `globalThis.gtag` via `Object.defineProperty` in `beforeEach` (lines 137-140). `afterEach` (lines 149-152) calls only `vi.restoreAllMocks()` and `document.body.innerHTML = ""`. `Object.defineProperty` is NOT undone by `vi.restoreAllMocks()`. The gtag property leaks across test suites.
-
-**Fix:** Use `vi.stubGlobal("gtag", mockGtag)` in `beforeEach` and `vi.unstubGlobal()` in `afterEach`, or explicitly `delete (globalThis as any).gtag` in `afterEach`.
-
-Non-blocking as long as no other suite reads `globalThis.gtag` and misinterprets the mock value.
+Replaced `Object.defineProperty(globalThis, "gtag", ...)` with `vi.stubGlobal("gtag", mockGtag)` in `beforeEach`, and added `vi.unstubAllGlobals()` in `afterEach`. `vi.stubGlobal`/`vi.unstubAllGlobals` properly manages global property lifecycle, unlike `Object.defineProperty` which leaks across suites. The gtag mock is now fully isolated to each test.
 
 ### Finding 6 (Minor): Redundant `setCancelDialogOpen` in `handleConfirmCancel`
 
-**Status: STILL OPEN (harmless)**
+**Status: FIXED ✓ (this commit)**
 
-Line 315: `setCancelDialogOpen(false)` is redundant because Radix UI's `AlertDialog.Action` auto-closes on click. Harmless — no functional impact.
+Removed the explicit `setCancelDialogOpen(false)` call at line 315. Radix UI's `AlertDialog.Action` auto-closes the dialog on click, making the call redundant. No functional impact — removes unnecessary code.
 
 ---
 
@@ -139,13 +135,15 @@ One concern: the "dismisses cancel dialog" test (line 319) uses `await flush()` 
 | Telemetry failure safety | ✓ (try-catch) |
 | Double-submit guard | ✓ (isPending + disabled) |
 | Dialog dismissal during mutation | ✓ (guarded) |
-| gtag type declaration | ✗ (non-blocking) |
-| Test isolation | ✗ (non-blocking gtag leak) |
+| gtag type declaration | ✓ (local ambient declaration added) |
+| Test isolation | ✓ (vi.stubGlobal/vi.unstubAllGlobals) |
 
 ---
 
 ## Recommendation
 
-**APPROVED** — both must-fix and should-fix items from the previous review are properly addressed. The remaining 3 open items (gtag type declaration, test gtag leak, redundant setCancelDialogOpen) are all non-blocking — they were classified as "Minor" in the original review and remain so.
+**APPROVED** — all 6 findings from the original Staff Engineer review are now resolved:
+- Items 1-3 (gtag try-catch, dialog pending guard, window guard inconsistency): Fixed in commit `e1f3fe4147`
+- Items 4-6 (gtag type declaration, test gtag leak, redundant setCancelDialogOpen): Fixed in commit `b2224c1649` (this document)
 
-This branch is structurally sound and ready for shipping. Routing to CTO for final go/no-go.
+This branch is fully clean and ready for shipping.

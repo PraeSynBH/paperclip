@@ -312,7 +312,6 @@ export function PricingPage() {
       // Telemetry failure must not prevent subscription cancellation
     }
     cancelMutation.mutate();
-    setCancelDialogOpen(false);
   };
 
   const handleDismissCancel = () => {
