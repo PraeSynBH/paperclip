@@ -3,13 +3,13 @@ title: M6 — Self-Serve Trial & Onboarding
 version: m6
 date: 2026-08-24
 commits: 2ffd656, 1c19fca, 63dd5aa, e70118c
-status: Released — deployed to production 2026-08-24 ~??:?? UTC. [Verify and update]
+status: Draft — M6 not yet live (deploy blockers in VOY-2156). Frontmatter date is the doc preparation date; deployment timestamp TBD on release notification.
 ---
 
 # M6 Release: Self-Serve Trial Signup & Onboarding
 
 **Branch:** `feat/m6-self-serve-trial-onboarding` → `master`
-**Release status:** [To be filled on notification]
+**Release status:** DRAFT — not yet deployed. Deploy blockers in VOY-2156 (DB schema, health route, Traefik routing). To be finalized on release notification.
 **Applies to:** VOY-1998 (Phase 0.1) + VOY-2027 (Phase 3) + VOY-1474 follow-up (async job pattern) + PostHog analytics
 
 ---

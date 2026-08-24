@@ -5,7 +5,54 @@ maintained_by: Support Engineer (88b72065)
 
 # Support Engineer Heartbeat Log
 
-## 2026-08-20 ~10:10 UTC — Heartbeat: all docs in sync, board human-gated, standing by
+## 2026-08-24 ~23:02 UTC — Heartbeat: M2 ICS UID follow-up documented (pending ship); M6 still not live; standing by
+
+### Diff assessment
+
+Since last heartbeat (`ceb3554f56` at ~22:45 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `64e70b6131` — fix(m2): deterministic ICS UIDs so calendar re-imports dedupe (Staff Engineer P2 follow-up) | Feature code (M2 branch) | **Yes** — user-visible ICS export behavior change. VEVENT UIDs now deterministic (SHA-256 of title\|start\|end) instead of random per-export UUIDs; calendar re-imports update existing events instead of duplicating |
+| `303ea58e8d` — docs(fe): heartbeat | Docs only | **None** |
+| `f3af088c42` / `08a9cd4483` — docs(cto): M6 deploy live assessment | Docs only (but content-bearing) | 3 deploy blockers logged in VOY-2156 (RE owns); M6 not yet live — docs stay in draft |
+
+### Actions taken
+
+1. **Updated `doc/async-jobs.md` → v7** — documented deterministic ICS UIDs (commit `64e70b6131`) as a pending-ship follow-up: export processor note + header applies-to + version history row 7.
+2. **Updated `docs/support/releases/voy-1474-async-ux.md`** — added "Calendar Export Follow-up" section under post-review hardening: deterministic UID behavior, user impact (re-imports dedupe), migration note for exports made with random-UID build, and explicit pending-ship status.
+
+> Both changes are marked **pending ship** (committed on `fix/m-series-tech-debt`, not yet deployed). Per documentation policy, customer-facing claims stay tied to live behavior; these will be flipped to "live" when deployed.
+
+### M6 deployment status
+
+- voyonder.com root: **404** (still not live — Traefik routing / docs site not up)
+- voyonder.com/api/health: **200** (API healthy — progress from earlier degraded state)
+- voyonder.com/documentation: **404** (docs site not yet served — deploys with M6)
+- VOY-2156 (M6 deploy blockers) — in_progress with Release Engineer; my support docs remain drafted and ready for final timestamp/status update on deployment
+
+### Board state
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| M6 release notes + support assessment | Drafted, awaiting deployment verification |
+| Documentation coverage | 100% — all shipped features documented; one pending-ship note added (ICS UIDs) |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. Next triggers:
+
+1. M6 deploy completes (VOY-2156 / VOY-1984) → RE notifies per release checklist item #7 → finalize M6 release notes + support assessment (timestamp, deployed commit, status flip)
+2. `64e70b6131` (deterministic ICS UIDs) deploys → flip async-ux + async-jobs pending-ship notes to live
+3. Release Engineer pre-ship docs sync check
+4. COO documentation health report request
+
+### Reference
+
+- Previous heartbeat: `ceb3554f56` (22:45 UTC)
+- Current branch: `fix/m-series-tech-debt`
+
 
 ### Diff assessment
 

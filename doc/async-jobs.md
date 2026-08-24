@@ -1,7 +1,7 @@
 # Async Jobs (Background Jobs) — Internal Reference
 
-**Last updated:** 2026-08-20 (v6)
-**Applies to:** Commit `f81d572a40` (deployed to VPS production 2026-08-20), VOY-1493 (M2 post-review fixes), VOY-1527 (P0/P1 hotfixes), VOY-1531 (follow-up refinements)
+**Last updated:** 2026-08-24 (v7)
+**Applies to:** Commit `f81d572a40` (deployed to VPS production 2026-08-20), VOY-1493 (M2 post-review fixes), VOY-1527 (P0/P1 hotfixes), VOY-1531 (follow-up refinements), commit `64e70b6131` (deterministic ICS UIDs — pending ship)
 **Status:** Released to production (VPS). All M2 post-review fixes and P0/P1 hotfixes live: transaction-wrapped claim, candidateIds, processor timeout, retry, graceful shutdown, queued partial index, SSE authz, export payload cap, DB CHECK constraints, emitEvent try/catch guard, terminal-status WHERE guard, stale-job recovery startup sweep, list endpoint slim projection (strips dataUri), email digest ordering fix. Staff Engineer review (VOY-1494) complete — APPROVED. 31/31 tests passed, all routes verified post-deploy.
 
 ## Overview
@@ -159,6 +159,11 @@ data: {
    calendar text. Both run inside the worker's 2s tick loop and
    briefly block the event loop during rendering. No blob storage
    integration yet — PDF content is embedded in the result object.
+   *(Pending ship — commit `64e70b6131` on `fix/m-series-tech-debt`):
+   VEVENT UIDs are now deterministic (SHA-256 hash of title|start|end)
+   instead of random per-export UUIDs, so Google/Apple Calendar
+   re-imports of the same trip update existing events rather than
+   duplicating them.*
 
 9. **Semantic upgrade requires an embedding provider.** Without
    `PAPERCLIP_EMBEDDING_API_KEY`, `research.semantic_search` falls back
@@ -394,3 +399,4 @@ data: {
 | 4 | 2026-08-20 | Support Engineer | M2 post-review fixes (commit f81d572a40): resolved #6 (retries with exponential backoff) and #11 (SSE scope:read check now enforced); added #13 (512 KB export payload cap), #14 (candidateIds scoping), #15 (processor timeout), #16 (transaction-atomic claim); documented queued partial index + DB CHECK constraints; fixed stale "scaffolds" wording in export troubleshooting; added timeout/413 troubleshooting + escalation rows |
 | 5 | 2026-08-20 | Support Engineer | Added known issues #17-20 (P0/P1 items shipped unfixed, tracked under VOY-1527 hotfix): emitEvent failure, stale-job recovery, large export results in list endpoint, email digest ordering; added troubleshooting entries and escalation rows for each; updated header to reflect "in production, hotfix in progress" status |
 | 6 | 2026-08-20 | Support Engineer | VOY-1527 P0/P1 hotfixes resolved (commits dd2a41f9a0, 10536a49ee, 953249ae19): items #17-#20 marked RESOLVED; emitEvent try/catch guard + terminal-status WHERE clause (#17), stale-job recovery startup sweep (#18), list endpoint slim projection stripping dataUri (#19), email digest ordering fix (#20); updated header and status to reflect all fixes live |
+| 7 | 2026-08-24 | Support Engineer | Documented pending-ship deterministic ICS UIDs (commit 64e70b6131, Staff Engineer P2 follow-up): VEVENT UIDs now SHA-256-hash of (title, start, end) instead of random UUIDs, so calendar re-imports dedupe instead of duplicating events. Marked as pending ship on `fix/m-series-tech-debt` (not yet deployed). |
