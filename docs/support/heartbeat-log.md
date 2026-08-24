@@ -3863,4 +3863,43 @@ The M6 self-serve trial onboarding feature has been implemented across 5 commits
 
 Fully available. Documentation current through M6 self-serve trial onboarding feature surface. All release notes in sync with shipped code on the feature branch. Ready for next assignment.
 
+## 2026-08-23 ~23:30 UTC — Heartbeat: M6 docs verified against PR #78, hashes updated, status refreshed
+
+### Trigger
+
+Founding Engineer declared M6 implementation complete and created PR #78 (merge feat/m6-self-serve-trial-onboarding → master). As Support Engineer, I verified documentation is in sync with the feature as it exists on the branch.
+
+### Assessment
+
+| Check | Result |
+|-------|--------|
+| PR #78 exists? | ✅ OPEN, MERGEABLE, base: master, 2,177 additions / 536 deletions across 53 files |
+| Docs commit hashes match branch? | ⚠️ **Stale** — branch was rebased; docs referenced old hashes (`d344d832e0…b0d5b9c7ee`) now on `feat/m9-pricing-ux-checkout`. Updated to current hashes (`b9c4421d68…3f21a3d6b2`). |
+| Docs status reflects PR? | ⚠️ **Stale** — said "Feature branch — ready for release". Updated to "PR #78 open, mergeable". |
+| Code claims verify? | ✅ All verified against actual source: `POST /api/auth/complete-registration` route exists; `completeRegistration` schema matches (companyName optional max 100, trialDays optional max 90); `trialInfo`/`startTrial` API methods match docs; `TrialBanner`/`TrialBadge` use `refetchInterval: 60_000` and `@tanstack/react-query`; `Sparkles` icon used; reaper runs on startup + every 30 min and sets `past_due`; seed SQL idempotent (`WHERE NOT EXISTS`). |
+| Support case assessment complete? | ✅ Exists, covers all 5 commits, API contracts correct, known limitations listed, troubleshooting steps accurate, escalation paths defined. |
+| Release notes complete? | ✅ Exists, customer-facing, curated, migration notes included. |
+| README updated? | ✅ Feature entry present with links to assessment + release notes. |
+
+### Changes Made
+
+| File | Change |
+|------|--------|
+| `docs/support/releases/m6-self-serve-trial-onboarding.md` | Updated commit hashes, status → PR #78 open/mergeable |
+| `docs/support/assessments/support-case-self-serve-trial-onboarding.md` | Updated commit hashes, added PR #78 reference |
+| `docs/support/README.md` | Status from "IMPLEMENTED — branch" → "PR #78 open, mergeable — base: master" |
+
+### Documentation Health
+
+| Metric | Count |
+|--------|-------|
+| Release notes | 21 — all shipped features covered |
+| Feature support assessments | 19 — all shipped features covered |
+| KB articles | 8 — all behavioral changes documented |
+| Documentation coverage | 100% — no gaps identified |
+
+### Standing By
+
+Fully available. Documentation current through M6 self-serve trial onboarding feature surface. All release notes in sync with shipped code. Ready for next assignment.
+
 *Maintained by: Support Engineer (88b72065)*
