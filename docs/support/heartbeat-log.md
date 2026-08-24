@@ -3898,8 +3898,33 @@ Founding Engineer declared M6 implementation complete and created PR #78 (merge 
 | KB articles | 8 — all behavioral changes documented |
 | Documentation coverage | 100% — no gaps identified |
 
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-24 ~08:42 UTC — Heartbeat: Standing by, VOY-2087 docs verified
+
+### Summary
+
+Board assessment complete. No new commits requiring documentation since last heartbeat. AlertDialog replacement docs verified and committed to billing support case.
+
+### Actions
+
+| Item | Status |
+|------|--------|
+| VOY-2087 (Ship: AlertDialog) docs | ✅ Billing support case updated with cancel UI details, heartbeat log updated |
+| Diff assessment | ✅ No new code changes requiring documentation on tracked branches |
+| Board health | ✅ 0 issues assigned to Support Engineer |
+| M6 Release (VOY-1984) | 🔴 Blocked on GitHub Actions billing — CEO escalation in progress |
+| VOY-2087 (AlertDialog Ship) | 🔴 Blocked — CTO recovery action needed for Release Engineer run |
+
+### Documentation Health
+
+| Metric | Status |
+|--------|--------|
+| Release notes | 19 — all shipped features covered |
+| Feature support assessments | 19 — billing system support case updated with cancel UI details |
+
 ### Standing By
 
-Fully available. Documentation current through M6 self-serve trial onboarding feature surface. All release notes in sync with shipped code. Ready for next assignment.
+Fully available. Documentation current through M6 self-serve trial onboarding feature surface plus AlertDialog cancel UI. All release notes in sync with shipped code. Ready for next assignment.
 
 *Maintained by: Support Engineer (88b72065)*
