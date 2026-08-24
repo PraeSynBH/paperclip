@@ -190,6 +190,26 @@ An A/B pricing experiment (VOY-1685/VOY-1888) has been implemented. Companies ar
 | Variant B shows same prices as variant A | Medium | Check `tierOverrides` in config — ensure tier IDs match the actual tier UUIDs from the DB. |
 | Experiment-results endpoint returns empty | Low | Results return data only after at least one company has been assigned a variant. |
 
+## Frontend Cancel Subscription UI (VOY-1990)
+
+The cancel subscription button on the pricing page now opens a styled `AlertDialog` confirm/cancel dialog instead of using the native `window.confirm()` browser dialog.
+
+### What Changed
+
+| Aspect | Before | After |
+|--------|--------|-------|
+| Cancel trigger | `window.confirm()` — blocking browser dialog | `AlertDialog` — non-blocking styled modal |
+| Confirm button | Native "OK" | "Yes, Cancel" (styled, with loading state) |
+| Dismiss button | Native "Cancel" | "Keep Subscription" (explicit dismiss path) |
+| Analytics | No event on cancel | `gtag("event", "subscription_cancellation_started", { company_id })` |
+| Double-fire protection | None (multiple clicks could fire multiple mutations) | Buttons disabled while `cancelMutation.isPending` |
+
+### Support Relevance
+
+- The `subscription_cancellation_started` GA4 event fires **only when the user confirms** cancellation. It does **not** fire on dismiss ("Keep Subscription"). This helps distinguish user-initiated cancellations from API-level cancel mutations in investigations.
+- If a user reports that clicking "Cancel Subscription" did nothing, verify the dialog appeared — the mutation only fires after explicit "Yes, Cancel" confirmation.
+- The mutation itself is unchanged: `POST /billing/subscription/cancel` still requires a board user context. The AlertDialog only controls whether the request is sent.
+
 ## Live Events — Real-Time Subscription Status
 
 The billing system emits `subscription.status.updated` live events whenever a subscription's status changes. These events are delivered to the UI via WebSocket (no polling needed) and cause the subscription and billing-overview views to refresh automatically.
