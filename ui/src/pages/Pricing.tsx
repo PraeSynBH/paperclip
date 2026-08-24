@@ -298,7 +298,7 @@ export function PricingPage() {
     setPendingTier(null);
   };
 
-  // ── Cancel Handlers ────────────────────────────────────────────────────────
+  // ── Cancel confirmation dialog ──────────────────────────────────────
 
   const handleConfirmCancel = () => {
     // Fire GA4 event if gtag is available (must not block cancellation)
@@ -559,7 +559,7 @@ export function PricingPage() {
 
       {/* Cancel confirmation dialog */}
       <AlertDialog open={cancelDialogOpen} onOpenChange={(open) => {
-        if (!open && !cancelMutation.isPending) setCancelDialogOpen(false);
+        if (!open) setCancelDialogOpen(false);
       }}>
         <AlertDialogContent>
           <AlertDialogHeader>
