@@ -1,7 +1,7 @@
 # Support Case Assessment: M6 Self-Serve Trial Onboarding (VOY-1839)
 
 **Date:** 2026-08-24 ~13:35 UTC
-**Feature version:** feat/m6-self-serve-trial-onboarding (a9c5cef+ — includes uncommitted must-fix patches)
+**Feature version:** feat/m6-self-serve-trial-onboarding (10fb10a2e8 — includes all 4 must-fix patches)
 **Support Engineer:** 88b72065
 **Release tracking:** VOY-1984 (blocked on GitHub billing)
 
@@ -31,7 +31,7 @@ The self-serve trial onboarding flow allows new users who sign up via better-aut
 - **Concurrency safe:** Uses `pg_advisory_xact_lock` + `SELECT FOR UPDATE` to prevent duplicate companies from simultaneous requests.
 - **14-day trial by default:** The `trialDays` field in the request body can override (but the UI does not expose this).
 - **Trial tier must exist in DB:** The `startTrial` function looks up a tier named `"Trial"` in the `subscription_tiers` table. If it's missing, the request returns a 404 error with a message to seed the database.
-- **Reaper (daily):** `expireTrials()` in billing.ts runs as a scheduled job. It finds trialing subscriptions past their `trialEnd` date and sets status to `past_due` — blocking paid features.
+- **Reaper (30-min interval + startup sweep):** `expireTrials()` in billing.ts runs via `setInterval` in index.ts. It finds trialing subscriptions past their `trialEnd` date and sets status to `past_due` — blocking paid features.
 - **Stripe integration optional:** If Stripe keys are not configured, `startTrial` creates a local-only trial with a placeholder Stripe customer. No Stripe API calls are made.
 
 ---
@@ -39,7 +39,7 @@ The self-serve trial onboarding flow allows new users who sign up via better-aut
 ## Known Limitations & Edge Cases
 
 ### 1. Trial reaper uses batch update + in-memory publishLiveEvent loop
-The `expireTrials` function does a single `UPDATE ... RETURNING` query for all expired trials, then fires `publishLiveEvent` for each in a for loop. If the server restarts between the UPDATE and the last event, some companies will have their DB status set to `past_due` but no live event will be published for them. The UI polls subscription status, so the stale event is cosmetic — the correct status is already in the DB.
+The `expireTrials` function does a single `UPDATE ... RETURNING` query for all expired trials, then fires `publishLiveEvent` for each in a for loop. Each `publishLiveEvent` call is individually wrapped in try/catch so a single failure does not abort the loop (M6-4, committed). However, if the server restarts between the UPDATE and the last event, some companies will have their DB status set to `past_due` but no live event will be published for them. The UI polls subscription status, so the stale event is cosmetic — the correct status is already in the DB.
 
 **Impact:** Low. The live event is a real-time notification; the DB is the source of truth.
 
@@ -64,10 +64,8 @@ Some paid-feature routes may not check subscription status before allowing acces
 
 **Support guidance:** Report routes that bypass gating as feature requests / bugs to engineering.
 
-### 5. Reaper is not wired into any scheduler
-The `expireTrials` method exists but is **not yet wired into a cron job, setTimeout loop, or server startup hook**. Until it is scheduled, expired trials will never transition to `past_due` automatically. This means a user's trial can remain active indefinitely after the 14-day window.
-
-**Deployment prerequisite:** Someone must wire the reaper into the server startup or a cron schedule before the M6 release is production-ready.
+### 5. Reaper startup sweep runs once immediately on server boot
+The `expireTrials` method is wired via `setInterval` (30-minute interval) in `server/src/index.ts` with a startup sweep that runs immediately on server boot. If the startup sweep fails (e.g., database not yet ready), the failure is logged as a non-fatal warning and the periodic interval continues. This means expired trials are caught within 30 minutes at most, and immediately on restart. No manual scheduling is required.
 
 ### 6. No "Trial Banner" UI component committed
 The plan (VOY-1839) mentions a `TrialBanner` component for showing remaining trial days. This has not been built. The UI currently has no way to display trial status to the user beyond API responses.
@@ -94,8 +92,8 @@ The `pg_advisory_xact_lock` function is PostgreSQL-specific. This code will not 
 - Manual workaround: call `POST /api/companies/:companyId/billing/start-trial` with a manually created company
 
 ### Problem: Trial does not expire
-- Check if the reaper is running (see Known Limitation #5)
-- If the reaper is not wired: run manually via the server console or a script
+- The reaper runs every 30 minutes (setInterval in index.ts) and also runs once on server startup
+- If the reaper is failing, check server logs for errors in the `expireTrials` function
 - Manual SQL to expire a specific company's trial:
   ```sql
   UPDATE company_subscriptions
@@ -120,7 +118,7 @@ The `pg_advisory_xact_lock` function is PostgreSQL-specific. This code will not 
 | Issue | Escalate To |
 |-------|-------------|
 | Missing "Trial" tier in database | Engineering (seed migration) |
-| Reaper not running / not wired | Engineering (deploy fix) |
+| Reaper failures (logged errors) | Engineering (investigate billing.ts or index.ts) |
 | Concurrent registration bug (duplicate companies) | Engineering (P0 — data integrity) |
 | Feature gating gaps (paid features accessible without subscription) | Engineering (feature request) |
 | Stripe billing issues during conversion | Engineering (Stripe configuration) |
@@ -136,7 +134,7 @@ The `pg_advisory_xact_lock` function is PostgreSQL-specific. This code will not 
 - [ ] `GET /trial-info` returns correct days remaining and expired=false
 - [ ] Trial expiry → status transitions to `past_due` → paid features blocked
 - [ ] Concurrent registration (two simultaneous clicks) → one company created
-- [ ] Reaper can be triggered manually without restart
+- [ ] Reaper runs on startup + periodic 30-min interval (check logs for "Trial reaper expired subscriptions")
 - [ ] User can upgrade from trial via Stripe Checkout (if Stripe configured)
 
 ---
