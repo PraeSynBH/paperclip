@@ -119,86 +119,95 @@ export function authRoutes(db: Db) {
       const body = req.body as CompleteRegistration;
       const userId = req.actor.userId;
 
-      // Check if user is already a member of a company — idempotent
-      const [membershipRow] = await db.execute<{ companyId: string }>(sql`
-        SELECT cm."company_id" as "companyId"
-        FROM "company_memberships" cm
-        WHERE cm."member_type" = 'user'
-          AND cm."member_id" = ${userId}
-          AND cm."status" = 'active'
-        LIMIT 1
-      `);
-      const existingMembership = membershipRow ?? null;
+      // Check existing membership and create company + membership + trial
+      // atomically inside a transaction with FOR UPDATE to prevent concurrent
+      // registration races (M6-2). We also acquire a user-scoped advisory lock
+      // to serialize the case where no membership row exists yet (FOR UPDATE
+      // only locks existing rows, so two simultaneous requests with no
+      // membership could both miss the check without the advisory lock).
+      // Errors from startTrial propagate as 503 so the caller can retry (M6-1).
+      const result = await db.transaction(async (tx) => {
+        // Acquire a transaction-scoped advisory lock on the user ID so that
+        // two concurrent registration requests from the same user are
+        // serialized regardless of whether a membership row exists yet.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${userId}, 0))`);
 
-      if (existingMembership) {
+        // Check membership with pessimistic lock — prevents two simultaneous
+        // requests from the same user both passing the check (M6-2)
+        const [existingMembership] = await tx.execute<{ companyId: string }>(sql`
+          SELECT cm."company_id" as "companyId"
+          FROM "company_memberships" cm
+          WHERE cm."member_type" = 'user'
+            AND cm."member_id" = ${userId}
+            AND cm."status" = 'active'
+          LIMIT 1
+          FOR UPDATE
+        `);
+
+        if (existingMembership) {
+          return { kind: "existing" as const, companyId: existingMembership.companyId };
+        }
+
+        // Create company using transaction-bound service instances
+        const companies = companyService(tx as unknown as Db);
+        const access = accessService(tx as unknown as Db);
+
+        const company = await companies.create({
+          name: body.companyName?.trim() || "My Company",
+          defaultResponsibleUserId: userId,
+        });
+
+        // Ensure membership (owner)
+        await access.ensureMembership(company.id, "user", userId, "owner", "active");
+        await access.ensureRoleDefaultGrants(company.id, userId, "owner", userId);
+
+        // Start trial subscription — errors propagate (M6-1)
+        const trialDays = body.trialDays ?? 14;
+        const billing = billingService(tx as unknown as Db);
+        await billing.startTrial(company.id, { trialDays });
+
+        return { kind: "created" as const, company };
+      });
+
+      // Post-transaction: handle existing vs created, log activity
+      if (result.kind === "existing") {
         logger.info(
-          { userId, companyId: existingMembership.companyId },
+          { userId, companyId: result.companyId },
           "Registration skipped — user already has a company",
         );
-        // Fetch the company name for the response
         const existing = await db
           .select({ id: companiesTable.id, name: companiesTable.name })
           .from(companiesTable)
-          .where(eq(companiesTable.id, existingMembership.companyId))
+          .where(eq(companiesTable.id, result.companyId))
           .then((r) => r[0] ?? null);
         res.json({
-          companyId: existing?.id ?? existingMembership.companyId,
+          companyId: existing?.id ?? result.companyId,
           companyName: existing?.name ?? "My Company",
           created: false,
         });
         return;
       }
 
-      const companyName = body.companyName?.trim() || "My Company";
-      const companies = companyService(db);
-      const access = accessService(db);
-
-      // 1. Create the company
-      const company = await companies.create({
-        name: companyName,
-        defaultResponsibleUserId: userId,
-      });
-
-      // 2. Ensure membership (owner)
-      await access.ensureMembership(company.id, "user", userId, "owner", "active");
-      await access.ensureRoleDefaultGrants(company.id, userId, "owner", userId);
-
-      // 3. Start trial subscription
-      const trialDays = body.trialDays ?? 14;
-      try {
-        const billing = billingService(db);
-        await billing.startTrial(company.id, { trialDays });
-        logger.info(
-          { companyId: company.id, trialDays },
-          "Trial started for new company",
-        );
-      } catch (err) {
-        logger.warn(
-          { err, companyId: company.id },
-          "Failed to start trial (non-fatal)",
-        );
-      }
-
-      // 4. Log activity
+      // Log activity outside the transaction
       await logActivity(db, {
-        companyId: company.id,
+        companyId: result.company.id,
         actorType: "user",
         actorId: userId,
         action: "company.created",
         entityType: "company",
-        entityId: company.id,
-        details: { name: company.name, source: "self_serve_registration" },
+        entityId: result.company.id,
+        details: { name: result.company.name, source: "self_serve_registration" },
       });
 
       logger.info(
-        { companyId: company.id, userId },
+        { companyId: result.company.id, userId },
         "Self-serve registration complete",
       );
 
       res.status(201).json({
-        companyId: company.id,
-        companyName: company.name,
-        companyPrefix: company.issuePrefix,
+        companyId: result.company.id,
+        companyName: result.company.name,
+        companyPrefix: result.company.issuePrefix,
         created: true,
       });
     },
