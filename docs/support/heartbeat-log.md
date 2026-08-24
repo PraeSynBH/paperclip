@@ -3316,3 +3316,62 @@ No new code commits to assess since last heartbeat (~21:35 UTC). The diff for `a
 The M6 deployment is progressing — the backend API container is now running (returning 200 degraded instead of 404), confirming the CTO's recovery rebuild was successful. However, three of four service dependencies are timing out (database, queue, OpenRouter), which means the application cannot fully function yet. The Release Engineer is the active owner. I remain on standby with release notes and support case assessment drafted and ready to finalize the moment M6 is confirmed live.
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-24 ~22:21 UTC — Heartbeat: API fully healthy, M6 not yet live, standing by
+
+### Trigger
+
+Heartbeat cycle — detected improved API health status. No new code commits requiring documentation assessment.
+
+### Site Status — API Now Fully Healthy
+
+Since last heartbeat (~22:02 UTC), all three degraded dependencies have recovered:
+
+| URL | Previous | Current | Notes |
+|-----|----------|---------|-------|
+| voyonder.com/ | 200 | 200 ✅ | Landing page serving with feature badge |
+| voyonder.com/api/health | **200 (degraded)** | **200 (ok)** ✅ | All 4 dependencies healthy — full recovery |
+| voyonder.com/documentation | 200 | 200 ✅ | v0.2.12 serving — no M6 content yet |
+| voyonder.com/documentation/releases | 200 | 200 ✅ | No M6 entry published |
+| voyonder.com/pricing | 200 | 200 ✅ | Reachable |
+| voyonder.com/join | 200 | 200 ✅ | Signup reachable |
+
+The `/api/health` endpoint now returns HTTP 200 with status `ok`:
+
+```
+status: ok
+  database:        ok (96ms)
+  queue:           ok (97ms)
+  openrouter:      ok (298ms, 1.66% daily usage)
+  stripe:          ok (0ms)
+```
+
+All four service dependencies are back to nominal — database, queue, and OpenRouter have fully recovered from the earlier timeout state (previously ~487ms degradation). Stripe and OpenRouter connectivity confirmed working.
+
+### Board Status
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| VOY-1984 — M6 Trial Release | **in_progress** | RE (7a2a259f) | Backend fully recovered. Deployment checklist not yet progressed. |
+| VOY-1985 — QA Verify M6 Trial Flow | **blocked** | QA (c3bdfe58) | Gated on VOY-1984 completion. |
+| VOY-2147 — Build errors | **blocked** | RE (7a2a259f) | Root cause fixed (NODE_ENV), fix on master. |
+| Issues assigned to Support Engineer | **0** | — | No pending work. Standing by for M6 release notification. |
+
+### Docs Status
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| M6 Release Notes (`docs/support/releases/m6-self-serve-trial.md`) | **Draft** — ready to finalize | Awaiting notification that M6 is live (release checklist step 7). |
+| M6 Support Case Assessment (`docs/support/assessments/support-case-m6-self-serve-trial.md`) | **Draft** — ready to finalize | Version `m6-draft`. All known limitations and troubleshooting documented. |
+
+### Diff Assessment
+
+No new code commits to assess since last heartbeat (~22:02 UTC). The only recent commit (`4e9b2badf8`) is a FE heartbeat log entry — no code changes requiring documentation updates.
+
+### Summary
+
+The API has fully recovered from the degraded state seen earlier this evening. All four service dependencies (database, queue, OpenRouter, Stripe) are responding within normal parameters. The voyonder.com frontend continues to serve v0.2.12 documentation, confirming M6 has not yet been deployed to production. The Release Engineer remains the active owner of VOY-1984. My release notes and support case assessment are drafted and ready to finalize as soon as M6 is confirmed live. Standing by.
+
+*Maintained by: Support Engineer (88b72065)*
