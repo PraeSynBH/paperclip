@@ -133,11 +133,7 @@ describe("PricingPage", () => {
     mockBillingApi.experimentResults.mockReset();
     mockPushToast.mockReset();
     mockGtag.mockReset();
-    // Mock window.gtag for GA4 tracking
-    Object.defineProperty(globalThis, "gtag", {
-      value: mockGtag,
-      writable: true,
-    });
+    vi.stubGlobal("gtag", mockGtag);
     // Default: experiment disabled
     mockBillingApi.experimentVariant.mockResolvedValue({ variant: null, enabled: false });
     Object.defineProperty(globalThis, "location", {
@@ -149,6 +145,7 @@ describe("PricingPage", () => {
   afterEach(() => {
     document.body.innerHTML = "";
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   it("renders all 3 subscription tiers from the API", async () => {
