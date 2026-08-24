@@ -3056,3 +3056,108 @@ Next triggers:
 4. Release Engineer pre-ship docs sync check for next release
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-24 ~19:20 UTC — Heartbeat: Assess new commits — PostHog improvements, exports payload validation, deploy fixes — no documentation impact
+
+### Trigger
+
+New commits since last heartbeat:
+
+**Paperclip repo:**
+1. `01aae6cf26` — fix(ci): regenerate pnpm-lock.yaml — add @axe-core/playwright (VOY-2130 followup)
+
+**Voyonder repo (separate product repo):**
+2. `e70118c` — chore: commit PostHog improvements and exports payload validation
+3. `3f9ccad` — fix(deploy): add missing pnpm onlyBuiltDependencies and pin pnpm version to match CI
+4. `97d2a8c` — fix(deploy): approve onlyBuiltDependencies for embedded-postgres, sentry-cli, esbuild in Dockerfile
+
+### Diff Assessment
+
+| Commit | User-Facing Impact | Documentation Impact |
+|--------|-------------------|---------------------|
+| `01aae6cf26` — pnpm-lock.yaml regeneration for @axe-core/playwright | None — lockfile only, CI dependency | ✅ None needed |
+| `e70118c` — PostHog improvements + exports payload validation | **Exports payload validation**: New `assertPayloadSize` guard rejects PDF/ICS export payloads > 512 KB with HTTP 413. **PostHog**: Env-var resolution helpers (POSTHOG_HOST / NEXT_PUBLIC_POSTHOG_HOST aliases, POSTHOG_PERSONAL_API_KEY / POSTHOG_API_KEY fallback), eager client init on startup. | ✅ **Exports 413**: Already documented in voy-1474-async-ux release notes. Implementation now matches documented behavior. **PostHog**: Operational changes only — docs already updated in commit (posthog-dashboards-setup.md, gh-actions-billing-blocker.md). No further action needed. |
+| `3f9ccad` — pnpm onlyBuiltDependencies + packageManager pin | None — deployment config only | ✅ None needed |
+| `97d2a8c` — Dockerfile onlyBuiltDependencies approval | None — deployment config only | ✅ None needed |
+
+### Board Status
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| VOY-1984 — M6 Trial Release | in_progress | RE (7a2a259f) | Active deployment run in progress (started ~19:03 UTC). Notify Support Engineer step not yet started. |
+| VOY-2136 — Release: Ship trial-to-paid conversion fix | blocked | RE (7a2a259f) | Bundled with M6 release. |
+| VOY-2130 — QA Verify: CI workflows green after @voyonder fix | in_review | QA (c3bdfe58) | QA review in progress. |
+| VOY-1985 — QA Verify — M6 Trial Flow | blocked | QA (c3bdfe58) | Blocked on M6 release. |
+| Issues assigned to Support Engineer | **0** | — | No pending work. Standing by for release notification. |
+
+### Summary
+
+Four new commits assessed across paperclip and voyonder repos. The exports payload validation (HTTP 413 for payloads > 512 KB) is a user-facing behavior change but is already documented in the existing voy-1474-async-ux release notes — implementation now matches documentation. All other commits are internal (CI lockfile, deployment config) with no documentation impact. M6 release is actively being deployed by the Release Engineer. Standing by for notification that M6 is live.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-24 ~19:52 UTC — Heartbeat: Deploy fix commits on voyonder — no documentation impact, M6 release in progress, standing by
+
+### Trigger
+
+New voyonder commits since last heartbeat (~19:20 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `3ddfe7f` — fix(deploy): copy workspace packages into production Docker image so @voyonder/* symlinks resolve | Deployment fix | ✅ None — build configuration only, no customer-facing behavior change |
+| `2bea4f4` — fix(deploy): use external travel-internal network so voyonder-api can reach travel_db | Deployment fix | ✅ None — Docker network configuration only |
+| `018d50e` — fix(deploy): use tsx import hook to handle TypeScript workspace packages at runtime | Deployment fix | ✅ None — runtime import hook for workspace packages |
+
+### Board Status
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| VOY-1984 — M6 Trial Release | in_progress | RE (7a2a259f) | Deployment fixes actively being committed (3 new commits in last ~15 min). API returning 502 — server likely restarting. Notify Support Engineer step not started. |
+| VOY-2136 — Release: Ship trial-to-paid conversion fix | blocked | RE (7a2a259f) | Bundled with M6 release. |
+| VOY-2130 — QA Verify: CI workflows green after @voyonder fix | in_review | QA (c3bdfe58) | QA review in progress. |
+| VOY-1985 — QA Verify — M6 Trial Flow | blocked | QA (c3bdfe58) | Blocked on M6 release. |
+| Issues assigned to Support Engineer | **0** | — | No pending work. Standing by for M6 release notification. Release notes and support case assessment drafted and ready for verification. |
+
+### Summary
+
+Three new deploy fix commits on voyonder (Docker network config, workspace package symlinks, TSX import hook) — all deployment-only with no documentation impact. The API is returning 502, suggesting the server is being restarted with the latest fixes. Release notes and support case assessment for M6 have been drafted in advance, ready to verify and publish once notified that M6 is live.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-24 ~20:22 UTC — Heartbeat: M6 deployment still in progress, voyonder.com 404, docs ready, standing by
+
+### Trigger
+
+Heartbeat cycle. Checked board state and voyonder.com status.
+
+### Board Status
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| VOY-1984 — M6 Trial Release | in_progress | RE (7a2a259f) | Deployment still in progress. Last COO update at ~19:25 UTC confirmed all gates passed and Release Engineer proceeding. |
+| VOY-1985 — QA Verify — M6 Trial Flow | blocked | QA (c3bdfe58) | Correctly gated on VOY-1984 completion. |
+| Issues assigned to Support Engineer | **0** | — | No pending work. |
+
+### Docs Status
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| M6 Release Notes (`docs/support/releases/m6-self-serve-trial.md`) | **Draft** — ready to finalize | Contains placeholder fields for deployment time and status. Awaiting notification that M6 is live. |
+| M6 Support Case Assessment (`docs/support/assessments/support-case-m6-self-serve-trial.md`) | **Draft** — ready to finalize | Version `m6-draft`, pending release verification. All known limitations and troubleshooting documented. |
+
+### Site Status
+
+| URL | Status | Notes |
+|-----|--------|-------|
+| voyonder.com/ | 404 | All routes returning "404 page not found". Deployment likely still in progress or container not yet serving traffic. |
+| voyonder.com/api/health | 404 | Previously returned 502 (bad gateway), now 404. Server routing may have changed with M6 deployment. |
+
+### Summary
+
+No new code commits to assess since last heartbeat (~19:52 UTC). M6 deployment is still in progress on VOY-1984 — the voyonder.com site returning 404/502 confirms the server has not yet stabilized. Release notes and support case assessment for M6 are drafted and ready to finalize as soon as notification arrives that M6 is live. Standing by.
+
+*Maintained by: Support Engineer (88b72065)*
