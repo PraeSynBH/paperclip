@@ -22,6 +22,7 @@ const mockBillingApi = vi.hoisted(() => ({
   experimentResults: vi.fn(),
 }));
 const mockPushToast = vi.hoisted(() => vi.fn());
+const mockGtag = vi.hoisted(() => vi.fn());
 const originalLocation = globalThis.location;
 
 vi.mock("@/context/CompanyContext", () => ({ useCompany: () => companyState }));
@@ -131,6 +132,12 @@ describe("PricingPage", () => {
     mockBillingApi.experimentVariant.mockReset();
     mockBillingApi.experimentResults.mockReset();
     mockPushToast.mockReset();
+    mockGtag.mockReset();
+    // Mock window.gtag for GA4 tracking
+    Object.defineProperty(globalThis, "gtag", {
+      value: mockGtag,
+      writable: true,
+    });
     // Default: experiment disabled
     mockBillingApi.experimentVariant.mockResolvedValue({ variant: null, enabled: false });
     Object.defineProperty(globalThis, "location", {
@@ -233,13 +240,52 @@ describe("PricingPage", () => {
     act(() => root.unmount());
   });
 
-  it("cancel button calls the cancel endpoint", async () => {
+  it("cancel button opens confirmation dialog and cancel endpoint on confirm", async () => {
     mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1" })]);
     mockBillingApi.subscription.mockResolvedValue(createSubscription());
     mockBillingApi.cancelSubscription.mockResolvedValue(
       createSubscription({ cancelAtPeriodEnd: true }),
     );
-    vi.spyOn(globalThis, "confirm").mockReturnValue(true);
+
+    const { container, root } = renderPricing();
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain("Cancel Subscription");
+    });
+
+    // Click Cancel Subscription button — opens the AlertDialog
+    const cancelButton = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Cancel Subscription"),
+    );
+    expect(cancelButton).toBeTruthy();
+    act(() => cancelButton!.click());
+
+    // AlertDialog renders via Portal — look in document.body for the dialog content
+    await waitForAssertion(() => {
+      expect(document.body.textContent).toContain("Yes, Cancel");
+      expect(document.body.textContent).toContain("Keep Subscription");
+    });
+
+    // Click "Yes, Cancel" to confirm — find button in document.body (portal)
+    const confirmButton = Array.from(document.body.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Yes, Cancel"),
+    );
+    expect(confirmButton).toBeTruthy();
+    act(() => confirmButton!.click());
+
+    await waitForAssertion(() => {
+      expect(mockBillingApi.cancelSubscription).toHaveBeenCalledWith("company-1");
+    });
+
+    act(() => root.unmount());
+  });
+
+  it("fires GA4 subscription_cancellation_started event on cancel confirm", async () => {
+    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1" })]);
+    mockBillingApi.subscription.mockResolvedValue(createSubscription());
+    mockBillingApi.cancelSubscription.mockResolvedValue(
+      createSubscription({ cancelAtPeriodEnd: true }),
+    );
 
     const { container, root } = renderPricing();
 
@@ -253,8 +299,57 @@ describe("PricingPage", () => {
     act(() => cancelButton!.click());
 
     await waitForAssertion(() => {
-      expect(mockBillingApi.cancelSubscription).toHaveBeenCalledWith("company-1");
+      expect(document.body.textContent).toContain("Yes, Cancel");
     });
+
+    const confirmButton = Array.from(document.body.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Yes, Cancel"),
+    );
+    act(() => confirmButton!.click());
+
+    await waitForAssertion(() => {
+      expect(mockGtag).toHaveBeenCalledWith("event", "subscription_cancellation_started", {
+        company_id: "company-1",
+      });
+    });
+
+    act(() => root.unmount());
+  });
+
+  it("dismisses cancel dialog without calling cancel endpoint", async () => {
+    mockBillingApi.tiers.mockResolvedValue([createTier({ id: "tier-1" })]);
+    mockBillingApi.subscription.mockResolvedValue(createSubscription());
+    mockBillingApi.cancelSubscription.mockResolvedValue(
+      createSubscription({ cancelAtPeriodEnd: true }),
+    );
+
+    const { container, root } = renderPricing();
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain("Cancel Subscription");
+    });
+
+    // Open cancel dialog
+    const cancelButton = Array.from(container.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Cancel Subscription"),
+    );
+    act(() => cancelButton!.click());
+
+    await waitForAssertion(() => {
+      expect(document.body.textContent).toContain("Keep Subscription");
+    });
+
+    // Click "Keep Subscription" to dismiss — find button in document.body (portal)
+    const dismissButton = Array.from(document.body.querySelectorAll("button")).find((b) =>
+      b.textContent?.includes("Keep Subscription"),
+    );
+    expect(dismissButton).toBeTruthy();
+    act(() => dismissButton!.click());
+
+    // Wait a bit to ensure no cancel call was made
+    await flush();
+    expect(mockBillingApi.cancelSubscription).not.toHaveBeenCalled();
+    expect(mockGtag).not.toHaveBeenCalled();
 
     act(() => root.unmount());
   });

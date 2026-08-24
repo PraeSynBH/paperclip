@@ -12,6 +12,16 @@ import { Check, CreditCard, AlertCircle, Beaker } from "lucide-react";
 import { useToast } from "@/context/ToastContext";
 import { useState } from "react";
 import type { BillingPeriod } from "@paperclipai/shared";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -145,6 +155,9 @@ export function PricingPage() {
 
   // Confirmation dialog state (variant B only)
   const [pendingTier, setPendingTier] = useState<SubscriptionTier | null>(null);
+
+  // Cancel confirmation dialog state
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   // ── Queries ──────────────────────────────────────────────────────────────
 
@@ -285,6 +298,23 @@ export function PricingPage() {
     setPendingTier(null);
   };
 
+  // ── Cancel Handlers ────────────────────────────────────────────────────────
+
+  const handleConfirmCancel = () => {
+    // Fire GA4 event if gtag is available
+    if (typeof window !== "undefined" && typeof window.gtag === "function") {
+      window.gtag("event", "subscription_cancellation_started", {
+        company_id: companyId,
+      });
+    }
+    cancelMutation.mutate();
+    setCancelDialogOpen(false);
+  };
+
+  const handleDismissCancel = () => {
+    setCancelDialogOpen(false);
+  };
+
   // ── Loading / Empty State ─────────────────────────────────────────────────
 
   if (!companyId) {
@@ -380,11 +410,7 @@ export function PricingPage() {
               ) : isSubscribed ? (
                 <Button
                   variant="outline"
-                  onClick={() => {
-                    if (confirm("Are you sure you want to cancel your subscription? It will remain active until the end of the billing period.")) {
-                      cancelMutation.mutate();
-                    }
-                  }}
+                  onClick={() => setCancelDialogOpen(true)}
                   disabled={cancelMutation.isPending}
                   className="text-destructive hover:text-destructive"
                 >
@@ -527,6 +553,30 @@ export function PricingPage() {
           <p className="text-muted-foreground">No subscription tiers are available at this time.</p>
         </div>
       )}
+
+      {/* Cancel confirmation dialog */}
+      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Subscription</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel your subscription? It will remain active until the end of the billing period.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDismissCancel} disabled={cancelMutation.isPending}>
+              Keep Subscription
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCancel}
+              disabled={cancelMutation.isPending}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {cancelMutation.isPending ? "Canceling..." : "Yes, Cancel"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Footer note */}
       <p className="mt-8 text-center text-xs text-muted-foreground">
