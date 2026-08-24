@@ -90,16 +90,7 @@ import { readBrandedStaticIndexHtml } from "./static-index-html.js";
 import { applyUiBranding } from "./ui-branding.js";
 import { logger } from "./middleware/logger.js";
 import { createPaperclipEventBus, createPaperclipAuthProvider, createPaperclipLogger } from "./services/voyonder-bridge.js";
-import type { EventBus, AuthProvider, AuthRequest, LoggerProvider } from "@paperclipai/shared";
-
-// Locally-defined VoyonderOptions — mirrors the interface from @voyonder/product
-// without requiring that package as a workspace dependency. The dynamic import
-// in the Voyonder mount section below gracefully degrades if the package is absent.
-interface VoyonderOptions {
-  eventBus: EventBus;
-  authProvider: AuthProvider;
-  logger?: LoggerProvider;
-}
+import type { VoyonderOptions } from "@voyonder/product";
 import { DEFAULT_LOCAL_PLUGIN_DIR, pluginLoader, type PluginLoader } from "./services/plugin-loader.js";
 import {
   SELF_HOSTED_AUTO_INSTALL_KEYS,

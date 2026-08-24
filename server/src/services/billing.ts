@@ -1404,7 +1404,7 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       const currentPeriodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
 
       const subscription = await db.transaction(async (tx) => {
-        const [record] = await tx.execute(sql`
+        const [record] = await tx.execute<typeof companySubscriptionsTable.$inferSelect>(sql`
           INSERT INTO "company_subscriptions"
             ("company_id", "tier_id", "stripe_customer_id", "status", "billing_period",
              "current_period_start", "current_period_end",

@@ -120,7 +120,7 @@ export function authRoutes(db: Db) {
       const userId = req.actor.userId;
 
       // Check if user is already a member of a company — idempotent
-      const membershipCheck = await db.execute<{ companyId: string }>(sql`
+      const [membershipRow] = await db.execute<{ companyId: string }>(sql`
         SELECT cm."company_id" as "companyId"
         FROM "company_memberships" cm
         WHERE cm."member_type" = 'user'
@@ -128,7 +128,7 @@ export function authRoutes(db: Db) {
           AND cm."status" = 'active'
         LIMIT 1
       `);
-      const existingMembership = membershipCheck.rows?.[0] ?? null;
+      const existingMembership = membershipRow ?? null;
 
       if (existingMembership) {
         logger.info(

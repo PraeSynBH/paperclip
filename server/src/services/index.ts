@@ -1,10 +1,4 @@
 export { companyService } from "./companies.js";
-// ── Voyonder Bridge — adapters for C1 (EventBus) and C2 (AuthProvider) ──
-export {
-  createPaperclipEventBus,
-  createPaperclipAuthProvider,
-  createPaperclipLogger,
-} from "./voyonder-bridge.js";
 export { companyArtifactsService } from "./company-artifacts.js";
 export { companySearchService } from "./company-search.js";
 export { companySearchExtractService } from "./company-search-extract.js";
