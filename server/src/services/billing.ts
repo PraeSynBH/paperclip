@@ -1530,16 +1530,23 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           { companyId: row.companyId, subscriptionId: row.id },
           "Trial expired — subscription status set to past_due",
         );
-        publishLiveEvent({
-          companyId: row.companyId,
-          type: "subscription.status.updated",
-          payload: {
-            status: "past_due",
-            stripeSubscriptionId: null,
-            cancelAtPeriodEnd: false,
-            tierId: null,
-          },
-        });
+        try {
+          publishLiveEvent({
+            companyId: row.companyId,
+            type: "subscription.status.updated",
+            payload: {
+              status: "past_due",
+              stripeSubscriptionId: null,
+              cancelAtPeriodEnd: false,
+              tierId: null,
+            },
+          });
+        } catch (err) {
+          logger.error(
+            { err, companyId: row.companyId, subscriptionId: row.id },
+            "publishLiveEvent failed during trial expiry — continuing to next subscription",
+          );
+        }
       }
 
       return result.length;
