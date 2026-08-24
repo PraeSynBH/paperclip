@@ -350,11 +350,14 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
             NOW(), NOW()
           )
           ON CONFLICT ("company_id") DO UPDATE SET
-            "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
-            "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
+            "tier_id" = EXCLUDED."tier_id",
+            "stripe_customer_id" = EXCLUDED."stripe_customer_id",
+            "billing_period" = EXCLUDED."billing_period",
             "status" = EXCLUDED."status",
             "current_period_start" = EXCLUDED."current_period_start",
             "current_period_end" = EXCLUDED."current_period_end",
+            "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
+            "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
             "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
             "trial_end" = EXCLUDED."trial_end",
             "updated_at" = NOW()
@@ -512,8 +515,12 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       const tier = await getTier(tierId);
       const stripeSubItemId = stripeSub.items.data[0]?.id ?? null;
 
-      // Upsert: INSERT ... ON CONFLICT (stripe_subscription_id) DO UPDATE
-      // Handles at-least-once delivery from Stripe (race-free with the UNIQUE index)
+      // Upsert: INSERT ... ON CONFLICT (company_id) DO UPDATE
+      // Handles at-least-once delivery from Stripe (race-free with the UNIQUE index
+      // on company_id). Using company_id as the conflict target also correctly
+      // handles trial-to-paid conversion: the trial row has stripe_subscription_id
+      // = NULL, which SQL NULL comparison semantics would not match with
+      // ON CONFLICT (stripe_subscription_id).
       await tx.execute(sql`
         INSERT INTO "company_subscriptions"
           ("company_id", "tier_id", "stripe_customer_id", "status", "billing_period",
@@ -531,11 +538,14 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           NOW(), NOW()
         )
         ON CONFLICT ("company_id") DO UPDATE SET
-          "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
-          "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
+          "tier_id" = EXCLUDED."tier_id",
+          "stripe_customer_id" = EXCLUDED."stripe_customer_id",
           "status" = EXCLUDED."status",
+          "billing_period" = EXCLUDED."billing_period",
           "current_period_start" = EXCLUDED."current_period_start",
           "current_period_end" = EXCLUDED."current_period_end",
+          "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
+          "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
           "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
           "trial_end" = EXCLUDED."trial_end",
           "updated_at" = NOW()
