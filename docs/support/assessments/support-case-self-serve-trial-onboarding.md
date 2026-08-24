@@ -2,10 +2,10 @@
 
 **Feature**: Self-serve trial sign-up and onboarding flow — new users can register, get a company created automatically, and start a 14-day free trial without human intervention. Trial expiry transitions through a 7-day grace period (`grace_period` status) before reaching `expired`, preserving user data throughout. An onboarding wizard guides role selection (or skip) to set up the initial agent, goal, project, and task.
 **Assessed by**: Support Engineer
-**Date**: 2026-08-23
+**Date**: 2026-08-24 (updated for trial router refactor + reaper rewrite)
 **Related**: M6 — Self-Serve Trial Onboarding, Trial Grace Period (added alongside M5 billing enhancements)
-**Commits**: `d344d832e0`, `996136bc66`, `722b0c4cbd`, `042d68662d`, `b0d5b9c7ee`, `f4e882dc04` (onboarding wizard + migrations)
-**Branch**: `feat/m6-self-serve-trial-onboarding` (cherry-picked into `feat/clean-m5-pricing-pr`)
+**Commits**: `d344d832e0`, `996136bc66`, `722b0c4cbd`, `042d68662d`, `b0d5b9c7ee`, `f4e882dc04`, `eaba9ea1c8` (trial routes refactor), `5353666316` (reaper tests)
+**Branch**: `feat/clean-m5-pricing-pr`
 
 ## Feature Overview (User Perspective)
 
@@ -39,7 +39,7 @@ A new endpoint completes the registration flow after better-auth creates the use
 
 - **Creates a company** with an optional `companyName` (defaults to "My Company")
 - **Ensures owner membership** — the registering user is added as an `owner` with full grants
-- **Starts a trial** — calls `billingService.startTrial()` with a configurable `trialDays` (default 14)
+- **Starts a trial** — calls `billingService.startTrial()` with a 14-day trial (fixed duration). Accepts `billingPeriod`: `"monthly"` or `"yearly"` to set the billing cadence for eventual conversion.
 - **Logs activity** — a `company.created` activity entry with source `self_serve_registration`
 - **Idempotent** — if the user already has a company, returns it without creating a duplicate
 
@@ -47,8 +47,7 @@ A new endpoint completes the registration flow after better-auth creates the use
 ```json
 POST /api/auth/complete-registration
 {
-  "companyName": "Acme Corp",   // optional, max 100 chars
-  "trialDays": 14               // optional, min 1, max 90
+  "companyName": "Acme Corp"   // optional, max 100 chars
 }
 ```
 
@@ -73,36 +72,60 @@ POST /api/auth/complete-registration
 
 ### 2. Trial Management API
 
-**`POST /api/companies/:companyId/billing/start-trial`** — Start a trial for an existing company (idempotent, board-user only, uses `ON CONFLICT` for race safety)
+**`POST /api/companies/:companyId/trial/start`** — Start a 14-day trial for an existing company (idempotent, any authenticated user with company access, uses `ON CONFLICT` for race safety). Accepts `{ billingPeriod: "monthly" | "yearly" }`. Returns `201` on creation, `200` if a subscription already exists.
 
-**`GET /api/companies/:companyId/billing/trial-info`** — Get trial status
+**`GET /api/companies/:companyId/trial/status`** — Get trial status
 
 Response when trialing:
 ```json
 {
-  "trialing": true,
+  "isTrialing": true,
   "trialEnd": "2026-09-06T10:38:26.000Z",
   "daysRemaining": 13,
-  "expired": false
+  "tierId": "uuid",
+  "tierName": "Trial",
+  "status": "trialing"
 }
 ```
 
 Response when not on trial (including expired):
 ```json
-null
+{
+  "isTrialing": false,
+  "trialEnd": null,
+  "daysRemaining": null,
+  "tierId": null,
+  "tierName": null,
+  "status": "expired"
+}
 ```
+
+**`POST /api/companies/:companyId/trial/convert`** — Create a Stripe Checkout Session to convert from trial to a paid subscription. Accepts `{ tierId, billingPeriod, successUrl?, cancelUrl? }`. Returns `{ url, sessionId }`.
+
+> **Note:** The old endpoint paths (`/billing/start-trial`, `/billing/trial-info`) have been removed. Update any scripts or API clients to use the new `/trial/*` paths.
 
 ### 3. Trial Expiry Reaper & Grace Period
 
-A background interval runs every 30 minutes that:
-- Queries all subscriptions with status `trialing` whose `trial_end` is in the past
-- Sets their status to `past_due` — this blocks access to paid-tier features via the existing feature-gating infrastructure
-- Publishes a `subscription.status.updated` live event for each expired subscription
-- Also runs once on server startup
+A background interval runs every **1 hour** (default; configurable via `intervalMs` parameter) that performs a **two-phase sweep**:
+
+**Phase 1 — Expired trials → grace period:**
+- Queries all subscriptions with status `trialing` whose `trialEnd` is in the past
+- Sets their status to `grace_period` — this starts a 7-day grace window during which data remains accessible
+- Records `currentPeriodEnd` as `trialEnd + 7 days`
+- Publishes a `subscription.status.updated` live event for each transition
+- Logs: `"Trial reaper: trial expired — entered grace period"`
+
+**Phase 2 — Expired grace period → expired:**
+- Queries all subscriptions in `grace_period` whose `currentPeriodEnd` is in the past
+- Sets their status to `expired`, records `canceledAt`
+- Publishes a `subscription.status.updated` live event for each transition
+- Logs: `"Trial reaper: grace period elapsed — subscription marked as expired"`
+
+The reaper also runs once on server startup (non-blocking, fire-and-forget). It is managed by `startTrialReaperScheduler()` which returns a disposer function for graceful shutdown.
 
 **Grace period integration:** When Stripe reports the subscription as `incomplete` or `past_due` after trial expiry, the `handlePostTrialStatus` function (called from the `customer.subscription.updated` webhook handler) transitions the subscription to a **7-day grace period** (`grace_period` status) instead of immediately blocking access. This preserves user data during the grace window. After 7 days, the subscription transitions to `expired` (data preserved, paid features fully blocked). See [Trial Grace Period](support-case-billing-system.md#trial-grace-period) in the Billing System assessment for details.
 
-**Note:** The reaper and `handlePostTrialStatus` operate independently. The reaper sets `past_due` immediately on detecting an expired trial, while `handlePostTrialStatus` responds to Stripe webhooks and enters the grace period. If both fire, the last write wins — the grace period transition is idempotent and preserves data access.
+**Note:** The reaper and `handlePostTrialStatus` operate independently. Both transition to `grace_period` — the reaper as a safety net on its sweep interval, and the webhook handler when Stripe notifies of expiry. If both fire, the last write wins. Both transitions are idempotent and preserve data access.
 
 ### 4. Trial Tier Seed Data
 
@@ -140,8 +163,9 @@ A new `Trial` subscription tier is seeded into the database (migration 0232):
 
 ### 6. Client-Side API Client
 
-- `billingApi.trialInfo(companyId)` — GET request returning trial info or null
-- `billingApi.startTrial(companyId, { trialDays })` — POST request for manual trial start
+- `billingApi.trialInfo(companyId)` — GET request returning trial status or null (endpoint: `GET /api/companies/:companyId/trial/status`)
+- `billingApi.startTrial(companyId, { billingPeriod })` — POST request for manual trial start (endpoint: `POST /api/companies/:companyId/trial/start`)
+- `billingApi.convertTrial(companyId, { tierId, billingPeriod, successUrl?, cancelUrl? })` — POST request for trial-to-paid conversion (endpoint: `POST /api/companies/:companyId/trial/convert`)
 - `authApi.completeRegistration(data)` — POST request for registration completion
 - `queryKeys.billing.trialInfo(companyId)` — React Query cache key for consistent invalidation
 
@@ -260,12 +284,12 @@ The onboarding wizard is presented to the user immediately after registration (b
 |-----------|---------|------------|
 | **Stripe not required for trial** | The trial system works without Stripe configured — it creates a local placeholder customer. However, upgrading to a paid plan requires Stripe to be configured | Configure `STRIPE_SECRET_KEY` and related env vars before going live |
 | **Trial start failure is non-fatal** | If `startTrial()` fails during registration (e.g., DB error), the company is still created and the user is logged in — they just won't be on a trial | Check server logs for `"Failed to start trial (non-fatal)"` message. Support can manually start a trial via the API |
-| **No email notifications** | The system does not send email reminders when a trial is about to expire or has expired | Users discover expiration when they see the banner or try to use a paid feature |
-| **Single-trial enforcement** | There is no mechanism to prevent the same email from starting multiple trials across different sessions | The idempotency check (user company membership) prevents duplicates for the same user, but a different email could create a second trial |
-| **Trial-to-paid conversion** | There is no automated conversion flow. Users must manually visit /pricing and subscribe via Stripe Checkout | Future feature — automated conversion on trial end |
-| **TrialDays max 90** | The `trialDays` field is limited to 90 days by the Zod schema | For longer trials, admins can directly set up a subscription |
-|| **Reaper delay** | The trial expiry reaper runs every 30 minutes. Expired trials may have up to 30 minutes of grace access | This is intentional — prevents hard cutoffs. The `past_due` status blocks paid features but doesn't delete data |
-|| **Grace period vs. reaper race** | The reaper (sets `past_due` immediately) and `handlePostTrialStatus` (sets `grace_period` via Stripe webhook) may race. The grace period system is the preferred path; the reaper acts as a safety net | If a user reports they were blocked immediately after trial expiry, check the subscription status in the DB. If it's `past_due` instead of `grace_period`, the reaper fired before the Stripe webhook was processed. The data is still accessible — the user can upgrade via `/pricing` |
+|| **No email notifications** | The system does not send email reminders when a trial is about to expire or has expired | Users discover expiration when they see the banner or try to use a paid feature |
+|| **Single-trial enforcement** | There is no mechanism to prevent the same email from starting multiple trials across different sessions | The idempotency check (user company membership) prevents duplicates for the same user, but a different email could create a second trial |
+|| **Trial-to-paid conversion** | Users must manually visit /pricing and subscribe via Stripe Checkout, or use `POST /api/trial/convert` | Future feature — automated conversion on trial end |
+|| **Stripe not configured on trial convert** | The `POST /api/companies/:companyId/trial/convert` endpoint requires Stripe to be configured. If Stripe is not set up, it returns a `500` | Configure `STRIPE_SECRET_KEY` and related env vars before going live |
+|| **Reaper delay** | The trial expiry reaper runs every 1 hour (default). Expired trials may have up to 1 hour of continued grace access after expiry | This is intentional — prevents hard cutoffs. The `grace_period` status preserves data access |
+|| **Reaper vs. webhook race** | The reaper (sets `grace_period` on sweep) and `handlePostTrialStatus` (sets `grace_period` via Stripe webhook) may race. Both produce the same result | Both transitions are idempotent. The last write wins. Data is preserved in both paths |
 || **Onboarding already completed/skipped** | Once onboarding is completed (role selected) or skipped, the user cannot change their choice | No workaround — the company's onboarding status is final. If a role needs changing, create a new agent manually via the Agents API |
 || **Onboarding role selection not retryable** | If role selection fails mid-transaction (e.g., agent creation), the entire transaction rolls back and the user can retry | The FOR UPDATE lock prevents partial state. The user sees an error and can select a role again |
 || **Claude Local adapter default** | The onboarding wizard creates agents with `claude_local` adapter by default. If this adapter is unavailable, role selection fails | Ensure `claude_local` adapter is available, or update the onboarding service to use a different default adapter |
@@ -276,7 +300,7 @@ The onboarding wizard is presented to the user immediately after registration (b
 
 1. Check server logs for `"Failed to start trial (non-fatal)"` — this indicates the trial creation failed but company was still created
 2. Verify the `Trial` tier exists: `SELECT * FROM subscription_tiers WHERE name = 'Trial';`
-3. Manually start a trial: `POST /api/companies/:companyId/billing/start-trial`
+3. Manually start a trial: `POST /api/companies/:companyId/trial/start`
 4. Check if the trial was already started but the UI wasn't updated (refresh the page)
 
 ### Symptom: Trial banner not showing
@@ -291,16 +315,18 @@ The onboarding wizard is presented to the user immediately after registration (b
 
 ### Symptom: User's trial says expired but they should still have time
 
-1. Check the `trial_end` value in `company_subscriptions` — it may have been set incorrectly
-2. The reaper's 30-minute interval may have run early if the trial was created with a short `trialDays`
-3. Manually update: `UPDATE company_subscriptions SET status = 'trialing' WHERE company_id = '<companyId>';`
+1. Check the `trialEnd` value in `company_subscriptions` — it may have been set incorrectly
+2. The reaper's 1-hour interval may have run early. Wait for the next sweep or check `status` in the DB
+3. If the subscription is in `grace_period`, the user still has data access. The `expired` status only activates after the grace period fully elapses
+4. Manually adjust: `UPDATE company_subscriptions SET status = 'trialing' WHERE company_id = '<companyId>';` (be aware this bypasses the grace period mechanism)
 
 ### Symptom: User can access paid features after trial expires
 
-- The `past_due` status blocks paid features via feature gating. If a user still has access, verify:
-  1. The reaper ran: check server logs for `"Trial reaper expired subscriptions"`
-  2. The `past_due` status is properly integrated with feature gating
-  3. The user may be within the 30-minute reaper window
+- The `grace_period` status preserves data access during the 7-day grace window. This is by design.
+- If the subscription has been in `grace_period` for more than 7 days, check:
+  1. The reaper ran: check server logs for `"Trial reaper: grace period elapsed — subscription marked as expired"` or `"Trial reaper: trial expired — entered grace period"`
+  2. `currentPeriodEnd` in the subscriptions table indicates when the grace period should have ended
+  3. The user may be within the 1-hour reaper window
 
 ### Symptom: Onboarding wizard doesn't appear after registration
 
@@ -338,10 +364,12 @@ The onboarding wizard is presented to the user immediately after registration (b
 - [ ] Trial banner shows correct days remaining
 - [ ] TrialBadge renders in nav context
 - [ ] Banner shows expired state after trial end
-- [ ] Reaper transitions expired trials to `past_due` within 30 minutes
+- [ ] Reaper transitions expired trials to `grace_period` within 1 hour
+- [ ] Reaper transitions expired grace periods to `expired` (second sweep)
 - [ ] Trial tier limits (1 seat, 100 runs, 1 GB) are enforced
 - [ ] Idempotency — same user cannot create multiple companies
 - [ ] Existing company's `startTrial` returns existing subscription (idempotent)
+- [ ] Trial/convert creates a Stripe Checkout session
 - [ ] No trial banner when subscription is not `trialing`
 - [ ] Pricing page is accessible from trial banner links
 - [ ] GET /onboarding/status returns `pending` for a new company
@@ -351,3 +379,4 @@ The onboarding wizard is presented to the user immediately after registration (b
 - [ ] POST /onboarding/skip returns 409 after role selection
 - [ ] Activity log entries created for role selection and skip
 - [ ] Onboarding status persists across page refreshes
+- [ ] Reaper logs correct messages (`"Trial reaper: trial expired — entered grace period"`, `"Trial reaper: grace period elapsed — subscription marked as expired"`)
