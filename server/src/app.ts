@@ -665,6 +665,7 @@ export async function createApp(
   // live-events, auth, and logging infrastructure.
   let voyonderRouter: Router | null = null;
   try {
+    // @ts-ignore — optional peer dep; gracefully degrades at runtime if absent
     const { createVoyonderApp } = await import("@voyonder/product");
     const voyonderOpts: VoyonderOptions = {
       eventBus: createPaperclipEventBus(),
