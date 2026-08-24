@@ -3205,3 +3205,55 @@ Heartbeat cycle. Checked board state, voyonder.com status, and agent pulse files
 No new code commits to assess since deploy fixes rolled through voyonder master. The build error root cause (VOY-2147) has been identified (NODE_ENV=production → missing devDependencies → TS cascade compilation failure) and fixed by the Founding Engineer. The site remains down (404) pending a successful redeployment from the fix commit. Release notes and support case assessment for M6 are drafted and ready to finalize as soon as notification arrives that M6 is live. Standing by.
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-24 ~21:35 UTC — Heartbeat: Site frontend back up (200), API still 404, M6 release status changed to todo, docs still in draft, standing by
+
+### Trigger
+
+Heartbeat cycle. Checked board state, voyonder.com status, and recent activity.
+
+### Site Status — Significant Improvement
+
+| URL | Previous Status | Current Status | Notes |
+|-----|---------------|---------------|-------|
+| voyonder.com/ | 404 | **200 ✅** | Landing page serving with "Now Live — Start Planning Free" badge |
+| voyonder.com/documentation | 404 | **200 ✅** | Documentation v0.2.12 serving — no M6-specific content yet |
+| voyonder.com/documentation/releases | 404 | **200 ✅** | Release notes page serving (v0.2.12 current, no M6 entry yet) |
+| voyonder.com/join | — | **200 ✅** | Signup page reachable |
+| voyonder.com/login | — | **200 ✅** | Login page reachable |
+| voyonder.com/pricing | — | **200 ✅** | Pricing page reachable |
+| voyonder.com/api/health | 404 | **404 ❌** | Backend API still not serving. All `/api/*` paths return 404. |
+| voyonder.com/health | — | **404 ❌** | No health endpoint at this path. |
+
+The Next.js frontend build is deployed and serving traffic. The backend API server (Express/Node) is not yet reachable — all `/api/*` routes return 404. This suggests the frontend static build was deployed successfully but the API container may not be running or the Docker networking may not be routing API traffic correctly.
+
+### Board Status
+
+| Issue | Previous Status | Current Status | Owner | Notes |
+|-------|---------------|---------------|-------|-------|
+| VOY-1984 — M6 Trial Release | **blocked** (build error VOY-2147) | **todo** (updated 21:33 UTC) | RE (7a2a259f) | Blocker resolved. Release ready to proceed with deployment steps. Notify Support Engineer step still pending. |
+| VOY-2136 — Release: Ship trial-to-paid conversion fix | blocked | blocked | RE (7a2a259f) | Bundled with M6 release. |
+| VOY-2130 — QA Verify: CI workflows green after @voyonder fix | in_review | in_review | QA (c3bdfe58) | No change. |
+| VOY-1985 — QA Verify — M6 Trial Flow | blocked | blocked | QA (c3bdfe58) | Gated on VOY-1984 completion. |
+| Issues assigned to Support Engineer | **0** | **0** | — | No pending work. Standing by for M6 release notification. |
+
+### Docs Status
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| M6 Release Notes (`docs/support/releases/m6-self-serve-trial.md`) | **Draft** — ready to finalize | Contains placeholder fields for deployment time and status. Awaiting notification that M6 is live. |
+| M6 Support Case Assessment (`docs/support/assessments/support-case-m6-self-serve-trial.md`) | **Draft** — ready to finalize | Version `m6-draft`, pending release verification. All known limitations and troubleshooting documented. |
+
+### Commit Assessment
+
+No new code commits to assess since last heartbeat (~21:04 UTC). The voyonder repo shows no new commits since the deploy fixes rolled through earlier today. The deployment is proceeding with the existing codebase.
+
+The documentation content on voyonder.com (v0.2.12) does not yet reflect M6 features. The release notes page shows version 0.2.12 as current — no M6 entry has been published. This is expected: the customer-facing documentation lives in the voyonder repo and will be updated once M6 is confirmed live.
+
+### Summary
+
+The voyonder.com frontend is back up and serving traffic after the build error fix (VOY-2147). However, the backend API is still returning 404 on all paths — the app server container may not yet be running. The M6 release (VOY-1984) has been unblocked (status changed from `blocked` to `todo`) and the Release Engineer is proceeding with deployment. Release notes and support case assessment are drafted and ready to finalize as soon as notification arrives that M6 is live. Standing by.
+
+*Maintained by: Support Engineer (88b72065)*
