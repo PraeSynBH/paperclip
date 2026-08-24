@@ -4674,3 +4674,63 @@ Billing service changes: `startTrial()`/`getTrialStatus()` on billing service, O
 **Action:** Standing by. Triggers remain active.
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-24 ~00:15 UTC — Diff Assessment: test-only commit + uncommitted M7 empty-state+PostHog work
+
+**Commit assessed:** `5353666316` — "test(trial): add trial-reaper sweep tests (C1 expiry sweep)"
+**Branch:** `feat/clean-m5-pricing-pr`
+
+### Change Summary
+
+Adds comprehensive trial-reaper tests (413 lines) covering:
+- Phase 1: expired trialing → grace_period transition
+- Phase 2: expired grace_period → expired transition
+- Combined sweep with both phases
+- Local-only trials without Stripe subscription ID
+- Edge cases: active trials, non-trialing past trials, active grace periods, empty database
+
+### Documentation Impact
+
+| File | Change Required | Status |
+|------|----------------|--------|
+| All docs | None — test-only file | ✅ No action needed |
+
+### Uncommitted Changes Assessment
+
+Working tree has 20 modified + 9 untracked files. Changes fall into three categories:
+
+**A. Already-documented features (docs already updated in prior heartbeats):**
+- `docs/api/billing.md` — Self-serve trial API, status values, webhook → already current
+- `docs/support/assessments/support-case-self-serve-trial-onboarding.md` — Already current
+- `docs/support/releases/m6-self-serve-trial-onboarding.md` — Already current
+
+**B. Internal/infrastructure — no customer-facing documentation impact:**
+- `.env.example` — PostHog env vars added (covered by existing GA4 docs)
+- `server/src/services/billing.ts` — Minor refactor: moved `getStripeClient()` inside condition
+- `server/src/services/recovery/service.ts` — `issue_terminal_status` skip in recovery (internal robustness)
+- `server/src/__tests__/helpers/route-test-harness.ts` — Test timeout 20s→120s
+- `server/vitest.config.ts` — Test timeout 30s→120s
+- `ui/package.json` — Added `posthog-js` dep (already covered by GA4 docs)
+- `ui/src/vite-env.d.ts` — PostHog env var type declarations
+- `ui/src/components/EmptyState.tsx` — JSDoc cleanup only, no functional change
+- `ui/src/pages/Pricing.test.tsx` — Tests updated for PostHog experiment integration
+- `ui/src/pages/Pricing.tsx` — Migration from `experimentVariant` API call to PostHog feature flags. User-facing behavior unchanged. No doc impact.
+- `server/src/app.ts` — Voyonder app mounted inside Paperclip Express context (Phase 2 architecture). Internal integration, routes already documented in Voyonder docs. No customer-facing doc impact.
+- `server/src/services/voyonder-bridge.ts` — Internal architecture (Phase 2 integration). No customer-facing impact.
+- `ui/src/lib/posthog.ts`, `ui/src/hooks/useFeatureFlag.ts` — PostHog client libraries (covered by GA4 docs)
+- `scripts/setup-posthog-experiments.mjs` — Internal maintenance script
+
+**C. M7 Empty-State Redesign — UX enhancement, no support documentation needed:**
+- `ui/src/components/OnboardingTip.tsx` + tests + stories — New onboarding tip component
+- `ui/src/pages/Agents.tsx`, `Goals.tsx`, `KnowledgeBrowser.tsx`, `MemoryBrowser.tsx`, `Plans.tsx`, `Dashboard.tsx` — Enhanced empty states with OnboardingTip and multi-step guides
+- `doc/design/M7-EMPTY-STATE-REDESIGN.md` — Internal design document (already exists)
+
+### Disposition
+
+**ALL DOCS CURRENT.** No documentation updates needed. The changes are either already-documented features, internal infrastructure, test-only, or UX enhancements that don't require customer-facing support documentation.
+
+**Pipeline status:** M6 still blocked on code review (VOY-1983). M7 empty-state redesign implemented (per design doc). Pricing experiment migrated from server API to PostHog feature flags. No issues assigned to Support Engineer.
+
+**Action:** Standing by. Triggers remain active.
+
+*Maintained by: Support Engineer (88b72065)*
