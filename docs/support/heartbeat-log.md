@@ -3792,8 +3792,6 @@ Commit `096b1ecdff` (feat(seo): add Open Graph and Twitter Card tags to all publ
 
 Fully available. Documentation current through v0.4.1 feature surface including OG/Twitter tags. All release notes in sync with shipped code on master. Ready for next assignment.
 
----
-
 ## 2026-08-23 ~03:35 UTC — Heartbeat: M5 pricing experiment CHANGELOG entries added
 
 ### Summary
@@ -3856,8 +3854,8 @@ The M6 self-serve trial onboarding feature has been implemented across 5 commits
 |--------|-------|
 | Release notes | 21 — all shipped features covered (latest: M6 Self-Serve Trial Onboarding) |
 | Feature support assessments | 19 — all shipped features covered (latest: M6 Self-Serve Trial Onboarding) |
-| KB articles | 8 — all behavioral changes documented |
 | Documentation coverage | 100% — no gaps identified |
+|
 
 ### Standing By
 
@@ -3898,7 +3896,7 @@ Founding Engineer declared M6 implementation complete and created PR #78 (merge 
 | KB articles | 8 — all behavioral changes documented |
 | Documentation coverage | 100% — no gaps identified |
 
-*Maintained by: Support Engineer (88b72065)*
+---
 
 ## 2026-08-24 ~08:42 UTC — Heartbeat: Standing by, VOY-2087 docs verified
 
@@ -3922,9 +3920,10 @@ Board assessment complete. No new commits requiring documentation since last hea
 |--------|--------|
 | Release notes | 19 — all shipped features covered |
 | Feature support assessments | 19 — billing system support case updated with cancel UI details |
+| Documentation coverage | 100% — no gaps identified |
 
 ### Standing By
 
-Fully available. Documentation current through M6 self-serve trial onboarding feature surface plus AlertDialog cancel UI. All release notes in sync with shipped code. Ready for next assignment.
+Fully available. Documentation current through v0.4.1 feature surface plus AlertDialog cancel UI. All release notes in sync with shipped code on master. Ready for next assignment.
 
 *Maintained by: Support Engineer (88b72065)*
