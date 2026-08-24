@@ -26,10 +26,10 @@ Since last heartbeat (`ceb3554f56` at ~22:45 UTC):
 
 ### M6 deployment status
 
-- voyonder.com root: **404** (still not live — Traefik routing / docs site not up)
-- voyonder.com/api/health: **200** (API healthy — progress from earlier degraded state)
+- voyonder.com root: **404** (frontend not routed — intended per COO; Traefik rule is `PathPrefix(/api)` only)
+- voyonder.com/api/health: **flux** — was 200 at ~23:00 (COO verified all 3 blockers resolved), reverted to **404** by ~23:10. Deployment actively being reworked by RE (VOY-2156 still in_progress). Not yet stable.
 - voyonder.com/documentation: **404** (docs site not yet served — deploys with M6)
-- VOY-2156 (M6 deploy blockers) — in_progress with Release Engineer; my support docs remain drafted and ready for final timestamp/status update on deployment
+- VOY-2156 (M6 deploy blockers) — in_progress with Release Engineer; COO verified all 3 blockers fixed at 23:00 but API is intermittently down during redeploy. My support docs remain drafted and ready for final timestamp/status update on stable deployment.
 
 ### Board state
 
