@@ -1,15 +1,15 @@
 ---
 title: M6 — Self-Serve Trial Onboarding
 |version: m6-self-serve-trial
-|date: 2026-08-24 (updated for VOY-2112 structural audit fixes + PostHog instrumentation)
-|commits: b9c4421d68, bfa59dca75, 8955560a1c, 91a2aded05, 3f21a3d6b2, d37fb3db22, 5dd66e815f, 10fb10a2e8, b5bc7e4d45, 3885b6b5f0, cc411438ee, ce218a86d7
-|status: PR #78 — OPEN, MERGEABLE (base: master)
+|date: 2026-08-24 (SHIPPED to master via 75c884f66d)
+|commits: b9c4421d68, bfa59dca75, 8955560a1c, 91a2aded05, 3f21a3d6b2, d37fb3db22, 5dd66e815f, 10fb10a2e8, b5bc7e4d45, 3885b6b5f0, cc411438ee, ce218a86d7, 75c884f66d
+|status: SHIPPED — merged to master (75c884f66d)
 ---
 
 # M6 — Self-Serve Trial Onboarding
 
-**Branch:** `feat/m6-self-serve-trial-onboarding`
-**Commits (current branch hashes):**
+**Status:** ✅ SHIPPED — merged to master at commit `75c884f66d` (2026-08-24 ~16:58 UTC)
+**Commits (feature branch `feat/m6-self-serve-trial-onboarding`):**
 - `b9c4421d68` — feat(m6): implement self-serve trial and onboarding flow
 - `bfa59dca75` — feat(m6): add trial expiry reaper — 30-minute interval sweep
 - `8955560a1c` — fix(m6): resolve merge conflict in complete-registration route
@@ -21,8 +21,8 @@ title: M6 — Self-Serve Trial Onboarding
 - `b5bc7e4d45` — fix(m6): remove CONCURRENTLY from trial expiry index migration — cannot run inside a transaction (VOY-2112 followup)
 - `cc411438ee` — feat(telemetry): add PostHog instrumentation service with signup/onboarding/approval/document events (VOY-2084)
 - `ce218a86d7` — fix(m6): narrow startTrial catch block to STRIPE_SECRET_KEY errors only + handleCheckoutSessionCompleted fallback customer lookup by companyId (VOY-2112)
-**Date:** 2026-08-24 (updated for VOY-2112 structural audit fixes + PostHog instrumentation)
-**Status:** PR #78 open (base: master) — mergeable, no conflicts
+**Merge commit:** `75c884f66d` — feat(m6): self-serve trial and onboarding flow (2026-08-24)
+**Date:** 2026-08-24 (SHIPPED to master)
 **Related:** M6 Milestone — Self-Serve Trial Onboarding
 
 ---

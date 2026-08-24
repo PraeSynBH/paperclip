@@ -4089,3 +4089,61 @@ Git commit `ce218a86d7` authored by Staff Engineer after final M6 structural aud
 ### Summary
 
 Documentation updated for the Staff Engineer's final M6 structural audit fix (VOY-2112). The narrowed catch block and webhook customer fallback are now documented in both the support case assessment and release notes. Release pipeline remains blocked on GitHub billing resolution. Standing by.
+
+---
+
+## 2026-08-24 ~17:00 UTC — Heartbeat: M6 SHIPPED to master — docs updated to reflect merged state
+
+### Trigger
+
+Git commit `75c884f66d` authored by Ben Hamilton — M6 feature committed directly to master:
+```
+feat(m6): self-serve trial and onboarding flow
+
+- Self-serve trial signup and onboarding flow
+- Trial banner and badge UI components
+- Trial expiry reaper (30-minute interval)
+- Billing integration for trial-to-paid conversion
+- PostHog telemetry instrumentation
+- Concurrent registration protection (pg_advisory_xact_lock)
+- Trial expiry partial index
+```
+
+### Diff Assessment
+
+70 files changed (+4,585/-40). The merge commit `75c884f66d` consolidates the entire `feat/m6-self-serve-trial-onboarding` feature branch into master. All changes have been previously assessed through individual commit reviews:
+
+| Change | Previous Assessment | Documentation Impact |
+|--------|-------------------|---------------------|
+| M6 trial signup + onboarding flow | Multiple assessments over Aug 23-24 | ✅ Already documented — status updated from PR → SHIPPED |
+| TrialBanner.tsx (UI component) | Assessed in earlier M6 commits | ✅ Documented in support case + release notes |
+| Trial expiry reaper | Assessed VOY-2112/2113 fix commits | ✅ Documented |
+| Trial-to-paid conversion fix (VOY-2117) | Assessed after 3885b6b5f0 and ce218a86d7 | ✅ Documented |
+| PostHog instrumentation (cc411438ee) | Assessed ~15:30 UTC — backend analytics only | ✅ No user-facing impact; documented as backend |
+| SEO test coverage | Test-only — no behavior change | ✅ No documentation impact |
+| doc/status/ and doc/coo/ files | Inter-agent status updates | ✅ Not in Support Engineer scope |
+
+### Documentation Updates Applied
+
+| Document | Change |
+|----------|--------|
+| `docs/support/releases/m6-self-serve-trial-onboarding.md` | Updated status from "PR #78 — OPEN, MERGEABLE" to "SHIPPED — merged to master". Added merge commit `75c884f66d` to commit list. Updated dates. |
+| `docs/support/assessments/support-case-self-serve-trial-onboarding.md` | Updated frontmatter — merged to master status, commit list includes `75c884f66d`. Removed branch/PR references. |
+| `docs/support/README.md` | M6 row updated: shipped date Aug 24, status "SHIPPED — merged to master via 75c884f66d". Last-updated timestamp refreshed. |
+
+### Board Status
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| VOY-1984 — M6 Trial Release | ✅ done | RE → CEO | Feature is on master. Deploy blocked on GitHub billing. |
+| VOY-2088 — GitHub billing escalation | blocked | CEO (c2a215b2) | Human action needed — GitHub billing resolution |
+| VOY-2131 — Release CI fix | in_progress | RE (7a2a259f) | CI fix approved, merge to master pending |
+| VOY-2134 — Trial-to-paid conversion bug | in_progress | FE (57fa7e0e) | Code fix in progress |
+| VOY-2128 — CI fix (remove @voyonder deps) | in_progress | FE (57fa7e0e) | Implementation in progress |
+| Issues assigned to Support Engineer | **0** | — | No pending work |
+
+### Summary
+
+M6 self-serve trial onboarding has been committed to master. Documentation already existed for the full feature set and has been updated to reflect the merged state. Release pipeline remains blocked on GitHub Actions billing resolution (human action needed by repo admin). All shipped code is fully documented. Standing by.
+
+*Maintained by: Support Engineer (88b72065)*
