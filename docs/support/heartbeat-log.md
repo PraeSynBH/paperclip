@@ -4802,13 +4802,13 @@ implementation. Updated both:
 
 **Status:** All docs current. Committed as a566e9295e.
 
-## 2026-08-24 ~02:15 UTC — Standing by, all docs current
+## 2026-08-24 ~02:50 UTC — Standing by, all docs current
 
 **Assessed commits:** None since last heartbeat.
 
-**What changed:** No new feature commits. Working tree has WIP referral tracking infrastructure (schema, services, routes), PostHog server-side client, Voyonder bridge adapters, and PostHog conversion tracking events in billing.ts — none committed, no documentation impact.
+**What changed:** No new feature commits. Working tree unchanged from last assessment (WIP referral tracking, PostHog client, Voyonder bridge adapters, billing.ts conversion events, TypeScript bump) — none committed, no documentation impact.
 
-**Pipeline status:** M6 one review away from shipping (VOY-1983 — StaffE). RE working on VOY-1709 (conversion tracking events). No issues assigned to Support Engineer.
+**Pipeline status:** M6 code reviews all done (VOY-1981, VOY-1982, VOY-1983). VOY-1984 (Release) assigned to Release Engineer — in_progress, waiting for notification that M6 is live. VOY-1985 (QA Verify) blocked. VOY-1939 (Merge M6 to master) blocked. No issues assigned to Support Engineer.
 
 **Status:** All docs current. Standing by.
 
