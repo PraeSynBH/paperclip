@@ -123,6 +123,7 @@ export function researchSearchService(db: Db) {
       .where(
         and(
           eq(issues.companyId, companyId),
+          isNull(issues.hiddenAt),
           or(
             ilike(issues.title, containsPattern),
             sql<boolean>`lower(coalesce(${issues.identifier}, '')) LIKE ${containsPattern} ESCAPE '\\'`,

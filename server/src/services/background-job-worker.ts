@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { and, eq, inArray, isNotNull, lt } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { backgroundJobs } from "@paperclipai/db";
@@ -399,15 +400,19 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
     }
   }
 
+  let ticking = false;
+
   async function tick() {
-    if (stopped) return;
-    if (inFlight >= batchSize) return;
+    if (stopped || ticking) return;
+    ticking = true;
     try {
       const rows = await claimQueuedJobs();
       inFlight += rows.length;
       await Promise.all(rows.map((row) => processJob(row).finally(() => { inFlight -= 1; })));
     } catch (err) {
       logger.error({ err }, "Background job worker tick failed");
+    } finally {
+      ticking = false;
     }
   }
 
@@ -477,7 +482,12 @@ function buildVEvent(event: Record<string, unknown>): string[] {
   const location = typeof event.location === "string" ? event.location : undefined;
   const description = typeof event.description === "string" ? event.description : undefined;
 
-  const lines = ["BEGIN:VEVENT", `SUMMARY:${sanitizeIcsText(title)}`];
+  const lines = [
+    "BEGIN:VEVENT",
+    `UID:${randomUUID()}@voyonder.com`,
+    `DTSTAMP:${toIcsDate(new Date().toISOString())}`,
+    `SUMMARY:${sanitizeIcsText(title)}`,
+  ];
   if (start) lines.push(`DTSTART:${toIcsDate(start)}`);
   if (end) lines.push(`DTEND:${toIcsDate(end)}`);
   if (location) lines.push(`LOCATION:${sanitizeIcsText(location)}`);

@@ -50,6 +50,10 @@ export function backgroundJobService(db: Db) {
   }
 
   function emitEvent(row: typeof backgroundJobs.$inferSelect) {
+    // Strip large binary data from SSE payload — the client uses SSE as a
+    // signal to re-fetch via getById(), never reads dataUri from the event.
+    // Matches the slim projection in toApi().
+    const result = row.result ? { ...row.result, dataUri: undefined } : row.result;
     try {
       publishLiveEvent({
         companyId: row.companyId,
@@ -60,7 +64,7 @@ export function backgroundJobService(db: Db) {
           status: row.status,
           progress: row.progress,
           progressMessage: row.progressMessage,
-          result: row.result,
+          result,
           error: row.error,
           durationMs: row.durationMs,
           startedAt: row.startedAt?.toISOString() ?? null,
