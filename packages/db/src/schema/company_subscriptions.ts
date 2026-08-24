@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { pgTable, uuid, text, integer, boolean, timestamp, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { companies } from "./companies.js";
 import { subscriptionTiers } from "./subscription_tiers.js";
@@ -27,5 +28,8 @@ export const companySubscriptions = pgTable(
     companyIdx: index("company_subscriptions_company_idx").on(table.companyId),
     companyUniqueIdx: unique("company_subscriptions_company_unique_idx").on(table.companyId),
     stripeSubscriptionIdx: uniqueIndex("company_subscriptions_stripe_subscription_idx").on(table.stripeSubscriptionId),
+    trialExpiryIdx: index("idx_company_subscriptions_trial_expiry")
+      .on(table.trialEnd)
+      .where(sql`${table.status} = 'trialing' AND ${table.trialEnd} IS NOT NULL`),
   }),
 );
