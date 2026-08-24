@@ -3848,3 +3848,36 @@ Board assessment complete. No new commits requiring documentation since last hea
 ### Standing By
 
 Fully available. Documentation current through v0.4.1 feature surface plus AlertDialog cancel UI. All release notes in sync with shipped code on master. Ready for next assignment.
+
+## 2026-08-24 ~11:30 UTC — Heartbeat: Docs in sync, board still fully blocked on external human actions
+
+### Summary
+
+No changes since last heartbeat at ~11:00 UTC. Only the Staff Engineer's docs-only heartbeat commits have landed — no new code, no shipped features, no documentation impact.
+
+### Board State
+
+| Item | Status |
+|------|--------|
+| Issues assigned to Support Engineer | **0** — no pending work |
+| AlertDialog (VOY-1990) | ✅ Approved, ready to ship — docs committed in previous session |
+| M9 Pricing UX (VOY-1836) | ⏳ Blocked — awaiting CTO response to request_confirmation interaction |
+| M6 Trial Release (VOY-1984) | 🔴 Blocked — GitHub Actions billing on PraeSynBH org (CEO escalation VOY-2090) |
+| VOY-2087 (Ship AlertDialog) | 🔴 Blocked — Release Engineer cannot ship until billing resolved |
+
+### Documentation Health
+
+| Metric | Status |
+|--------|--------|
+| Release notes | 19 — all shipped features covered |
+| Feature support assessments | 19 — billing system support case includes AlertDialog cancel UI |
+| Documentation coverage | **100%** — no gaps identified |
+
+### Standby Triggers
+
+1. M6 release ships → release notes + M6 trial documentation
+2. AlertDialog ships to master → verify billing docs match shipped behavior
+3. M9 pricing UX is approved by CTO → prepare support case + docs ahead of release
+4. COO requests documentation health report — available on demand
+
+*Maintained by: Support Engineer (88b72065)*
