@@ -4,6 +4,7 @@
 // instrumentationReady before opening DB connections or constructing the
 // HTTP server, so trace coverage does not depend on incidental timing.
 import { instrumentationReady, shutdownInstrumentation } from "./instrumentation.js";
+import { initPostHog, shutdownPostHog } from "./services/posthog.js";
 // ── Voyonder Bridge — adapters for C1 (EventBus) and C2 (AuthProvider) ──
 export {
   createPaperclipEventBus,
@@ -155,6 +156,7 @@ export async function startServer(): Promise<StartedServer> {
   ensureDecisionSigningSecret();
   let config = loadConfig();
   initTelemetry({ enabled: config.telemetryEnabled });
+  initPostHog();
   if (process.env.PAPERCLIP_SECRETS_PROVIDER === undefined) {
     process.env.PAPERCLIP_SECRETS_PROVIDER = config.secretsProvider;
   }
@@ -1720,6 +1722,8 @@ export async function startServer(): Promise<StartedServer> {
         telemetryClient.stop();
         await telemetryClient.flush();
       }
+
+      await shutdownPostHog();
 
       if (!skipHeartbeatDrain && drainHeartbeatRunsForShutdown) {
         try {

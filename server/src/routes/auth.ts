@@ -15,6 +15,7 @@ import { logger } from "../middleware/logger.js";
 import { billingService } from "../services/billing.js";
 import { companyService } from "../services/companies.js";
 import { accessService, logActivity } from "../services/index.js";
+import { trackSignupCompleted } from "../services/posthog.js";
 
 async function loadCurrentUserProfile(db: Db, userId: string) {
   const user = await db
@@ -198,6 +199,9 @@ export function authRoutes(db: Db) {
         entityId: result.company.id,
         details: { name: result.company.name, source: "self_serve_registration" },
       });
+
+      // Fire PostHog signup.completed event (no-op if PostHog not configured)
+      trackSignupCompleted(result.company.id, userId, body.trialDays ?? 14);
 
       logger.info(
         { companyId: result.company.id, userId },
