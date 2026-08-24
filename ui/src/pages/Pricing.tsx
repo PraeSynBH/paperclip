@@ -301,11 +301,15 @@ export function PricingPage() {
   // ── Cancel Handlers ────────────────────────────────────────────────────────
 
   const handleConfirmCancel = () => {
-    // Fire GA4 event if gtag is available
-    if (typeof window !== "undefined" && typeof window.gtag === "function") {
-      window.gtag("event", "subscription_cancellation_started", {
-        company_id: companyId,
-      });
+    // Fire GA4 event if gtag is available (must not block cancellation)
+    try {
+      if (typeof window.gtag === "function") {
+        window.gtag("event", "subscription_cancellation_started", {
+          company_id: companyId,
+        });
+      }
+    } catch {
+      // Telemetry failure must not prevent subscription cancellation
     }
     cancelMutation.mutate();
     setCancelDialogOpen(false);
@@ -555,7 +559,9 @@ export function PricingPage() {
       )}
 
       {/* Cancel confirmation dialog */}
-      <AlertDialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+      <AlertDialog open={cancelDialogOpen} onOpenChange={(open) => {
+        if (!open && !cancelMutation.isPending) setCancelDialogOpen(false);
+      }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Cancel Subscription</AlertDialogTitle>
