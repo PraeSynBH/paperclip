@@ -3904,4 +3904,40 @@ No changes since last heartbeat at ~11:30 UTC. No new code on master. No feature
 | Feature support assessments | 19 — all current |
 | Documentation coverage | **100%** — no gaps identified |
 
+## 2026-08-24 ~12:15 UTC — Heartbeat: Docs in sync, AlertDialog branch gained bugfix, board still blocked
+
+### Summary
+
+One change since ~11:50 UTC: a bugfix commit (`5b10438599`) landed on the `fix/confirm-alertdialog-review-issues` branch — removes the `isPending` guard from AlertDialog's `onOpenChange` handler, which was causing the cancel dialog to unexpectedly re-open after mutation completion.
+
+**Documentation impact: None.** This fix aligns behavior with what was already documented — the dialog closes immediately on user action. No user-facing contract changed.
+
+No code on master. No features shipped. Board remains fully stalled on GitHub Actions billing (human action needed).
+
+### Board State
+
+| Item | Status |
+|------|--------|
+| Issues assigned to Support Engineer | **0** — no pending work |
+| AlertDialog (VOY-1990) | ✅ Approved + bugfix committed — ready to ship when CI unblocked |
+| M9 Pricing UX (VOY-1836) | ⏳ Blocked — awaiting CTO response |
+| M6 Trial Release (VOY-1984) | 🔴 Blocked — GitHub Actions billing (CEO escalation VOY-2090/2088) |
+| PostHog credentials (VOY-1719) | ✅ Provided — no documentation impact yet |
+| AlertDialog ship PR (VOY-2087) | 🔴 Blocked — downstream of GitHub billing |
+
+### Documentation Health
+
+| Metric | Status |
+|--------|--------|
+| Release notes | 19 — all shipped features covered |
+| Feature support assessments | 19 — billing system support case covers cancellation UI |
+| Documentation coverage | **100%** — no gaps identified |
+
+### Standby Triggers (unchanged)
+
+1. M6 release ships → release notes + M6 trial documentation
+2. AlertDialog ships to master → verify billing docs match shipped behavior
+3. M9 pricing UX is approved by CTO → prepare support case + docs ahead of release
+4. COO requests documentation health report — available on demand
+
 *Maintained by: Support Engineer (88b72065)*
