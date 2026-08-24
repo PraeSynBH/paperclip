@@ -61,6 +61,7 @@ import {
   workTimelineService,
 } from "../services/index.js";
 import { isCloudManagedInstance } from "../services/cloud-instance.js";
+import { captureMetric } from "../services/posthog.js";
 import type { StorageService } from "../storage/types.js";
 import { assertBoard, assertCompanyAccess, assertInstanceAdmin, getActorInfo } from "./authz.js";
 import { COMPANY_IMPORT_ROUTE_PATH } from "./company-import-paths.js";
@@ -1138,6 +1139,13 @@ export function companyRoutes(db: Db, storage?: StorageService, options?: Compan
       entityType: "company",
       entityId: company.id,
       details: { name: company.name },
+    });
+
+    // Fire signup_completed conversion event (best-effort, never blocks the response)
+    captureMetric("pricing.signup_completed", company.id, {
+      companyId: company.id,
+      companyName: company.name,
+      ownerPrincipalId,
     });
     if (company.budgetMonthlyCents > 0) {
       await budgets.upsertPolicy(

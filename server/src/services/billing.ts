@@ -15,6 +15,7 @@ import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { publishLiveEvent } from "./live-events.js";
 import { getGa4AnalyticsService, buildTrialStartEvent } from "./ga4-analytics.js";
 import type { PricingExperimentVariant, PricingExperimentService } from "./pricing-experiment.js";
+import { captureMetric } from "./posthog.js";
 import { logger } from "../middleware/logger.js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
@@ -172,6 +173,8 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     if (!invoice.subscription) return;
     const subId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription.id;
 
+    let companyId: string | undefined;
+
     await db.transaction(async (tx) => {
       const sub = await tx
         .select()
@@ -183,6 +186,8 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         logger.warn({ stripeSubscriptionId: subId }, "Received invoice for unknown subscription");
         return;
       }
+
+      companyId = sub.companyId;
 
       // Upsert: INSERT ... ON CONFLICT (stripe_invoice_id) DO UPDATE
       // Handles at-least-once delivery from Stripe (race-free with the UNIQUE index)
@@ -216,6 +221,17 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           "updated_at" = NOW()
       `);
     });
+
+    // Fire subscription_activated conversion event (best-effort, never blocks)
+    if (companyId) {
+      captureMetric("pricing.subscription_activated", companyId, {
+        companyId,
+        stripeSubscriptionId: subId,
+        invoiceAmountCents: invoice.amount_paid ?? invoice.total ?? 0,
+        periodStart: invoice.period_start ? new Date(invoice.period_start * 1000).toISOString() : null,
+        periodEnd: invoice.period_end ? new Date(invoice.period_end * 1000).toISOString() : null,
+      });
+    }
   };
 
   const handleInvoicePaymentFailed = async (invoice: Stripe.Invoice) => {
@@ -261,6 +277,7 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     }
 
     const tierId = stripeSub.metadata?.paperclipTierId;
+    let oldStatus: string | undefined;
 
     await db.transaction(async (tx) => {
       // Search by stripe_subscription_id first, then fallback to companyId for
@@ -280,6 +297,7 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       }
 
       if (existing) {
+        oldStatus = existing.status;
         await tx
           .update(companySubscriptionsTable)
           .set({
@@ -428,10 +446,24 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     // After the subscription update, check if the trial has ended and handle
     // the transition to grace period if needed.
     await handlePostTrialStatus(stripeSub);
+
+    // Fire trial_converted event when a trialing subscription becomes active
+    // (best-effort, never blocks)
+    if (oldStatus === "trialing" && stripeSub.status === "active") {
+      captureMetric("pricing.trial_converted", companyId, {
+        companyId,
+        stripeSubscriptionId: stripeSub.id,
+        tierId: tierId ?? null,
+        trialEnd: stripeSub.trial_end
+          ? new Date(stripeSub.trial_end * 1000).toISOString()
+          : null,
+      });
+    }
   };
 
   const handleSubscriptionDeleted = async (stripeSub: Stripe.Subscription) => {
     const companyId = stripeSub.metadata?.paperclipCompanyId;
+    const tierId = stripeSub.metadata?.paperclipTierId ?? null;
 
     // Fetch current subscription record to get companyId before deleting.
     // Search by stripe_subscription_id first, then fallback to companyId for
@@ -484,6 +516,19 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           cancelAtPeriodEnd: false,
           tierId: existing.tierId,
         },
+      });
+    }
+
+    // Fire subscription_canceled conversion event (best-effort, never blocks)
+    if (companyId) {
+      captureMetric("pricing.subscription_canceled", companyId, {
+        companyId,
+        stripeSubscriptionId: stripeSub.id,
+        tierId,
+        canceledAt: stripeSub.canceled_at
+          ? new Date(stripeSub.canceled_at * 1000).toISOString()
+          : new Date().toISOString(),
+        source: "stripe_webhook",
       });
     }
   };
@@ -712,6 +757,31 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         tierId,
       },
     });
+
+    // Fire subscription_completed conversion event (best-effort, never blocks)
+    captureMetric("pricing.subscription_completed", companyId, {
+      companyId,
+      tierId,
+      billingPeriod,
+      stripeSubscriptionId: subId,
+      status: stripeSub.status,
+      trialEnd: stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null,
+    });
+
+    // Fire trial_started conversion event when the subscription enters a trial
+    // (best-effort, never blocks)
+    if (stripeSub.trial_end) {
+      captureMetric("pricing.trial_started", companyId, {
+        companyId,
+        tierId,
+        billingPeriod,
+        stripeSubscriptionId: subId,
+        trialEnd: new Date(stripeSub.trial_end * 1000).toISOString(),
+        trialDurationDays: stripeSub.trial_start
+          ? Math.round((stripeSub.trial_end - stripeSub.trial_start) / 86400)
+          : null,
+      });
+    }
   };
 
   /**
@@ -771,6 +841,18 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         gracePeriodEnd: gracePeriodEnd?.toISOString(),
         event: "trial_will_end",
       },
+    });
+
+    // Fire trial_will_end conversion event (best-effort, never blocks)
+    const tierId = stripeSub.metadata?.paperclipTierId ?? null;
+    captureMetric("pricing.trial_will_end", companyId, {
+      companyId,
+      stripeSubscriptionId: stripeSub.id,
+      tierId,
+      trialEnd: trialEnd?.toISOString() ?? null,
+      currentPeriodEnd: stripeSub.current_period_end
+        ? new Date(stripeSub.current_period_end * 1000).toISOString()
+        : null,
     });
   };
 
@@ -978,6 +1060,34 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         .from(subscriptionTiersTable)
         .where(eq(subscriptionTiersTable.isActive, true))
         .orderBy(subscriptionTiersTable.sortOrder);
+
+      // Fire conversion-tracking event (best-effort, never blocks the response)
+      if (companyId) {
+        let hasExistingSubscription = false;
+        try {
+          const existing = await db
+            .select({ id: companySubscriptionsTable.id })
+            .from(companySubscriptionsTable)
+            .where(
+              and(
+                eq(companySubscriptionsTable.companyId, companyId),
+                sql`${companySubscriptionsTable.status} = ANY(${ACTIVE_SUBSCRIPTION_STATUSES}::text[])`,
+              ),
+            )
+            .limit(1)
+            .then((r) => r[0] ?? null);
+          hasExistingSubscription = existing !== null;
+        } catch {
+          // Best-effort — analytics failure never blocks the response.
+        }
+
+        captureMetric("pricing.page_view", companyId, {
+          companyId,
+          tierIds: tiers.map((t) => t.id),
+          tierNames: tiers.map((t) => t.name),
+          hasExistingSubscription,
+        });
+      }
 
       // Apply pricing experiment tier overrides when companyId is provided
       if (companyId && experiment) {
@@ -1245,6 +1355,14 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
 
       logger.info({ companyId, sessionId: session.id }, "Created Checkout Session");
 
+      // Fire checkout_started conversion event (best-effort, never blocks)
+      captureMetric("pricing.checkout_started", companyId, {
+        companyId,
+        tierId: data.tierId,
+        billingPeriod: data.billingPeriod,
+        sessionId: session.id,
+      });
+
       return { url: session.url, sessionId: session.id };
     },
 
@@ -1477,6 +1595,16 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           cancelAtPeriodEnd: true,
           tierId: subscription.tierId,
         },
+      });
+
+      // Fire subscription_canceled conversion event (best-effort, never blocks)
+      captureMetric("pricing.subscription_canceled", companyId, {
+        companyId,
+        stripeSubscriptionId: subscription.stripeSubscriptionId!,
+        tierId: subscription.tierId,
+        canceledAt: new Date().toISOString(),
+        cancelAtPeriodEnd: true,
+        source: "api",
       });
 
       return updated;
