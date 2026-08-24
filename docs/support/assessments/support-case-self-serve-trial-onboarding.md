@@ -2,9 +2,9 @@
 
 **Feature**: Self-serve trial sign-up and onboarding flow — new users can register, get a company created automatically, and start a 14-day free trial without human intervention
 **Assessed by**: Support Engineer
-**Date**: 2026-08-23
+**Date**: 2026-08-24 (updated for VOY-2117 fix)
 **Related**: M6 — Self-Serve Trial Onboarding
-**Commits** (current branch hashes): `b9c4421d68`, `bfa59dca75`, `8955560a1c`, `91a2aded05`, `3f21a3d6b2`
+**Commits** (current branch hashes): `b9c4421d68`, `bfa59dca75`, `8955560a1c`, `91a2aded05`, `3f21a3d6b2`, `3885b6b5f0`
 **Branch**: `feat/m6-self-serve-trial-onboarding`
 **PR**: #78 — OPEN, mergeable (base: master)
 
@@ -150,6 +150,7 @@ A new `Trial` subscription tier is seeded into the database:
 | **No email notifications** | The system does not send email reminders when a trial is about to expire or has expired | Users discover expiration when they see the banner or try to use a paid feature |
 | **Single-trial enforcement** | There is no mechanism to prevent the same email from starting multiple trials across different sessions | The idempotency check (user company membership) prevents duplicates for the same user, but a different email could create a second trial |
 | **Trial-to-paid conversion** | There is no automated conversion flow. Users must manually visit /pricing and subscribe via Stripe Checkout | Future feature — automated conversion on trial end |
+| **Trial-to-paid conversion crash** (VOY-2117, fixed in `3885b6b5f0`) | Before the fix, subscribing via Stripe Checkout while on a trial caused a database `unique constraint` error. The trial row has `stripe_subscription_id = NULL`; the upsert targeted `stripe_subscription_id`, and SQL NULL comparison semantics caused it to miss the trial row, attempting an INSERT for a second subscription row for the same company | Fixed by changing the upsert conflict target to `company_id`. Both webhook handlers now correctly match the trial row and update it with Stripe subscription details. If a user reports this error after the fix was deployed, escalate to CTO — it indicates a regression |
 | **TrialDays max 90** | The `trialDays` field is limited to 90 days by the Zod schema | For longer trials, admins can directly set up a subscription |
 | **Reaper delay** | The trial expiry reaper runs every 30 minutes. Expired trials may have up to 30 minutes of grace access | This is intentional — prevents hard cutoffs. The `past_due` status blocks paid features but doesn't delete data |
 
@@ -161,6 +162,27 @@ A new `Trial` subscription tier is seeded into the database:
 2. Verify the `Trial` tier exists: `SELECT * FROM subscription_tiers WHERE name = 'Trial';`
 3. Manually start a trial: `POST /api/companies/:companyId/billing/start-trial`
 4. Check if the trial was already started but the UI wasn't updated (refresh the page)
+
+### Symptom: Trial-to-paid conversion fails with unique constraint error (VOY-2117)
+
+**Note:** This is fixed in commit `3885b6b5f0`. If a user reports this error after the fix was deployed, it indicates a regression.
+
+Before the fix, subscribing via Stripe Checkout while on a trial would crash with a database unique constraint error. The root cause: the trial row has `stripe_subscription_id = NULL`, and the upsert used `ON CONFLICT (stripe_subscription_id)`. SQL NULL comparison semantics mean `NULL = 'sub_abc'` evaluates to NULL (not TRUE), so the conflict didn't match the trial row, and the INSERT attempted to create a second subscription for the same company.
+
+**If a user reports this error:**
+
+1. Verify the fix commit `3885b6b5f0` is deployed on the server
+2. Check the server logs for PostgreSQL unique constraint violations on `company_subscriptions.company_id`
+3. If the fix is deployed and the error persists, escalate to CTO — it indicates a regression
+4. Temporarily resolve by updating the existing trial row directly:
+   ```sql
+   UPDATE company_subscriptions
+   SET stripe_subscription_id = 'sub_<id>',
+       status = 'active',
+       tier_id = '<new-tier-uuid>',
+       updated_at = NOW()
+   WHERE company_id = '<companyId>' AND stripe_subscription_id IS NULL;
+   ```
 
 ### Symptom: Trial banner not showing
 

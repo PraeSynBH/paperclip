@@ -15,7 +15,8 @@ title: M6 — Self-Serve Trial Onboarding
 - `8955560a1c` — fix(m6): resolve merge conflict in complete-registration route
 - `91a2aded05` — feat(m6): add trial status banner component
 - `3f21a3d6b2` — feat(m6): add trialInfo and startTrial to billing API client + query keys
-**Date:** 2026-08-23
+- `3885b6b5f0` — fix(billing): change ON CONFLICT target from stripe_subscription_id to company_id for trial-to-paid conversion (VOY-2117)
+**Date:** 2026-08-24 (updated for VOY-2117 fix)
 **Status:** PR #78 open (base: master) — mergeable, no conflicts
 **Related:** M6 Milestone — Self-Serve Trial Onboarding
 
@@ -91,3 +92,7 @@ To disable self-serve trial onboarding:
 - No email notification on trial expiry (future improvement)
 - No automated trial-to-paid conversion flow (future improvement)
 - No multi-email trial enforcement (users could sign up with different emails for multiple trials)
+
+## Fixes
+
+- **VOY-2117: Trial-to-paid conversion crash** (commit `3885b6b5f0`) — Subscribing via Stripe Checkout while on a trial no longer crashes with a unique constraint violation. The upsert conflict target was changed from `stripe_subscription_id` to `company_id` because the trial row has `stripe_subscription_id = NULL`, and SQL NULL comparison semantics prevented the conflict match. Both `handleCheckoutSessionCompleted` and `handleSubscriptionUpdated` now correctly match the trial row and update it with Stripe subscription details.
