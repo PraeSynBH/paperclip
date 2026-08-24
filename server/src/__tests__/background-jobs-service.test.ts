@@ -245,6 +245,38 @@ describeEmbeddedPostgres("backgroundJobWorker — processor dispatch", () => {
     expect(String(result?.calendarText)).toContain("SUMMARY:Flight out");
   });
 
+  it("produces deterministic ICS UIDs so calendar re-imports dedupe instead of duplicating", async () => {
+    companyId = await seedCompany("Worker ICS Deterministic Co");
+    const svc = backgroundJobService(db);
+    const worker = createBackgroundJobWorker(db, { pollIntervalMs: 50, batchSize: 5 });
+    const payload = {
+      title: "Trip",
+      events: [
+        { title: "Flight out", start: "2026-09-01T10:00:00.000Z", end: "2026-09-01T12:00:00.000Z" },
+        { title: "Hotel check-in", start: "2026-09-01T15:00:00.000Z", end: "2026-09-01T16:00:00.000Z" },
+      ],
+    };
+
+    const first = await svc.create({ companyId, jobType: "export.ics", payload });
+    await worker.tick();
+    const firstResult = (await svc.getById(first.id, companyId))?.result as Record<string, unknown> | null;
+    const firstText = String(firstResult?.calendarText ?? "");
+
+    const second = await svc.create({ companyId, jobType: "export.ics", payload });
+    await worker.tick();
+    const secondResult = (await svc.getById(second.id, companyId))?.result as Record<string, unknown> | null;
+    const secondText = String(secondResult?.calendarText ?? "");
+
+    // Same event identity → same UID across separate exports.
+    const firstUids = [...firstText.matchAll(/^UID:([^@]+)@voyonder\.com$/gm)].map((m) => m[1]);
+    const secondUids = [...secondText.matchAll(/^UID:([^@]+)@voyonder\.com$/gm)].map((m) => m[1]);
+    expect(firstUids).toHaveLength(2);
+    expect(firstUids).toEqual(secondUids);
+
+    // Different events → different UIDs (no cross-event collision).
+    expect(firstUids[0]).not.toBe(firstUids[1]);
+  });
+
   it("processes an export.pdf job and produces a data-uri PDF", async () => {
     companyId = await seedCompany("Worker PDF Co");
     const svc = backgroundJobService(db);

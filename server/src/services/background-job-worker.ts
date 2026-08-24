@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import { and, eq, inArray, isNotNull, lt } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { backgroundJobs } from "@paperclipai/db";
@@ -482,9 +482,19 @@ function buildVEvent(event: Record<string, unknown>): string[] {
   const location = typeof event.location === "string" ? event.location : undefined;
   const description = typeof event.description === "string" ? event.description : undefined;
 
+  // Deterministic UID derived from the event's identity so re-exports of the
+  // same trip produce the same UID. Calendar clients (Google/Apple) use UID to
+  // match events for update/dedup on re-import — random UIDs would create
+  // duplicate events every time the user re-exports. A 64-bit hex hash keeps
+  // the UID short while remaining collision-safe for a trip's event set.
+  const uidHash = createHash("sha256")
+    .update([title, start ?? "", end ?? ""].join("|"))
+    .digest("hex")
+    .slice(0, 16);
+
   const lines = [
     "BEGIN:VEVENT",
-    `UID:${randomUUID()}@voyonder.com`,
+    `UID:${uidHash}@voyonder.com`,
     `DTSTAMP:${toIcsDate(new Date().toISOString())}`,
     `SUMMARY:${sanitizeIcsText(title)}`,
   ];
