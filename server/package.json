@@ -61,8 +61,6 @@
     "@paperclipai/shared": "workspace:*",
     "@paperclipai/skills-catalog": "workspace:*",
     "@paperclipai/hermes-paperclip-adapter": "workspace:*",
-    "@voyonder/product": "workspace:*",
-    "@voyonder/types": "workspace:*",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "better-auth": "1.6.28",
