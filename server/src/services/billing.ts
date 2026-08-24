@@ -15,6 +15,7 @@ import { pricingExperimentService, type PricingExperimentService } from "./prici
 import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { publishLiveEvent } from "./live-events.js";
+import { trackTrialStarted } from "./posthog.js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
@@ -348,11 +349,14 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
             ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
             NOW(), NOW()
           )
-          ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
+          ON CONFLICT ("company_id") DO UPDATE SET
+            "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
+            "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
             "status" = EXCLUDED."status",
             "current_period_start" = EXCLUDED."current_period_start",
             "current_period_end" = EXCLUDED."current_period_end",
             "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
+            "trial_end" = EXCLUDED."trial_end",
             "updated_at" = NOW()
         `);
 
@@ -464,8 +468,11 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     const stripeCustomerId = sessionCustomerId ?? getStripeCustomerId(stripeSub.customer);
 
     // Use transaction + upsert for idempotent handling of at-least-once Stripe delivery.
-    // The UNIQUE index on stripe_subscription_id prevents duplicate rows; the upsert
-    // makes the second-and-later deliveries a safe no-op.
+    // The UNIQUE index on company_id prevents duplicate rows per company; the upsert
+    // makes the second-and-later deliveries a safe no-op. Using company_id as the conflict
+    // target also correctly handles trial-to-paid conversion: the trial row has
+    // stripe_subscription_id = NULL, and SQL NULL comparison semantics would cause
+    // ON CONFLICT (stripe_subscription_id) to miss the match.
     await db.transaction(async (tx) => {
       const cust = await tx
         .select()
@@ -502,11 +509,14 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
           NOW(), NOW()
         )
-        ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
+        ON CONFLICT ("company_id") DO UPDATE SET
+          "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
+          "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
           "status" = EXCLUDED."status",
           "current_period_start" = EXCLUDED."current_period_start",
           "current_period_end" = EXCLUDED."current_period_end",
           "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
+          "trial_end" = EXCLUDED."trial_end",
           "updated_at" = NOW()
       `);
 
@@ -1469,6 +1479,9 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           tierId: tier.id,
         },
       });
+
+      // Fire PostHog trial.started event (no-op if PostHog not configured)
+      trackTrialStarted(companyId, trialDays, tier.name);
 
       return { subscription, tier };
     },
