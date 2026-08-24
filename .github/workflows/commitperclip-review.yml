@@ -35,6 +35,7 @@ jobs:
 
       - name: Generate commitperclip token
         id: token
+        if: ${{ secrets.COMMITPERCLIP_KEY != '' }}
         run: |
           TOKEN=$(node .github/scripts/get-bot-token.mjs)
           echo "::add-mask::$TOKEN"
@@ -44,7 +45,9 @@ jobs:
 
       - name: Run quality gates
         id: quality
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        if: >-
+          github.event.pull_request.user.login != 'dependabot[bot]' &&
+          steps.token.outputs.value != ''
         run: node .github/scripts/run-quality-gates.mjs
         continue-on-error: true
         env:
@@ -57,7 +60,8 @@ jobs:
       - name: Fail if quality gates failed
         if: >-
           github.event.pull_request.user.login != 'dependabot[bot]' &&
-          steps.quality.outcome == 'failure'
+          steps.quality.outcome == 'failure' &&
+          steps.quality.conclusion != 'skipped'
         run: |
           echo "One or more quality gates failed. See commitperclip comment on the PR for details."
           exit 1
