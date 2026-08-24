@@ -12,7 +12,7 @@
  * - Tier overrides are shallow merges over the DB tier row
  */
 import { createHash } from "node:crypto";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { z } from "zod";
 import { companies as companiesTable } from "@paperclipai/db";
 import type { Db } from "@paperclipai/db";
@@ -141,34 +141,41 @@ export function pricingExperimentService(db: Db) {
   ): Promise<PricingExperimentVariant> => {
     const cfg = config ?? loadConfig();
 
-    // Read current assignment
-    const company = await db
-      .select({
-        variant: companiesTable.pricingExperimentVariant,
-        enrolledAt: companiesTable.pricingExperimentEnrolledAt,
-      })
-      .from(companiesTable)
-      .where(eq(companiesTable.id, companyId))
-      .then((r) => r[0] ?? null);
-
-    if (company?.variant === "A" || company?.variant === "B") {
-      return company.variant as PricingExperimentVariant;
-    }
-
     if (!cfg.enabled) return "A";
 
-    // Assign and persist
+    // Atomic compare-and-swap: only assign if variant is still NULL.
+    // Eliminates the TOCTOU race where two concurrent requests both
+    // SELECT null and then UPDATE, potentially overwriting each other.
     const variant = assignVariant(companyId, cfg);
-    await db
+    const [updated] = await db
       .update(companiesTable)
       .set({
         pricingExperimentVariant: variant,
         pricingExperimentEnrolledAt: new Date(),
       })
-      .where(eq(companiesTable.id, companyId));
+      .where(
+        and(
+          eq(companiesTable.id, companyId),
+          isNull(companiesTable.pricingExperimentVariant),
+        ),
+      )
+      .returning({ variant: companiesTable.pricingExperimentVariant });
 
-    logger.info({ companyId, variant }, "Assigned pricing experiment variant");
-    return variant;
+    if (updated) {
+      logger.info({ companyId, variant }, "Assigned pricing experiment variant");
+      return variant;
+    }
+
+    // Another request already assigned — return existing value
+    const existing = await db
+      .select({
+        variant: companiesTable.pricingExperimentVariant,
+      })
+      .from(companiesTable)
+      .where(eq(companiesTable.id, companyId))
+      .then((r) => r[0] ?? null);
+
+    return (existing?.variant as PricingExperimentVariant) ?? "A";
   };
 
   /**

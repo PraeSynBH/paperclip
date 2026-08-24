@@ -716,21 +716,20 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       const stripe = getStripeClient();
       const tier = await getTier(data.tierId);
 
+      // Apply experiment variant tier overrides so variant B users are
+      // charged the correct (overridden) Stripe price at checkout.
+      const variant = experiment ? await experiment.getOrAssignVariant(companyId) : undefined;
+      const effectiveTier = variant ? experiment!.applyTierOverrides([tier], variant)[0] : tier;
+
       const stripePriceId = data.billingPeriod === "yearly"
-        ? (tier.stripePriceYearlyId ?? tier.stripePriceMonthlyId)
-        : (tier.stripePriceMonthlyId ?? tier.stripePriceYearlyId);
+        ? (effectiveTier.stripePriceYearlyId ?? effectiveTier.stripePriceMonthlyId)
+        : (effectiveTier.stripePriceMonthlyId ?? effectiveTier.stripePriceYearlyId);
 
       if (!stripePriceId) {
         throw unprocessable("Selected tier does not have a Stripe price configured");
       }
 
       const { stripeCustomerId } = await getOrCreateStripeCustomer(companyId);
-
-      // Resolve experiment variant for metadata tracking
-      let experimentVariant: string | undefined;
-      if (experiment) {
-        experimentVariant = await experiment.getOrAssignVariant(companyId);
-      }
 
       const publicUrl = process.env.PAPERCLIP_PUBLIC_URL ?? "http://localhost:5173";
       const successUrl = data.successUrl ?? `${publicUrl}/boards/${companyId}`;
@@ -745,7 +744,7 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           paperclipCompanyId: companyId,
           paperclipTierId: data.tierId,
           billingPeriod: data.billingPeriod,
-          ...(experimentVariant ? { pricingExperimentVariant: experimentVariant } : {}),
+          ...(variant ? { pricingExperimentVariant: variant } : {}),
         },
         success_url: successUrl,
         cancel_url: cancelUrl,
@@ -770,13 +769,18 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         .then((r) => r[0] ?? null);
       if (!tier) throw notFound("Subscription tier not found");
 
-      if (!tier.stripePriceMonthlyId && !tier.stripePriceYearlyId) {
+      // Apply experiment variant tier overrides so variant B users are
+      // charged the correct Stripe price (admin path).
+      const variant = experiment ? await experiment.getOrAssignVariant(companyId) : undefined;
+      const effectiveTier = variant ? experiment!.applyTierOverrides([tier], variant)[0] : tier;
+
+      if (!effectiveTier.stripePriceMonthlyId && !effectiveTier.stripePriceYearlyId) {
         throw unprocessable("Selected tier does not have a Stripe price configured");
       }
 
       const stripePriceId = data.billingPeriod === "yearly"
-        ? (tier.stripePriceYearlyId ?? tier.stripePriceMonthlyId)
-        : (tier.stripePriceMonthlyId ?? tier.stripePriceYearlyId);
+        ? (effectiveTier.stripePriceYearlyId ?? effectiveTier.stripePriceMonthlyId)
+        : (effectiveTier.stripePriceMonthlyId ?? effectiveTier.stripePriceYearlyId);
 
       const { id: stripeCustomerId, stripeCustomerId: stripeCustomerStr } = await getOrCreateStripeCustomer(companyId);
 
