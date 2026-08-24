@@ -4089,7 +4089,6 @@ Git commit `ce218a86d7` authored by Staff Engineer after final M6 structural aud
 ### Summary
 
 Documentation updated for the Staff Engineer's final M6 structural audit fix (VOY-2112). The narrowed catch block and webhook customer fallback are now documented in both the support case assessment and release notes. Release pipeline remains blocked on GitHub billing resolution. Standing by.
-
 ---
 
 ## 2026-08-24 ~17:00 UTC — Heartbeat: M6 SHIPPED to master — docs updated to reflect merged state
