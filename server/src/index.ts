@@ -4,6 +4,7 @@
 // instrumentationReady before opening DB connections or constructing the
 // HTTP server, so trace coverage does not depend on incidental timing.
 import { instrumentationReady, shutdownInstrumentation } from "./instrumentation.js";
+import { initPostHog, shutdownPostHog } from "./services/posthog.js";
 // ── Voyonder Bridge — adapters for C1 (EventBus) and C2 (AuthProvider) ──
 export {
   createPaperclipEventBus,
@@ -155,6 +156,7 @@ export async function startServer(): Promise<StartedServer> {
   ensureDecisionSigningSecret();
   let config = loadConfig();
   initTelemetry({ enabled: config.telemetryEnabled });
+  initPostHog();
   if (process.env.PAPERCLIP_SECRETS_PROVIDER === undefined) {
     process.env.PAPERCLIP_SECRETS_PROVIDER = config.secretsProvider;
   }
@@ -1576,6 +1578,47 @@ export async function startServer(): Promise<StartedServer> {
     }, backupIntervalMs);
   }
   
+  // Trial expiry reaper: check every 30 minutes for expired trials.
+  // Marks trial subscriptions as past_due so feature gating blocks paid features.
+  const TRIAL_REAPER_INTERVAL_MS = 30 * 60 * 1000;
+
+  // Cache the billing service import so we don't re-import on every tick.
+  let billingServiceCache: any = null;
+  async function getBillingService() {
+    if (!billingServiceCache) {
+      const { billingService: bs } = await import("./services/billing.js");
+      billingServiceCache = bs(db as any);
+    }
+    return billingServiceCache;
+  }
+
+  // Concurrency guard: skip a tick if the previous run is still in-flight.
+  let trialReaperRunning = false;
+
+  async function runTrialReaper() {
+    if (trialReaperRunning) {
+      logger.warn("Trial reaper tick skipped — previous run still in progress");
+      return;
+    }
+    trialReaperRunning = true;
+    try {
+      const bs = await getBillingService();
+      const count = await bs.expireTrials();
+      if (count > 0) {
+        logger.info({ count }, "Trial reaper expired subscriptions");
+      }
+    } catch (err) {
+      logger.error({ err }, "Trial reaper failed");
+    } finally {
+      trialReaperRunning = false;
+    }
+  }
+
+  setInterval(runTrialReaper, TRIAL_REAPER_INTERVAL_MS).unref();
+
+  // Run once on startup too
+  runTrialReaper();
+
   // Wait for external adapters to finish loading before accepting requests.
   // Without this, adapter type validation (assertKnownAdapterType) would
   // reject valid external adapter types during the startup loading window.
@@ -1692,6 +1735,8 @@ export async function startServer(): Promise<StartedServer> {
         telemetryClient.stop();
         await telemetryClient.flush();
       }
+
+      await shutdownPostHog();
 
       if (!skipHeartbeatDrain && drainHeartbeatRunsForShutdown) {
         try {

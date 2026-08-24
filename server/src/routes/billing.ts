@@ -298,5 +298,36 @@ export function billingRoutes(db: Db) {
     }
   });
 
+  /**
+   * GET /api/companies/:companyId/billing/trial-info
+   * Get trial status (days remaining, expired, etc.)
+   */
+  router.get("/companies/:companyId/billing/trial-info", async (req, res, next) => {
+    try {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+      const info = await billing.getTrialInfo(companyId);
+      res.json(info);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  /**
+   * POST /api/companies/:companyId/billing/start-trial
+   * Start a trial for an existing company (idempotent).
+   */
+  router.post("/companies/:companyId/billing/start-trial", async (req, res, next) => {
+    try {
+      const companyId = req.params.companyId as string;
+      assertCompanyAccess(req, companyId);
+      requireBoardUser(req);
+      const result = await billing.startTrial(companyId);
+      res.status(201).json(result);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   return router;
 }

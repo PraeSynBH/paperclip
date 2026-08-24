@@ -20,6 +20,7 @@ import {
 } from "../services/index.js";
 import { assertBoard, assertCompanyAccess, getAccessibleResource, getActorInfo, hasCompanyAccess } from "./authz.js";
 import { redactEventPayload } from "../redaction.js";
+import { trackApprovalCreated } from "../services/posthog.js";
 import type { PluginWorkerManager } from "../services/plugin-worker-manager.js";
 import { issueService } from "../services/issues.js";
 import { REVIEW_PATH_RECOVERY_INSTRUCTION } from "../services/recovery/review-path-recovery.js";
@@ -272,6 +273,9 @@ export function approvalRoutes(
       entityId: approval.id,
       details: { type: approval.type, issueIds: uniqueIssueIds },
     });
+
+    // Fire PostHog approval.created event (no-op if PostHog not configured)
+    trackApprovalCreated(companyId, approval.id, approval.type);
 
     res.status(201).json(redactApprovalPayload(approval));
   });

@@ -8,6 +8,7 @@ import { projectService } from "./projects.js";
 import { issueService } from "./issues.js";
 import { readBuiltInAgentMarker } from "./built-in-agent-metadata.js";
 import { logActivity, publishActivity, type ActivityPublication } from "./activity-log.js";
+import { trackOnboardingSeedApplied } from "./posthog.js";
 
 /**
  * The project the seeded first task lands in, matching the name the tenant's
@@ -408,6 +409,18 @@ export function onboardingSeedService(db: Db) {
     });
 
     for (const publication of publications) publishActivity(publication);
+
+    // Fire PostHog onboarding.seed_applied event (no-op if PostHog not configured)
+    if (result.changed) {
+      trackOnboardingSeedApplied(
+        companyId,
+        result.revision,
+        seed.mission !== undefined && seed.mission !== null && seed.mission.trim().length > 0,
+        seed.agent !== undefined && seed.agent !== null,
+        seed.firstTask !== undefined && seed.firstTask !== null,
+      );
+    }
+
     return result;
   }
 

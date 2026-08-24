@@ -15,6 +15,7 @@ import { pricingExperimentService, type PricingExperimentService } from "./prici
 import { badRequest, notFound, paywall, unprocessable } from "../errors.js";
 import { logger } from "../middleware/logger.js";
 import { publishLiveEvent } from "./live-events.js";
+import { trackTrialStarted } from "./posthog.js";
 
 const STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET ?? "";
 
@@ -348,11 +349,14 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
             ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
             NOW(), NOW()
           )
-          ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
+          ON CONFLICT ("company_id") DO UPDATE SET
+            "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
+            "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
             "status" = EXCLUDED."status",
             "current_period_start" = EXCLUDED."current_period_start",
             "current_period_end" = EXCLUDED."current_period_end",
             "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
+            "trial_end" = EXCLUDED."trial_end",
             "updated_at" = NOW()
         `);
 
@@ -464,14 +468,38 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
     const stripeCustomerId = sessionCustomerId ?? getStripeCustomerId(stripeSub.customer);
 
     // Use transaction + upsert for idempotent handling of at-least-once Stripe delivery.
-    // The UNIQUE index on stripe_subscription_id prevents duplicate rows; the upsert
-    // makes the second-and-later deliveries a safe no-op.
+    // The UNIQUE index on company_id prevents duplicate rows per company; the upsert
+    // makes the second-and-later deliveries a safe no-op. Using company_id as the conflict
+    // target also correctly handles trial-to-paid conversion: the trial row has
+    // stripe_subscription_id = NULL, and SQL NULL comparison semantics would cause
+    // ON CONFLICT (stripe_subscription_id) to miss the match.
     await db.transaction(async (tx) => {
-      const cust = await tx
+      // First, try to find the customer by Stripe customer ID (normal path)
+      let cust = await tx
         .select()
         .from(stripeCustomersTable)
         .where(eq(stripeCustomersTable.stripeCustomerId, stripeCustomerId as string))
         .then((r) => r[0] ?? null);
+
+      // If not found, fall back to company_id lookup — handles the case where
+      // the trial placeholder customer (created when Stripe was not configured)
+      // has a synthetic stripe_customer_id like 'trial-local-{companyId}'.
+      if (!cust) {
+        cust = await tx
+          .select()
+          .from(stripeCustomersTable)
+          .where(eq(stripeCustomersTable.companyId, companyId))
+          .then((r) => r[0] ?? null);
+
+        // If we found the trial placeholder, update its stripe_customer_id
+        // to the real Stripe customer ID so future lookups work directly.
+        if (cust) {
+          await tx
+            .update(stripeCustomersTable)
+            .set({ stripeCustomerId: stripeCustomerId as string })
+            .where(eq(stripeCustomersTable.id, cust.id));
+        }
+      }
 
       if (!cust) {
         logger.warn(
@@ -502,11 +530,14 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
           ${stripeSub.trial_end ? new Date(stripeSub.trial_end * 1000).toISOString() : null},
           NOW(), NOW()
         )
-        ON CONFLICT ("stripe_subscription_id") DO UPDATE SET
+        ON CONFLICT ("company_id") DO UPDATE SET
+          "stripe_subscription_id" = EXCLUDED."stripe_subscription_id",
+          "stripe_subscription_item_id" = EXCLUDED."stripe_subscription_item_id",
           "status" = EXCLUDED."status",
           "current_period_start" = EXCLUDED."current_period_start",
           "current_period_end" = EXCLUDED."current_period_end",
           "cancel_at_period_end" = EXCLUDED."cancel_at_period_end",
+          "trial_end" = EXCLUDED."trial_end",
           "updated_at" = NOW()
       `);
 
@@ -1326,6 +1357,243 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
         usage: subscription?.usage ?? [],
         totalSpentCents: Number(totalSpentResult?.total ?? 0),
       };
+    },
+
+    /**
+     * Start a free trial for a company.
+     *
+     * Creates a local subscription row with status "trialing" and a trial end
+     * date 14 days in the future. When Stripe is configured, also creates a
+     * Stripe customer record (but no Stripe subscription — trials start
+     * locally and convert via Stripe Checkout).
+     *
+     * Idempotent: if the company already has a subscription, returns it
+     * unchanged.
+     */
+    startTrial: async (
+      companyId: string,
+      options?: { trialDays?: number; tierName?: string },
+    ): Promise<{
+      subscription: typeof companySubscriptionsTable.$inferSelect;
+      tier: typeof subscriptionTiersTable.$inferSelect;
+    }> => {
+      const trialDays = options?.trialDays ?? 14;
+      const tierName = options?.tierName ?? "Trial";
+
+      // Check if subscription already exists
+      const existing = await db
+        .select()
+        .from(companySubscriptionsTable)
+        .where(eq(companySubscriptionsTable.companyId, companyId))
+        .then((r) => r[0] ?? null);
+
+      if (existing) {
+        const tier = await getTier(existing.tierId);
+        return { subscription: existing, tier };
+      }
+
+      // Find the Trial tier
+      const tier = await db
+        .select()
+        .from(subscriptionTiersTable)
+        .where(and(
+          eq(subscriptionTiersTable.name, tierName),
+          eq(subscriptionTiersTable.isActive, true),
+        ))
+        .then((r) => r[0] ?? null);
+
+      if (!tier) {
+        throw notFound(`Tier "${tierName}" not found — seed the database`);
+      }
+
+      // Create or get Stripe customer (no-op if Stripe not configured)
+      let stripeCustomerId: string;
+      try {
+        const cust = await getOrCreateStripeCustomer(companyId);
+        stripeCustomerId = cust.id;
+      } catch (err) {
+        // Differentiate between Stripe-not-configured errors and real failures
+        if (err instanceof Error && err.message.includes("STRIPE_SECRET_KEY")) {
+          // Stripe not configured — create a placeholder customer row
+          logger.warn(
+            { err, companyId },
+            "getOrCreateStripeCustomer failed — falling back to local trial-only customer row",
+          );
+          const [record] = await db.execute(sql`
+            INSERT INTO "stripe_customers"
+              ("company_id", "stripe_customer_id")
+            VALUES (${companyId}, ${`trial-local-${companyId}`})
+            ON CONFLICT ("company_id") DO NOTHING
+            RETURNING "id"
+          `);
+          stripeCustomerId = record?.id as string ?? (
+            await db
+              .select({ id: stripeCustomersTable.id })
+              .from(stripeCustomersTable)
+              .where(eq(stripeCustomersTable.companyId, companyId))
+              .then((r) => r[0]!.id)
+          );
+        } else {
+          // Real error — rethrow so it's not silently swallowed
+          throw err;
+        }
+      }
+
+      const now = new Date();
+      const trialEnd = new Date(now.getTime() + trialDays * 24 * 60 * 60 * 1000);
+      const currentPeriodStart = now;
+      const currentPeriodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+      const subscription = await db.transaction(async (tx) => {
+        const [record] = await tx.execute<typeof companySubscriptionsTable.$inferSelect>(sql`
+          INSERT INTO "company_subscriptions"
+            ("company_id", "tier_id", "stripe_customer_id", "status", "billing_period",
+             "current_period_start", "current_period_end",
+             "cancel_at_period_end", "trial_end",
+             "created_at", "updated_at")
+          VALUES (
+            ${companyId}, ${tier.id}, ${stripeCustomerId}, 'trialing', 'monthly',
+            ${currentPeriodStart.toISOString()}, ${currentPeriodEnd.toISOString()},
+            false, ${trialEnd.toISOString()},
+            NOW(), NOW()
+          )
+          ON CONFLICT ("company_id") DO NOTHING
+          RETURNING *
+        `);
+
+        if (!record) {
+          // Race lost — another request inserted first
+          const winner = await tx
+            .select()
+            .from(companySubscriptionsTable)
+            .where(eq(companySubscriptionsTable.companyId, companyId))
+            .then((r) => r[0]!);
+          return winner;
+        }
+
+        // Seed usage metrics
+        const usageMetrics: Array<{ metric: string; included: number }> = [
+          { metric: "seats", included: tier.includedSeats },
+          { metric: "agent_runs", included: tier.includedAgentRuns },
+          { metric: "storage_gb", included: tier.includedStorageGb },
+        ];
+
+        for (const m of usageMetrics) {
+          await tx.execute(sql`
+            INSERT INTO "subscription_usage"
+              ("company_id", "subscription_id", "metric", "usage", "included",
+               "overage", "overage_cents", "period_start", "period_end")
+            VALUES (
+              ${companyId}, ${record.id}, ${m.metric}, 0, ${m.included},
+              0, 0,
+              ${currentPeriodStart.toISOString()}, ${currentPeriodEnd.toISOString()}
+            )
+            ON CONFLICT ("subscription_id", "metric", "period_start", "period_end") DO NOTHING
+          `);
+        }
+
+        return record;
+      });
+
+      logger.info(
+        { companyId, tierId: tier.id, trialEnd },
+        "Started trial subscription",
+      );
+
+      publishLiveEvent({
+        companyId,
+        type: "subscription.status.updated",
+        payload: {
+          status: "trialing",
+          stripeSubscriptionId: null,
+          cancelAtPeriodEnd: false,
+          tierId: tier.id,
+        },
+      });
+
+      // Fire PostHog trial.started event (no-op if PostHog not configured)
+      trackTrialStarted(companyId, trialDays, tier.name);
+
+      return { subscription, tier };
+    },
+
+    /**
+     * Get trial status information for a company.
+     * Returns null if the company has no subscription or is not trialing.
+     */
+    getTrialInfo: async (companyId: string) => {
+      const subscription = await db
+        .select()
+        .from(companySubscriptionsTable)
+        .where(eq(companySubscriptionsTable.companyId, companyId))
+        .then((r) => r[0] ?? null);
+
+      if (!subscription || subscription.status !== "trialing" || !subscription.trialEnd) {
+        return null;
+      }
+
+      const now = new Date();
+      const daysRemaining = Math.max(
+        0,
+        Math.ceil((subscription.trialEnd.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)),
+      );
+
+      return {
+        trialing: true,
+        trialEnd: subscription.trialEnd.toISOString(),
+        daysRemaining,
+        expired: now >= subscription.trialEnd,
+      };
+    },
+
+    /**
+     * Expire trials that have passed their trial end date.
+     * Sets status to "past_due" so feature gating blocks paid features.
+     * Returns count of expired subscriptions.
+     */
+    expireTrials: async (): Promise<number> => {
+      const now = new Date();
+
+      const result = await db
+        .update(companySubscriptionsTable)
+        .set({
+          status: "past_due",
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(companySubscriptionsTable.status, "trialing"),
+            sql`${companySubscriptionsTable.trialEnd} IS NOT NULL`,
+            sql`${companySubscriptionsTable.trialEnd} < ${now.toISOString()}`,
+          ),
+        )
+        .returning({ id: companySubscriptionsTable.id, companyId: companySubscriptionsTable.companyId });
+
+      for (const row of result) {
+        logger.info(
+          { companyId: row.companyId, subscriptionId: row.id },
+          "Trial expired — subscription status set to past_due",
+        );
+        try {
+          publishLiveEvent({
+            companyId: row.companyId,
+            type: "subscription.status.updated",
+            payload: {
+              status: "past_due",
+              stripeSubscriptionId: null,
+              cancelAtPeriodEnd: false,
+              tierId: null,
+            },
+          });
+        } catch (err) {
+          logger.error(
+            { err, companyId: row.companyId, subscriptionId: row.id },
+            "publishLiveEvent failed during trial expiry — continuing to next subscription",
+          );
+        }
+      }
+
+      return result.length;
     },
   };
 }

@@ -209,4 +209,33 @@ export const authApi = {
       ...(typeof result.redirectTo === "string" ? { redirectTo: result.redirectTo } : {}),
     };
   },
+
+  /**
+   * Complete self-serve registration after sign-up.
+   * Creates a company and starts a trial subscription.
+   * Requires an active user session (set by better-auth during sign-up).
+   */
+  completeRegistration: async (input?: { companyName?: string }): Promise<{
+    companyId: string;
+    companyName: string;
+    companyPrefix: string;
+    created: boolean;
+  }> => {
+    const res = await fetch("/api/auth/complete-registration", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify(input ?? {}),
+    });
+    const payload = await res.json().catch(() => null);
+    if (!res.ok) {
+      throw extractAuthError(payload as AuthErrorBody, res.status);
+    }
+    return payload as {
+      companyId: string;
+      companyName: string;
+      companyPrefix: string;
+      created: boolean;
+    };
+  },
 };

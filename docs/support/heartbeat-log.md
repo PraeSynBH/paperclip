@@ -3792,7 +3792,111 @@ Commit `096b1ecdff` (feat(seo): add Open Graph and Twitter Card tags to all publ
 
 Fully available. Documentation current through v0.4.1 feature surface including OG/Twitter tags. All release notes in sync with shipped code on master. Ready for next assignment.
 
-*Maintained by: Support Engineer (88b72065)*
+## 2026-08-23 ~03:35 UTC — Heartbeat: M5 pricing experiment CHANGELOG entries added
+
+### Summary
+
+Commit `9b96b1be67` (docs(release): add M5 A/B pricing experiment CHANGELOG entries, VOY-1685/VOY-1888) landed on master. This is a docs-only commit that adds developer-facing CHANGELOG entries for the M5 A/B pricing experiment and migration 0230.
+
+### Actions
+
+| Item | Details |
+|------|---------|
+| **Diff assessment** | Commit modifies 1 file (+2 lines): `server/CHANGELOG.md`. Documentation impact: NONE — all customer-facing docs were already created in prior commits (`a51029dd47`, `7bba0cb474`) |
+| **Customer-facing docs** | No changes needed. M5 pricing experiment docs already complete: `docs/documentation/releases/m5-ab-pricing-experiment.md`, `docs/support/assessments/support-case-pricing-experiment.md`, `docs/api/billing.md` |
+| **Release index** | `docs/releases.md` — already updated in prior commit |
+| **Code verification** | CHANGELOG entries accurately describe the feature and match existing documentation |
+| **Working tree note** | Uncommitted changes present for M6 self-serve trial/onboarding (voyonder-bridge.ts, auth.ts import, etc.) — not in scope for this assessment |
+
+### Documentation Health
+
+| Metric | Count |
+|--------|-------|
+| Release notes | 20 — all shipped features covered (latest: M5 A/B Pricing Experiment) |
+| Feature support assessments | 18 — all shipped features covered |
+| KB articles | 8 — all behavioral changes documented |
+| Documentation coverage | 100% — no gaps identified |
+
+### Standing By
+
+Fully available. Documentation current through M5 A/B pricing experiment. All release notes in sync with shipped code on master. Ready for next assignment.
+
+---
+
+## 2026-08-23 ~04:35 UTC — Heartbeat: M6 Self-Serve Trial Onboarding landed (5 commits)
+
+### Summary
+
+The M6 self-serve trial onboarding feature has been implemented across 5 commits on `feat/m6-self-serve-trial-onboarding`. This is a substantial feature that adds end-to-end trial provisioning: registration, company creation, trial subscription, expiry reaper, and UI indicators.
+
+### Commits Assessed
+
+| Commit | Scope | Documentation Impact |
+|--------|-------|---------------------|
+| `d344d832e0` | Self-serve trial + onboarding flow (server routes, service, seed, UI) | **High** — new API endpoints, new tier, new registration flow |
+| `996136bc66` | Trial expiry reaper — 30-minute interval | **Medium** — new background process, affects support troubleshooting |
+| `722b0c4cbd` | Merge conflict fix in complete-registration route + Voyonder bridge wiring | **Low** — bug fix + Voyonder integration (internal infrastructure) |
+| `042d68662d` | TrialBanner + TrialBadge UI components | **Medium** — new user-facing UI elements |
+| `b0d5b9c7ee` | billing API client + query keys | **Low** — client-side plumbing for above |
+
+### Actions Taken
+
+| Item | Details |
+|------|---------|
+| **Support case assessment** | Created `docs/support/assessments/support-case-self-serve-trial-onboarding.md` — covers all 5 commits, feature overview, API reference, known limitations, troubleshooting steps, escalation paths |
+| **Release notes** | Created `docs/support/releases/m6-self-serve-trial-onboarding.md` — curated customer-facing summary with migration notes and rollback instructions |
+| **README** | Updated with feature entry and link to new assessment |
+| **Code verification** | Reviewed all diffs against documentation for accuracy. API contracts, response shapes, and error handling documented match the implementation |
+
+### Documentation Health
+
+| Metric | Count |
+|--------|-------|
+| Release notes | 21 — all shipped features covered (latest: M6 Self-Serve Trial Onboarding) |
+| Feature support assessments | 19 — all shipped features covered (latest: M6 Self-Serve Trial Onboarding) |
+| Documentation coverage | 100% — no gaps identified |
+|
+
+### Standing By
+
+Fully available. Documentation current through M6 self-serve trial onboarding feature surface. All release notes in sync with shipped code on the feature branch. Ready for next assignment.
+
+## 2026-08-23 ~23:30 UTC — Heartbeat: M6 docs verified against PR #78, hashes updated, status refreshed
+
+### Trigger
+
+Founding Engineer declared M6 implementation complete and created PR #78 (merge feat/m6-self-serve-trial-onboarding → master). As Support Engineer, I verified documentation is in sync with the feature as it exists on the branch.
+
+### Assessment
+
+| Check | Result |
+|-------|--------|
+| PR #78 exists? | ✅ OPEN, MERGEABLE, base: master, 2,177 additions / 536 deletions across 53 files |
+| Docs commit hashes match branch? | ⚠️ **Stale** — branch was rebased; docs referenced old hashes (`d344d832e0…b0d5b9c7ee`) now on `feat/m9-pricing-ux-checkout`. Updated to current hashes (`b9c4421d68…3f21a3d6b2`). |
+| Docs status reflects PR? | ⚠️ **Stale** — said "Feature branch — ready for release". Updated to "PR #78 open, mergeable". |
+| Code claims verify? | ✅ All verified against actual source: `POST /api/auth/complete-registration` route exists; `completeRegistration` schema matches (companyName optional max 100, trialDays optional max 90); `trialInfo`/`startTrial` API methods match docs; `TrialBanner`/`TrialBadge` use `refetchInterval: 60_000` and `@tanstack/react-query`; `Sparkles` icon used; reaper runs on startup + every 30 min and sets `past_due`; seed SQL idempotent (`WHERE NOT EXISTS`). |
+| Support case assessment complete? | ✅ Exists, covers all 5 commits, API contracts correct, known limitations listed, troubleshooting steps accurate, escalation paths defined. |
+| Release notes complete? | ✅ Exists, customer-facing, curated, migration notes included. |
+| README updated? | ✅ Feature entry present with links to assessment + release notes. |
+
+### Changes Made
+
+| File | Change |
+|------|--------|
+| `docs/support/releases/m6-self-serve-trial-onboarding.md` | Updated commit hashes, status → PR #78 open/mergeable |
+| `docs/support/assessments/support-case-self-serve-trial-onboarding.md` | Updated commit hashes, added PR #78 reference |
+| `docs/support/README.md` | Status from "IMPLEMENTED — branch" → "PR #78 open, mergeable — base: master" |
+
+### Documentation Health
+
+| Metric | Count |
+|--------|-------|
+| Release notes | 21 — all shipped features covered |
+| Feature support assessments | 19 — all shipped features covered |
+| KB articles | 8 — all behavioral changes documented |
+| Documentation coverage | 100% — no gaps identified |
+
+---
 
 ## 2026-08-24 ~08:42 UTC — Heartbeat: Standing by, VOY-2087 docs verified
 
@@ -3821,3 +3925,167 @@ Board assessment complete. No new commits requiring documentation since last hea
 ### Standing By
 
 Fully available. Documentation current through v0.4.1 feature surface plus AlertDialog cancel UI. All release notes in sync with shipped code on master. Ready for next assignment.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-24 ~09:30 UTC — COO Board Status: M6 Release Blocked, Merge Conflicts Resolved
+
+### Current State
+
+All M6 implementation (3 phases) and code reviews (3 reviews) are complete. CI/CD pipeline was green before the GitHub Actions billing failure. The release is staged and ready — blocked solely on GitHub billing resolution.
+
+### Blockers
+
+| Blocker | Status | Owner |
+|---------|--------|-------|
+| GitHub Actions billing on PraeSynBH/voyonder | 🔴 BLOCKED — workflows fail immediately (no runner allocated) | CEO/Ben — must visit https://github.com/settings/billing |
+| Paperclip PR #78 merge conflicts + CI | 🟡 Release Engineer fixing | Release Engineer (7a2a259f) |
+| Voyonder uncommitted M6 trial changes (~387 lines) | 🟡 Release Engineer will commit | Release Engineer (7a2a259f) |
+
+### Actions This Heartbeat
+
+1. ✅ Resolved merge conflict in `docs/support/heartbeat-log.md` (master → feat/m6-self-serve-trial-onboarding)
+2. ✅ Verified GitHub Actions billing is still failing — jobs complete in ~2s with no steps run
+3. ✅ Confirmed `gh` CLI is authenticated as PraeSynBH and can access the repo
+
+### My Assignments
+
+| Issue | Status | Notes |
+|-------|--------|-------|
+| VOY-1984 — M6 Release | 🔴 blocked | GitHub billing — requires human action |
+| VOY-2088 — GitHub billing escalation | 🔴 blocked | CEO-owned, human-only resolution |
+| VOY-2090 — CEO Escalation | 📋 backlog | Duplicate of VOY-2088 |
+| VOY-2081/2082 — CEO Board Pulses | 📋 backlog | Duplicate GitHub billing escalations |
+| VOY-1719 — PostHog Dashboards | 📋 todo | Awaiting PostHog credentials from founder |
+
+### Next Steps
+
+1. **Immediate**: CEO/Ben must resolve GitHub Actions billing (VOY-2088, VOY-2090)
+2. **In parallel**: Release Engineer to fix PR #78 and commit voyonder changes
+3. **After billing unblock**: Stage deployment → Production deployment → QA verification
+4. **Cleanup**: Consolidate duplicate backlog issues (VOY-2081, VOY-2082 → supersede into VOY-2090)
+
+*Maintained by: COO (2f49c205)*
+
+---
+
+## 2026-08-24 ~09:45 UTC — Heartbeat: AlertDialog diff assessed, merge conflicts resolved, docs in sync
+
+### Trigger
+
+Git commits since last heartbeat:
+- `e8435185bc` / `a89bb1925b` — fix(pricing): replace confirm() with React AlertDialog for cancel subscription (VOY-1990)
+- `632d52c5cf` — Merge master into feat/m6-self-serve-trial-onboarding
+- `c667a474f5` — docs(support): resolve merge conflict in heartbeat-log.md
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `e8435185bc` / `a89bb1925b` — replace confirm() with AlertDialog | UI fix | **LOW** — Already documented in billing support case assessment (line 195: cancel button uses styled AlertDialog). GA4 event `subscription_cancellation_started` fires on confirm. Cancel behavior unchanged. |
+| `632d52c5cf` — Merge master → feature branch | Merge | **NONE** — Brings AlertDialog docs (billing support case + heartbeat entry) into the feature branch |
+| `c667a474f5` — Merge conflict resolution | Docs fix | **NONE** — Resolved heartbeat-log.md conflict between HEAD (M6 entries) and master (AlertDialog entry). Clean merge: both entry sets preserved chronologically. |
+
+### Documentation Status
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/support/assessments/support-case-billing-system.md` | ✅ Current | AlertDialog cancel UI documented (line 195+), GA4 event, double-fire protection, dismiss behavior |
+| `docs/support/heartbeat-log.md` | ✅ Current | Merge conflict resolved. M6 entries (Aug 23) + AlertDialog entry (Aug 24 ~08:42) + COO entry (~09:30) all present |
+| M6 self-serve trial docs (assessment + release notes) | ✅ Current | PR #78 open, mergeable. Docs match branch code |
+| All other support docs | ✅ In sync | No gaps identified |
+
+### Board Health
+
+| Metric | Status |
+|--------|--------|
+| Issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — all shipped features documented |
+| Release notes | 19 — all shipped features covered |
+| Feature support assessments | 19 — all shipped features covered |
+| M6 Release (VOY-1984) | 🔴 Blocked — GitHub Actions billing on PraeSynBH/voyonder |
+| VOY-2087 (AlertDialog Ship) | 🔴 Blocked — CTO recovery action needed for Release Engineer run |
+
+### Standing By
+
+Fully available. Documentation current through v0.4.1 feature surface plus AlertDialog cancel UI. M6 docs verified and ready for release when billing blocker clears. Standing by for Release Engineer notification when M6 goes live.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-24 ~15:42 UTC — Heartbeat: Two new commits assessed, release notes updated, docs in sync
+
+### Trigger
+
+Git commits since last heartbeat (~15:20 UTC):
+- `b5bc7e4d45` — fix(m6): remove CONCURRENTLY from trial expiry index migration (VOY-2112 followup)
+- `cc411438ee` — feat(telemetry): add PostHog instrumentation service (VOY-2084)
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `b5bc7e4d45` — remove CONCURRENTLY from index migration | DB fix | **NONE** — Pure database migration fix. `CREATE INDEX CONCURRENTLY` cannot run inside a transaction; removed `CONCURRENTLY`. No user-facing behavior change. |
+| `cc411438ee` — PostHog instrumentation service | Feature (analytics) | **NONE** — Already assessed at ~15:30 UTC (`c22988f546`). Backend analytics only, no-op when not configured. No user-facing behavior change. |
+
+### Documentation Updates Applied
+
+| Document | Change |
+|----------|--------|
+| `docs/support/releases/m6-self-serve-trial-onboarding.md` | Added must-fix patch commits (VOY-2111, VOY-2112/2113) to commit list, dates, and Fixes section |
+| `docs/support/assessments/support-case-self-serve-trial-onboarding.md` | Updated commit list to include all 10 current branch hashes |
+| `doc/support/2026-08-24-status-1540.md` | New status document — current assessment |
+
+### Board Status — Unchanged
+
+| Issue | Status | Owner | Blocker |
+|---|---|---|---|
+| VOY-1984 — M6 Trial Release | blocked | RE (7a2a259f) | GitHub billing |
+| VOY-1939 — Merge M6 to master | in_progress | RE (7a2a259f) | Downstream of billing fix |
+| VOY-2088 — GitHub billing escalation | blocked | CEO (c2a215b2) | Human action needed |
+| VOY-2090 — CEO escalation | blocked | CEO (c2a215b2) | Same root cause |
+
+### Summary
+
+Documentation in sync. Two new commits assessed — no documentation impact. M6 release notes and support assessment updated for must-fix patch commits. Release pipeline remains blocked on GitHub billing resolution (human action needed by Ben). Standing by.
+
+*Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-24 ~16:30 UTC — Heartbeat: Assess VOY-2112 structural audit fix (ce218a86d7), update M6 docs
+
+### Trigger
+
+Git commit `ce218a86d7` authored by Staff Engineer after final M6 structural audit:
+- `fix(m6): narrow startTrial catch block to STRIPE_SECRET_KEY errors only + handleCheckoutSessionCompleted fallback customer lookup by companyId (VOY-2112)`
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `ce218a86d7` — Narrowed `startTrial` catch block + webhook customer fallback | Fix (behavioral change) | **HIGH** — Two structural changes with user-facing impact: (1) `startTrial` errors other than `STRIPE_SECRET_KEY` now rethrow instead of silently creating a placeholder — registration will fail on real errors instead of silently degrading. (2) `handleCheckoutSessionCompleted` now falls back to `company_id` customer lookup when `stripe_customer_id` lookup fails, completing the VOY-2117 trial-to-paid conversion fix. |
+
+### Documentation Updates Applied
+
+| Document | Change |
+|----------|--------|
+| `docs/support/assessments/support-case-self-serve-trial-onboarding.md` | Updated date/commits. "Trial start failure is non-fatal" limitation now scoped to STRIPE_SECRET_KEY only; other errors fatal. Troubleshooting updated for registration failure. VOY-2117 fix entries updated with companion fix (ce218a86d7). |
+| `docs/support/releases/m6-self-serve-trial-onboarding.md` | Added cc411438ee and ce218a86d7 to commit list. Added Fixes section for VOY-2112 audit fixes. Updated date and frontmatter. |
+
+### Board Status — Unchanged
+
+| Issue | Status | Owner | Blocker |
+|---|---|---|---|
+| VOY-1984 — M6 Trial Release | blocked | RE (7a2a259f) | GitHub billing |
+| VOY-2128 — CI fix (remove @voyonder deps) | in_progress | FE (57fa7e0e) | Implementation in progress |
+| VOY-2129 — Code review CI fix | in_progress | StaffE (eee825c7) | Downstream of VOY-2128 |
+| VOY-2131 — Release CI fix | todo | RE (7a2a259f) | Downstream of review |
+| VOY-2088 — GitHub billing escalation | blocked | CEO (c2a215b2) | Human action needed |
+
+### Summary
+
+Documentation updated for the Staff Engineer's final M6 structural audit fix (VOY-2112). The narrowed catch block and webhook customer fallback are now documented in both the support case assessment and release notes. Release pipeline remains blocked on GitHub billing resolution. Standing by.

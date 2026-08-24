@@ -446,6 +446,7 @@ export const queryKeys = {
     invoices: (companyId: string) => ["billing", companyId, "invoices"] as const,
     overview: (companyId: string) => ["billing", companyId, "overview"] as const,
     experimentVariant: (companyId: string) => ["billing", companyId, "experiment-variant"] as const,
+    trialInfo: (companyId: string) => ["billing", companyId, "trial-info"] as const,
   },
   usageByProvider: (companyId: string, from?: string, to?: string) =>
     ["usage-by-provider", companyId, from, to] as const,

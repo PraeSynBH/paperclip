@@ -32,3 +32,8 @@ WHERE NOT EXISTS (SELECT 1 FROM subscription_tiers WHERE name = 'Explorer');
 INSERT INTO subscription_tiers (name, description, price_monthly_cents, price_yearly_cents, stripe_price_monthly_id, stripe_price_yearly_id, stripe_product_id, included_seats, extra_seat_price_cents, included_agent_runs, extra_agent_run_price_cents, included_storage_gb, extra_storage_gb_price_cents, features, is_active, sort_order)
 SELECT 'Elite', 'For power users and enterprises — everything unlocked, dedicated support, white-glove onboarding.', 49900, 499000, 'price_1U2GjrK6Q827UREsrWOL9nWy', 'price_1U6xzvK6Q827UREs6PLU0l0I', 'prod_V7COuXR34Qdjie', 20, 500, 10000, 5, 100, 200, '["ai_trip_planning", "premium_itinerary", "real_time_collaboration", "dedicated_support", "unlimited_agents", "custom_templates", "white_glove_onboarding", "api_access", "sso_saml"]'::jsonb, true, 3
 WHERE NOT EXISTS (SELECT 1 FROM subscription_tiers WHERE name = 'Elite');
+
+-- Trial tier (free, 14-day trial with limited features)
+INSERT INTO subscription_tiers (name, description, price_monthly_cents, price_yearly_cents, included_seats, extra_seat_price_cents, included_agent_runs, extra_agent_run_price_cents, included_storage_gb, extra_storage_gb_price_cents, features, is_active, sort_order)
+SELECT 'Trial', 'Free 14-day trial — explore Paperclip AI agents with basic features.', 0, 0, 1, 0, 100, 0, 1, 0, '["ai_trip_planning", "basic_itinerary", "1_agent"]'::jsonb, true, 0
+WHERE NOT EXISTS (SELECT 1 FROM subscription_tiers WHERE name = 'Trial');

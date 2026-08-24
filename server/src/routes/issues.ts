@@ -7544,6 +7544,12 @@ export function issueRoutes(
       documentChanged: true,
     });
 
+    // Fire PostHog document.created event on new document creation (no-op if PostHog not configured)
+    if (result.created) {
+      const { trackDocumentCreated } = await import("../services/posthog.js");
+      trackDocumentCreated(issue.companyId, doc.id, doc.key);
+    }
+
     res.status(result.created ? 201 : 200).json(doc);
   });
 
