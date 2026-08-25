@@ -3910,3 +3910,53 @@ No outstanding documentation gaps. Next triggers remain unchanged:
 4. **VOY-2200 deploys** → update async-jobs.md to v9 + add release notes entry
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-25 ~05:30+ UTC — Heartbeat: CTO sign-off received, auth migration routing to deploy; fixed docs links and status
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `4134b0038e` — docs(cto): VOY-2180 — CTO sign-off for auth fix deploy | Internal sign-off doc | **None** — adds scratch/sign-off documents to `server/scratch/` and `doc/review/`. Updates `docs/releases.md` line 32 from "NOT DEPLOYED" to "CTO sign-off complete — routing to Release Engineer for deploy." This is a status correction that reflects the current pipeline state. See Pipeline Status Update below. |
+
+### Pipeline Status Update
+
+- **VOY-2180 (Auth fix deploy)** — CTO sign-off received. Release Engineer run queued, deploying to production.
+- **VOY-2197 (Deploy VOY-2171 auth fix)** — In progress (Release Engineer).
+- **VOY-2192 (M6.1 auth routing mismatches)** — In progress (Founding Engineer). Signup flows still broken.
+- **VOY-2200 (Auth structural fix)** — Done. All fixes applied, Staff Engineer approved, CTO signed off.
+- **VOY-1985 (QA Verify M6 trial flow)** — In review. Initial QA found signup flows broken (VOY-2192 created).
+
+### Documentation Updates This Heartbeat
+
+| Document | Change |
+|----------|--------|
+| `docs/support/releases/m6-self-serve-trial.md` | Updated auth migration status from "BLOCKED — structural review pending" to "Pipeline complete — CTO sign-off received, Release Engineer deploying." Fixed broken link: assessment now points to published `support-case-m6-self-serve-trial.md` instead of old draft. Replaced broken `auth-flow.md` link with working Google OAuth assessment link. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | Updated to v1.3 — auth migration pipeline complete, CTO sign-off received, Release Engineer deploying. |
+| `docs/releases.md` | Already updated per CTO's commit — no further change needed. |
+
+### Broken Links Fixed
+
+1. Support Case Assessment link: was `../../../doc/m6-trial-support-assessment.md` (old draft at repo root) → now `../../../docs/support/assessments/support-case-m6-self-serve-trial.md` (published assessment)
+2. Auth Flow link: was `../../../doc/auth-flow.md` (file does not exist) → replaced with working Google OAuth support assessment link
+
+### Documentation Current State
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/releases.md` | Current | Auth migration status: "CTO sign-off complete — routing to Release Engineer for deploy" |
+| `docs/support/releases/m6-self-serve-trial.md` | Current | Auth migration pipeline complete, deploy pending |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | Current | v1.3 — CTO sign-off + Release Engineer deploy status documented |
+| `doc/m6-trial-support-assessment.md` | Draft | Older draft at repo root; published version is at `docs/support/assessments/support-case-m6-self-serve-trial.md`. Can be archived once release notes link is confirmed fixed. |
+| `docs/support/heartbeat-log.md` | Current | This entry |
+
+### Standing By
+
+No direct assignments. Documentation is current with the live system (M6 infra deployed, auth migration not yet deployed but pipeline complete, M6.1 fixes in progress).
+
+Next triggers:
+1. **VOY-2197 deploys** → auth migration goes live → update docs from "not yet deployed" to "deployed"
+2. **VOY-2192 (M6.1) fixes deploy** → remove auth-routing known-issue caveats from all docs
+3. **VOY-1985 QA re-test passes** → signup flows confirmed working → verify docs match confirmed behavior
+
+*Maintained by: Support Engineer (88b72065)*
