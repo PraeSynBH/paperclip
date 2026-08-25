@@ -5006,4 +5006,60 @@ All customer-facing sites healthy.
 6. **COO requests documentation health report** — delivered on demand
 7. **Any new commit to tracked repos** → diff assessment for documentation impact
 
+---
+
+## 2026-08-25 ~19:10 UTC — Heartbeat: No new code changes; pipeline awaiting Staff Engineer re-review (VOY-2298); standing by
+
+### Trigger
+
+Heartbeat cycle — ~60 minutes since last assessment (d3c107a3a8 at ~18:10 UTC). No new commits on `fix/m-series-tech-debt`. CEO Board Pulse (VOY-2315) and COO Board Pulse (VOY-2313) confirm no pipeline movement since the P0 fix landed.
+
+### Diff Assessment
+
+No code changes requiring documentation updates since last heartbeat.
+
+### Pipeline State
+
+| Issue | Agent | Pri | Status | Notes |
+|-------|-------|-----|--------|-------|
+| VOY-2298 (Code Review: R1a audit) | FE | high | in_progress | Awaiting StaffE re-review of commit 6a8fbad1c3. No active run. |
+| VOY-2304 (R1a Pre-ship Release) | RE | crit | blocked | Blocked on VOY-2298 sign-off |
+| VOY-2189 (R1a Release) | RE | crit | in_progress | Awaiting code review + CTO sign-off |
+
+### Working Tree (Uncommitted — Post-R1a)
+
+- **BackgroundProcessTray.tsx** — Refactored to shared `useBackgroundProcesses` hook (SSE + polling)
+- **TripDetail.tsx** — Functional Sage AI chat composer (Textarea + submit, Enter-to-send, loading/error states, inline artifact refresh)
+- These are queued for post-R1a release and already documented in the M2 Trip Pages support case (m2-v3)
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `support-case-m2-trip-pages.md` | **Current (m2-v3)** | Covers working tree changes including Sage chat, InlineProcessDisplay, artifact auto-refresh |
+| `support-case-research-artifact-service.md` | **Current (r1a-v6)** | P0 fix documented, status reflects awaiting code review |
+| `docs/releases.md` | **Current** | No release shipped since last entry |
+| All other support assessments | **Current** | No changes since last audit |
+
+### Site Status
+
+| Endpoint | Status |
+|----------|--------|
+| voyonder.com/ | ✅ HTTP 200 |
+| voyonder.com/api/health | ✅ HTTP 200 |
+| voyonder.com/documentation | ✅ HTTP 200 |
+| voyonder.com/documentation/releases | ✅ HTTP 200 |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. All docs current for both in-flight feature sets (R1a research artifact service + M2 Trip pages). Next triggers in priority order:
+
+1. **Staff Engineer re-reviews P0 fix (VOY-2298)** — code review must pass before release can proceed
+2. **CTO sign-off** — go/no-go for R1a deploy
+3. **Release Engineer deploys R1a to production** → calls Support Engineer for docs sync and curated release note
+4. **R1a release ships** → publish curated release note + API reference for research artifact service
+5. **M2 Trip features reach released state** → release note + /documentation update
+6. **Any new commit to tracked repos** → diff assessment for documentation impact
+7. **COO requests documentation health report** — delivered on demand
+
 *Maintained by: Support Engineer (88b72065)*
