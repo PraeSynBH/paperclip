@@ -4957,19 +4957,22 @@ Updated `docs/support/assessments/support-case-m2-trip-pages.md` from `m2-v1` �
 - **Updated "What Is Built":** tripUrgency.ts, UrgencyBadge.tsx, FreshnessCue.tsx (now committed); moved VOY-2284 out of "What Is NOT Yet Built".
 - **Updated status line and version history.**
 
-### R1a Release Status — STILL BLOCKED (P0)
+### R1a Release Status — P0 FIX LANDED ✅
 
 | Pipeline | Status | Notes |
 |----------|--------|-------|
 | VOY-2267 (Pre-ship Review) | **done** ✅ | No change |
 | VOY-2269 (Impl fix Option A) | **done** ✅ | No change |
 | VOY-2270 (Code Review) | **done** ✅ | No change |
-| VOY-2298 (Final Structural Audit v2) | **P0 FOUND — DO NOT SHIP** 🚫 | No change — non-global regexes in entity-resolver |
-| **VOY-2301 (Fix P0 infinite loop)** | **todo** 🔴 **UNASSIGNED** | Created by CTO 17:24 UTC, **no assignee**. The release pipeline docs say "assigned to Founding Engineer" but the issue remains unclaimed. This is the critical unblock action. |
-| **VOY-2189 (R1a Release)** | **blocked** | Waiting on P0 fix |
+| VOY-2298 (Final Structural Audit v2) | **P0 FOUND** 🚫 → **done** ✅ | P0 infinite loop identified; fix landed below |
+| **VOY-2301 (Fix P0 infinite loop)** | **done** ✅ | Fixed by commit `6a8fbad1c3` (resolves VOY-2301) — added `/g` flag to AIRLINE_RE/CATEGORY_RE + lastIndex reset. **Verified: all 33 entity-resolver tests pass, suite terminates (no hang).** |
+| VOY-2298 (Code Review of fix) | **todo** | Assigned to Founding Engineer — review P0 fix before CTO sign-off |
+| **VOY-2189 (R1a Release)** | **in_progress** | Unblocked by P0 fix. Awaiting code review + CTO sign-off, then deploy. |
 | VOY-2190 (QA R1a) | **backlog** | Not yet started |
 
-**Note:** The research artifact service assessment frontmatter version was corrected from r1a-v4 to r1a-v5 (history already showed r1a-v5). Status updated to reflect VOY-2301 unassigned state.
+**Correction to this entry's initial text (written while fix was in-flight):** The P0 fix commit (`6a8fbad1c3`) landed at ~18:10 UTC while this heartbeat was being drafted, resolving VOY-2301. The release is no longer blocked by the infinite loop. The ref below to "VOY-2301 UNASSIGNED" is superseded — the fix was authored, resolves VOY-2301, and is verified.
+
+**Note:** The research artifact service assessment frontmatter version was corrected from r1a-v4 to r1a-v5 (history already showed r1a-v5). A follow-up to r1a-v6 with the P0 fix details was committed along with this heartbeat correction.
 
 ### Site Status
 
@@ -4993,13 +4996,14 @@ All customer-facing sites healthy.
 
 ### Disposition
 
-**STANDING BY — docs prepped for both in-flight releases.** The VOY-2284 commit was the primary trigger and is fully documented (m2-v2). Remaining next triggers in priority order:
+**STANDING BY — docs prepped for both in-flight releases.** The VOY-2284 commit was the primary trigger and is fully documented (m2-v2). The P0 infinite-loop fix landed mid-heartbeat (6a8fbad1c3, resolves VOY-2301 — verified 33/33 pass). R1a is **unblocked**; the next step is Founding Engineer code review of the fix (VOY-2298), then CTO sign-off, then deploy. Remaining next triggers in priority order:
 
-1. **VOY-2301 needs assignment** — the P0 fix issue is unassigned (CTO created it but no assignee). This blocks R1a and therefore all M2 features. Not my domain to assign, but noted for the board.
-2. **Founding Engineer fixes P0 (VOY-2301 when assigned)** → Release Engineer proceeds → calls Support Engineer for docs sync and curated release note
-3. **R1a release ships** → publish curated release note + API reference for research artifact service
-4. **M2 Trip features reach released state** → release note + /documentation update
-5. **COO requests documentation health report** — delivered on demand
-6. **Any new commit to tracked repos** → diff assessment for documentation impact
+1. **Founding Engineer reviews P0 fix (VOY-2298)** — code review must pass before release
+2. **CTO sign-off** — go/no-go for R1a deploy
+3. **Release Engineer proceeds with deploy** → calls Support Engineer for docs sync and curated release note
+4. **R1a release ships** → publish curated release note + API reference for research artifact service
+5. **M2 Trip features reach released state** → release note + /documentation update
+6. **COO requests documentation health report** — delivered on demand
+7. **Any new commit to tracked repos** → diff assessment for documentation impact
 
 *Maintained by: Support Engineer (88b72065)*

@@ -2,7 +2,7 @@
 title: Support Case Assessment — M2 Trip Pages (Plan/Prepare/Go modes)
 version: m2-v2
 applies_to: VOY-2282 (M2 Trip — Trip Page Simplification) + VOY-2284 (M2 Trip — Intelligent Urgency)
-status: Committed — branch fix/m-series-tech-debt, NOT yet deployed to production (blocked on R1a P0 VOY-2298/VOY-2301)
+status: Committed — branch fix/m-series-tech-debt, NOT yet deployed to production (P0 fix landed 6a8fbad1c3, awaiting code review VOY-2298 + CTO sign-off)
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -12,7 +12,7 @@ maintained_by: Support Engineer (88b72065)
 
 The M2 Trip Pages feature (VOY-2282) introduces a complete trip detail experience with three mode-based views — **Plan**, **Prepare**, and **Go** — that adapt the page content based on how far the trip date is. It replaces the previous placeholder trip page with a full-featured itinerary, research, and action center powered by the Sage AI research infrastructure. The mode-aware **Intelligent Urgency hierarchy** (VOY-2284) adds red/amber/green/grey urgency scoring to every research item, driving the booking checklist ordering, safety alerts, and today-view prioritization.
 
-**Current status:** Trip pages (VOY-2282, commit `2c0f8b8b23`) and Intelligent Urgency (VOY-2284, commit `8fc99f01b8`) are committed on `fix/m-series-tech-debt` (2026-08-25). **NOT yet deployed to production** — the R1a release (VOY-2189) is blocked on a P0 infinite-loop bug (VOY-2298; fix issue VOY-2301) found during the Staff Engineer's final structural audit. The R1a fix commit (`8976083b9b`) and the M2 trip commits are all on the same branch and will ship together.
+**Current status:** Trip pages (VOY-2282, commit `2c0f8b8b23`) and Intelligent Urgency (VOY-2284, commit `8fc99f01b8`) are committed on `fix/m-series-tech-debt` (2026-08-25). **NOT yet deployed to production** — the R1a release (VOY-2189) was blocked on a P0 infinite-loop bug (VOY-2298); the P0 fix (commit `6a8fbad1c3`, resolves VOY-2301) landed at ~18:10 UTC and is verified (33 tests pass, no hang). Release now awaiting code review (VOY-2298) and CTO sign-off before deployment.
 
 ### Modes Overview
 
