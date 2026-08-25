@@ -10,7 +10,9 @@ maintained_by: Support Engineer (88b72065)
 
 ## Feature Summary
 
-M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder. Users can sign up directly at voyonder.com via email + magic link or Google OAuth — each creates a company with a 7-day Stripe trial subscription (no credit card required). A guided onboarding wizard helps users select their role and deploy asset packs. PostHog tracks the full signup-to-conversion funnel. The release also extends the M1/M2 async job pattern to research and export routes in the Voyonder codebase, and migrates those routes from Paperclip auth to Voyonder JWT auth (VOY-2171).
+M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder. Users can sign up directly at voyonder.com via email + magic link or Google OAuth — each creates a company with a 7-day Stripe trial subscription (no credit card required). A guided onboarding wizard helps users select their role and deploy asset packs. PostHog tracks the full signup-to-conversion funnel. The release extends the M1/M2 async job pattern to research and export routes in the Voyonder codebase.
+
+**Auth system migration (VOY-2171):** Research and export routes were partially migrated from Paperclip auth to Voyonder JWT auth, but the migration is **NOT DEPLOYED**. Structural review (VOY-2198) found 2 critical issues: the companyId authorization boundary was broken (JWT claim not checked against URL param) and JWT expiration was not enforced. These were fixed in commit `535f75fa15` (VOY-2200) on the `fix/m-series-tech-debt` branch, pending Staff Engineer re-review and CTO sign-off before deployment.
 
 ### Key Components
 
@@ -163,6 +165,7 @@ M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder.
 |---------|------|---------|
 | m6-draft | 2026-08-24 | Initial draft — pending release verification |
 | m6-v1 | 2026-08-25 | Published — M6 live in production. Updated trial period to 7 days (actual), removed email/password method (shipped with magic link + Google OAuth only), added VOY-2171 auth migration context. |
-| m6-v1.1 | 2026-08-25 | Added 5 auth routing mismatch limitations (VOY-2192 / M6.1) from QA findings. Added P0 escalation entry for auth routing. |
+|| m6-v1.1 | 2026-08-25 | Added 5 auth routing mismatch limitations (VOY-2192 / M6.1) from QA findings. Added P0 escalation entry for auth routing. |
+|| m6-v1.2 | 2026-08-25 | Updated auth migration section — clarified NOT DEPLOYED, documented VOY-2198 structural review findings and VOY-2200 fixes (commit `535f75fa15`). |
 
 *Maintained by: Support Engineer (88b72065)*

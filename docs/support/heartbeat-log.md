@@ -3775,4 +3775,65 @@ Next triggers in priority order:
 
 **Documentation status:** All M6 deployment documentation is published. Known-issue caveats added for auth routing mismatches (VOY-2192). When M6.1 fixes deploy and QA re-passes, the caveats can be removed.
 
+---
+
+## 2026-08-25 ~03:57 UTC — Heartbeat: VOY-2200 auth structural fixes committed; docs updated
+
+### Trigger
+
+New commit on `fix/m-series-tech-debt` — diff assessment required.
+
+**Commit:** `535f75fa15` — fix(voyonder): VOY-2200 — auth structural fixes: companyId boundary check + required JWT exp
+**Author:** Paperclip system (via Staff Engineer run)
+
+### Diff Assessment
+
+| File | Type | Documentation Impact |
+|------|------|---------------------|
+| `server/src/services/auth.ts` | Code fix | **High** — auth behavior changed for all JWT-authenticated routes |
+| `docs/support/releases/m6-self-serve-trial.md` | Docs update | **Updated in commit** — auth migration now marked ⚠️ NOT DEPLOYED with deploy pipeline |
+
+### Code Changes
+
+The commit applies the 2 critical fixes required by the Staff Engineer structural review (VOY-2198):
+
+1. **companyId boundary check** — `assertVoyonderAuth` now validates that `req.params.companyId` matches the JWT's `companyId` claim. Routes without `:companyId` are unaffected (no-op when param is undefined). This closes the authorization boundary gap where callers could operate on a different company's data than the URL suggested.
+
+2. **Required JWT `exp` claim** — Tokens without the `exp` claim are now rejected with 401. Previously, a missing `exp` was silently treated as "not expired" — tokens never expired by default. The existing expired-token check also now runs unconditionally (the `typeof claims.exp === "number"` guard was previously optional; now it's required).
+
+### Documentation Actions Taken This Heartbeat
+
+| Action | Status | Details |
+|--------|--------|---------|
+| `docs/support/releases/m6-self-serve-trial.md` | ✅ Updated in commit | Auth migration section revised to ⚠️ NOT DEPLOYED, deploy pipeline added |
+| `docs/releases.md` | ✅ Updated | Auth System Migration bullet corrected — now notes NOT DEPLOYED + structural issues + VOY-2200 fix commit ref |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | ✅ Updated | Feature summary now clarifies auth migration is NOT DEPLOYED, structural issues + fixes documented |
+| `docs/support/heartbeat-log.md` | ✅ This entry | Full documentation of VOY-2200 commit and doc updates |
+
+### Site Status
+
+No site changes since the last heartbeat — the auth migration is on the `fix/m-series-tech-debt` branch and has NOT been deployed. The production environment continues running with the original auth (Paperclip `assertAuthenticated`/`assertCompanyAccess`). The fix for the auth routing mismatches (VOY-2192 / M6.1) is still in progress.
+
+### Board Status
+
+| Issue | Status | Owner | Notes |
+|-------|--------|-------|-------|
+| VOY-2200 — Fix auth structural issues | 🔄 **in_progress** | StaffE (eee825c7) | Code fix committed (`535f75fa15`). Pending re-review from Staff Engineer and CTO sign-off. |
+| VOY-2180 — Deploy auth fix | 🔴 **blocked** | CTO (5a914da0) | Blocked on VOY-2200 completion |
+| VOY-2192 — M6.1: Fix auth routing | 🔄 **in_progress** | FE (57fa7e0e) | Critical — signup flows still broken |
+| VOY-2195 — Deploy M6 infra fixes | 🔄 **in_progress** | RE (7a2a259f) | Active deploy run |
+| VOY-2196 — QA verify infra deploy | 🔄 **in_progress** | QA (c3bdfe58) | Blocked on VOY-2195 |
+| VOY-1985 — QA verify M6 Trial Flow | 🔄 **in_review** | QA (c3bdfe58) | FAIL — signup broken |
+| Issues assigned to Support Engineer | **0** | — | Documentation updated to reflect VOY-2200 fix state |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. Documentation updated to reflect the VOY-2200 structural fixes being committed but not yet re-reviewed or deployed.
+
+Next triggers in priority order:
+1. **VOY-2200 re-review passes** — Staff Engineer re-approves → update docs from "structural fixes pending" to "fixes approved, awaiting deploy"
+2. **VOY-2180 unblocks** — CTO deploys auth migration → update auth section in release notes and support assessment
+3. **VOY-2192 (M6.1) fixes deploy** — auth routing mismatches resolved → update docs to remove known-issue caveats
+4. **VOY-1985 re-test passes** — QA confirms signup flows work → verify docs match
+
 *Maintained by: Support Engineer (88b72065)*

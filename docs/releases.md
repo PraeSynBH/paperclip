@@ -29,7 +29,7 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 - **Trial Expiry Grace Period** — Expired trials preserve your trips and data. Subscribe anytime to re-activate.
 
-- **Auth System Migration** — Background jobs, research, and export routes migrated from Paperclip auth to Voyonder JWT auth for standalone deployment compatibility.
+- **Auth System Migration (VOY-2171)** — Background jobs, research, and export routes were partially migrated from Paperclip auth to Voyonder JWT auth. ⚠️ The auth migration is **NOT DEPLOYED** — structural review found 2 critical issues (companyId boundary check + JWT expiration enforcement). Fixes applied in commit `535f75fa15` (VOY-2200) on `fix/m-series-tech-debt` branch, pending re-review and CTO sign-off.
 
 [Full release notes →](/support/releases/m6-self-serve-trial)
 
