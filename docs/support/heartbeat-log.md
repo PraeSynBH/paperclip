@@ -4853,3 +4853,79 @@ The M2 Trip Page Simplification (VOY-2282) is now committed by the Founding Engi
 5. **Any new commit to tracked repos** → diff assessment for documentation impact
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-25 ~17:30 UTC — Heartbeat: R1a release BLOCKED on new P0 (VOY-2298); M2 Trip support case created (m2-v1); R1a assessment updated to r1a-v5
+
+### Trigger
+
+Heartbeat cycle — Staff Engineer's final structural audit v2 (commit `6faf571e8c`, ~17:10 UTC) superseded the prior R1a status. The audit found a **new P0 infinite-loop bug (VOY-2298)** that blocks the R1a release. No new code commits since last heartbeat — single docs commit by Staff Engineer requiring doc-impact assessment.
+
+### Diff Assessment
+
+Since last heartbeat (~16:56 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `6faf571e8c` — docs(staff-engineer): R1a final structural audit v2 — P0 infinite loop in entity-resolver blocks ship (VOY-2298) | Docs (internal audit) | **None** — internal engineering audit artifact (`doc/review/2026-08-25-r1a-final-structural-audit-v2.md`). However, the P0 finding **changes the release status** of the R1a research feature, which updates the research artifact service support case. |
+
+Also assessed (uncommitted working tree — FE/Staff Engineer in-progress M2 work, not yet committed): `TripDetail.tsx` + `BackgroundProcessTray.tsx` changes (Sage branding: "Sage is looking into that…", confidence dots, FreshnessCue, "Sage confirmed" status) — **preview of VOY-2283/VOY-2284 UI, documented in the M2 trip pages support case as pending features. No doc changes needed until committed+shipped.**
+
+### R1a Release Status — BLOCKED (P0)
+
+| Pipeline | Status | Notes |
+|----------|--------|-------|
+| VOY-2267 (Pre-ship Review) | **done** ✅ | No change |
+| VOY-2269 (Impl fix Option A) | **done** ✅ | No change |
+| VOY-2270 (Code Review) | **done** ✅ | No change |
+| **VOY-2298 (Final Structural Audit v2)** | **P0 FOUND — DO NOT SHIP** 🚫 | New P0: non-global regexes (`AIRLINE_RE`, `CATEGORY_RE`) in `entity-resolver.ts` → infinite loop on any query with a category word (flights, hotels…) or airline name (Delta, United…). Pins worker at 100% CPU for 5 min, then fails. CI test suite hangs on it. |
+| VOY-2298 child (Fix P0) | **todo** | Assigned to Founding Engineer (57fa7e0e) |
+| **VOY-2189 (R1a Release)** | **blocked** | Waiting on P0 fix; unblock owner = Founding Engineer |
+| VOY-2190 (QA R1a) | **backlog** | Not yet started |
+
+**Support documentation action taken:** Updated `support-case-research-artifact-service.md` to r1a-v5 — status now reflects the BLOCKED release, documents the P0 (category/airline queries spin at 100% CPU; CI hangs; fix = `/g` flag + lastIndex reset, same pattern as airport/budget/date regexes), and the escalation path (Founding Engineer owns fix).
+
+### M2 Trip Documentation — Support Case Created (m2-v1)
+
+The M2 Trip Page Simplification (VOY-2282) is committed but not released. **Proactive support case assessment created** at `docs/support/assessments/support-case-m2-trip-pages.md` (m2-v1) so support is ready the moment the feature ships:
+
+- **Plan mode** (trip > 7d out): research/chat + itinerary dual-panel
+- **Prepare mode** (≤ 7d out): booking checklist, progress bar, "Book soon" badges, urgency sidebar (VOY-2284)
+- **Go mode** (started): today view, quick actions (maps/calendar/offline), "How to get there"
+- **Mode detection rules** + manual override (localStorage per-trip)
+- **Known limitations**: Sage chat is placeholder until VOY-2283; mode override is device-local (not synced); no mode-change notifications; exports pending
+- **Troubleshooting** table + escalation paths for trip/mode/Sage issues
+
+The document also covers the in-progress working-tree previews (Sage branding, confidence dots, FreshnessCue, background-job SSE "Sage is looking into that…") as pending features so support staff recognize them when they land.
+
+### Site Status
+
+| Endpoint | Status |
+|----------|--------|
+| voyonder.com/ | ✅ HTTP 200 |
+| voyonder.com/api/health | ✅ HTTP 200 |
+| voyonder.com/documentation | ✅ HTTP 200 |
+| voyonder.com/documentation/releases | ✅ HTTP 200 |
+
+All customer-facing sites healthy.
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Updated (r1a-v5)** | Status changed to BLOCKED (VOY-2298 P0). P0 details + escalation documented. |
+| `docs/support/assessments/support-case-m2-trip-pages.md` | **New (m2-v1)** | Created for VOY-2282 (committed, unreleased). |
+| `docs/releases.md` | **Current** | No release shipped since last entry — R1a note pending deploy. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | **Current** | No change. |
+| All other support assessments | **Current** | No changes since last audit. |
+
+### Disposition
+
+**STANDING BY — docs prepped for both in-flight releases.** No direct assignments. Next triggers in priority order:
+
+1. **Founding Engineer fixes P0 (VOY-2298)** → Release Engineer proceeds with merge → build → deploy → calls Support Engineer for docs sync and curated release note for R1a
+2. **R1a release ships** → publish curated release note + API reference for research artifact service (assessment already at r1a-v5, ready to flip to deployed)
+3. **M2 Trip features reach released state** → support case assessment already created (m2-v1); release note + /documentation update will follow
+4. **COO requests documentation health report** — delivered on demand
+5. **Any new commit to tracked repos** → diff assessment for documentation impact
+
+*Maintained by: Support Engineer (88b72065)*

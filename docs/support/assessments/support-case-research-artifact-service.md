@@ -2,7 +2,7 @@
 title: Support Case Assessment — Research Artifact Service (R1a Foundation)
 version: r1a-v4
 applies_to: VOY-2172 (Research Deep Dive — Phase R1a Foundation)
-status: Draft — R1a fixes committed (8976083b9b), release in progress (VOY-2189 / R1a-8), NOT yet deployed to production
+status: Draft — R1a fixes committed (8976083b9b) but release BLOCKED (P0 infinite loop, VOY-2298); fix pending (Founding Engineer), NOT yet deployed to production
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -12,7 +12,9 @@ maintained_by: Support Engineer (88b72065)
 
 The Research Deep Dive (VOY-2172) builds a structured research pipeline on top of the existing M1+M2 async job infrastructure. Phase R1a (Foundation) establishes the data models, REST API, and background job processors for research queries, research artifacts, and trips. It enables submitting natural language travel queries, extracting structured entities (destinations, dates, hotels, airlines, budget), and persisting citation results.
 
-**Current status:** R1a-1 (DB schemas + migration), R1a-2 (entity resolver), R1a-3 (artifact service + routes), and R1a-4 (background job processors) are committed on `fix/m-series-tech-debt`. The Staff Engineer structural audit (A1-A9) is fully resolved, the N+1 batch-lookup fix landed, and the **P0 pre-ship blocker (VOY-2267) plus all P1/P2 findings are resolved by commit `8976083b9b` (2026-08-25 ~16:00 UTC)** — the route handler now enqueues `RESEARCH_RESOLVE_ENTITIES`, entity resolution is fully asynchronous, and the state machine flow works end-to-end. The R1a release (VOY-2189 / R1a-8) is **in progress** — **NOT yet deployed to production**. Web search integration (R1a-5) and TripPage UI (R1a-6) are not yet built.
+**Current status:** R1a-1 (DB schemas + migration), R1a-2 (entity resolver), R1a-3 (artifact service + routes), and R1a-4 (background job processors) are committed on `fix/m-series-tech-debt`. The Staff Engineer structural audit (A1-A9) is fully resolved, the N+1 batch-lookup fix landed, and the **P0 pre-ship blocker (VOY-2267) plus all P1/P2 findings are resolved by commit `8976083b9b` (2026-08-25 ~16:00 UTC)** — the route handler now enqueues `RESEARCH_RESOLVE_ENTITIES`, entity resolution is fully asynchronous, and the state machine flow works end-to-end.
+
+**However, a new P0 infinite-loop bug was discovered in the Staff Engineer's final structural audit v2 (VOY-2298, 2026-08-25 ~17:10 UTC):** non-global regexes (`AIRLINE_RE`, `CATEGORY_RE`) in entity-resolver.ts cause an infinite loop on ANY query containing a travel category word (flights, hotels, activities, restaurants, transport, …) or a recognized airline name (Delta, United, Emirates, …). This is the most common query shape — every travel query pins a worker slot at 100% CPU for 5 minutes, then fails. The CI test suite itself hangs on this bug. **The R1a release (VOY-2189 / R1a-8) is BLOCKED pending fix (assigned to Founding Engineer).** Web search integration (R1a-5) and TripPage UI (R1a-6) are not yet built.
 
 ### What Is Built
 
@@ -265,7 +267,8 @@ The regex-based entity resolver (committed in R1a-2) can extract:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| r1a-v4 | 2026-08-25 | Support Engineer | Rebased on commit `8976083b9b` (R1a fix impl, VOY-2189): all pre-ship findings resolved (A/B/C + D/E/G). P0 removed. Documented async entity resolution (202 response = queryId+jobId only; poll GET query), compensating `failed` status (Finding B), single resolution path (Finding C), new `GET /background-jobs/:id/download` endpoint, POST background-jobs jobType validation (400), PDF blob-storage results vs inline dataUri fallback, embedding LRU cache, worker stale-sweep. Updated status → committed, release in progress (R1a-8), NOT deployed. |
+|| r1a-v5 | 2026-08-25 | Support Engineer | Updated status: release BLOCKED by new P0 infinite-loop bug (VOY-2298, non-global regexes in entity-resolver). Added finding details: category/airline queries spin forever at 100% CPU, CI test suite hangs. Assigned to Founding Engineer. |
+|| r1a-v4 | 2026-08-25 | Support Engineer | Rebased on commit `8976083b9b` (R1a fix impl, VOY-2189): all pre-ship findings resolved (A/B/C + D/E/G). P0 removed. Documented async entity resolution (202 response = queryId+jobId only; poll GET query), compensating `failed` status (Finding B), single resolution path (Finding C), new `GET /background-jobs/:id/download` endpoint, POST background-jobs jobType validation (400), PDF blob-storage results vs inline dataUri fallback, embedding LRU cache, worker stale-sweep. Updated status → committed, release in progress (R1a-8), NOT deployed. |
 | r1a-v3 | 2026-08-25 | Support Engineer | Corrected status: R1a-4 processors now built (RESOLVE_ENTITIES / GATHER_CITATIONS / VERIFY_CITATIONS). Added VOY-2267 pre-ship review section — P0 state machine bug (every REST query submit fails), P1 findings B/C, Option A fix direction, 3 recommended pre-ship fixes. N+1 batch lookup in VERIFY_CITATIONS noted. Updated limitations/troubleshooting/escalation to reflect the P0 and stubbed gatherer. |
 | r1a-v2 | 2026-08-25 | Support Engineer | Added structural audit findings (A1-A9) all resolved. Documented TOCTOU guards, dedup upsert, test coverage, regex fixes, stale-transition guards. Pre-release hardening on fix/m-series-tech-debt. |
 | r1a-v1 | 2026-08-25 | Support Engineer | Initial assessment for R1a Foundation (R1a-1/2/3 committed). Notes feature as incomplete — no citation gatherer, no web search, no TripPage UI. |
