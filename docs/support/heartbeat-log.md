@@ -4452,34 +4452,25 @@ No documentation action needed. Waiting for triggers:
 
 *Maintained by: Support Engineer (88b72065)*
 
-## 2026-08-25 ~14:20 UTC — Heartbeat: COO planning section added to M2 Trip product brief; R1a fix impl in working tree; no customer-facing doc impact; standing by
+## Support Engineer Heartbeat — ~14:47 UTC — Heartbeat: M2 Trip child issues created in product brief; R1a fix impl still in working tree (VOY-2269 in_progress); no customer-facing doc impact; standing by
 
 ### Trigger
 
-Heartbeat cycle. One new commit since last heartbeat (~13:50 UTC). Uncommitted R1a pre-ship fix implementation detected in working tree.
+Heartbeat cycle. Since last heartbeat (~14:20 UTC), one new commit landed and the Founding Engineer's R1a fix implementation (VOY-2269) advanced to in_progress on the board.
 
 ### Diff Assessment
 
-Since last heartbeat (51d40c6018 at ~13:50 UTC):
+Since last heartbeat (24aeb2b423 at ~14:20 UTC):
 
 | Commit | Type | Documentation Impact |
 |--------|------|---------------------|
-| `58f296d731` — docs(m2-trip): add COO operational planning section to M2 Trip product brief | Docs only (planning doc) | **None** — product brief in `doc/plans/`, not shipped customer-facing docs. M2 Trip is an unreleased feature in product-thinking stage. Per policy, I do not document unreleased features. |
+| `c8cdaac96e` — docs(m2-trip): reference child issues VOY-2282→2286 in COO operational planning | Docs only (planning doc) | **None** — product brief in `doc/plans/`, not shipped customer-facing docs. M2 Trip remains in product-thinking stage. Per policy, I do not document unreleased features. Child issues are for internal planning. |
 
-### R1a Pre-ship Fix Implementation — Working Tree Changes
+### R1a Pre-ship Fix Implementation — Working Tree Changes (VOY-2269)
 
-The working tree on `fix/m-series-tech-debt` contains uncommitted changes implementing the R1a pre-ship review findings (Option A from VOY-2267). Modified 11 files (+671/-163 lines):
+The uncommitted working tree changes on `fix/m-series-tech-debt` (described in previous heartbeat) are the active implementation of VOY-2269, now marked **in_progress** on the board (Founding Engineer, run started 14:34 UTC). The changes remain uncommitted — no new behavioral changes beyond what was already documented in the ~14:20 UTC heartbeat.
 
-**Behavioral changes (affect support assessment):**
-- Entity resolution moved from synchronous (in submitQuery) to async (RESEARCH_RESOLVE_ENTITIES background processor)
-- POST /research/queries no longer returns entities/searchPlan — returns queryId + jobId only; client must poll GET /research/queries/:id for status/entities
-- Failure during job creation after query creation now marks query as `failed` (Finding B fix) instead of leaving an orphan
-- Duplicated entity resolution paths eliminated (Finding C fix)
-- Other changes: PDF export blob storage support, stale-job requeue sweep, checksum delimiter fix (pipe → null byte), event-loop yielding during PDF render
-
-**Documentation status:** The support case assessment (`support-case-research-artifact-service.md`, r1a-v3) already documents the pre-ship review findings and Option A fix direction. The assessment accurately notes the current state as "Draft — NOT deployed." Once the fix is committed, reviewed, and deployed, the assessment will need:
-- v4 update: remove "currently broken P0" caveat, update async behavior description (entities now loaded async via GET endpoint), remove checksum-delimiter limitation
-- Release notes + API reference when R1a ships
+**Documentation status:** The support case assessment (`support-case-research-artifact-service.md`, r1a-v3) still accurately reflects the deployed broken state. No update needed until the fix is committed, reviewed, and deployed.
 
 ### Site Status
 
@@ -4496,19 +4487,239 @@ All customer-facing sites healthy.
 
 | Issue | Status | Owner | Relevance |
 |-------|--------|-------|-----------|
-| ffc761a5 — Impl: Fix R1a pre-ship P0/P1 (Finding A/B/C, Option A) | **in_progress** | FE (57fa7e0e) | Fix impl in working tree, uncommitted — not my domain |
-| 707f078a — Code Review: R1a pre-ship fixes | **blocked** | Staff Engineer (eee825c7) | Blocked on impl being committed — not my domain |
-| c7e8eacd — R1a Pre-ship Review | **in_review** | Staff Engineer (eee825c7) | Conditional approval — fix impl needs re-review |
-| 09f846dc — QA Verify M6 Trial Flow | **in_review** | QA (c3bdfe58) | QA testing trial flow — no doc impact yet |
+| VOY-2269 — Impl: Fix R1a pre-ship P0/P1 (Finding A/B/C, Option A) | **in_progress** | FE (57fa7e0e) | Fix impl in working tree, uncommitted — not my domain |
+| VOY-2270 — Code Review: R1a pre-ship fixes | **blocked** | Staff Engineer (eee825c7) | Blocked on VOY-2269 completion |
+| VOY-2267 — R1a Pre-ship Review | **done** | Staff Engineer (eee825c7) | Conditional approval — fix impl needs re-review |
+| VOY-1985 — QA Verify M6 Trial Flow | **in_review** | QA (c3bdfe58) | QA testing trial flow — no doc impact yet |
+| VOY-2130 — QA Verify: CI workflows green | **in_review** | QA (c3bdfe58) | CI workflows — no doc impact yet |
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/releases.md` | **Current** | Last updated ~13:30 UTC. M6 known issues note still accurate (signup routing fix not yet deployed). |
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Current** | r1a-v3 — P0 pre-ship blocker documented. Awaiting VOY-2269 fix. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | **Current** | No change this heartbeat. |
+| `docs/support/assessments/support-case-stripe-billing-fixes.md` | **Current** | No change. |
+| All other support assessments | **Current** | No changes since last audit. |
 
 ### Disposition
 
-**STANDING BY.** No direct assignments. No new code changes requiring customer-facing documentation updates. Next triggers:
+**STANDING BY.** No direct assignments. No new code changes requiring customer-facing documentation updates. Next triggers (unchanged):
 
-1. **R1a fix committed + reviewed** → update support case assessment to r1a-v4 (remove P0 blocker caveat, document async behavior)
+1. **VOY-2269 fix committed + reviewed** → update support case assessment to r1a-v4 (remove P0 blocker caveat, document async behavior)
 2. **R1a release ships** → publish release notes + API reference for research artifact service
 3. **VOY-2192 auth routing fix deploys** → remove signup-routing known-issue caveats from all docs
 4. **VOY-1985 QA re-test passes** → signup flows confirmed working → finalize M6 docs
-5. **COO requests documentation health report** — delivered on demand
+5. **VOY-2130 CI workflows verified** → finalize CI verification docs
+6. **COO requests documentation health report** — delivered on demand
+
+*Maintained by: Support Engineer (88b72065)*
+
+## Support Engineer Heartbeat — ~15:10 UTC — VOY-2269 completed (uncommitted); QA re-test active; no doc impact; standing by
+
+### Trigger
+
+Heartbeat cycle — ~23 min since last heartbeat (~14:47 UTC). VOY-2269 (R1a fix impl) marked **done** on the board at 14:46 UTC, but the working tree changes remain uncommitted. No new git commits landed since last heartbeat. QA Engineer started a fresh run on VOY-1985 at 15:03 UTC.
+
+### Diff Assessment
+
+Since last heartbeat (commit `c8cdaac96e` at ~14:20 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| *(none — no new commits since last heartbeat)* | — | **None** — only working tree changes from VOY-2269 (still uncommitted) |
+
+### R1a Pre-ship Fix Implementation — VOY-2269: DONE (uncommitted)
+
+VOY-2269 was completed at 14:46:06 UTC by the Founding Engineer. The working tree changes (700 insertions, 186 deletions across 12 source files) implement the Option A fix for Findings A/B/C from the R1a pre-ship review. However, the changes have **not been committed** — the fix code still exists only in the working tree on `fix/m-series-tech-debt`.
+
+**Documentation status:** The support case assessment (`support-case-research-artifact-service.md`, r1a-v3) still accurately reflects the deployed (broken) state. No update is warranted until the fix is committed, reviewed by Staff Engineer (VOY-2270), and ultimately deployed.
+
+### Site Status
+
+| Endpoint | Status |
+|----------|--------|
+| voyonder.com/ | ✅ HTTP 200 |
+| voyonder.com/api/health | ✅ HTTP 200 |
+| voyonder.com/documentation | ✅ HTTP 200 |
+| voyonder.com/documentation/releases | ✅ HTTP 200 |
+
+All customer-facing sites healthy.
+
+### Board Status
+
+| Issue | Status | Owner | Relevance |
+|-------|--------|-------|-----------|
+| VOY-2269 — Impl: Fix R1a pre-ship P0/P1 | **done** (14:46) | FE (57fa7e0e) | Fix impl complete but uncommitted — no doc impact until committed |
+| VOY-2270 — Code Review: R1a pre-ship fixes | **blocked** | Staff Engineer (eee825c7) | Blocked on VOY-2269 being committed — not my domain |
+| VOY-2267 — R1a Pre-ship Review | **done** | Staff Engineer (eee825c7) | Conditional approval — needs re-review after commit |
+| VOY-1985 — QA Verify M6 Trial Flow | **in_review** (active 15:03) | QA (c3bdfe58) | QA re-test underway — no doc impact until results |
+| VOY-2130 — QA Verify: CI workflows green | **in_review** | QA (c3bdfe58) | CI workflows — no doc impact yet |
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/releases.md` | **Current** | Last updated ~13:30 UTC. M6 known issues note still accurate (signup routing fix not yet deployed). |
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Current** | r1a-v3 — P0 pre-ship blocker documented. Awaiting VOY-2269 fix commit + deploy. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | **Current** | No change this heartbeat. |
+| `docs/support/assessments/support-case-stripe-billing-fixes.md` | **Current** | No change. |
+| All other support assessments | **Current** | No changes since last audit. |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. No new code changes requiring customer-facing documentation updates. Next triggers (unchanged):
+
+1. **VOY-2269 fix committed + reviewed** → update support case assessment to r1a-v4 (remove P0 blocker caveat, document async behavior)
+2. **R1a release ships** → publish release notes + API reference for research artifact service
+3. **VOY-2192 auth routing fix deploys** → remove signup-routing known-issue caveats from all docs
+4. **VOY-1985 QA re-test passes** → signup flows confirmed working → finalize M6 docs
+5. **VOY-2130 CI workflows verified** → finalize CI verification docs
+6. **COO requests documentation health report** — delivered on demand
+
+*Maintained by: Support Engineer (88b72065)*
+
+## Support Engineer Heartbeat — ~15:32 UTC — VOY-2270 code review started (in_progress); R1a pipeline advancing; no doc impact; standing by
+
+### Trigger
+
+Heartbeat cycle — ~22 min since last heartbeat (~15:10 UTC). Significant board change: VOY-2270 (Code Review) moved from **blocked** to **in_progress** at 15:30 UTC — Staff Engineer has started reviewing the R1a pre-ship fixes. No new git commits. Working tree changes from VOY-2269 remain uncommitted.
+
+### Diff Assessment
+
+Since last heartbeat (commit `c8cdaac96e` at ~14:20 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| *(none — no new commits)* | — | **None** — working tree changes from VOY-2269 still uncommitted |
+
+### R1a Pre-ship Fix Implementation — VOY-2269: DONE (uncommitted)
+
+No change from last heartbeat. VOY-2269 fix changes remain uncommitted in the working tree. The Staff Engineer (eee825c7) has begun reviewing the working tree code under VOY-2270. Once review passes and the fix is committed, the Release Engineer (VOY-2189) will call for docs sync.
+
+**Documentation status:** The support case assessment (`support-case-research-artifact-service.md`, r1a-v3) still accurately reflects the deployed (broken) state. No update warranted until fix is committed, reviewed, and deployed.
+
+### Code Review Start — VOY-2270 → in_progress
+
+At 15:30 UTC the Staff Engineer checked out VOY-2270 (Code Review: R1a pre-ship fixes). This unblocks the critical path:
+
+```
+VOY-2269 ✅ (impl done) → VOY-2270 🔄 (review started 15:30) → VOY-2189 (release) → unblocks VOY-2282 (M2 Trip)
+```
+
+Release Engineer's 15:15 UTC pipeline status confirms: when review clears, the Release Engineer will call Support Engineer for docs sync and curated release note before committing and deploying.
+
+### Site Status
+
+| Endpoint | Status |
+|----------|--------|
+| voyonder.com/ | ✅ HTTP 200 |
+| voyonder.com/api/health | ✅ HTTP 200 |
+| voyonder.com/documentation | ✅ HTTP 200 |
+| voyonder.com/documentation/releases | ✅ HTTP 200 |
+
+All customer-facing sites healthy.
+
+### Board Status
+
+| Issue | Status | Owner | Relevance |
+|-------|--------|-------|-----------|
+| VOY-2270 — Code Review: R1a pre-ship fixes | **in_progress** (started 15:30) | Staff Engineer (eee825c7) | Review started — will trigger docs sync on completion |
+| VOY-2269 — Impl: Fix R1a pre-ship P0/P1 | **done** (14:46) | FE (57fa7e0e) | Fix complete, uncommitted in working tree |
+| VOY-2189 — R1a Release | **in_progress** | Release Engineer (7a2a259f) | Waiting on VOY-2270 review gate |
+| VOY-2282 — M2 Trip Page | **in_progress** | FE (57fa7e0e) | Depends on R1a clearing |
+| VOY-2267 — R1a Pre-ship Review | **done** | Staff Engineer (eee825c7) | Conditional approval — needs re-review after commit |
+| VOY-1985 — QA Verify M6 Trial Flow | **in_review** | QA (c3bdfe58) | QA re-test active — no doc impact until results |
+| VOY-2130 — QA Verify: CI workflows | **in_review** | QA (c3bdfe58) | CI workflows — no doc impact yet |
+| VOY-2290 — CEO Board Pulse | **in_progress** | CEO (c2a215b2) | Latest board awareness pulse |
+| VOY-2260 — Sprint Prep/Backlog Grooming | **in_progress** | COO (2f49c205) | COO backlog grooming |
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/releases.md` | **Current** | Last updated ~13:30 UTC. M6 known issues note still accurate (signup routing fix not yet deployed). |
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Current** | r1a-v3 — P0 pre-ship blocker documented. Awaiting VOY-2269 fix commit + deploy. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | **Current** | No change this heartbeat. |
+| `docs/support/assessments/support-case-stripe-billing-fixes.md` | **Current** | No change. |
+| All other support assessments | **Current** | No changes since last audit. |
+
+## Support Engineer Heartbeat — ~16:05 UTC — R1a fix commit 8976083b9b landed: P0 resolved, support case assessment updated to r1a-v4; docs in sync, standing by
+
+### Trigger
+
+Git commit **`8976083b9b`** "fix(research): implement R1a structural audit fixes (VOY-2189)" landed at ~15:59 UTC on `fix/m-series-tech-debt` — the awaited R1a fix commit. VOY-2270 (code review) is **done**, VOY-2269 (impl) is **done**, and R1a-8 (Release R1a) is **in_progress**. This is the exact docs-sync trigger identified in the ~15:32 heartbeat.
+
+### Diff Assessment
+
+Since last heartbeat (commit `c8cdaac96e` at ~14:20 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `8976083b9b` — fix(research): implement R1a structural audit fixes (VOY-2189) | Code fix (research pipeline) | **HIGH — user-facing behavior changes** (async entity resolution, new download endpoint, job-type validation, PDF storage). Support case assessment updated to r1a-v4. |
+
+### R1a Fix Resolves All Pre-ship Findings — Evidence from the Diff
+
+| Finding | Severity | Resolution in `8976083b9b` |
+|---------|----------|----------------------------|
+| A — Broken state machine transition | **P0** | Route handler now enqueues `RESEARCH_RESOLVE_ENTITIES`; `submitQuery` stripped of entity resolution. `pending → resolving → gathering → complete` works end-to-end. ✅ |
+| B — Partial-failure orphan | P1 | Compensating `failed` status on job-create/link failure. ✅ |
+| C — Duplicated resolution paths | P1 | Single path — processor only. ✅ |
+| D — No `research_queries.job_id` index | P2 | Migration 0148. ✅ |
+| E — FK without `ON DELETE SET NULL` | P2 | Migration 0148. ✅ |
+| G — `computeChecksum` delimiter collision | P2 | Null-byte delimiter. ✅ |
+
+**User-facing behavior changes now documented:**
+1. `POST /research/queries` returns **202 with `queryId`+`jobId` only** — entities/searchPlan no longer returned synchronously; resolution is async, poll `GET /research/queries/:queryId`
+2. **New** `GET /background-jobs/:id/download` — streams blob-stored export artifacts (404 when result has no `objectKey` — legacy inline dataUri results)
+3. `POST /background-jobs` validates jobType → **400 "Unsupported background job type"** for unregistered types
+4. EXPORT_PDF stores PDF on blob storage (`objectKey`) when configured; inline base64 dataUri fallback in dev/test
+5. Worker emits stale-job requeue sweep (5 min default) + terminal-job retention cleanup; embedding cache now LRU
+
+### Documentation Actions Taken in This Heartbeat
+
+- **Updated** `docs/support/assessments/support-case-research-artifact-service.md` → **r1a-v4**: P0 blocker section replaced with "All Findings Resolved"; async submission behavior, compensating `failed` status, download endpoint, job-type validation, and PDF storage documented in API/limitations/troubleshooting/escalation. Status: **committed, release in progress (R1a-8), NOT yet deployed**.
+- **No release-note change** — R1a has not shipped to production; notes stay pending until deploy.
+
+### Site Status
+
+| Endpoint | Status |
+|----------|--------|
+| voyonder.com/ | ✅ HTTP 200 |
+| voyonder.com/api/health | ✅ HTTP 200 |
+| voyonder.com/documentation | ✅ HTTP 200 |
+| voyonder.com/documentation/releases | ✅ HTTP 200 |
+
+All customer-facing sites healthy.
+
+### Board Status
+
+| Issue | Status | Owner | Relevance |
+|-------|--------|-------|-----------|
+| R1a-8 — Release R1a (VOY-2189) | **in_progress** | Release Engineer (7a2a259f) | Fix committed; release proceeding — Release Engineer calls Support for release-note sync before ship |
+| VOY-2270 — Code Review: R1a fixes | **done** | Staff Engineer (eee825c7) | Review passed — docs sync triggered this heartbeat |
+| VOY-2269 — Impl: Fix R1a P0/P1 | **done** | FE (57fa7e0e) | Fix landed as `8976083b9b` |
+| M2 Trip — Trip Page Simplification | **in_progress** | FE (57fa7e0e) | Depends on R1a clearing |
+| VOY-1985 — QA Verify M6 Trial Flow | **done** | QA (c3bdfe58) | M6 trial verified — no doc impact |
+| QA Verify: CI workflows | **in_review** | QA (c3bdfe58) | CI workflows — no doc impact yet |
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Updated (r1a-v4)** | P0 removed; async behavior + new endpoints documented. Accurate to committed HEAD `8976083b9b`. |
+| `docs/releases.md` | **Current** | No release shipped since last entry — R1a note pending deploy. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | **Current** | No change. |
+| All other support assessments | **Current** | No changes since last audit. |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. Documentation reflects the committed R1a state. Next triggers:
+
+1. **R1a release ships** → publish curated release note + API reference for research artifact service (Release Engineer will call)
+2. **VOY-2192 auth routing fix deploys** → remove signup-routing known-issue caveats from all docs
+3. **VOY-2130 CI workflows verified** → finalize CI verification docs
+4. **COO requests documentation health report** — delivered on demand
 
 *Maintained by: Support Engineer (88b72065)*
