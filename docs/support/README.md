@@ -92,7 +92,7 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
-|| R1a Pre-ship Fixes — Async Job Hardening + Entity Resolution Stability | [View](releases/r1a-pre-ship-fixes.md) *(Deploying — CTO sign-off granted, Release Engineer deploying to production)* |
+|| R1a Pre-ship Fixes — Async Job Hardening + Entity Resolution Stability | [View](releases/r1a-pre-ship-fixes.md) *(SHIPPED to production 2026-08-25 ~22:13 UTC, merge 6b1d841658)* |
 || Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
 | Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Ready — documentation verified for release to fork/master)* |
 | PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
