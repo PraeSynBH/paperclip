@@ -3,7 +3,7 @@
 |version: m6
 |date: 2026-08-25
 |commits: 75c884f66d (feat/m6), 46a0b32003 (billing fix), 74753fe83b (CI fix), 8fb4d72b8f (certresolver fix), 27b6a2b29d (routing fix), b63c4f9f26 (verified healthy)
-||status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. All production services healthy. Auth migration (VOY-2171) NOT YET DEPLOYED — CTO sign-off received, Release Engineer deploying.
+||status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. All production services healthy. Auth migration (VOY-2171) CTO sign-off complete — Release Engineer deployment in progress (VOY-2197). Known issues: VOY-2192 signup routing (fixes committed, awaiting deploy), VOY-2217 billing checkout body parsing, VOY-2218 billing portal link 500.
 ---
 
 # M6 Release: Self-Serve Trial Signup & Onboarding
@@ -98,9 +98,9 @@ The M6 release extends the M1/M2 async job infrastructure to the Voyonder codeba
 - **Research activity search** — Converted to background job processing (returns HTTP 202 with jobId)
 - **CSV/ICS export routes** — New export endpoints use the background job pattern for non-blocking PDF and calendar file generation
 
-### Auth System Migration (VOY-2171) — ⚠️ NOT YET DEPLOYED TO PRODUCTION
+### Auth System Migration (VOY-2171) — ⚠️ DEPLOYMENT IN PROGRESS
 
-**Status:** Pipeline complete — CTO sign-off received (commit `4134b0038e`). Routing to Release Engineer for production deployment.
+**Status:** CTO sign-off received (commit `4134b0038e`). Release Engineer is deploying to production (VOY-2197) — re-applying the migration on voyonder `fix/voy-2197-reapply-auth-migration` (commit `68da3ab`).
 
 The auth migration code (commit `99b3917519`) is on the `fix/m-series-tech-debt` branch. When deployed, background jobs, research, and export API routes will use `assertVoyonderAuth` (Voyonder JWT auth) instead of Paperclip's `assertAuthenticated`/`assertCompanyAccess`. The `Authorization` header must carry a Voyonder HS256 JWT with `sub` (userId) and `company_id` claims. Requires `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` environment variable.
 
@@ -151,6 +151,21 @@ QA verification (VOY-1985) found that all signup flows are non-functional in pro
 
 **Workaround:** No user-facing workaround. Users see the signup page and pricing page, but signup submissions fail. Monitor VOY-2192 for deployment of fixes.
 
+### Billing Defects (VOY-2217 / VOY-2218) — In Flight
+
+QA verification also found billing paths failing in production:
+
+| Issue | Frontend Expects | Current Behavior | Status |
+|-------|-----------------|------------------|--------|
+| Checkout POST body parsing | Checkout/start-trial request body parsed correctly | POST body parsing fails (`VOY-2217`) | ❌ Broken — fix in progress (M6.2a) |
+| Billing portal link | Billing portal opens with a customer portal link | Portal link returns 500 (`VOY-2218`) | ❌ Broken — fix in progress (M6.2b) |
+
+**Root cause:** Billing route/subscription handling defects surfaced during QA verification of the trial flow (VOY-1985).
+
+**Fix tracked in:** VOY-2217 (billing POST body parsing) and VOY-2218 (billing portal link 500), both assigned to Founding Engineer, high priority.
+
+**Workaround:** No user-side workaround. Existing trial users with active Stripe subscriptions are unaffected; new checkout and billing portal access fail until fixes deploy. Monitor VOY-2217 / VOY-2218 for deployment.
+
 ---
 
 ## Configuration
@@ -178,4 +193,4 @@ QA verification (VOY-1985) found that all signup flows are non-functional in pro
 
 ---
 
-*Maintained by: Support Engineer (88b72065). Updated 2026-08-25 to reflect CTO sign-off and Release Engineer deploy status for auth migration (VOY-2171). Fixed broken links to support assessments.*
+*Maintained by: Support Engineer (88b72065). Updated 2026-08-25 to reflect CTO sign-off and Release Engineer deploy status for auth migration (VOY-2171), and to document billing defects VOY-2217/VOY-2218. Fixed broken links to support assessments.*

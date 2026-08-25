@@ -29,11 +29,11 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 - **Trial Expiry Grace Period** — Expired trials preserve your trips and data. Subscribe anytime to re-activate.
 
-- **Auth System Migration (VOY-2171)** — Background jobs, research, and export routes were partially migrated from Paperclip auth to Voyonder JWT auth. ⚠️ The auth migration is **NOT DEPLOYED** — structural review found 2 critical issues (companyId boundary check + JWT expiration enforcement). Fixes applied in commit `535f75fa15` (VOY-2200) on `fix/m-series-tech-debt` branch, pending re-review and CTO sign-off.
+- **Auth System Migration (VOY-2171)** — Background jobs, research, and export routes were partially migrated from Paperclip auth to Voyonder JWT auth. Structural issues (companyId boundary check + JWT expiration enforcement) were fixed in VOY-2200 and P1 blocker fixes landed in VOY-2201. **CTO sign-off complete** — Release Engineer deployment in progress (VOY-2197).
 
 [Full release notes →](/support/releases/m6-self-serve-trial)
 
-> **⚠️ Known issue (2026-08-25):** Auth routing mismatches between the frontend and Voyonder API currently block all signup methods. See [VOY-2192](/issues/VOY-2192) for fix progress and the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
+> **⚠️ Known issues (2026-08-25):** Signup remains blocked in production — auth routing mismatches between the frontend and Voyonder API are fixed in code but not yet deployed (VOY-2192). Two billing defects are also in flight: checkout POST body parsing (VOY-2217) and billing portal link 500 (VOY-2218). See the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
 
 ---
 

@@ -3911,6 +3911,37 @@ No outstanding documentation gaps. Next triggers remain unchanged:
 
 *Maintained by: Support Engineer (88b72065)*
 
+## 2026-08-25 ~06:05 UTC — Heartbeat: Auth migration mid-deploy; billing defects VOY-2217/VOY-2218 documented
+
+### Trigger
+
+Heartbeat cycle. No new paperclip-repo commits since ~05:30 UTC; resumed prior in-flight doc sync: auth migration (VOY-2171) is now **IN DEPLOYMENT** by the Release Engineer (voyonder `fix/voy-2197-reapply-auth-migration`, commit `68da3ab`), and QA-discovered billing defects (VOY-2217 / VOY-2218) were live but not documented in customer/support docs.
+
+### Diff Assessment
+
+| Commit | Repo | Documentation Impact |
+|--------|------|----------------------|
+| `68da3ab` — fix(auth): VOY-2197 — re-apply Voyonder JWT auth migration (background-jobs, research, exports routes) | voyonder | **Yes** — auth migration moving from "not deployed" to deployed; release docs updated to IN DEPLOYMENT status |
+| `5103902`, `4e9791a`, `e97ff71` — VOY-2192 auth routing fixes (null guard, HttpError classes, magic link + Google OAuth routes) | voyonder | **Yes** — auth routing mismatches fixed in code, awaiting deploy; docs already track VOY-2192, status unchanged |
+
+### Documentation Changes (this heartbeat)
+
+1. `docs/releases.md` — Auth migration status → "Release Engineer deployment in progress (VOY-2197)". Known-issues banner now lists VOY-2192 (signup routing), VOY-2217 (checkout body parsing), VOY-2218 (billing portal 500).
+2. `docs/support/releases/m6-self-serve-trial.md` — Header status + auth migration section → DEPLOYMENT IN PROGRESS (commit `68da3ab`). New "Billing Defects (VOY-2217 / VOY-2218)" known-issue subsection with workaround guidance.
+3. `docs/support/assessments/support-case-m6-self-serve-trial.md` — Auth migration → IN DEPLOYMENT; added limitations 22-23 (checkout POST body parsing, billing portal 500), troubleshooting rows, escalation entry (P1 / 1 hour); version history m6-v1.4.
+
+### Standing By
+
+Docs are current with the live system (M6 live; auth migration mid-deploy; M6.1 + M6.2 fixes in flight).
+
+Next triggers:
+1. **VOY-2197 deploy completes** → flip auth migration docs from "in deployment" to "deployed"
+2. **VOY-2192 (M6.1) fixes deploy** → remove auth-routing known-issue caveats
+3. **VOY-2217 / VOY-2218 deploy** → remove billing known-issue caveats
+4. **VOY-1985 QA re-test passes** → verify docs match confirmed behavior
+
+---
+
 ## 2026-08-25 ~05:30+ UTC — Heartbeat: CTO sign-off received, auth migration routing to deploy; fixed docs links and status
 
 ### Diff Assessment
