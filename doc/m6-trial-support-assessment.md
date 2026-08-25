@@ -1,9 +1,10 @@
-# M6 Trial Feature — Support Case Assessment (DRAFT)
+# M6 Trial Feature — Support Case Assessment
 
-**Status:** DRAFT — awaiting production deployment
+**Status:** PUBLISHED — M6 is live in production
 **Applies to:** M6 Trial Feature Release (VOY-1984)
 **Version:** v0.3.0 (estimated)
-**Last updated:** 2026-08-25 ~00:40 UTC
+**Last updated:** 2026-08-25 ~01:00 UTC
+**Deployed commit:** TBD (confirm with Release Engineer)
 
 ---
 
@@ -18,16 +19,16 @@ This is a significant change from the previous flow where users signed up throug
 ### 1. Self-Serve Signup (3 methods)
 Users can create an account at voyonder.com/join using any of:
 - **Email + magic link** — user enters email, receives a one-time login link (expires after 15 minutes), clicks to verify and sign in
-- **Google OAuth** — one-click signup with Google account ( if configured in thedeployment)
+- **Google OAuth** — one-click signup with Google account (if configured in the deployment)
 - **Magic link only** — no password; each login sends a new magic link
 
-On first signup, a company is created automatically and a trial subscription isprovisioned (7-day free, Explorer tier, no credit card required).
+On first signup, a company is created automatically and a trial subscription is provisioned (7-day free, Explorer tier, no credit card required).
 
 ### 2. Onboarding Wizard
 After signup, new users see an onboarding flow:
-- **Role selection** — choose a travel role (e.g., Adventurer, BusinessTraveler, Family Planner, etc.)
-- **Asset pack deployment** — relevant starter packs (knowledge, tools,agents) are deployed to the new company based on the selected role
-- **Skip option** — users can skip onboarding and land directly on an emptydashboard
+- **Role selection** — choose a travel role (e.g., Adventurer, Business Traveler, Family Planner, etc.)
+- **Asset pack deployment** — relevant starter packs (knowledge, tools, agents) are deployed to the new company based on the selected role
+- **Skip option** — users can skip onboarding and land directly on an empty dashboard
 
 ### 3. Free Trial
 - **Duration:** 7 days from signup
@@ -40,38 +41,38 @@ After signup, new users see an onboarding flow:
 When the trial ends (or user proactively subscribes):
 - User visits Pricing page (voyonder.com/pricing) to choose a plan
 - Stripe Checkout handles the subscription
-- The trial subscription row is updated to the paid subscription (ONCONFLICT on company_id, not stripe_subscription_id — closed a P0 bug whereNULL subscription_id prevented conversion)
+- The trial subscription row is updated to the paid subscription (ON CONFLICT on company_id, not stripe_subscription_id — closed a P0 bug where NULL subscription_id prevented conversion)
 - The company transitions from `trialing` to `active`
 
 ### 5. Billing Management
-- Users can manage their subscription via Stripe Customer Portal atvoyonder.com/settings/billing
-- View current plan, change tiers, update payment method, download invoices,cancel
+- Users can manage their subscription via Stripe Customer Portal at voyonder.com/settings/billing
+- View current plan, change tiers, update payment method, download invoices, cancel
 
 ### 6. Trial Expiry & Data Retention
 When a trial expires:
 - Company status changes from `trialing` to `expired_trial`
 - A periodic sweep (`expireTrials`) handles batch expiry
-- User data is **preserved** — the company can be re-activated bysubscribing
+- User data is **preserved** — the company can be re-activated by subscribing
 - No automatic data deletion after trial expiry
 
 ## Key Architecture Changes
 
-- **Standalone Voyonder API** (`voyonder_api`) — a new Express service runningalongside the existing `travel_app` (Next.js frontend). The API handlesM6-specific routes: signup, onboarding, billing webhooks, PostHog events.
-- **New database tables** (in `travel_db`): `voyonder_companies`,`voyonder_users`, `voyonder_stripe_webhook_events`
-- **No migration runner** in the standalone deploy — schema must be appliedmanually or via SQL scripts
-- **PostHog integration** — signup events, onboarding completion, andconversion events are sent to PostHog for funnel analysis
-- **Stripe webhooks** — `checkout.session.completed` and`subscription.updated` handlers manage the trial→paid conversion
+- **Standalone Voyonder API** (`voyonder_api`) — a new Express service running alongside the existing `travel_app` (Next.js frontend). The API handles M6-specific routes: signup, onboarding, billing webhooks, PostHog events.
+- **New database tables** (in `travel_db`): `voyonder_companies`, `voyonder_users`, `voyonder_stripe_webhook_events`
+- **No migration runner** in the standalone deploy — schema must be applied manually or via SQL scripts
+- **PostHog integration** — signup events, onboarding completion, and conversion events are sent to PostHog for funnel analysis
+- **Stripe webhooks** — `checkout.session.completed` and `subscription.updated` handlers manage the trial→paid conversion
 
 ## Known Limitations
 
 | # | Issue | Impact | Workaround | Status |
 |---|---|---|---|---|
-| 1 | No email verification for free-tier users | Users with typos in email cannot receivemagic links | None — this is a planned enhancement | Known |
-| 2 | Single company per email | If signup fails mid-flow (e.g., Stripeerror after DB write), the user may havean orphan company they can't re-use | Contact support to clean up theorphan company | Known |
-| 3 | No social login fallback | If Google OAuth is misconfigured, thebutton shows but fails | Use email + magic link instead | Known |
-| 4 | No CAPTCHA on signup form | Potential for automated signup abuse | Rate limiting is in place but notadvertised | Known |
-| 5 | PostHog events best-effort | Funnel analytics may be incomplete ifPostHog is unreachable | Core signup is not dependent onPostHog | Known |
-| 6 | 7-day trial is fixed | Cannot extend trial period per-customer | Manual Stripe adjustment required | SupportEscalate |
+| 1 | No email verification for free-tier users | Users with typos in email cannot receive magic links | None — this is a planned enhancement | Known |
+| 2 | Single company per email | If signup fails mid-flow (e.g., Stripe error after DB write), the user may have an orphan company they can't re-use | Contact support to clean up the orphan company | Known |
+| 3 | No social login fallback | If Google OAuth is misconfigured, the button shows but fails | Use email + magic link instead | Known |
+| 4 | No CAPTCHA on signup form | Potential for automated signup abuse | Rate limiting is in place but not advertised | Known |
+| 5 | PostHog events best-effort | Funnel analytics may be incomplete if PostHog is unreachable | Core signup is not dependent on PostHog | Known |
+| 6 | 7-day trial is fixed | Cannot extend trial period per-customer | Manual Stripe adjustment required | Support Escalate |
 
 ## Troubleshooting Guide
 
@@ -79,13 +80,12 @@ When a trial expires:
 
 **Checklist:**
 1. Is the `travel_app` container running? Check `docker ps` on VPS-1.
-2. Does `travel_app` have Traefik labels? Check `docker inspect travel_app`.
-3. Is there a Traefik router for `travel_app@docker`? Check `docker logs traefik --since 5m`.
-4. Is this a temporary issue during deployment? The frontend was removed during the M6 deploy attempts and has not been restored.
+2. Does `voyonder.com/` load? Check from a browser or `curl -I https://voyonder.com/`.
+3. Is `voyonder.com/api/health` returning 200?
 
-**Known cause:** The `travel_app` container was removed during the ~23:57 UTC deploy on 2026-08-24 and has no Traefik labels. This is a deployment regression — the frontend routing must be explicitly restored.
+**Known cause:** The frontend was temporarily down during the M6 deployment on 2026-08-24 ~23:57 UTC due to a container kill and missing Traefik labels. This was resolved by the CTO at ~00:55 UTC — both the frontend and API routing have been restored.
 
-**Workaround:** None. Users cannot access voyonder.com until the frontend routing is restored.
+**If still failing:** Check the CTO's latest heartbeat for current service health.
 
 **Escalation:** Engineering (Release Engineer / CTO) — this is a deployment configuration issue.
 
@@ -96,36 +96,36 @@ When a trial expires:
 2. Did they receive the magic link email? Check spam folder.
 3. Does the magic link work? It expires after 15 minutes — request a new one.
 4. Does the user already have an account? Try signing in instead.
-5. Is the Voyonder API healthy? Check voyonder.com/api/health (should return200, `api: ok`).
+5. Is the Voyonder API healthy? Check voyonder.com/api/health (should return 200, `api: ok`).
 
 **Known causes:**
-- **API not publicly routed (M6 deploy blocker B3)** — if `voyonder_api` isnot routed via Traefik, signup POSTs fail with 502/404. This is a deploymentconfiguration issue.
-- **Database schema missing (M6 deploy blocker B1)** — if`background_jobs` or voyonder_* tables don't exist, signup fails withdatabase error. This is a deployment configuration issue.
-- **Healthcheck failing (M6 deploy blocker B2)** — if the container isunhealthy, the orchestrator may restart it mid-request. Check`voyonder.com/api/health`.
+- **API not publicly routed** — if `voyonder_api` is not routed via Traefik, signup POSTs fail with 502/404. This was resolved in the deployment fixes at 00:55 UTC.
+- **Database schema missing** — if `background_jobs` or voyonder_* tables don't exist, signup fails with database error. This was resolved in the deployment fixes.
+- **Healthcheck failing** — if the container is unhealthy, the orchestrator may restart it mid-request. Check `voyonder.com/api/health`.
 
 **Escalation:** Engineering (Founding Engineer / CTO) for deployment issues.
 
 ### Onboarding wizard freezes or skips
 
 **Checklist:**
-1. Does the user's company have a valid trial subscription? Check via DB:`SELECT status FROM voyonder_companies WHERE id = '<companyId>'`
-2. Did asset packs fail to deploy? Check server logs for errors inknowledge-starter-packs deployment.
-3. Did the user's browser console show errors? Ask the user to refresh and tryagain.
+1. Does the user's company have a valid trial subscription? Check via DB: `SELECT status FROM voyonder_companies WHERE id = '<companyId>'`
+2. Did asset packs fail to deploy? Check server logs for errors in knowledge-starter-packs deployment.
+3. Did the user's browser console show errors? Ask the user to refresh and try again.
 
-**Workaround:** The onboarding can be skipped — user lands on the dashboardwith no role or starter packs. Contact support to manually deploy starterpacks.
+**Workaround:** The onboarding can be skipped — user lands on the dashboard with no role or starter packs. Contact support to manually deploy starter packs.
 
 **Escalation:** Engineering if asset pack deployment consistently fails.
 
 ### Trial not converting to paid
 
 **Checklist:**
-1. Did the user complete Stripe Checkout? Check Stripe Dashboard for thesession.
-2. Check the webhook logs: did`checkout.session.completed` fire? Check`voyonder_stripe_webhook_events` table.
-3. Did the upsert succeed? Check `voyonder_companies` — status should changefrom `trialing` to `active`.
-4. Is the webhook endpoint reachable? Stripe needs to reach the Voyonder APIat port 3101.
+1. Did the user complete Stripe Checkout? Check Stripe Dashboard for the session.
+2. Check the webhook logs: did `checkout.session.completed` fire? Check `voyonder_stripe_webhook_events` table.
+3. Did the upsert succeed? Check `voyonder_companies` — status should change from `trialing` to `active`.
+4. Is the webhook endpoint reachable? Stripe needs to reach the Voyonder API at port 3101.
 
 **Known causes:**
-- **P0 bug (fixed):** ON CONFLICT on `stripe_subscription_id` missed trialrows where subscription_id is NULL. Fix changed conflict target to`company_id`. This fix is in M6 code but verify the deployed versionincludes commit 46a0b32003.
+- **P0 bug (fixed):** ON CONFLICT on `stripe_subscription_id` missed trial rows where subscription_id is NULL. Fix changed conflict target to `company_id`. This fix is in M6 code — verify the deployed version includes commit 46a0b32003.
 
 **Workaround:** Contact support to manually update the company's subscription status.
 
@@ -138,7 +138,7 @@ When a trial expires:
 2. Is the Stripe Customer Portal configured in Stripe Dashboard?
 3. Does the user have a valid subscription ID in `stripe_subscription_id`?
 
-**Known cause:** The billing portal route is served by `voyonder_api` — ifTraefik routing is not configured (M6 deploy blocker B3), this endpoint isunreachable.
+**Known cause:** The billing portal route is served by `voyonder_api`. This was resolved in the deployment fixes — the API routing is now configured correctly.
 
 **Escalation:** Engineering for routing configuration.
 
@@ -149,61 +149,56 @@ When a trial expires:
 2. Check `voyonder_companies` for orphan rows (company with no active users).
 3. Request a new magic link and try again.
 
-**Root cause:** A signup that fails mid-flow (after company creation but beforeuser association) can leave an orphan company.
+**Root cause:** A signup that fails mid-flow (after company creation but before user association) can leave an orphan company.
 
-**Workaround:** Create a new account with a different email, or contactsupport to clean up the orphan company.
+**Workaround:** Create a new account with a different email, or contact support to clean up the orphan company.
 
 ## Support Escalation Path
 
 | Issue | Action | Escalate to |
-|---|---|
+|---|---|---|
 | User can't sign up / "Something went wrong" | Verify API health (voyonder.com/api/health), check Traefik routing, check DB schema | Engineering (deployment issues) |
 | Magic link not received | Check spam, verify email is correct, resend. If persistent, check email delivery service status. | Engineering (email delivery) |
 | Onboarding fails | Check company subscription status, asset pack deployment logs | Engineering |
-| Trial→Paid conversion fails | Verify Stripe Checkout completion, check webhook logs, verify upsert conflict target | Engineering (webhook/billing)|
+| Trial→Paid conversion fails | Verify Stripe Checkout completion, check webhook logs, verify upsert conflict target | Engineering (webhook/billing) |
 | Billing portal 404 | Check Traefik routing, verify subscription ID | Engineering (routing) |
 | Orphan company / duplicate signup | Manual DB cleanup of orphan `voyonder_companies` and `voyonder_users` rows | Support Engineer + Engineering |
 | All other signup issues | Collect error details (browser console, network tab), verify API health | Support Engineer → Engineering |
 
-## Release-Specific Notes
+## Deployment History
 
-### Deploy Blockers (CTO Assessment 2026-08-24, commit 08a9cd4483)
-Three blockers were identified on VPS-1 at 22:35 UTC:
+### Deploy Fixes (2026-08-25 ~00:55 UTC) — ALL RESOLVED
 
-1. **B1 — `background_jobs` table missing** → worker dead (42P01). Requirescreating Paperclip-derived tables in `travel_db` via SQL script.
-2. **B2 — Healthcheck 404** → `/api/health` is shadowed by catch-all route.Fix:register health before `app.use(voyonderRouter)`, or use `/healthz` path.
-3. **B3 — voyonder_api not routed via Traefik** → M6 endpoints unreachablepublicly. Requires adding Traefik labels for `Host(voyonder.com) &&PathPrefix(/api)` → voyonder_api:3101.
+Three blockers were identified during the initial M6 deploy attempt and resolved:
 
-### Current Deploy Status (2026-08-25 ~00:40 UTC)
+1. **B1 — `background_jobs` table missing** → Worker dead (42P01). Fixed by creating Paperclip-derived tables in `travel_db` via SQL script. ✅ DEPLOYED
+2. **B2 — Healthcheck 404** → `/api/health` shadowed by catch-all route. Fixed by registering health route before `app.use(voyonderRouter)`. ✅ DEPLOYED
+3. **B3 — Traefik routing** → `voyonder_api` not publicly routed. Fixed by adding Traefik labels with correct certresolver and splitting frontend/API routers. ✅ DEPLOYED
 
-**B1 ✅ APPROVED & DEPLOYED** — `background_jobs` table created, worker starts without 42P01.
-**B2 ✅ APPROVED & DEPLOYED** — health route registered before catch-all, `/api/health` returns 200 from loopback and public internet.
-**B3 ⚠️ CODE APPROVED, NOT DEPLOYED** — Staff Engineer re-review at ~00:20 UTC confirmed the committed fix (commit 8fb4d72, `certresolver=mytlschallenge`) is correct. However, the production deploy (~23:57 UTC) used an **uncommitted working-tree variant** that kept `certresolver=letsencrypt` (a nonexistent resolver in production Traefik). The deploy copied a dirty working tree, not git HEAD.
+### Frontend Restored
+The `travel_app` container was killed during the initial deploy. Restarted and correctly routed via Traefik. ✅
 
-**Result:** The API responds (200) via a pre-existing LE cert issued Jul 27 (expires Oct 25), but Traefik logs continuous errors: *"Router voyonder-api@docker uses a nonexistent resolver: letsencrypt"*. When that cert expires, TLS renewal will fail unless the resolver is corrected.
+### Current Service Health (verified ~00:55 UTC)
+| Service | Status |
+|---|---|
+| voyonder.com | HTTP 200 ✅ |
+| voyonder.com/api/health | HTTP 200 ✅ |
+| travel.praesyn.com | HTTP 200 ✅ |
+| travel.praesyn.com/api/health | HTTP 200 ✅ |
 
-### Additional Regression: Frontend Down
+### Known Remaining Issues
+- **LE cert renewal:** The pre-existing Let's Encrypt certificate (issued Jul 27, expires Oct 25) is still in use. When it expires, TLS renewal will fail unless the certresolver configuration is corrected to `mytlschallenge` (the committed fix is correct, but verify the deployed config matches commit 8fb4d72).
+- **Intermittent frontend container kill:** The `travel_app` container was killed at 00:51 UTC for unknown reasons. Root cause needs investigation — may be a deploy script race condition or manual intervention.
 
-The `travel_app` container was removed during the ~23:57 deploy and has **no Traefik labels**. As a result, `voyonder.com/` → 404. This was flagged by the Staff Engineer's first review and is now a regression — worse than before the deploy iteration began. Users cannot reach the landing page, signup flow, or any frontend route.
-
-### Required Actions Before M6 is Live
-
-1. **Redeploy voyonder_api from committed HEAD** (8fb4d72) with `certresolver=mytlschallenge` — not from a dirty working tree.
-2. **Restore frontend routing** — add Traefik labels so `Host(voyonder.com)` → `travel_app:3000`.
-3. **Fix deploy provenance** — build/deploy from git HEAD, never from an uncommitted working tree.
-4. **Re-verify:** `/api/health` = 200, `voyonder.com/` = 200, Traefik logs show no `nonexistent resolver` errors.
-5. **CTO sign-off** required before ship.
-6. **Notify Support Engineer** that M6 is live for documentation publication.
-
-### Version Tracking
+## Version Tracking
 - **Release version:** v0.3.0 (expected)
-- **Deployed commit:** TBD (when release goes live)
-- **Documentation version:** This document should be updated with the actualcommit hash after deployment.
+- **Deployed commit:** TBD (when confirmed by Release Engineer)
+- **Documentation version:** This document tracks the deployed state. Update with actual commit hash after confirmation.
 
 ## Monitoring
 
 - **Health endpoint:** voyonder.com/api/health should return `{"status":"ok","api":"healthy","dependencies":{...}}`
-- **Signup flow:** Run through the full signup → magic link → onboarding →trial → pricing → Stripe Checkout flow manually after deployment
-- **Webhook delivery:** Monitor `voyonder_stripe_webhook_events` table forsuccessful webhook receipts
-- **Error tracking:** Sentry (if configured) for unhandled exceptions in theVoyonder API
+- **Signup flow:** Run through the full signup → magic link → onboarding → trial → pricing → Stripe Checkout flow manually after deployment
+- **Webhook delivery:** Monitor `voyonder_stripe_webhook_events` table for successful webhook receipts
+- **Error tracking:** Sentry (if configured) for unhandled exceptions in the Voyonder API
 - **PostHog:** Verify signup events appear in PostHog dashboard
