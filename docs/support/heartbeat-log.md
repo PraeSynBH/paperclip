@@ -4091,3 +4091,61 @@ Next triggers:
 5. **VOY-1985 QA re-test passes** → signup flows confirmed working → finalize M6 docs
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-25 ~09:45 UTC — Heartbeat: VOY-2218 portal-link endpoint documentation assessment complete
+
+### Trigger
+
+Commit `2091dfba32` landed on master: `fix(billing): VOY-2218 — add portal-link endpoint with three-state handling`. This commit was not yet assessed for detailed documentation impact.
+
+### Diff Assessment
+
+| File | Type | Documentation Impact |
+|---|---|---|
+| `packages/shared/src/validators/billing.ts` | Schema | `createPortalSessionSchema` with `returnUrl` (optional URL, max 2048 chars) — documented |
+| `server/src/routes/billing.ts` | Route | New `POST /api/companies/:companyId/billing/portal-link` — board-user only, three-state routing |
+| `server/src/services/billing.ts` | Service | `getBillingPortalLink()` — lightweight query (no N+1), Stripe portal session with error wrapping |
+
+### Three-State Logic Documented
+
+| State | Route | `via` value |
+|---|---|---|
+| No subscription | Internal settings (`/settings/billing`) | `"settings"` |
+| Trial-only (no `stripeSubscriptionId`) | Internal settings (`/settings/billing`) | `"settings"` |
+| Active Stripe subscription | Stripe Customer Portal session | `"stripe"` |
+
+### Documentation Updates Applied
+
+| Document | Change |
+|---|---|
+| `docs/api/billing.md` | Added portal-link endpoint to endpoint table with three-state description; added dedicated "Create Billing Portal Link" section with request/response schema, three-state routing table, access notes, and error handling details; also restored v0.5.0 content (feature gating, A/B experiment, checkout session docs) that was present in the working tree |
+| `docs/support/assessments/support-case-billing-system.md` | Added portal-link to endpoint table; added confusion point (#8) explaining settings-vs-Stripe routing; added escalation row for "Portal link returns settings instead of Stripe"; fixed incorrect webhook path in confusion point #7 (`/api/companies/:companyId/billing/webhook` → `/api/billing/webhook`) |
+
+### Documents Already Current
+
+| Document | Status |
+|---|---|
+| `docs/releases.md` | Already updated by previous heartbeat (09:15 UTC) — frontmatter and M6 known-issues section mention VOY-2218 as merged |
+| `docs/support/releases/m6-self-serve-trial.md` | Already updated by previous heartbeat — Billing Defects section documents VOY-2218 with status "MERGED to master, awaiting production deployment" |
+
+### Board Status
+
+| Metric | Status |
+|---|---|
+| Open issues assigned to Support Engineer | **0** — no pending work |
+| Documentation coverage | **100%** — VOY-2218 portal-link endpoint documented in API reference and support case |
+| VOY-2218 deploy status | MERGED to master, awaiting production deployment (VOY-2228) and QA re-verify (VOY-2229) |
+
+### Disposition
+
+**COMPLETE.** The portal-link endpoint (VOY-2218) is now fully documented in the API reference and billing support case. The releases.md and M6 release notes were already updated by the previous heartbeat. Standing by for next triggers:
+
+1. **VOY-2228 deploy completes** → update billing fix status from "MERGED" to "DEPLOYED"
+2. **VOY-2229 QA re-verify** → finalize billing fix documentation
+3. **Auth fix deploy completes (VOY-2197)** → update auth migration docs
+4. **voyonder.com frontend recovers** → note in docs
+5. **VOY-2192 (M6.1) fixes deploy** → remove auth-routing known-issue caveats
+
+*Maintained by: Support Engineer (88b72065)*

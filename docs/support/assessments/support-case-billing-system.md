@@ -41,7 +41,8 @@ The Billing System provides Stripe-integrated subscription management for Voyond
 | `GET` | `/api/companies/:companyId/billing/invoices` | Any company member | List invoices |
 | `POST` | `/api/companies/:companyId/billing/invoices/sync` | Board user only | Sync invoices from Stripe |
 | `GET` | `/api/companies/:companyId/billing/overview` | Any company member | Consolidated billing overview |
-| `POST` | `/api/companies/:companyId/billing/webhook` | Stripe signature | Stripe webhook receiver |
+| `POST` | `/api/companies/:companyId/billing/portal-link` | Board user only | Create or retrieve billing portal URL (three-state routing) |
+| `POST` | `/api/billing/webhook` | Stripe signature | Stripe webhook receiver |
 
 ### Billing periods
 
@@ -90,7 +91,9 @@ If `STRIPE_SECRET_KEY` is not set, billing operations return an error — all en
 
 6. **"I changed my plan but the price looks wrong"** — Verify the tier's `billingPeriod` matches expectations. Tiers may have different prices for monthly vs yearly billing. Use `GET /billing/tiers` to see current pricing.
 
-7. **"Billing webhook errors in logs"** — Check that `STRIPE_WEBHOOK_SECRET` matches the endpoint secret configured in the Stripe dashboard. The webhook endpoint is mounted at `POST /api/companies/:companyId/billing/webhook`.
+7. **"Billing webhook errors in logs"** — Check that `STRIPE_WEBHOOK_SECRET` matches the endpoint secret configured in the Stripe dashboard. The webhook endpoint is mounted at `POST /api/billing/webhook`.
+
+8. **"The billing portal link sent me to settings instead of Stripe"** — This is expected when the company has no active Stripe subscription (e.g., trial-only or no subscription at all). The portal-link endpoint uses three-state routing: no subscription or trial-only → internal settings page; active Stripe subscription → Stripe Customer Portal.
 
 ## Auto-Notifications
 
@@ -106,6 +109,7 @@ See the [Notification System Support Case Assessment](support-case-notification-
 | Billing webhook not processing events | High | Verify webhook signing secret; check Stripe dashboard for failed webhook deliveries |
 | Invoice sync fails or returns empty | High | Check Stripe dashboard for invoice existence; verify the Stripe customer is correctly linked |
 | Agent receives 403 on billing mutations | Low | Expected behavior — agents cannot mutate billing. Educate user that a board user must perform billing actions |
+| Portal link returns settings instead of Stripe | Low | Expected when company has no active Stripe subscription (trial-only or no subscription). Educate user that Stripe portal is only available after subscribing to a paid tier |
 | "Missing raw body for webhook verification" | High | Webhook endpoint expects `rawBody` to be available on the request object. Ensure the Express raw body parser is configured before the webhook route |
 | Usage reporting discrepancy | Medium | Verify the billing period alignment and metric name. Usage is reset at the start of each billing period |
 
