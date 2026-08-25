@@ -122,3 +122,9 @@ export { stripeCustomers } from "./stripe_customers.js";
 export { companySubscriptions } from "./company_subscriptions.js";
 export { subscriptionUsage } from "./subscription_usage.js";
 export { subscriptionInvoices } from "./subscription_invoices.js";
+
+// Research pipeline (R1a)
+export { researchArtifacts } from "./research_artifacts.js";
+export { researchQueries } from "./research_queries.js";
+export { trips } from "./trips.js";
+export type { ResolvedEntity, TripDestination } from "./research-types.js";
