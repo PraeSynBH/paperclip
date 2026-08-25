@@ -2,7 +2,7 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-25 (~07:45 UTC — restored missing Aug 21-23 entries lost in merge)
+last_updated: 2026-08-25 (~09:15 UTC — billing portal-link fix merged to master, auth fix deploy in progress)
 ---
 
 # Release Notes
@@ -29,11 +29,11 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 - **Trial Expiry Grace Period** — Expired trials preserve your trips and data. Subscribe anytime to re-activate.
 
-- **Auth System Migration (VOY-2171)** — Background jobs, research, and export routes were partially migrated from Paperclip auth to Voyonder JWT auth. Structural issues (companyId boundary check + JWT expiration enforcement) were fixed in VOY-2200 and P1 blocker fixes landed in VOY-2201. **Merged to voyonder master — CI/CD pipeline deploying to production. Not yet confirmed live.**
+|- **Auth System Migration (VOY-2171)** — Background jobs, research, and export routes were partially migrated from Paperclip auth to Voyonder JWT auth. Structural issues (companyId boundary check + JWT expiration enforcement) were fixed in VOY-2200 and P1 blocker fixes landed in VOY-2201. **Merged to voyonder master — CI/CD pipeline deploying to production. voyonder.com currently returning 502 (API) and 404 (frontend) — deploy in progress.**
 
 [Full release notes →](/support/releases/m6-self-serve-trial)
 
-> **⚠️ Known issues (2026-08-25):** Signup remains blocked in production — auth routing mismatches between the frontend and Voyonder API are fixed in code but not yet deployed (VOY-2192). Two billing defects (checkout POST body parsing VOY-2217, billing portal link 500 VOY-2218) are **FIXED in code** — awaiting QA re-verify and production deployment. See the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
+> **⚠️ Known issues (2026-08-25 ~09:15 UTC):** Signup remains blocked in production — auth routing mismatches between the frontend and Voyonder API are fixed in code but not yet deployed (VOY-2192). The billing checkout POST body parsing fix (VOY-2217) is **DEPLOYED and verified in production**. The billing portal link fix (VOY-2218) is **MERGED to master** — awaiting production deployment and QA re-verify. voyonder.com is currently returning 502 (API) and 404 (frontend) as the auth fix deploy completes. See the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
 
 ---
 
