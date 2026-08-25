@@ -202,7 +202,7 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
 
     // ── R1a processors ───────────────────────────────────────────────────
 
-    [BACKGROUND_JOB_TYPES.RESEARCH_RESOLVE_ENTITIES]: async ({ companyId, payload, report }) => {
+    [BACKGROUND_JOB_TYPES.RESEARCH_RESOLVE_ENTITIES]: async ({ companyId, payload, report, jobId }) => {
       const rawQuery = typeof payload.rawQuery === "string" ? payload.rawQuery : "";
       const researchQueryId = typeof payload.researchQueryId === "string" ? payload.researchQueryId : "";
       const tripId = typeof payload.tripId === "string" ? payload.tripId : undefined;
@@ -214,17 +214,30 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
         throw new Error("RESEARCH_RESOLVE_ENTITIES: missing researchQueryId in payload");
       }
 
-      // ── Idempotency guard: skip if the query already has a linked job ─────────
-      // On retry after linkQueryJob succeeded but a later step fails, the query
-      // already has a jobId. We must not create a second GATHER_CITATIONS job
-      // (M2-F1 fix). We also skip if the query is already past "pending" —
-      // re-resolving entities would be wasted work.
-      // NOTE: if linkQueryJob itself failed, the existing query has no jobId and
-      // the gather job created by the first attempt is orphaned. This is an
-      // acceptable edge case — the orphan is cleaned up by stale-job recovery.
+      // ── Idempotency guard: skip if query is past pending or linked to a
+      //    different job ─────────────────────────────────────────────────────
+      // The route handler links the RESEARCH_RESOLVE_ENTITIES job to the query
+      // BEFORE this processor runs (setQuery jobId). That means on first-run
+      // the query's jobId equals this processor's jobId — we should NOT skip
+      // in that case.
+      //
+      // Scenarios:
+      //   1. First run (normal):       status=pending, jobId=current jobId    → proceed
+      //   2. Retry after linkQueryJob(GATHER_CITATIONS) succeeded: status≠pending,
+      //      jobId≠current jobId                                             → skip
+      //   3. Retry after linkQueryJob(GATHER_CITATIONS) failed:  status≠pending,
+      //      jobId=current jobId (never overwritten)                         → skip (status check)
+      //   4. Retry before linkQueryJob ever reached:  status=pending,
+      //      jobId=current jobId                                             → proceed
+      //
+      // (M2-F1 fix — prevents duplicate GATHER_CITATIONS jobs on retry.)
       const existingQuery = await artifactSvc.getQuery(companyId, researchQueryId);
-      if (existingQuery && (existingQuery.jobId || existingQuery.status !== "pending")) {
-        const message = existingQuery.jobId
+      if (existingQuery && existingQuery.status !== "pending") {
+        // Already past pending — entity resolution already happened (or another
+        // job is handling it). Also skip if a DIFFERENT jobId is linked, which
+        // means a GATHER_CITATIONS job was already created by a prior attempt.
+        const differentJobLinked = existingQuery.jobId && existingQuery.jobId !== jobId;
+        const message = differentJobLinked
           ? `Query already linked to job ${existingQuery.jobId.slice(0, 8)} (status: ${existingQuery.status}) — skipping`
           : `Query already past pending (status: ${existingQuery.status}) — skipping`;
         logger.info({ researchQueryId, existingJobId: existingQuery.jobId, status: existingQuery.status }, message);
