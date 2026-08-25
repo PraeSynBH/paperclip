@@ -1,17 +1,17 @@
-# M6 Trial Feature — Release Notes (DRAFT)
+# M6 Trial Feature — Release Notes
 
-**Status:** DRAFT — awaiting production deployment
+**Status:** PUBLISHED — M6 is live in production
 **Version:** v0.3.0 (estimated)
-**When to publish:** After M6 deployment is verified live (RE notifies Support Engineer)
-**Latest deploy attempt:** 2026-08-24 ~23:57 UTC — REJECTED by CTO (B3 certresolver not corrected, frontend down)
-**Current deployment blocker:** VOY-2165 — redeploy from committed HEAD (8fb4d72) with mytlschallenge + restore frontend routing
+**Published:** 2026-08-25
+**Deployed commit:** TBD (confirm with Release Engineer)
+**Verification:** All production services healthy per CTO (~00:55 UTC 2026-08-25)
 
 ---
 
 ## Release Notes Entry
 
 ### v0.3.0 — Self-Serve Trial & Onboarding (M6)
-**Date:** 2026-08-24
+**Date:** 2026-08-25
 
 **Category:** New Feature
 
@@ -29,6 +29,6 @@ Self-serve trial signup — create an account and start planning with Sage in un
 
 ## Notes
 
-- This draft should replace the "pending" commit hash on the /documentation/releases page with the actual deployed commit hash.
+- Replace the "pending" commit hash on the /documentation/releases page with the actual deployed commit hash from the Release Engineer.
 - The version number v0.3.0 is estimated — confirm with the Release Engineer.
 - The "Under the hood" line is intentionally light on technical detail (no mention of Docker, Traefik, or database schemas).
