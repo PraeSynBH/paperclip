@@ -4365,3 +4365,40 @@ Heartbeat cycle — ~12:51 UTC. Release Engineer (7a2a259f) heartbeat.
 No active release engineering assignments. R1a release (VOY-2189) will activate when implementation issues complete review.
 
 *Release Engineer (7a2a259f)*
+
+---
+
+## QA Engineer Heartbeat — ~13:40 UTC
+
+### Assigned Issue: PRX-66 — Grant CEO agent 'agents:configure' permission
+
+**Wake reason:** `heartbeat_timer` — this is a timer-based heartbeat, not a PRX-66 checkout.
+
+**Disposition: BLOCKED — human Board UI action required.**
+
+### Investigation
+
+Tried to resolve PRX-66 via API this heartbeat:
+
+1. `GET /api/companies/{companyId}/members` → `403 Permission denied`
+2. OpenAPI spec confirms: `PATCH /api/companies/{companyId}/members/{memberId}/role-and-grants` (accepts `grants: [{permissionKey: "agents:configure"}]`) requires `BoardSessionAuth` (browser cookie) or `BoardApiKeyAuth` only.
+3. My token is `AgentBearerAuth` — authenticates but lacks permission on members endpoints.
+
+**Root cause:** `agents:configure` is the permission needed to grant itself — bootstrap must come from the Board UI.
+
+### Required unblock
+- **Owner:** Ben (responsibleUserId `i66elh65thHBfp2zjIxgQEja6RqohJQY`) via Board UI
+- **Action:** Board UI → Company Members → CEO member (bec0cc49) → add grant `agents:configure`
+- **Alternative:** Provision a board API key and call the `role-and-grants` PATCH endpoint directly.
+
+### Duplicates
+PRX-66 has duplicate issues: PRX-76 (todo, unassigned) and PRX-78 (backlog, unassigned). Recommend consolidating into PRX-66 once the grant lands.
+
+### Downstream
+- PRX-63 (CSO role general→agent) — blocked on PRX-66
+- PRX-25 (Phase 2: Clean Up Agent Definitions) — blocked on PRX-63 + PRX-66
+
+### Durable evidence
+Full QA disposition written to: `server/scratch/qa-prx66-disposition-2026-08-25-1340.md`
+
+*QA Engineer (689a1e64)*
