@@ -85,8 +85,18 @@ export function assertVoyonderAuth(req: Request): VoyonderAuth {
     throw unauthorized("Token missing userId or companyId");
   }
 
-  const exp = typeof claims.exp === "number" ? claims.exp : null;
-  if (exp && exp < Math.floor(Date.now() / 1000)) {
+  // Validate URL param companyId matches JWT companyId — catches mismatches
+  // without changing routing contracts. Routes without :companyId are unaffected
+  // (req.params.companyId is undefined, so the check is a no-op).
+  if (req.params.companyId && req.params.companyId !== companyId) {
+    throw unauthorized("Token companyId does not match URL companyId");
+  }
+
+  // Require exp claim — tokens without expiration are rejected immediately.
+  if (typeof claims.exp !== "number") {
+    throw unauthorized("Token missing expiration (exp claim required)");
+  }
+  if (claims.exp < Math.floor(Date.now() / 1000)) {
     throw unauthorized("Token expired");
   }
 

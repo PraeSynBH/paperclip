@@ -1,9 +1,9 @@
 ---
-title: M6 — Self-Serve Trial & Onboarding
-version: m6
-date: 2026-08-25
-commits: 75c884f66d (feat/m6), 46a0b32003 (billing fix), 74753fe83b (CI fix), 8fb4d72b8f (certresolver fix), 27b6a2b29d (routing fix), 99b3917519 (auth migration), b63c4f9f26 (verified healthy)
-status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. All production services healthy.
+|title: M6 — Self-Serve Trial & Onboarding
+|version: m6
+|date: 2026-08-25
+|commits: 75c884f66d (feat/m6), 46a0b32003 (billing fix), 74753fe83b (CI fix), 8fb4d72b8f (certresolver fix), 27b6a2b29d (routing fix), b63c4f9f26 (verified healthy)
+|status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. All production services healthy. Auth migration (VOY-2171) is NOT deployed — BLOCKED on structural review fixes (VOY-2200), excluded from current deploy per CEO directive.
 ---
 
 # M6 Release: Self-Serve Trial Signup & Onboarding
@@ -98,9 +98,15 @@ The M6 release extends the M1/M2 async job infrastructure to the Voyonder codeba
 - **Research activity search** — Converted to background job processing (returns HTTP 202 with jobId)
 - **CSV/ICS export routes** — New export endpoints use the background job pattern for non-blocking PDF and calendar file generation
 
-### Auth System Migration (VOY-2171)
+### Auth System Migration (VOY-2171) — ⚠️ NOT DEPLOYED
 
-Background jobs, research, and export API routes now use `assertVoyonderAuth` (Voyonder JWT auth) instead of Paperclip's `assertAuthenticated`/`assertCompanyAccess`. The `Authorization` header must carry a Voyonder HS256 JWT with `sub` (userId) and `company_id` claims. Requires `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` environment variable.
+**Status:** BLOCKED — excluded from current deploy per CEO directive (VOY-2199). Structural review (VOY-2198) identified 2 critical issues requiring fixes (VOY-2200) before deployment. See pipeline below.
+
+The auth migration code (commit `99b3917519`) is on the `fix/m-series-tech-debt` branch but has **not** been deployed to production. When it ships:
+
+Background jobs, research, and export API routes will use `assertVoyonderAuth` (Voyonder JWT auth) instead of Paperclip's `assertAuthenticated`/`assertCompanyAccess`. The `Authorization` header must carry a Voyonder HS256 JWT with `sub` (userId) and `company_id` claims. Requires `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` environment variable.
+
+**Deploy pipeline:** VOY-2200 (fix structural issues) → VOY-2198 re-review → CTO sign-off → VOY-2201 (deploy).
 
 ---
 
