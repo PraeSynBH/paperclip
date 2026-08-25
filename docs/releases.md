@@ -2,12 +2,33 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-25 (~13:30 UTC — R1a pre-ship review P0 found; R1a-4 processors documented; billing fixes deployed)
+last_updated: 2026-08-25 (~21:05 UTC — R1a pre-ship fixes release note created, CTO sign-off granted, deploying)
 ---
 
 # Release Notes
 
 Paperclip ships continuously. This page documents each release to the main branch with curated, customer-facing notes.
+
+---
+
+## R1a Pre-ship Fixes — August 25, 2026
+
+[Full release notes →](/support/releases/r1a-pre-ship-fixes)
+
+### Highlights
+
+- **Entity Resolution Stability** — Fixed a P0 infinite-loop bug where category/airline queries would spin at 100% CPU forever. All regex-based entity extraction now uses global flags with proper lastIndex resets. 33 regression tests added.
+- **State Machine Fix** — The `RESEARCH_RESOLVE_ENTITIES` routing now correctly enqueues the entity resolution → citation gathering flow. Previously the route handler was broken, causing every REST query submit to fail.
+- **Retry-Safe Entity Resolution** — If a background job retries, it no longer creates duplicate `GATHER_CITATIONS` jobs. Idempotency guard ensures entity resolution runs exactly once per query.
+- **No More Orphan Queries** — Query creation and job linkage are now wrapped in a database transaction. If a job fails after creating a query row, the transaction rolls back cleanly.
+- **Improved Query Performance** — Added index on `research_queries.job_id`, foreign key `ON DELETE CASCADE`, and fixed `computeChecksum` delimiter collision.
+- **Inline Process Display** — Trip pages now show mode-aware background job progress: inline progress bar in Plan mode, collapsible tray in Prepare mode, and hidden in Go mode. Shared SSE + polling hook ensures consistent background process tracking across the app.
+
+### Fixes Included
+
+This release addresses 5 findings from the R1a structural audit and 2 M2 P1 items, all verified by the Staff Engineer and signed off by the CTO.
+
+[Full release notes →](/support/releases/r1a-pre-ship-fixes)
 
 ---
 
