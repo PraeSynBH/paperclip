@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { createHash } from "node:crypto";
 import { logger } from "../middleware/logger.js";
 import { EMBEDDING_TIMEOUT_MS, EMBEDDING_CACHE_TTL_MS } from "../timeout-constants.js";

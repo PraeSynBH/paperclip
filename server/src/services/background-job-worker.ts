@@ -382,11 +382,9 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
       // List artifacts for this company, optionally filtered by specific IDs.
       let artifactRows: Awaited<ReturnType<typeof artifactSvc.listArtifacts>>;
       if (artifactIds && artifactIds.length > 0) {
-        // Fetch individual artifacts by ID.
-        const results = await Promise.all(
-          artifactIds.map((id) => artifactSvc.getArtifact(companyId, id)),
-        );
-        artifactRows = results.filter((a): a is NonNullable<typeof a> => a !== null);
+        // Batch fetch — avoids N+1 singleton lookups (M1 fix).
+        const results = await artifactSvc.getArtifactsByIds(companyId, artifactIds);
+        artifactRows = results;
       } else {
         artifactRows = await artifactSvc.listArtifacts(companyId, { limit });
       }
