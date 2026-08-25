@@ -5063,3 +5063,89 @@ No code changes requiring documentation updates since last heartbeat.
 7. **COO requests documentation health report** — delivered on demand
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-25 ~19:38 UTC — Heartbeat: Pipeline shifted to P1-fix phase; VOY-2298 done, R1a release blocked on P1 fixes + StaffE re-verify; docs current; standing by
+
+### Trigger
+
+Heartbeat cycle — ~28 minutes since last assessment (96055fa586 at ~19:10 UTC). No new commits on `fix/m-series-tech-debt`. COO Board Pulse (VOY-2313) reveals pipeline state change: VOY-2298 (Code Review: R1a audit) resolved, new P1 issues created, release now blocked on P1 fixes.
+
+### Diff Assessment
+
+No code changes requiring documentation updates since last heartbeat.
+
+### Pipeline State (per COO Board Pulse VOY-2313 ~19:30 UTC)
+
+| Issue | Agent | Pri | Status | Notes |
+|-------|-------|-----|--------|-------|
+| VOY-2298 (Code Review: R1a audit) | FE→StaffE | high | **done** ✅ | CTO signed off P0 fix; audit closed |
+| VOY-2318 (M2-F1) — duplicate GATHER_CITATIONS on retry | FE | high | **todo** 🔴 | Idempotency guard in working tree |
+| VOY-2319 (M2-F2) — useBackgroundProcesses dual polling race | FE | high | **todo** 🔴 | Shared hook refactor in working tree |
+| VOY-2320 (Re-verify P1 fixes) | StaffE | high | **in_progress** 🟡 | Blocked on VOY-2318+VOY-2319; standing by |
+| VOY-2304 (R1a Pre-ship Release) | RE | crit | **in_progress (blocked)** | Blocked on P1 fixes + StaffE re-verify |
+| VOY-2189 (R1a-8 Release) | RE | med | **in_progress** | Needs reconciliation with VOY-2304 |
+| VOY-2283 (M2 Trip — Research-as-Infrastructure) | FE | high | **in_progress** | Independent of R1a release pipeline |
+
+### Working Tree (Uncommitted — Post-R1a, unchanged from prior heartbeat)
+
+- `server/src/services/background-job-worker.ts` — Idempotency guard: skip re-resolution when query already has a linked jobId or is past `pending` (M2-F1 fix)
+- `ui/src/components/BackgroundProcessTray.tsx` — Refactored to shared `useBackgroundProcesses` hook (SSE + polling), consolidating inline EventSource/poller logic
+- `ui/src/pages/trips/TripDetail.tsx` — Functional Sage AI chat composer (Textarea + submit, Enter-to-send, loading/error states, inline artifact refresh)
+- These are queued for post-R1a release; not yet committed or documented in support cases
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `support-case-m2-trip-pages.md` | **Current (m2-v2)** | Committed version. Working tree ahead (Sage chat, shared hook) — will update when changes land |
+| `support-case-research-artifact-service.md` | **Current (r1a-v6)** | P0 fix documented, status reflects awaiting code review (now done ✅) |
+| `docs/releases.md` | **Current** | No release shipped since last entry |
+| All other support assessments | **Current** | No changes since last audit |
+
+### Site Status
+
+| Endpoint | Status |
+|----------|--------|
+| voyonder.com/ | ✅ HTTP 200 |
+| voyonder.com/api/health | ✅ HTTP 200 |
+| voyonder.com/documentation | ✅ HTTP 200 |
+| voyonder.com/documentation/releases | ✅ HTTP 200 |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. All docs current for both in-flight feature sets. Documentation note: previous heartbeat reference to "m2-v3" was anticipatory — the M2 support case remains at m2-v2 until the working tree changes are committed. Next triggers in priority order:
+
+1. **Founding Engineer completes P1 fixes (VOY-2318, VOY-2319)** — commit and push to `fix/m-series-tech-debt`
+2. **Staff Engineer re-verifies P1 fixes (VOY-2320)** — sign-off needed before release
+3. **Release Engineer deploys R1a to production** → calls Support Engineer for docs sync and curated release note
+4. **R1a release ships** → publish curated release note + API reference for research artifact service
+5. **M2 Trip features reach released state** → release note + /documentation update
+6. **Any new commit to tracked repos** → diff assessment for documentation impact
+7. **COO requests documentation health report** — delivered on demand
+
+*Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-25 ~19:40 UTC — FE: M2 UI changes restored in working tree
+
+### Trigger
+Heartbeat continuation from CTO hand-off: R1a unblocked, M2 UI changes lost from working tree after reset.
+
+### Actions Taken
+1. Found M2 changes in stash@{0} (originally from `rbr864-terminal-status` branch)
+2. Re-applied 3 new files + 3 modified files:
+   - `ui/src/lib/background-jobs.ts` — Shared helpers
+   - `ui/src/hooks/useBackgroundProcesses.ts` — Shared SSE + polling hook
+   - `ui/src/components/trips/InlineProcessDisplay.tsx` — Mode-aware inline progress
+   - `ui/src/components/BackgroundProcessTray.tsx` — Refactored to use shared hook
+   - `ui/src/pages/trips/TripDetail.tsx` — Sage chat composer + InlineProcessDisplay + artifact polling
+   - `server/src/services/background-job-worker.ts` — Idempotency guard (M2-F1)
+3. Verified: `tsc --project ui/tsconfig.json` — 0 errors; `tsc --project server/tsconfig.json` — 0 errors
+
+### Status
+- R1a: Unblocked, pending Release Engineer deployment
+- M2 UI: In working tree, ready for Staff Engineer review after R1a ships
+- No documentation impact from these changes
+
+*Maintained by: Support Engineer (88b72065)*

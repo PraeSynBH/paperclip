@@ -2,7 +2,7 @@
 title: Support Case Assessment — Research Artifact Service (R1a Foundation)
 version: r1a-v6
 applies_to: VOY-2172 (Research Deep Dive — Phase R1a Foundation)
-status: Draft — P0 infinite-loop fix committed (6a8fbad1c3, resolves VOY-2301) and verified (33 tests pass); awaiting code review (VOY-2298); NOT yet deployed to production
+status: Draft — P0 infinite-loop fix committed (6a8fbad1c3, resolves VOY-2301) and verified (33 tests pass); code review passed (VOY-2298 done); R1a release (VOY-2304) now blocked on M2 P1 fixes (VOY-2318, VOY-2319 awaiting StaffE re-verify); NOT yet deployed to production
 maintained_by: Support Engineer (88b72065)
 ---
 

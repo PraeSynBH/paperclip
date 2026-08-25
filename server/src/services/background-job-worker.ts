@@ -214,6 +214,32 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
         throw new Error("RESEARCH_RESOLVE_ENTITIES: missing researchQueryId in payload");
       }
 
+      // ── Idempotency guard: skip if the query already has a linked job ─────────
+      // On retry after linkQueryJob succeeded but a later step fails, the query
+      // already has a jobId. We must not create a second GATHER_CITATIONS job
+      // (M2-F1 fix). We also skip if the query is already past "pending" —
+      // re-resolving entities would be wasted work.
+      // NOTE: if linkQueryJob itself failed, the existing query has no jobId and
+      // the gather job created by the first attempt is orphaned. This is an
+      // acceptable edge case — the orphan is cleaned up by stale-job recovery.
+      const existingQuery = await artifactSvc.getQuery(companyId, researchQueryId);
+      if (existingQuery && (existingQuery.jobId || existingQuery.status !== "pending")) {
+        const message = existingQuery.jobId
+          ? `Query already linked to job ${existingQuery.jobId.slice(0, 8)} (status: ${existingQuery.status}) — skipping`
+          : `Query already past pending (status: ${existingQuery.status}) — skipping`;
+        logger.info({ researchQueryId, existingJobId: existingQuery.jobId, status: existingQuery.status }, message);
+        await report(100, message);
+        return {
+          rawQuery,
+          researchQueryId,
+          entityCount: (existingQuery.entities as any[] | null)?.length ?? 0,
+          entities: (existingQuery.entities as any[]) ?? [],
+          searchPlan: [],
+          gatherJobId: existingQuery.jobId ?? null,
+          skipped: true,
+        };
+      }
+
       await report(20, "Resolving entities from query…");
       const resolved: ResolvedQuery = resolveQuery(rawQuery);
 

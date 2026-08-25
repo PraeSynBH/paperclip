@@ -1,6 +1,6 @@
-import { useEffect, useCallback, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   Calendar,
@@ -11,6 +11,7 @@ import {
   MapPin,
   MessagesSquare,
   Palette,
+  Send,
   Settings2,
   Loader2,
   AlertCircle,
@@ -36,10 +37,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import { FreshnessCue } from "@/components/ui/FreshnessCue";
-import { backgroundJobsApi } from "@/api/background-jobs";
-import type { BackgroundJob } from "@paperclipai/shared";
 import { cn } from "@/lib/utils";
+import { InlineProcessDisplay } from "@/components/trips/InlineProcessDisplay";
 
 // ── Mode icons & labels ──────────────────────────────────────────────────────
 
@@ -118,6 +119,8 @@ export function TripDetail() {
     queryKey: queryKeys.researchTrips.artifacts(selectedCompanyId!, tripId),
     queryFn: () => researchTripsApi.listArtifacts(selectedCompanyId!, { tripId }),
     enabled: !!selectedCompanyId && !!tripId,
+    // Poll while research might be processing so new results appear inline
+    refetchInterval: 15_000,
   });
 
   const artifacts = artifactsData?.artifacts;
@@ -278,10 +281,42 @@ function PlanModePanels({
   companyId: string;
   artifacts: ResearchArtifact[] | undefined;
 }) {
+  const queryClient = useQueryClient();
+  const [input, setInput] = useState("");
+
   // In Plan mode, only grey items (unknowns) are surfaced; everything else is green
   const greyCount = artifacts
     ? computeUrgencySummary(artifacts.map(toUrgencyInput), "plan").grey
     : 0;
+
+  const submitMutation = useMutation({
+    mutationFn: (query: string) =>
+      researchTripsApi.submitQuery(companyId, { query, tripId: trip.id }),
+    onSuccess: () => {
+      setInput("");
+      // Invalidate artifacts so new results appear inline
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.researchTrips.artifacts(companyId, trip.id),
+      });
+      // Also invalidate queries list for the query history
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.researchTrips.queries(companyId, trip.id),
+      });
+    },
+  });
+
+  const handleSubmit = () => {
+    const trimmed = input.trim();
+    if (!trimmed || trimmed.length > 500) return;
+    submitMutation.mutate(trimmed);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSubmit();
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -293,24 +328,62 @@ function PlanModePanels({
             <CardTitle className="text-sm font-semibold">Chat with Sage</CardTitle>
           </div>
         </CardHeader>
-        <CardContent>
-          <p className="text-xs text-muted-foreground">
+        <CardContent className="flex flex-col">
+          <p className="text-xs text-muted-foreground mb-3">
             Ask Sage about activities, restaurants, and things to do. Research
             results will appear inline as suggestions.
           </p>
-          {/* Chat composer and message area — wire to Voyonder's chat API */}
-          <div className="mt-4 rounded-md border border-dashed border-border bg-muted/30 p-8 text-center">
-            <MessagesSquare className="mx-auto h-8 w-8 text-muted-foreground/50" />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Sage chat integration — wire to /api/companies/:id/research/queries
-            </p>
+
+          {/* Chat messages area — future: show query history */}
+          {submitMutation.isPending && (
+            <div className="mb-3 flex items-center gap-2 rounded-md border border-border/50 bg-blue-500/5 px-3 py-2 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin text-blue-500" />
+              <span>Sage is thinking&hellip;</span>
+            </div>
+          )}
+
+          {submitMutation.isError && (
+            <div className="mb-3 rounded-md border border-destructive/50 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+              Failed to submit query. Please try again.
+            </div>
+          )}
+
+          {/* Input area — pinned to bottom */}
+          <div className="mt-auto flex items-end gap-2">
+            <Textarea
+              placeholder="Ask Sage about this trip&hellip;"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              rows={2}
+              maxLength={500}
+              className="min-h-[44px] resize-none text-sm"
+              disabled={submitMutation.isPending}
+            />
+            <Button
+              size="icon"
+              onClick={handleSubmit}
+              disabled={!input.trim() || submitMutation.isPending}
+              className="shrink-0 h-[44px] w-[44px]"
+            >
+              <Send className="h-4 w-4" />
+            </Button>
           </div>
+          <p className="mt-1 text-[10px] text-muted-foreground">
+            Press Enter to send, Shift+Enter for new line
+          </p>
         </CardContent>
       </Card>
 
       {/* Itinerary panel */}
       <div className="space-y-4">
         <ItineraryPanel trip={trip} companyId={companyId} artifacts={artifacts} compact />
+
+        {/* Inline progress while Sage is researching */}
+        <InlineProcessDisplay
+          companyId={companyId}
+          mode="plan"
+        />
 
         {/* In Plan mode, show a subtle card about research needs */}
         {greyCount > 0 && (
@@ -367,7 +440,10 @@ function PrepareModePanels({
       {/* Urgency summary sidebar */}
       <div className="space-y-4">
         <UrgencySummaryPanel trip={trip} artifacts={artifacts} />
-        <BackgroundProcessSummary companyId={companyId} />
+        <InlineProcessDisplay
+          companyId={companyId}
+          mode="prepare"
+        />
       </div>
     </div>
   );
@@ -986,75 +1062,6 @@ function QuickActionsPanel({
         </Button>
       </CardContent>
     </Card>
-  );
-}
-
-// ── Background Process Summary ───────────────────────────────────────────────
-
-function BackgroundProcessSummary({ companyId }: { companyId: string }) {
-  const [runningJobs, setRunningJobs] = useState<BackgroundJob[]>([]);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const unmountedRef = useRef(false);
-
-  const refresh = useCallback(() => {
-    backgroundJobsApi.list(companyId, { limit: 5, jobType: "research" }).then((list) => {
-      if (!unmountedRef.current) {
-        setRunningJobs(list.filter((j) => j.status === "queued" || j.status === "running"));
-      }
-    }).catch(() => {});
-  }, [companyId]);
-
-  useEffect(() => {
-    unmountedRef.current = false;
-    refresh();
-    return () => { unmountedRef.current = true; };
-  }, [refresh]);
-
-  // SSE for live updates
-  useEffect(() => {
-    try {
-      const es = new EventSource(backgroundJobsApi.eventsUrl(companyId));
-      eventSourceRef.current = es;
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as { type?: string };
-          if (data.type === "background_job.status") refresh();
-        } catch { /* ignore */ }
-      };
-      es.onerror = () => {
-        if (!pollTimerRef.current) {
-          pollTimerRef.current = setInterval(refresh, 5000);
-        }
-      };
-    } catch { /* SSE unavailable — polling fallback below */ }
-    return () => {
-      if (eventSourceRef.current) { eventSourceRef.current.close(); eventSourceRef.current = null; }
-    };
-  }, [companyId, refresh]);
-
-  // Polling fallback
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (!eventSourceRef.current) refresh();
-    }, 5000);
-    pollTimerRef.current = timer;
-    return () => { clearInterval(timer); pollTimerRef.current = null; };
-  }, [refresh]);
-
-  if (runningJobs.length === 0) return null;
-
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-border/50 bg-blue-500/5 px-3 py-2 text-xs text-muted-foreground">
-      <span className="relative flex h-2 w-2 shrink-0">
-        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-        <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
-      </span>
-      <span>
-        Sage is looking into that{"\u2026"}
-        {runningJobs.length > 1 && <span className="ml-1">({runningJobs.length} things)</span>}
-      </span>
-    </div>
   );
 }
 
