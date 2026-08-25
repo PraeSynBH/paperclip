@@ -66,6 +66,8 @@ import { BoardClaimPage } from "./pages/BoardClaim";
 import { CliAuthPage } from "./pages/CliAuth";
 import { InviteLandingPage } from "./pages/InviteLanding";
 import { DemoTravelConcierge } from "./pages/DemoTravelConcierge";
+import { TripsList } from "./pages/trips/TripsList";
+import { TripDetail } from "./pages/trips/TripDetail";
 import { JoinRequestQueue } from "./pages/JoinRequestQueue";
 import { NotFoundPage } from "./pages/NotFound";
 import { MemoryBrowser } from "./pages/MemoryBrowser";
@@ -139,6 +141,8 @@ function boardRoutes() {
       <Route path="projects/:projectId/configuration" element={<ProjectDetail />} />
       <Route path="projects/:projectId/budget" element={<ProjectDetail />} />
       <Route path="workspaces" element={<Workspaces />} />
+      <Route path="trips" element={<TripsList />} />
+      <Route path="trips/:tripId" element={<TripDetail />} />
       <Route path="issues" element={<Issues />} />
       <Route path="search" element={<Search />} />
       <Route path="issues/all" element={<Navigate to="/issues" replace />} />
@@ -455,6 +459,8 @@ export function App() {
           <Route path="projects/:projectId/workspaces" element={<UnprefixedBoardRedirect />} />
           <Route path="projects/:projectId/workspaces/:workspaceId" element={<UnprefixedBoardRedirect />} />
           <Route path="projects/:projectId/configuration" element={<UnprefixedBoardRedirect />} />
+          <Route path="trips" element={<UnprefixedBoardRedirect />} />
+          <Route path="trips/:tripId" element={<UnprefixedBoardRedirect />} />
           <Route path="workspaces" element={<UnprefixedBoardRedirect />} />
           <Route path="execution-workspaces/:workspaceId" element={<UnprefixedBoardRedirect />} />
           <Route path="execution-workspaces/:workspaceId/services" element={<UnprefixedBoardRedirect />} />

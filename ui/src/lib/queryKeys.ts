@@ -345,4 +345,18 @@ export const queryKeys = {
     search: (companyId: string, q: string) =>
       ["knowledge", companyId, "search", q] as const,
   },
+  researchTrips: {
+    list: (companyId: string, status?: string) =>
+      ["research-trips", companyId, "list", status ?? "__all__"] as const,
+    detail: (companyId: string, tripId: string) =>
+      ["research-trips", companyId, tripId] as const,
+    queries: (companyId: string, tripId?: string) =>
+      ["research-trips", companyId, "queries", tripId ?? "__all__"] as const,
+    query: (companyId: string, queryId: string) =>
+      ["research-trips", companyId, "query", queryId] as const,
+    artifacts: (companyId: string, tripId?: string) =>
+      ["research-trips", companyId, "artifacts", tripId ?? "__all__"] as const,
+    artifact: (companyId: string, artifactId: string) =>
+      ["research-trips", companyId, "artifact", artifactId] as const,
+  },
 };
