@@ -1,8 +1,8 @@
 ---
 title: Support Case Assessment — Research Artifact Service (R1a Foundation)
-version: r1a-v1
+version: r1a-v2
 applies_to: VOY-2172 (Research Deep Dive — Phase R1a Foundation)
-status: Draft — R1a-1/2/3 committed on fix/m-series-tech-debt, NOT complete or deployed
+status: Draft — R1a-1/2/3 committed + R1a structural audit (A1-A9 all resolved) on fix/m-series-tech-debt, NOT complete or deployed
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -12,7 +12,7 @@ maintained_by: Support Engineer (88b72065)
 
 The Research Deep Dive (VOY-2172) builds a structured research pipeline on top of the existing M1+M2 async job infrastructure. Phase R1a (Foundation) establishes the data models and REST API for research queries, research artifacts, and trips. It enables submitting natural language travel queries, extracting structured entities (destinations, dates, hotels, airlines, budget), and persisting citation results.
 
-**Current status:** R1a-1 (DB schemas + migration), R1a-2 (entity resolver), and R1a-3 (artifact service + routes) are committed on `fix/m-series-tech-debt`. Background job processors for entity resolution and citation gathering (R1a-4), web search integration (R1a-5), and TripPage UI (R1a-6) are not yet built. This feature is **NOT released** — the API endpoints exist but citation gathering and the trip planner are not wired.
+**Current status:** R1a-1 (DB schemas + migration), R1a-2 (entity resolver), and R1a-3 (artifact service + routes) are committed on `fix/m-series-tech-debt`. A Staff Engineer structural audit of the R1a codebase identified 9 findings (A1-A9), all of which have been addressed and committed. Background job processors for entity resolution and citation gathering (R1a-4), web search integration (R1a-5), and TripPage UI (R1a-6) are not yet built. This feature is **NOT released** — the API endpoints exist but citation gathering and the trip planner are not wired.
 
 ### What Is Built
 
@@ -38,6 +38,26 @@ The Research Deep Dive (VOY-2172) builds a structured research pipeline on top o
 - Trip planner service — artifacts are stored but not consumed by any planner
 - Citation verification / re-fetch job — no freshness re-check mechanism
 - Entity resolver Phase R1b (LLM-based fallback) — regex-only, may miss ambiguous or complex queries
+
+### Structural Audit Hardening (A1-A9) — All Resolved ✅
+
+A Staff Engineer structural audit of the R1a codebase (commits `eaab8740d2`, `a9b0c208c1`) identified 9 findings. All have been addressed:
+
+| Finding | Severity | Fix |
+|---------|----------|-----|
+| A1 — TOCTOU race in `updateQueryStatus`/`updateTripStatus` | HIGH | Conditional UPDATE with `WHERE status = ...` guard rejects stale-read transitions |
+| A2 — Dedup race in `createArtifact` | HIGH | Replaced read-then-write with atomic `INSERT ... ON CONFLICT DO UPDATE` upsert (migration 0146 adds unique partial index) |
+| A3 — Zero test coverage | HIGH | 24 tests added covering query/trip state machines, invalid transitions, company isolation, TOCTOU guard, dedup upsert, list edge cases |
+| A4 — Global regex `lastIndex` leakage | MEDIUM | Reset `AIRPORT_CODE_RE` and `ABSOLUTE_DATE_RE` `lastIndex` before `exec()` loops |
+| A5 — Missing `submitQuery()` service entry point | MEDIUM | Consolidated create+resolve+set flow into single `submitQuery()` method exposed from service |
+| A6 — `setQueryEntities` stale-transition guard | MEDIUM | Only transition from `pending` status; conditional UPDATE prevents rolling state machine backward on retry |
+| A7 — INSERT...ON CONFLICT `targetWhere` clause | MEDIUM | Added `checksum IS NOT NULL` guard to upsert target, matching the unique partial index |
+| A8 — Global regex `lastIndex` (BUDGET_RE) | MEDIUM | Already correctly reset; verified and documented |
+| A9 — Research cite-gather complete-status guard | MEDIUM | Background job worker checks query status before transitioning to `complete`; no-ops if already complete |
+
+**Also:** Removed stale `embedBatch()` stub (leftover from Finding #4/M2 P2). The real batch-single-request implementation was already in HEAD.
+
+These fixes harden the R1a code against production race conditions and state-machine violations. They apply to unreleased code on `fix/m-series-tech-debt` — no shipped behavior is affected.
 
 ## API Endpoints
 
@@ -195,4 +215,5 @@ The regex-based entity resolver (committed in R1a-2) can extract:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+| r1a-v2 | 2026-08-25 | Support Engineer | Added structural audit findings (A1-A9) all resolved. Documented TOCTOU guards, dedup upsert, test coverage, regex fixes, stale-transition guards. Pre-release hardening on fix/m-series-tech-debt. |
 | r1a-v1 | 2026-08-25 | Support Engineer | Initial assessment for R1a Foundation (R1a-1/2/3 committed). Notes feature as incomplete — no citation gatherer, no web search, no TripPage UI. |

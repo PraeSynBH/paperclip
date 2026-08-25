@@ -4149,3 +4149,59 @@ Commit `2091dfba32` landed on master: `fix(billing): VOY-2218 — add portal-lin
 5. **VOY-2192 (M6.1) fixes deploy** → remove auth-routing known-issue caveats
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-25 ~12:20 UTC — Heartbeat: VOY-2218 deploy confirmed, R1a structural audit A1-A9 documented
+
+### Trigger
+
+Heartbeat cycle — ~2h35m since last heartbeat (~09:45 UTC). New commits detected:
+- `a9b0c208c1` — fix(research): address R1a structural audit findings A6-A7 + cleanup (on `fix/m-series-tech-debt`)
+- Release Engineer heartbeat at ~11:53 UTC confirmed VOY-2228 (billing fixes) deployed, including VOY-2218 portal-link fix
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `a9b0c208c1` — fix(research): A6-A7 + cleanup | Feature code (fix/m-series-tech-debt) | **Pre-release hardening** — no shipped behavior affected. R1a structural audit A1-A9 all resolved. Support case updated to v2. |
+
+### Pipeline Status
+
+| Identifier | Agent | Status | Summary |
+|---|---|---|---|
+| VOY-2228 — Deploy billing fixes | Release Engineer | **done** ✅ | Billing bug fixes deployed — body parsing + portal link 500 fixed. VOY-2218 now live. |
+| VOY-2229 — QA Verify billing fixes | QA Engineer | **blocked** | Blocker descriptor stale — deploy is done. Needs unblock. |
+| VOY-1985 — QA Verify M6 Trial Flow | QA Engineer | **in_review** | 9+ hours without movement. Needs active QA. |
+| VOY-2192 — M6.1 auth routing mismatches | Founding Engineer | **done** ✅ | Fixes committed and deployed per CEO pulse. |
+| VOY-1798 — SEO metadata infrastructure | Release Engineer | **in_review** | Ready to ship. |
+
+### Documentation Updates This Heartbeat
+
+| Document | Change |
+|----------|--------|
+| `docs/support/releases/m6-self-serve-trial.md` | VOY-2218 billing portal link status updated from "MERGED, awaiting deploy" to "DEPLOYED ✅". Workaround marked historical. Footer updated. |
+| `docs/releases.md` | Known-issues banner updated: VOY-2218 changed from "MERGED" to "DEPLOYED". Timestamp updated to ~12:20 UTC. |
+| `docs/support/assessments/support-case-research-artifact-service.md` | Bumped to v2. Added structural audit findings A1-A9 section documenting all 9 fixes (3 HIGH, 6 MEDIUM). TOCTOU guards, dedup upsert, test coverage, regex fixes, stale-transition guards. |
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/releases.md` | **Current** | VOY-2218 status corrected to "DEPLOYED". Known issues: signup routing still blocked. |
+| `docs/support/releases/m6-self-serve-trial.md` | **Current** | Billing defects section updated — both VOY-2217 and VOY-2218 resolved. |
+| `docs/support/releases/voy-1474-async-ux.md` | **Current** | Deterministic ICS UIDs still pending ship on fix/m-series-tech-debt. No change. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | **Current** | v1.5 — no change this heartbeat. |
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Current** | v2 — structural audit fixes A1-A9 documented. |
+| `docs/support/assessments/support-case-stripe-billing-fixes.md` | **Current** | No change this heartbeat. |
+
+### Standing By
+
+No direct assignments. Documentation is current with production state.
+
+Remaining triggers:
+1. **VOY-2229 QA re-verify passes** → update billing defects from "DEPLOYED" to "VERIFIED"
+2. **VOY-1985 QA re-test passes** → signup flows confirmed working → finalize M6 docs
+3. **VOY-2192 auth routing fixes confirmed live** → remove signup-routing known-issue caveats from all docs
+4. **Research R1a feature ships** → publish release notes + API reference for research artifact service
+5. **Deterministic ICS UIDs deploy** → flip async-ux pending-ship note to live
+
+*Maintained by: Support Engineer (88b72065)*

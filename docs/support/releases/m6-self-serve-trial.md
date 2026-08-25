@@ -3,7 +3,7 @@
 ||version: m6
 ||date: 2026-08-25
 ||commits: 75c884f66d (feat/m6), 46a0b32003 (billing fix), 74753fe83b (CI fix), 8fb4d72b8f (certresolver fix), 27b6a2b29d (routing fix), b63c4f9f26 (verified healthy), 78d44ce (deploy fix), 68da3ab (auth migration)
-||||status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. Auth migration (VOY-2171) deployed on 2026-08-25 10:32 UTC — assertVoyonderAuth live on background-jobs, research, exports routes. voyonder.com healthy (200). Docker image includes wget fix. Known issues: VOY-2192 signup routing (fixes committed, awaiting deploy), VOY-2217 billing checkout body parsing (DEPLOYED ✅), VOY-2218 billing portal link 500 (MERGED to master, awaiting deploy).
+||||status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. Auth migration (VOY-2171) deployed on 2026-08-25 10:32 UTC — assertVoyonderAuth live on background-jobs, research, exports routes. voyonder.com healthy (200). Docker image includes wget fix. Known issues: VOY-2192 signup routing (fixes committed, awaiting deploy), VOY-2217 billing checkout body parsing (DEPLOYED ✅), VOY-2218 billing portal link 500 (DEPLOYED ✅).
 ---
 
 # M6 Release: Self-Serve Trial Signup & Onboarding
@@ -158,13 +158,13 @@ QA verification also found billing paths failing in production. The fixes have b
 | Issue | Frontend Expects | Current Behavior | Status |
 |-------|-----------------|------------------|--------|
 | Checkout POST body parsing | Checkout/start-trial request body parsed correctly | POST body parsing fails (`VOY-2217`) | ✅ **DEPLOYED** — verified in production by QA |
-| Billing portal link | Billing portal opens with a customer portal link | Portal link returns 500 (`VOY-2218`) | ✅ **MERGED to master** — awaiting production deployment |
+| Billing portal link | Billing portal opens with a customer portal link | Portal link returns 500 (`VOY-2218`) | ✅ **DEPLOYED** — included in VOY-2228 production deployment |
 
 **Root cause:** Billing route/subscription handling defects surfaced during QA verification of the trial flow (VOY-1985).
 
-**Fix tracked in:** VOY-2217 (billing POST body parsing) ✅ DEPLOYED and VERIFIED. VOY-2218 (billing portal link 500) ✅ MERGED to master (commit 2091dfba32), awaiting production deployment (VOY-2228) and QA re-verify (VOY-2229).
+**Fix tracked in:** VOY-2217 (billing POST body parsing) ✅ DEPLOYED and VERIFIED. VOY-2218 (billing portal link 500) ✅ **DEPLOYED** — included in VOY-2228 (~10:50 UTC). QA re-verify (VOY-2229) pending.
 
-**Workaround for VOY-2218:** Trial-only users cannot access the billing portal link until the fix deploys. Existing trial users with active Stripe subscriptions are unaffected by VOY-2217 (fix already deployed).
+**Workaround for VOY-2218 (historical):** Before deployment, trial-only users could not access the billing portal link. The fix is now deployed — portal link routing works correctly for all subscription states.
 
 ---
 
@@ -193,4 +193,4 @@ QA verification also found billing paths failing in production. The fixes have b
 
 ---
 
-*Maintained by: Support Engineer (88b72065). Updated 2026-08-25 ~11:50 UTC — Auth migration (VOY-2171) confirmed deployed 10:32 UTC. voyonder.com healthy (200). VOY-2217 DEPLOYED + verified, VOY-2218 MERGED to master (awaiting production deploy). travel.praesyn.com frontend 502 (API healthy).*
+*Maintained by: Support Engineer (88b72065). Updated 2026-08-25 ~12:20 UTC — VOY-2218 billing portal link fix confirmed DEPLOYED (included in VOY-2228 ~10:50 UTC). voyonder.com healthy (200). Research R1a structural audit fixes A1-A9 all committed on fix/m-series-tech-debt (pre-release hardening).*
