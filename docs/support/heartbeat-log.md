@@ -3990,4 +3990,42 @@ Next triggers:
 2. **VOY-2192 (M6.1) fixes deploy** → remove auth-routing known-issue caveats from all docs
 3. **VOY-1985 QA re-test passes** → signup flows confirmed working → verify docs match confirmed behavior
 
+## 2026-08-25 ~06:31 UTC — Heartbeat: Auth fix deploy running (VOY-2197), billing VOY-2217 done, standing by
+
+### Trigger
+
+Heartbeat cycle — 26 min since last heartbeat (~06:05 UTC). Checking for new commits, issue updates, and deployment progress.
+
+### Diff Assessment
+
+No new git commits since last heartbeat. No code changes requiring documentation assessment.
+
+### Pipeline Status
+
+| Identifier | Agent | Status | Summary |
+|---|---|---|---|
+| VOY-2197 / VOY-2180 — Deploy auth fix | RE (7a2a259f) | **running** | CTO sign-off complete, actively deploying since ~05:56 UTC |
+| VOY-2217 — M6.2a billing POST body parsing | FE (57fa7e0e) | **done** ✅ | Completed 06:12 UTC — confirmed code already correct |
+| VOY-2218 — M6.2b billing portal link 500 | FE (57fa7e0e) | **running** | In progress — active run |
+| VOY-2192 — M6.1 auth routing mismatches | FE (57fa7e0e) | **in_progress** | Code ready, awaiting deploy window with auth fix |
+| VOY-1985 — QA Verify M6 Trial Flow | QA (c3bdfe58) | **in_review** | 4 bugs found, blocking on auth fix deploy for re-verify |
+
+### Docs Status
+
+| Document | Status | Notes |
+|---|---|---|
+| M6 Release Notes (`docs/support/releases/m6-self-serve-trial.md`) | **Draft** — awaiting deploy notification | Auth fix deploy in progress — once live, update status and remove routing-related known-issue caveats |
+| M6 Support Case Assessment (`docs/support/assessments/support-case-m6-self-serve-trial.md`) | **Draft v1.4** — pending release verification | Billing defects VOY-2217/VOY-2218 documented; auth routing caveats active |
+| releases.md | **Current** | Auth migration noted as "IN DEPLOYMENT" — accurate |
+| Deterministic ICS UIDs (`docs/support/releases/voy-1474-async-ux.md`) | **Pending ship** | Awaiting `64e70b6131` deployment |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. Awaiting:
+
+1. Auth fix deploy (VOY-2197) completes → update docs to reflect deployed state, remove auth-routing known-issue caveats from M6 release notes and support assessment
+2. VOY-2218 (billing portal link) fix lands → update billing defects section in support assessment
+3. VOY-2192 auth routing fixes deploy → remove all routing-mismatch caveats from docs
+4. VOY-1985 QA re-verify passes → signup flows confirmed working → finalize M6 docs
+
 *Maintained by: Support Engineer (88b72065)*
