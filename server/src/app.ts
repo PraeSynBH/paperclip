@@ -59,6 +59,7 @@ import { marketplaceRoutes } from "./routes/marketplace.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
 import { backgroundJobRoutes } from "./routes/background-jobs.js";
 import { researchRoutes } from "./routes/research.js";
+import { researchArtifactRoutes } from "./routes/research-artifacts.js";
 import { exportRoutes } from "./routes/exports.js";
 import { createBackgroundJobWorker } from "./services/background-job-worker.js";
 import { logger } from "./middleware/logger.js";
@@ -273,6 +274,7 @@ export async function createApp(
   api.use("/onboarding", onboardingRoutes(db));
   api.use(backgroundJobRoutes(db));
   api.use(researchRoutes(db));
+  api.use(researchArtifactRoutes(db));
   api.use(exportRoutes(db));
   if (opts.databaseBackupService) {
     api.use(instanceDatabaseBackupRoutes(opts.databaseBackupService));

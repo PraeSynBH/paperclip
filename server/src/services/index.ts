@@ -128,3 +128,4 @@ export { backgroundJobService, type BackgroundJobService } from "./background-jo
 export { createBackgroundJobWorker, type BackgroundJobWorker } from "./background-job-worker.js";
 export { researchSearchService, type ResearchSearchService, type ResearchHit } from "./research-search.js";
 export { resolveQuery, type ResolvedQuery, type SearchPlanEntry } from "./entity-resolver.js";
+export { researchArtifactService, type ResearchArtifactService } from "./research-artifacts.js";
