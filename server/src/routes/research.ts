@@ -5,8 +5,7 @@ import { BACKGROUND_JOB_TYPES } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { backgroundJobService } from "../services/background-jobs.js";
 import { researchSearchService } from "../services/research-search.js";
-import { accessService } from "../services/index.js";
-import { assertAuthenticated, assertCompanyAccess, assertCompanyScopeReadAllowed } from "./authz.js";
+import { assertVoyonderAuth } from "../services/auth.js";
 
 const researchActivitySearchSchema = z.object({
   query: z.string().min(1).max(500),
@@ -41,7 +40,6 @@ export function researchRoutes(db: Db) {
   const router = Router();
   const jobs = backgroundJobService(db);
   const research = researchSearchService(db);
-  const access = accessService(db);
 
   // ── POST /research/activities (M1 — fire-and-forget background job) ───
 
@@ -49,10 +47,8 @@ export function researchRoutes(db: Db) {
     "/companies/:companyId/research/activities",
     validate(researchActivitySearchSchema),
     async (req, res) => {
-      assertAuthenticated(req);
-      const companyId = req.params.companyId as string;
-      assertCompanyAccess(req, companyId);
-      if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
+      const auth = assertVoyonderAuth(req);
+      const companyId = auth.companyId;
 
       const job = await jobs.create({
         companyId,
@@ -62,8 +58,7 @@ export function researchRoutes(db: Db) {
           scope: req.body.scope,
           limit: req.body.limit,
         },
-        createdByActorId:
-          req.actor.type === "board" ? req.actor.userId : req.actor.type === "agent" ? req.actor.agentId : null,
+        createdByActorId: auth.userId,
       });
 
       res.status(202).json({ jobId: job.id });
@@ -76,10 +71,8 @@ export function researchRoutes(db: Db) {
     "/companies/:companyId/research/auto-assess",
     validate(researchAutoAssessSchema),
     async (req, res) => {
-      assertAuthenticated(req);
-      const companyId = req.params.companyId as string;
-      assertCompanyAccess(req, companyId);
-      if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
+      const auth = assertVoyonderAuth(req);
+      const companyId = auth.companyId;
 
       const job = await jobs.create({
         companyId,
@@ -88,8 +81,7 @@ export function researchRoutes(db: Db) {
           itemIds: req.body.itemIds,
           limit: req.body.limit,
         },
-        createdByActorId:
-          req.actor.type === "board" ? req.actor.userId : req.actor.type === "agent" ? req.actor.agentId : null,
+        createdByActorId: auth.userId,
       });
 
       res.status(202).json({ jobId: job.id });
@@ -102,10 +94,8 @@ export function researchRoutes(db: Db) {
     "/companies/:companyId/research/search",
     validate(researchSearchSchema),
     async (req, res) => {
-      assertAuthenticated(req);
-      const companyId = req.params.companyId as string;
-      assertCompanyAccess(req, companyId);
-      if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
+      const auth = assertVoyonderAuth(req);
+      const companyId = auth.companyId;
 
       // 1. Keyword-first pass — synchronous, fast.
       const keywordResult = await research.searchKeywordFirst(companyId, {
@@ -126,8 +116,7 @@ export function researchRoutes(db: Db) {
             limit: req.body.limit,
             candidateIds: keywordResult.results.map((r) => r.id),
           },
-          createdByActorId:
-            req.actor.type === "board" ? req.actor.userId : req.actor.type === "agent" ? req.actor.agentId : null,
+          createdByActorId: auth.userId,
         });
         semanticJobId = job.id;
       }

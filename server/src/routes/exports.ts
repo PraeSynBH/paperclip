@@ -5,9 +5,8 @@ import type { Db } from "@paperclipai/db";
 import { BACKGROUND_JOB_TYPES } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { backgroundJobService } from "../services/background-jobs.js";
-import { accessService } from "../services/index.js";
+import { assertVoyonderAuth } from "../services/auth.js";
 import { HttpError } from "../errors.js";
-import { assertAuthenticated, assertCompanyAccess, assertCompanyScopeReadAllowed } from "./authz.js";
 
 const exportPdfSchema = z.object({
   title: z.string().max(200).optional(),
@@ -52,7 +51,6 @@ function assertPayloadSize(req: Request, limitBytes = 512 * 1024): void {
 export function exportRoutes(db: Db) {
   const router = Router();
   const jobs = backgroundJobService(db);
-  const access = accessService(db);
 
   /**
    * POST /api/companies/:companyId/exports/pdf
@@ -62,10 +60,8 @@ export function exportRoutes(db: Db) {
     "/companies/:companyId/exports/pdf",
     validate(exportPdfSchema),
     async (req, res) => {
-      assertAuthenticated(req);
-      const companyId = req.params.companyId as string;
-      assertCompanyAccess(req, companyId);
-      if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
+      const auth = assertVoyonderAuth(req);
+      const companyId = auth.companyId;
       assertPayloadSize(req);
 
       const job = await jobs.create({
@@ -75,8 +71,7 @@ export function exportRoutes(db: Db) {
           title: req.body.title,
           items: req.body.items,
         },
-        createdByActorId:
-          req.actor.type === "board" ? req.actor.userId : req.actor.type === "agent" ? req.actor.agentId : null,
+        createdByActorId: auth.userId,
       });
 
       res.status(202).json({ jobId: job.id });
@@ -91,10 +86,8 @@ export function exportRoutes(db: Db) {
     "/companies/:companyId/exports/ics",
     validate(exportIcsSchema),
     async (req, res) => {
-      assertAuthenticated(req);
-      const companyId = req.params.companyId as string;
-      assertCompanyAccess(req, companyId);
-      if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
+      const auth = assertVoyonderAuth(req);
+      const companyId = auth.companyId;
       assertPayloadSize(req);
 
       const job = await jobs.create({
@@ -104,8 +97,7 @@ export function exportRoutes(db: Db) {
           title: req.body.title,
           events: req.body.events,
         },
-        createdByActorId:
-          req.actor.type === "board" ? req.actor.userId : req.actor.type === "agent" ? req.actor.agentId : null,
+        createdByActorId: auth.userId,
       });
 
       res.status(202).json({ jobId: job.id });

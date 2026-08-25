@@ -1,6 +1,7 @@
 export {};
 
 import type { AgentApiKeyScope } from "@paperclipai/shared";
+import type { VoyonderAuth } from "../services/auth.js";
 
 declare global {
   namespace Express {
@@ -24,6 +25,8 @@ declare global {
         runId?: string;
         source?: "local_implicit" | "session" | "board_key" | "agent_key" | "agent_jwt" | "cloud_tenant" | "none";
       };
+      /** Voyonder JWT auth — populated by assertVoyonderAuth() in standalone Voyonder deployment. */
+      voyonderAuth?: VoyonderAuth;
     }
   }
 }

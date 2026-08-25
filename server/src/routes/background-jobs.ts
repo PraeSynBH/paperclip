@@ -3,8 +3,8 @@ import type { Db } from "@paperclipai/db";
 import { z } from "zod";
 import { validate } from "../middleware/validate.js";
 import { backgroundJobService, type BackgroundJobService } from "../services/background-jobs.js";
-import { assertAuthenticated, assertCompanyAccess, assertBoard, assertCompanyScopeReadAllowed } from "./authz.js";
-import { accessService, subscribeCompanyLiveEvents } from "../services/index.js";
+import { assertVoyonderAuth } from "../services/auth.js";
+import { subscribeCompanyLiveEvents } from "../services/index.js";
 
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
@@ -21,17 +21,14 @@ const createJobSchema = z.object({
 export function backgroundJobRoutes(db: Db) {
   const router = Router();
   const svc = backgroundJobService(db);
-  const access = accessService(db);
 
   /**
    * GET /api/companies/:companyId/background-jobs
    * List background jobs for a company.
    */
   router.get("/companies/:companyId/background-jobs", async (req, res) => {
-    assertAuthenticated(req);
-    const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
-    if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
+    const auth = assertVoyonderAuth(req);
+    const companyId = auth.companyId;
 
     const query = listQuerySchema.parse(req.query);
     const jobs = await svc.list(companyId, query);
@@ -44,10 +41,8 @@ export function backgroundJobRoutes(db: Db) {
    * NOTE: defined BEFORE the /:id wildcard to avoid "events" matching as an id.
    */
   router.get("/companies/:companyId/background-jobs/events", async (req, res) => {
-    assertAuthenticated(req);
-    const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
-    if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
+    const auth = assertVoyonderAuth(req);
+    const companyId = auth.companyId;
 
     res.writeHead(200, {
       "Content-Type": "text/event-stream",
@@ -75,11 +70,9 @@ export function backgroundJobRoutes(db: Db) {
    * Get a single background job by ID.
    */
   router.get("/companies/:companyId/background-jobs/:id", async (req, res) => {
-    assertAuthenticated(req);
-    const companyId = req.params.companyId as string;
+    const auth = assertVoyonderAuth(req);
+    const companyId = auth.companyId;
     const jobId = req.params.id as string;
-    assertCompanyAccess(req, companyId);
-    if (!(await assertCompanyScopeReadAllowed(req, res, companyId, access))) return;
 
     const job = await svc.getById(jobId, companyId);
     if (!job) {
@@ -97,15 +90,14 @@ export function backgroundJobRoutes(db: Db) {
     "/companies/:companyId/background-jobs",
     validate(createJobSchema),
     async (req, res) => {
-      assertBoard(req);
-      const companyId = req.params.companyId as string;
-      assertCompanyAccess(req, companyId);
+      const auth = assertVoyonderAuth(req);
+      const companyId = auth.companyId;
 
       const job = await svc.create({
         companyId,
         jobType: req.body.jobType,
         payload: req.body.payload,
-        createdByActorId: req.actor.type === "board" ? req.actor.userId : null,
+        createdByActorId: auth.userId,
       });
       res.status(201).json(job);
     },
