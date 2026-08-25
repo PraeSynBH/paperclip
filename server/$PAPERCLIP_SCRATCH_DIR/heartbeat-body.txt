@@ -1,0 +1,40 @@
+## CTO Heartbeat — PraeSyn — Aug 25, 2026 ~07:20 UTC
+
+### Disposition: YELLOW — PRA-1563 Blocked (Bluevine), vps-1 CPU Steal Regression (90%)
+
+### Service Health (live probe ~07:20 UTC)
+| Service | Status | Response |
+|---------|--------|----------|
+| praesyn.com | HTTP 200 ✅ | verified |
+| travel.praesyn.com/api/health | HTTP 200 ✅ | verified |
+| voyonder.com/api/health | HTTP 200 ✅ | verified |
+| southeastaksupply.com | HTTP 200 ✅ | verified |
+| crm.praesyn.com | HTTP 200 ✅ | verified |
+| conn.praesyn.com | HTTP 404 ✅ | expected (headscale) |
+| Paperclip API (localhost:3100) | HTTP 200 ✅ | verified |
+
+7 of 7 services healthy.
+
+### My Assigned Issues
+
+| Issue | Title | Status | Gate |
+|-------|-------|--------|------|
+| PRA-1563 | Daily Bluevine Sync & Ledger Import | blocked | Ben: store keychain credentials + re-auth at app.bluevine.com (MFA) |
+
+### Critical Finding: vps-1 CPU Steal Regression
+
+CPU steal has returned to 90-91% after being temporarily resolved by Hostinger hypervisor fix.
+
+Live diagnostics (07:22 UTC):
+- vmstat: 90% steal across both CPUs
+- top: 91.1% steal, 0% idle
+- Load average: 9.40 / 3.43 / 2.48 (1-min spike to 9.4)
+- Memory: 6.0 GB available (healthy)
+- 12 Docker containers running
+
+The Hetzner CX32 migration child issue (todo, unassigned) was created as contingency but never actioned.
+
+### Next Steps
+1. Awaiting Ben on PRA-1563 (credential storage + MFA)
+2. Escalate vps-1 CPU steal to CEO — needs Hetzner account for migration
+3. Once Brevo account exists, configure DNS records (DKIM, SPF)

@@ -48,6 +48,53 @@ export function embeddingService(config?: EmbeddingConfig) {
   };
 
   /**
+   * Shared HTTP request helper for the embedding API.
+   * Accepts a single string or an array of strings as `input`.
+   * Returns the raw API response data array and usage.
+   */
+  async function embedRequest(
+    input: string | string[],
+  ): Promise<{ data: Array<{ embedding: number[]; index: number }>; usage?: { prompt_tokens: number } }> {
+    if (!resolvedConfig.apiKey) {
+      throw new Error("No embedding API key configured");
+    }
+
+    const response = await fetch(
+      `${resolvedConfig.apiBaseUrl}/embeddings`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${resolvedConfig.apiKey}`,
+        },
+        body: JSON.stringify({
+          model: resolvedConfig.model,
+          input,
+        }),
+        signal: AbortSignal.timeout(resolvedConfig.timeoutMs!),
+      },
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "unknown");
+      throw new Error(
+        `Embedding API returned ${response.status}: ${errorBody}`,
+      );
+    }
+
+    const json = (await response.json()) as {
+      data: Array<{ embedding: number[]; index: number }>;
+      usage?: { prompt_tokens: number };
+    };
+
+    if (!json.data || json.data.length === 0) {
+      throw new Error("Embedding API returned empty data");
+    }
+
+    return { data: json.data, usage: json.usage };
+  }
+
+  /**
    * Generate an embedding vector for the given text.
    * Falls back to a zero-vector placeholder when no API key is configured
    * (caller should use full-text search in that case).
@@ -78,43 +125,11 @@ export function embeddingService(config?: EmbeddingConfig) {
     }
 
     const start = Date.now();
-    let embedding: number[];
-    let inputTokens: number;
 
     try {
-      const response = await fetch(
-        `${resolvedConfig.apiBaseUrl}/embeddings`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${resolvedConfig.apiKey}`,
-          },
-          body: JSON.stringify({
-            model: resolvedConfig.model,
-            input: text,
-          }),
-          signal: AbortSignal.timeout(resolvedConfig.timeoutMs!),
-        },
-      );
+      const { data, usage } = await embedRequest(text);
 
-      if (!response.ok) {
-        const errorBody = await response.text().catch(() => "unknown");
-        throw new Error(
-          `Embedding API returned ${response.status}: ${errorBody}`,
-        );
-      }
-
-      const data = (await response.json()) as {
-        data: Array<{ embedding: number[] }>;
-        usage?: { prompt_tokens: number };
-      };
-
-      if (!data.data || data.data.length === 0) {
-        throw new Error("Embedding API returned empty data");
-      }
-
-      embedding = data.data[0].embedding;
+      const embedding = data[0].embedding;
 
       // Validate embedding dimension matches expected model dimensions
       if (embedding.length !== resolvedConfig.dimensions && resolvedConfig.dimensions !== undefined) {
@@ -123,29 +138,99 @@ export function embeddingService(config?: EmbeddingConfig) {
         );
       }
 
-      inputTokens = data.usage?.prompt_tokens ?? 0;
+      const latencyMs = Date.now() - start;
+      const inputTokens = usage?.prompt_tokens ?? 0;
+
+      // Update cache
+      if (embeddingCache.size >= CACHE_MAX_SIZE) {
+        // Evict oldest entry
+        const firstKey = embeddingCache.keys().next().value;
+        if (firstKey) embeddingCache.delete(firstKey);
+      }
+      embeddingCache.set(cacheKey, { embedding, cachedAt: Date.now() });
+
+      return {
+        embedding,
+        model: resolvedConfig.model!,
+        dimensions: embedding.length,
+        latencyMs,
+        inputTokens,
+      };
     } catch (err) {
       logger.error({ err }, "Embedding generation failed");
       throw err;
     }
+  }
 
-    const latencyMs = Date.now() - start;
-
-    // Update cache
-    if (embeddingCache.size >= CACHE_MAX_SIZE) {
-      // Evict oldest entry
-      const firstKey = embeddingCache.keys().next().value;
-      if (firstKey) embeddingCache.delete(firstKey);
+  /**
+   * Generate embeddings for multiple texts in a single batch API request.
+   *
+   * Uses OpenAI's native batch input format to avoid N individual HTTP
+   * requests, reducing latency, rate-limit pressure, and connection-pool
+   * contention. The response `data` array maintains input order via the
+   * `index` field returned by the API.
+   */
+  async function embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
+    if (texts.length === 0) return [];
+    if (!resolvedConfig.apiKey) {
+      logger.warn("No embedding API key configured, returning zero-vector placeholders");
+      return texts.map(() => ({
+        embedding: new Array(DEFAULT_DIMENSIONS).fill(0),
+        model: "none",
+        dimensions: DEFAULT_DIMENSIONS,
+        latencyMs: 0,
+        inputTokens: 0,
+      }));
     }
-    embeddingCache.set(cacheKey, { embedding, cachedAt: Date.now() });
 
-    return {
-      embedding,
-      model: resolvedConfig.model!,
-      dimensions: embedding.length,
-      latencyMs,
-      inputTokens,
-    };
+    const start = Date.now();
+
+    try {
+      const { data, usage } = await embedRequest(texts);
+
+      // Build a map keyed by the response's `index` field so we can
+      // reconstruct results in input order regardless of API ordering.
+      const byIndex = new Map<number, { embedding: number[] }>();
+      for (const item of data) {
+        byIndex.set(item.index, item);
+      }
+
+      const totalTokens = usage?.prompt_tokens ?? 0;
+      // Approximate per-text token count (the API returns total across all inputs)
+      const tokensPerText = texts.length > 0 ? Math.round(totalTokens / texts.length) : 0;
+      const latencyMs = Date.now() - start;
+
+      const results: EmbeddingResult[] = [];
+      for (let i = 0; i < texts.length; i++) {
+        const item = byIndex.get(i);
+        if (!item) {
+          // Should not happen — API guarantees one result per input in order
+          throw new Error(`Embedding batch missing result at index ${i}`);
+        }
+
+        const embedding = item.embedding;
+
+        // Validate embedding dimension
+        if (embedding.length !== resolvedConfig.dimensions && resolvedConfig.dimensions !== undefined) {
+          throw new Error(
+            `Embedding dimension mismatch at index ${i}: expected ${resolvedConfig.dimensions}, got ${embedding.length}`,
+          );
+        }
+
+        results.push({
+          embedding,
+          model: resolvedConfig.model!,
+          dimensions: embedding.length,
+          latencyMs,
+          inputTokens: tokensPerText,
+        });
+      }
+
+      return results;
+    } catch (err) {
+      logger.error({ err, textCount: texts.length }, "Embedding batch generation failed");
+      throw err;
+    }
   }
 
   /**

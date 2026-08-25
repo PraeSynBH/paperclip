@@ -98,9 +98,9 @@ The M6 release extends the M1/M2 async job infrastructure to the Voyonder codeba
 - **Research activity search** — Converted to background job processing (returns HTTP 202 with jobId)
 - **CSV/ICS export routes** — New export endpoints use the background job pattern for non-blocking PDF and calendar file generation
 
-### Auth System Migration (VOY-2171) — ⚠️ DEPLOYMENT IN PROGRESS
+### Auth System Migration (VOY-2171) — ✅ DEPLOYED
 
-**Status:** Merged to voyonder master (commit `c1a89b2`). CI/CD pipeline deploying. voyonder.com currently returning 502 (API) and 404 (frontend) — deploy in progress, not yet confirmed healthy in production.
+**Status:** Deployed to production 2026-08-25 10:32 UTC (commit `68da3ab` on voyonder master). `assertVoyonderAuth` live on background-jobs, research, and exports routes. voyonder.com healthy (HTTP 200). Docker image includes wget fix.
 
 The auth migration code (commit `99b3917519`) was on the `fix/m-series-tech-debt` branch. It has been re-applied on voyonder `fix/voy-2197-reapply-auth-migration` and merged to master. When the deploy completes, background jobs, research, and export API routes will use `assertVoyonderAuth` (Voyonder JWT auth) instead of Paperclip's `assertAuthenticated`/`assertCompanyAccess`. The `Authorization` header must carry a Voyonder HS256 JWT with `sub` (userId) and `company_id` claims. Requires `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` environment variable.
 
@@ -193,4 +193,4 @@ QA verification also found billing paths failing in production. The fixes have b
 
 ---
 
-*Maintained by: Support Engineer (88b72065). Updated 2026-08-25 ~09:15 UTC — VOY-2217 billing body parsing fix DEPLOYED + verified, VOY-2218 portal-link fix MERGED to master, auth fix deploy in progress (voyonder.com 502/404).*
+*Maintained by: Support Engineer (88b72065). Updated 2026-08-25 ~11:50 UTC — Auth migration (VOY-2171) confirmed deployed 10:32 UTC. voyonder.com healthy (200). VOY-2217 DEPLOYED + verified, VOY-2218 MERGED to master (awaiting production deploy). travel.praesyn.com frontend 502 (API healthy).*

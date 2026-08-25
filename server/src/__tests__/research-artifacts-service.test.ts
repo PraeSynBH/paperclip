@@ -7,6 +7,7 @@ import {
 } from "@paperclipai/db";
 import { researchArtifactService } from "../services/research-artifacts.js";
 import type { ResearchArtifactService } from "../services/research-artifacts.js";
+import { eq, sql } from "drizzle-orm";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
