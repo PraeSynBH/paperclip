@@ -3,7 +3,7 @@
 **Status:** DRAFT — awaiting production deployment
 **Applies to:** M6 Trial Feature Release (VOY-1984)
 **Version:** v0.3.0 (estimated)
-**Last updated:** 2026-08-24
+**Last updated:** 2026-08-25 ~00:40 UTC
 
 ---
 
@@ -74,6 +74,20 @@ When a trial expires:
 | 6 | 7-day trial is fixed | Cannot extend trial period per-customer | Manual Stripe adjustment required | SupportEscalate |
 
 ## Troubleshooting Guide
+
+### User reports "voyonder.com/ returns 404" or "site is down"
+
+**Checklist:**
+1. Is the `travel_app` container running? Check `docker ps` on VPS-1.
+2. Does `travel_app` have Traefik labels? Check `docker inspect travel_app`.
+3. Is there a Traefik router for `travel_app@docker`? Check `docker logs traefik --since 5m`.
+4. Is this a temporary issue during deployment? The frontend was removed during the M6 deploy attempts and has not been restored.
+
+**Known cause:** The `travel_app` container was removed during the ~23:57 UTC deploy on 2026-08-24 and has no Traefik labels. This is a deployment regression — the frontend routing must be explicitly restored.
+
+**Workaround:** None. Users cannot access voyonder.com until the frontend routing is restored.
+
+**Escalation:** Engineering (Release Engineer / CTO) — this is a deployment configuration issue.
 
 ### User cannot sign up
 
@@ -160,7 +174,26 @@ Three blockers were identified on VPS-1 at 22:35 UTC:
 2. **B2 — Healthcheck 404** → `/api/health` is shadowed by catch-all route.Fix:register health before `app.use(voyonderRouter)`, or use `/healthz` path.
 3. **B3 — voyonder_api not routed via Traefik** → M6 endpoints unreachablepublicly. Requires adding Traefik labels for `Host(voyonder.com) &&PathPrefix(/api)` → voyonder_api:3101.
 
-All three must be resolved before M6 is considered live.
+### Current Deploy Status (2026-08-25 ~00:40 UTC)
+
+**B1 ✅ APPROVED & DEPLOYED** — `background_jobs` table created, worker starts without 42P01.
+**B2 ✅ APPROVED & DEPLOYED** — health route registered before catch-all, `/api/health` returns 200 from loopback and public internet.
+**B3 ⚠️ CODE APPROVED, NOT DEPLOYED** — Staff Engineer re-review at ~00:20 UTC confirmed the committed fix (commit 8fb4d72, `certresolver=mytlschallenge`) is correct. However, the production deploy (~23:57 UTC) used an **uncommitted working-tree variant** that kept `certresolver=letsencrypt` (a nonexistent resolver in production Traefik). The deploy copied a dirty working tree, not git HEAD.
+
+**Result:** The API responds (200) via a pre-existing LE cert issued Jul 27 (expires Oct 25), but Traefik logs continuous errors: *"Router voyonder-api@docker uses a nonexistent resolver: letsencrypt"*. When that cert expires, TLS renewal will fail unless the resolver is corrected.
+
+### Additional Regression: Frontend Down
+
+The `travel_app` container was removed during the ~23:57 deploy and has **no Traefik labels**. As a result, `voyonder.com/` → 404. This was flagged by the Staff Engineer's first review and is now a regression — worse than before the deploy iteration began. Users cannot reach the landing page, signup flow, or any frontend route.
+
+### Required Actions Before M6 is Live
+
+1. **Redeploy voyonder_api from committed HEAD** (8fb4d72) with `certresolver=mytlschallenge` — not from a dirty working tree.
+2. **Restore frontend routing** — add Traefik labels so `Host(voyonder.com)` → `travel_app:3000`.
+3. **Fix deploy provenance** — build/deploy from git HEAD, never from an uncommitted working tree.
+4. **Re-verify:** `/api/health` = 200, `voyonder.com/` = 200, Traefik logs show no `nonexistent resolver` errors.
+5. **CTO sign-off** required before ship.
+6. **Notify Support Engineer** that M6 is live for documentation publication.
 
 ### Version Tracking
 - **Release version:** v0.3.0 (expected)

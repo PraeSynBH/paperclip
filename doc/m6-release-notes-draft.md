@@ -3,6 +3,8 @@
 **Status:** DRAFT — awaiting production deployment
 **Version:** v0.3.0 (estimated)
 **When to publish:** After M6 deployment is verified live (RE notifies Support Engineer)
+**Latest deploy attempt:** 2026-08-24 ~23:57 UTC — REJECTED by CTO (B3 certresolver not corrected, frontend down)
+**Current deployment blocker:** VOY-2165 — redeploy from committed HEAD (8fb4d72) with mytlschallenge + restore frontend routing
 
 ---
 
