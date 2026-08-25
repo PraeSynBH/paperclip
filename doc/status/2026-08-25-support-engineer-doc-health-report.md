@@ -119,7 +119,7 @@ The Paperclip docs site `docs/releases.md` has entries for:
 
 ---
 
-## Current Pipeline Impact on Documentation
+## Pipeline Impact on Documentation
 
 | Pipeline Item | Documentation Impact | Status |
 |--------------|--------------------|--------|
@@ -127,6 +127,7 @@ The Paperclip docs site `docs/releases.md` has entries for:
 | VOY-2192 — Fix auth routing mismatches | Update known issues/limitations when fixed | 🔴 Blocking signup |
 | VOY-2200 — Auth structural fixes (committed + APPROVED) | Create release notes + update async-jobs.md to v9 after deploy | 🟡 Approved (awaiting CTO go/no-go) |
 | VOY-2196 — QA Verify M6 infra fixes | Document QA findings after verification | 🟡 Pending QA |
+| **VOY-2172 — R1a Foundation (Research Artifact Service)** | Support case assessment created (`docs/support/assessments/support-case-research-artifact-service.md`). Release notes + API reference pending feature completion (R1a-4/5/6 not built). | 🟡 Foundation committed, assessment live. Pending R1a-4/5/6 completion for full documentation. |
 
 ---
 
