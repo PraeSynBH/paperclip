@@ -41,3 +41,9 @@ export const completeRegistrationSchema = z.object({
 });
 
 export type CompleteRegistration = z.infer<typeof completeRegistrationSchema>;
+
+export const createPortalSessionSchema = z.object({
+  returnUrl: z.string().url().max(2048).optional(),
+});
+
+export type CreatePortalSession = z.infer<typeof createPortalSessionSchema>;

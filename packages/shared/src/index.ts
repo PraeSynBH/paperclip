@@ -2589,10 +2589,12 @@ export {
   createCheckoutSessionSchema,
   updateSubscriptionSchema,
   reportUsageSchema,
+  createPortalSessionSchema,
   completeRegistrationSchema,
   type CreateSubscription,
   type CreateCheckoutSession,
   type UpdateSubscription,
   type ReportUsage,
+  type CreatePortalSession,
   type CompleteRegistration,
 } from "./validators/billing.js";

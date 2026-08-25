@@ -5,6 +5,7 @@ import {
   createCheckoutSessionSchema,
   updateSubscriptionSchema,
   reportUsageSchema,
+  createPortalSessionSchema,
 } from "@paperclipai/shared";
 import { badRequest, forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
@@ -184,6 +185,29 @@ export function billingRoutes(db: Db) {
       next(err);
     }
   });
+
+  /**
+   * POST /api/companies/:companyId/billing/portal-link
+   * Create or retrieve a billing portal URL
+   * - No subscription → settings page URL (via: "settings")
+   * - Trial-only → settings page URL (via: "settings")
+   * - Active subscriber → Stripe billing portal session URL (via: "stripe")
+   */
+  router.post(
+    "/companies/:companyId/billing/portal-link",
+    validate(createPortalSessionSchema),
+    async (req, res, next) => {
+      try {
+        const companyId = req.params.companyId as string;
+        assertCompanyAccess(req, companyId);
+        requireBoardUser(req);
+        const result = await billing.getBillingPortalLink(companyId);
+        res.json(result);
+      } catch (err) {
+        next(err);
+      }
+    },
+  );
 
   /**
    * GET /api/companies/:companyId/billing/usage
