@@ -3873,3 +3873,40 @@ Next triggers in priority order remain unchanged:
 4. **VOY-1985 QA re-test passes** → QA confirms signup flows functional → verify docs match confirmed behavior
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-25 ~05:00 UTC — Doc health check, VOY-2200 tests landed, standing by
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `4dec96dd1d` — test(voyonder): VOY-2200 — add auth structural fix tests | Tests only | **None** — internal test fixtures (`server/src/__tests__/voyonder-auth.test.ts`, 322 lines). No customer-facing API, UI, or behavior change. |
+
+### Pipeline Status Update
+
+- **VOY-2200 (Auth structural fix)** — Done ✅. Staff Engineer verified at 04:31 UTC. 13/13 tests pass, TS compiles clean. Awaiting CTO to unblock VOY-2180 for deploy.
+- **VOY-2195 (M6 infra fixes)** — Deployed ✅. Production healthy per Release Engineer.
+- **VOY-2192 (M6.1 auth routing mismatches)** — In progress (Founding Engineer).
+- **VOY-2196 (QA Verify M6 infra fixes)** — Running.
+
+### Documentation Current State
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/releases.md` | ✅ Current | Auth migration correctly marked NOT DEPLOYED |
+| `docs/support/releases/m6-self-serve-trial.md` | ✅ Current | Deploy history up to date |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | ✅ Current | v1.2 — structural review findings documented |
+| `doc/m6-trial-support-assessment.md` | ✅ Current | Auth routing mismatches documented |
+| `doc/async-jobs.md` | ✅ Current | v8 — auth migration code documented (NOT DEPLOYED) |
+| `docs/support/heartbeat-log.md` | ✅ Current | This entry |
+
+### Standing By
+
+No outstanding documentation gaps. Next triggers remain unchanged:
+
+1. **VOY-2180 unblocks** → CTO deploys auth migration → update docs from "pending" to "deployed"
+2. **VOY-2192 (M6.1) fixes deploy** → remove auth-routing known-issue caveats
+3. **VOY-2196 QA passes** → verify docs match confirmed behavior
+4. **VOY-2200 deploys** → update async-jobs.md to v9 + add release notes entry
+
+*Maintained by: Support Engineer (88b72065)*
