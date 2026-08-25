@@ -86,6 +86,24 @@ No new configuration. Existing `POSTHOG_API_KEY` and `POSTHOG_HOST` settings are
 | Login method detection | If `login_method` is consistently `"unknown"` for valid sign-ins, check the server's reverse proxy configuration — `resolveLoginMethod` uses `ctx.request.url` which may be affected by URL rewriting. |
 | `ts_rank` alias fix | Knowledge search and memory warm-up results are now reliably sorted by relevance score. If search ranking appears incorrect, verify the consuming query references `score` correctly. |
 
+## Post-Release Updates: August 25, 2026 — Auth Routing Mismatch Fixes (VOY-2192)
+
+Following the initial release, the M6.1 update fixed 4 auth routing mismatches that were breaking the signup flow in production:
+
+| Bug | Symptom | Fix |
+|-----|---------|-----|
+| **B1: Google OAuth 404** | Frontend calls `GET /api/auth/google` → 404 | Added Google OAuth redirect/callback routes to Voyonder API |
+| **B2: Magic link send** | Frontend calls `POST /api/auth/magic-link/send` → 404 | Added route that delegates to existing service |
+| **B3: Magic link verify** | Frontend calls `POST /api/auth/magic-link/verify` with `{token}` body, expects JSON → 404 | Added POST route returning JSON matching frontend expectations |
+| **B4: GET verify 500** | `GET /api/auth/magic-link/verify` throws internal error | Used HttpError classes in signup service to prevent 500 errors |
+
+All four fixes are deployed to production. Signup flows (Google OAuth, magic link) should now work end-to-end.
+
+**What this means for support:**
+- Users who previously reported 404 or 500 errors during signup should retry — the signup flow is now fully functional
+- If Google OAuth still fails, check that `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` environment variables are set
+- If magic link signup still fails, check the server logs for routing errors and escalate to CTO if the fix appears not to be deployed
+
 ## Related Documentation
 
 - [Google OAuth Support Case Assessment](../assessments/support-case-google-oauth.md) — Full support case details, troubleshooting, escalation paths
