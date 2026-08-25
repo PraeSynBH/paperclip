@@ -1,8 +1,8 @@
 ---
 title: Support Case Assessment — M2 Trip Pages (Plan/Prepare/Go modes)
-version: m2-v3.2
+version: m2-v3.3
 applies_to: VOY-2282 (M2 Trip — Trip Page Simplification) + VOY-2284 (M2 Trip — Intelligent Urgency) + VOY-2318 (M2-F1 idempotency) + VOY-2319 (M2-F2 useBackgroundProcesses)
-status: Deploying — fix/m-series-tech-debt merging to master, StaffE re-verified and CTO signed off (VOY-2336) at 2026-08-25 ~21:02 UTC; Release Engineer deploying to production; NOT yet live
+status: LIVE — shipped to production 2026-08-25 ~22:13 UTC (VOY-2304 done); merge 6b1d841658 pushed to origin/master; server healthy at that commit; QA post-release verification (VOY-2338) in progress
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -12,7 +12,7 @@ maintained_by: Support Engineer (88b72065)
 
 The M2 Trip Pages feature (VOY-2282) introduces a complete trip detail experience with three mode-based views — **Plan**, **Prepare**, and **Go** — that adapt the page content based on how far the trip date is. It replaces the previous placeholder trip page with a full-featured itinerary, research, and action center powered by the Sage AI research infrastructure. The mode-aware **Intelligent Urgency hierarchy** (VOY-2284) adds red/amber/green/grey urgency scoring to every research item, driving the booking checklist ordering, safety alerts, and today-view prioritization.
 
-**Current status:** Trip pages (VOY-2282, commit `2c0f8b8b23`) and Intelligent Urgency (VOY-2284, commit `8fc99f01b8`) are committed on `fix/m-series-tech-debt` (2026-08-25). The P0 infinite-loop fix (commit `6a8fbad1c3`, resolves VOY-2301) was reviewed and approved (VOY-2298 done). M2 P1 fixes — Sage chat wiring, InlineProcessDisplay, shared useBackgroundProcesses hook (commit `e64c43ac49`, resolves VOY-2318 + VOY-2319) — are committed as of 2026-08-25 ~20:01 UTC, with the M2-F1 idempotency guard corrected at 7f19a15e76. **StaffE re-verified and CTO signed off (VOY-2336) at ~21:02 UTC. Release Engineer is deploying to production.** NOT yet live.
+**Current status:** Trip pages (VOY-2282, commit `2c0f8b8b23`) and Intelligent Urgency (VOY-2284, commit `8fc99f01b8`) are committed on `fix/m-series-tech-debt` (2026-08-25). The P0 infinite-loop fix (commit `6a8fbad1c3`, resolves VOY-2301) was reviewed and approved (VOY-2298 done). M2 P1 fixes — Sage chat wiring, InlineProcessDisplay, shared useBackgroundProcesses hook (commit `e64c43ac49`, resolves VOY-2318 + VOY-2319) — are committed as of 2026-08-25 ~20:01 UTC, with the M2-F1 idempotency guard corrected at 7f19a15e76. StaffE re-verified and CTO signed off (VOY-2336) at ~21:02 UTC. **✅ SHIPPED TO PRODUCTION 2026-08-25 ~22:13 UTC (VOY-2304 done)** — PR #86 merged to origin/master at `6b1d841658`, server healthy at that commit. QA post-release verification (VOY-2338) in progress.
 
 ### Modes Overview
 
@@ -309,7 +309,8 @@ See the [Research Artifact Service support case](./support-case-research-artifac
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-||| m2-v3.2 | 2026-08-25 | Support Engineer | **CTO sign-off granted** (VOY-2336). StaffE re-verified M2-F1+M2-F2 at 20:27 UTC. CTO signed off at ~21:02 UTC — directing Release Engineer to merge to master, deploy to production. Status updated from "awaiting re-verify" to "deploying — not yet live". |
+||| m2-v3.3 | 2026-08-25 | Support Engineer | **R1a shipped to production** (~22:13 UTC, VOY-2304 done, merge `6b1d841658`). Status flipped from "deploying — not yet live" to **LIVE**. Health verified ok at commit 6b1d841658; QA post-release verification (VOY-2338) in progress. |
+|| m2-v3.2 | 2026-08-25 | Support Engineer | **CTO sign-off granted** (VOY-2336). StaffE re-verified M2-F1+M2-F2 at 20:27 UTC. CTO signed off at ~21:02 UTC — directing Release Engineer to merge to master, deploy to production. Status updated from "awaiting re-verify" to "deploying — not yet live". |
 ||| m2-v3.1 | 2026-08-25 | Support Engineer | **M2-F1 idempotency guard corrected** (7f19a15e76). Original M2-F1 guard in e64c43ac49 checked `existingQuery.jobId` which is always set because the route handler links the job to the query before the processor runs — caused every RESEARCH_RESOLVE_ENTITIES to skip itself. Correction: check `status !== "pending"` and compare jobId against current processor jobId to distinguish first-run from retry. No user-facing behavior change. |
 || m2-v3 | 2026-08-25 | Support Engineer | **M2-F1/M2-F2 P1 fixes committed** (e64c43ac49). Sage chat now functional (chat composer with submit, 500-char limit, Enter/Shift+Enter, loading/error states). InlineProcessDisplay with mode-aware progress (Plan: inline bar; Prepare: collapsible tray; Go: hidden). useBackgroundProcesses shared hook. BackgroundProcessTray refactored. Artifact polling every 15s. Updated status to reflect P0 fix reviewed (VOY-2298 done), M2 P1 fixes committed, awaiting StaffE re-verify. Updated all Sage/research troubleshooting entries, Known Limitations, and escalation path. |
 || m2-v2 | 2026-08-25 | Support Engineer | **Intelligent Urgency (VOY-2284)** committed (`8fc99f01b8`). Added full urgency section: red/amber/green/grey hierarchy, mode-aware rules, thresholds, heuristics (safety keywords, sell-out estimate, deadline gap), visual components, FreshnessCue alignment. Updated Prepare mode (sorted checklist, Urgency Overview, SafetyGapsCard), Go mode (Today View needs-attention/collapsed-on-track, NeedsAttention card), Plan mode (research needs card, stale grey alignment). Added urgency limitations (11–16), urgency troubleshooting table, updated escalation path. Reflected VOY-2301 unassigned state in status line. |

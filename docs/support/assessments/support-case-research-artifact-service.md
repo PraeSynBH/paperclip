@@ -1,8 +1,8 @@
 ---
 title: Support Case Assessment — Research Artifact Service (R1a Foundation)
-version: r1a-v6.2
+version: r1a-v6.3
 applies_to: VOY-2172 (Research Deep Dive — Phase R1a Foundation)
-status: Deploying — fix/m-series-tech-debt merging to master, StaffE re-verified and CTO signed off (VOY-2336) at 2026-08-25 ~21:02 UTC; Release Engineer deploying to production; NOT yet live
+status: LIVE — shipped to production 2026-08-25 ~22:13 UTC (VOY-2304 done); merge 6b1d841658 pushed to origin/master; server healthy at that commit; QA post-release verification (VOY-2338) in progress
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -16,7 +16,7 @@ The Research Deep Dive (VOY-2172) builds a structured research pipeline on top o
 
 **However, a P0 infinite-loop bug was discovered in the Staff Engineer's final structural audit v2 (VOY-2298, 2026-08-25 ~17:10 UTC):** non-global regexes (`AIRLINE_RE`, `CATEGORY_RE`) in entity-resolver.ts caused an infinite loop on ANY query containing a travel category word (flights, hotels, activities, restaurants, transport, …) or a recognized airline name (Delta, United, Emirates, …) — every such query pinned a worker slot at 100% CPU for 5 minutes, then failed, and the CI test suite hung on it.
 
-**✅ P0 FIX LANDED (2026-08-25 ~18:10 UTC):** commit `6a8fbad1c3` (resolves VOY-2301) added the missing `/g` flag to `AIRLINE_RE` and `CATEGORY_RE`, reset `lastIndex` before each match loop, and added P0 regression tests. **Verified: all 33 entity-resolver tests pass and the suite terminates (no hang).** StaffE re-verified the fix (VOY-2298 done), M2-F1/M2-F2 committed and corrected, and CTO signed off (VOY-2336) at ~21:02 UTC. The R1a release is **now deploying to production** (not yet live). Web search integration (R1a-5) and TripPage UI (R1a-6) are not yet built.
+**✅ R1a SHIPPED TO PRODUCTION (2026-08-25 ~22:13 UTC):** VOY-2304 completed — PR #86 (fix/m-series-tech-debt → master) merged at commit `6b1d841658`, pushed to origin/master. Server is running merged code and health endpoint returns `ok` at commit `6b1d841658` (db-backup: ok). The P0 infinite-loop fix (commit `6a8fbad1c3`, resolves VOY-2301) added the missing `/g` flag to `AIRLINE_RE` and `CATEGORY_RE`, reset `lastIndex` before each match loop, and added P0 regression tests — verified: all 33 entity-resolver tests pass and the suite terminates (no hang). StaffE re-verified the fix (VOY-2298 done), M2-F1/M2-F2 committed and corrected, and CTO signed off (VOY-2336) at ~21:02 UTC. QA post-release verification is tracked by VOY-2338 (in progress). Web search integration (R1a-5) and TripPage UI (R1a-6) are not yet built.
 
 ### What Is Built
 
@@ -267,9 +267,10 @@ The regex-based entity resolver (committed in R1a-2) can extract:
 
 ## Version History
 
-| Version | Date | Author | Changes |
+|| Version | Date | Author | Changes |
 |---------|------|--------|---------|
-||| r1a-v6.2 | 2026-08-25 | Support Engineer | **CTO sign-off granted** (VOY-2336). StaffE re-verified M2-F1+M2-F2 at 20:27 UTC. CTO signed off at ~21:02 UTC — directing Release Engineer to merge to master, deploy to production. Status updated from "awaiting StaffE re-verify" to "deploying — not yet live". |
+|| r1a-v6.3 | 2026-08-25 | Support Engineer | **R1a shipped to production** (~22:13 UTC, VOY-2304 done, merge `6b1d841658`). Status flipped from "deploying — not yet live" to **LIVE**. Health verified ok at commit 6b1d841658; QA post-release verification (VOY-2338) in progress. |
+|| r1a-v6.2 | 2026-08-25 | Support Engineer | **CTO sign-off granted** (VOY-2336). StaffE re-verified M2-F1+M2-F2 at 20:27 UTC. CTO signed off at ~21:02 UTC — directing Release Engineer to merge to master, deploy to production. Status updated from "awaiting StaffE re-verify" to "deploying — not yet live". |
 ||| r1a-v6.1 | 2026-08-25 | Support Engineer | **M2-F1 idempotency guard corrected** (7f19a15e76). Original M2-F1 guard in e64c43ac49 checked `existingQuery.jobId` which is always set — caused every RESEARCH_RESOLVE_ENTITIES to skip itself. Correction checks status and compares jobId against current processor. No user-facing behavior change. Status updated: P1 M2-F1+M2-F2 committed and corrected; awaiting StaffE re-verify. |
 || r1a-v6 | 2026-08-25 | Support Engineer | **P0 infinite-loop fix landed** (commit `6a8fbad1c3`, resolves VOY-2301) — added `/g` flag to AIRLINE_RE/CATEGORY_RE + lastIndex reset. Verified 33 tests pass, suite no longer hangs. Status updated to awaiting code review (VOY-2298) + CTO sign-off. Release no longer BLOCKED by infinite loop. |
 || r1a-v5 | 2026-08-25 | Support Engineer | Updated status: release BLOCKED by new P0 infinite-loop bug (VOY-2298, non-global regexes in entity-resolver). Added finding details: category/airline queries spin forever at 100% CPU, CI test suite hangs. Assigned to Founding Engineer. |

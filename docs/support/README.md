@@ -12,7 +12,7 @@ This directory contains support case assessments for Paperclip features. Each do
 | Feature | Version | Shipped | Assessment |
 |---|---|---|---|---|
 | Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Async UX](releases/voy-1474-async-ux.md) |
-| R1a Pre-ship Fixes — Async Job Hardening + Entity Resolution Stability | r1a-v6.2 | Aug 25, 2026 (CTO sign-off granted, deploying) | [R1a Pre-ship Fixes](releases/r1a-pre-ship-fixes.md) |
+| R1a Pre-ship Fixes — Async Job Hardening + Entity Resolution Stability | r1a-v6.3 | Aug 25, 2026 (shipped to production ~22:13 UTC, merge 6b1d841658) | [R1a Pre-ship Fixes](releases/r1a-pre-ship-fixes.md) |
 | Google OAuth & PostHog auth events + P2 fixes (ts_rank alias, DB client hardening) | voy-1420-posthog-p2-fixes (96faa13434+) | Documented, ready for release to fork/master | [Google OAuth](assessments/support-case-google-oauth.md) |
 | Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
 | Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Aug 18, 2026 (PR #48) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |

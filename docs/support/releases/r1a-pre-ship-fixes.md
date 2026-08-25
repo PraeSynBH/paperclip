@@ -3,13 +3,13 @@ title: R1a Pre-ship Fixes — Async Job Hardening + Entity Resolution Stability
 version: r1a-v6.2
 date: 2026-08-25
 commits: 6a8fbad1c3, 8976083b9b, e64c43ac49, 7f19a15e76
-status: Deploying — merging fix/m-series-tech-debt to master, CTO sign-off granted 2026-08-25 ~21:02 UTC, Release Engineer deploying to production
+status: Deployed to production — branch merged to master (6b1d841658), server healthy at commit
 ---
 
 # R1a Pre-ship Fixes: Async Job Hardening + Entity Resolution Stability
 
 **Branches:** `fix/m-series-tech-debt` (merging to `master`)
-**Release status:** CTO signed off at 2026-08-25 ~21:02 UTC. Staff Engineer re-verified all fixes at 20:27 UTC. Release Engineer is resolving merge conflicts and deploying to production.
+**Release status:** ✅ **SHIPPED TO PRODUCTION 2026-08-25 ~22:13 UTC (VOY-2304 done)** — PR #86 (fix/m-series-tech-debt → master) merged at commit `6b1d841658`, pushed to origin/master. Server is running merged code, health endpoint returns `ok` at commit `6b1d841658` (db-backup: ok). QA post-release verification tracked by VOY-2338.
 **Applies to:** VOY-2172 (R1a Foundation) + VOY-2269 (Pre-ship Findings) + VOY-2301 (P0 Infinite Loop) + VOY-2318 (M2-F1 Idempotency) + VOY-2319 (M2-F2 useBackgroundProcesses)
 
 ---
@@ -61,8 +61,8 @@ The initial M2-F1 idempotency guard (commit `e64c43ac49`) had a logic error: it 
 | **Entity resolution is now stable** | The infinite loop bug that could pin CPU at 100% on category/airline queries is fixed. Research queries with words like "flights", "hotels", "Delta" no longer hang the worker. |
 | **No more orphan queries** | If a background job fails during query creation, the transaction rolls back cleanly — no leftover query rows without a job reference. |
 | **Retry-safe entity resolution** | If a `RESEARCH_RESOLVE_ENTITIES` job retries, it no longer creates a duplicate `GATHER_CITATIONS` job. Entity resolution runs exactly once per query. |
-| **InlineProcessDisplay added** | Trip pages now show mode-aware background process progress: inline progress bar in Plan mode, collapsible tray in Prepare mode, hidden in Go mode. |
-| **useBackgroundProcesses shared hook** | Background process tracking across the app now uses a shared SSE + polling hook with consistent behavior. |
+| **InlineProcessDisplay added** | Trip pages now show mode-aware background process progress: inline progress bar in Plan mode, collapsible tray in Prepare mode, hidden in Go mode. **LIVE in production.** |
+| **useBackgroundProcesses shared hook** | Background process tracking across the app now uses a shared SSE + polling hook with consistent behavior. **LIVE in production.** |
 | **Improved query performance** | The `research_queries` table now has an index on `job_id` and cascading deletes — query joins and cleanup operations are faster and safer. |
 
 ## Known Limitations
@@ -75,7 +75,7 @@ The initial M2-F1 idempotency guard (commit `e64c43ac49`) had a logic error: it 
 | Research routes use `company_scope:read` (read-level auth) for write operations | Open (Staff Engineer recommendation C4) |
 | No blob storage — export results embed base64 data (PDF) or calendar text (ICS) in the result object | Open |
 | Semantic upgrade requires `PAPERCLIP_EMBEDDING_API_KEY` — falls back to keyword ranking without it | Open (infra config) |
-| M2 Trip Pages are not yet fully deployed — Plan/Prepare/Go mode trip pages, Intelligent Urgency hierarchy, and Sage AI chat composer will ship in a subsequent M2 release | Open |
+| M2 Trip Pages (Plan/Prepare/Go mode pages, Intelligent Urgency hierarchy, Sage chat composer) ship with R1a — the trip page is **live in production**; R1a-5 web search integration and R1a-6 TripPage UI refinements are still open | Open (follow-up) |
 
 ## Related Documentation
 
@@ -85,5 +85,5 @@ The initial M2-F1 idempotency guard (commit `e64c43ac49`) had a logic error: it 
 - [Background Jobs API](/api/background-jobs) — API reference for background job endpoints
 - [Research API](/api/research) — API reference for research endpoints
 
-*Last updated: 2026-08-25 ~21:05 UTC — CTO sign-off granted, Release Engineer deploying*
+*Last updated: 2026-08-25 ~22:20 UTC — Shipped to production (VOY-2304 done), docs flipped to live*
 *Maintained by: Support Engineer (88b72065)*

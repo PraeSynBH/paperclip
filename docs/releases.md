@@ -2,7 +2,7 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-25 (~21:05 UTC — R1a pre-ship fixes release note created, CTO sign-off granted, deploying)
+last_updated: 2026-08-25 (~22:20 UTC — R1a pre-ship fixes SHIPPED to production, VOY-2304 done)
 ---
 
 # Release Notes
@@ -12,6 +12,8 @@ Paperclip ships continuously. This page documents each release to the main branc
 ---
 
 ## R1a Pre-ship Fixes — August 25, 2026
+
+**Status: ✅ SHIPPED to production 2026-08-25 ~22:13 UTC.**
 
 [Full release notes →](/support/releases/r1a-pre-ship-fixes)
 
