@@ -1,4 +1,4 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import {
   researchArtifacts,
@@ -351,6 +351,24 @@ export function researchArtifactService(db: Db) {
   }
 
   /**
+   * Fetch multiple artifacts by their IDs (company-scoped).
+   * Used by RESEARCH_VERIFY_CITATIONS to avoid N+1 singleton lookups.
+   */
+  async function getArtifactsByIds(
+    companyId: string,
+    ids: string[],
+  ): Promise<ResearchArtifact[]> {
+    if (ids.length === 0) return [];
+    return db
+      .select()
+      .from(researchArtifacts)
+      .where(
+        and(eq(researchArtifacts.companyId, companyId), inArray(researchArtifacts.id, ids)),
+      )
+      .limit(ids.length);
+  }
+
+  /**
    * Find an artifact by checksum for dedup (company-scoped).
    */
   async function findArtifactByChecksum(
@@ -567,6 +585,7 @@ export function researchArtifactService(db: Db) {
     // Artifacts
     createArtifact,
     getArtifact,
+    getArtifactsByIds,
     listArtifacts,
     updateArtifactStatus,
     deleteArtifact,
