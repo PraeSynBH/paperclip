@@ -1,6 +1,6 @@
 ---
 title: Support Case Assessment — M6 Self-Serve Trial & Onboarding
-version: m6-v1.3
+version: m6-v1.5
 applies_to: M6 release (self-serve trial signup, onboarding, PostHog analytics)
 status: Published — Live in production (deployed 2026-08-25 ~01:15 UTC)
 maintained_by: Support Engineer (88b72065)
@@ -12,7 +12,7 @@ maintained_by: Support Engineer (88b72065)
 
 M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder. Users can sign up directly at voyonder.com via email + magic link or Google OAuth — each creates a company with a 7-day Stripe trial subscription (no credit card required). A guided onboarding wizard helps users select their role and deploy asset packs. PostHog tracks the full signup-to-conversion funnel. The release extends the M1/M2 async job pattern to research and export routes in the Voyonder codebase.
 
-**Auth system migration (VOY-2171):** Research and export routes were partially migrated from Paperclip auth to Voyonder JWT auth, but the migration is **IN DEPLOYMENT — not yet confirmed live in production**. Structural issues found during review (VOY-2198) — broken companyId authorization boundary and missing JWT expiration — were fixed in commit `535f75fa15` (VOY-2200) and approved by Staff Engineer. Cross-system secret fallback and SSE listener leak fixes landed in commit `6dff29f449` (VOY-2201). CTO sign-off received (commit `4134b0038e`). Release Engineer is deploying (VOY-2197) — re-applying the migration on voyonder `fix/voy-2197-reapply-auth-migration` (commit `68da3ab`).
+**Auth system migration (VOY-2171):** Research and export routes were partially migrated from Paperclip auth to Voyonder JWT auth. Structural issues found during review (VOY-2198) — broken companyId authorization boundary and missing JWT expiration — were fixed in commit `535f75fa15` (VOY-2200) and approved by Staff Engineer. Cross-system secret fallback and SSE listener leak fixes landed in commit `6dff29f449` (VOY-2201). CTO sign-off received (commit `4134b0038e`). The migration has been **merged to voyonder master** (commit `c1a89b2`) and CI/CD pipeline triggered for production deployment (VOY-2197). **Not yet confirmed live in production** — deployment in progress.
 
 ### Key Components
 
@@ -98,12 +98,12 @@ M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder.
 20. **GET /api/auth/magic-link/verify returns 500 (HIGH)** — Even the correct Voyonder API endpoint for magic link verification crashes due to missing env var or DB issue. Tracked in VOY-2192.
 21. **General /api/auth/* routing conflict (HIGH)** — Traefik routes ALL `/api/auth/*` paths to the Voyonder API, intercepting Next.js API routes at travel_app. The Voyonder API does not handle all auth routes the frontend expects. Tracked in VOY-2192.
 
-### Billing Defects (VOY-2217 / VOY-2218 — In Flight)
+### Billing Defects (VOY-2217 / VOY-2218 — Fixes Complete, Awaiting Deploy)
 
-22. **Checkout POST body parsing fails (HIGH)** — Billing checkout/start-trial POST requests are not parsed correctly, breaking new checkout attempts. Tracked in VOY-2217 (M6.2a), Founding Engineer working.
-23. **Billing portal link returns 500 (HIGH)** — `POST /api/billing/portal` / portal-link access returns a 500 error, so users cannot reach Stripe Customer Portal from the app. Tracked in VOY-2218 (M6.2b), Founding Engineer working.
+22. **Checkout POST body parsing fails (HIGH)** — Billing checkout/start-trial POST requests are not parsed correctly, breaking new checkout attempts. VOY-2217 (M6.2a): **FIXED in code** — awaiting QA re-verify and production deploy.
+23. **Billing portal link returns 500 (HIGH)** — `POST /api/billing/portal` / portal-link access returns a 500 error, so users cannot reach Stripe Customer Portal from the app. VOY-2218 (M6.2b): **FIXED in code** — awaiting QA re-verify and production deploy.
 
-**Impact:** New signups cannot complete checkout, and existing users cannot open the billing portal. Existing active Stripe subscriptions and trial state are unaffected. No user-side workaround — escalate to Engineering; fixes are in progress.
+**Impact:** New signups cannot complete checkout, and existing users cannot open the billing portal. Existing active Stripe subscriptions and trial state are unaffected. No user-side workaround — escalate to Engineering; fixes are complete in code but not yet deployed to production.
 
 ## Troubleshooting
 
@@ -124,8 +124,8 @@ M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder.
 | Subscription status shows incorrect data | Webhook not processed or delayed | Check Stripe dashboard; verify webhook endpoint is reachable |
 | Trial not expiring | Reaper not running | Check scheduler logs; verify expireTrials() is scheduled |
 | Cannot cancel subscription | User is not a board member | Subscription management requires board-level access |
-| Checkout / start-trial fails | Billing POST body parsing defect (VOY-2217) | Tracked in VOY-2217 (M6.2a). No user workaround. Escalate to Engineering. |
-| Billing portal link returns 500 | Portal-link handler defect (VOY-2218) | Tracked in VOY-2218 (M6.2b). No user workaround. Escalate to Engineering. |
+| Checkout / start-trial fails | Billing POST body parsing defect (VOY-2217) | VOY-2217: **FIXED in code**. Awaiting QA re-verify and production deploy. Escalate to Engineering. |
+| Billing portal link returns 500 | Portal-link handler defect (VOY-2218) | VOY-2218: **FIXED in code**. Awaiting QA re-verify and production deploy. Escalate to Engineering. |
 
 ### Webhook Issues
 
@@ -159,7 +159,7 @@ M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder.
 | Signup completely broken (all methods fail) | P0 | CTO | Immediate |
 | Stripe webhook not processing (cannot create trials) | P0 | CTO | Immediate |
 | Auth routing mismatches (VOY-2192 — signup flows 404/500) | P0 | CTO | Immediate |
-| Billing checkout/portal failures (VOY-2217 / VOY-2218) | P1 | CTO | 1 hour |
+| Billing checkout/portal failures (VOY-2217 / VOY-2218) — fixes complete, awaiting deploy | P1 | CTO | 1 hour |
 | Trial not expiring (revenue impact) | P1 | CTO | 1 hour |
 | PostHog analytics not reporting | P2 | CTO | 4 hours |
 | Onboarding wizard broken (non-blocking) | P2 | CTO | 4 hours |
@@ -178,6 +178,7 @@ M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder.
 || m6-v1.1 | 2026-08-25 | Added 5 auth routing mismatch limitations (VOY-2192 / M6.1) from QA findings. Added P0 escalation entry for auth routing. |
 || m6-v1.2 | 2026-08-25 | Updated auth migration section — clarified NOT DEPLOYED, documented VOY-2198 structural review findings and VOY-2200 fixes (commit `535f75fa15`). |
 || m6-v1.3 | 2026-08-25 | Auth migration pipeline complete — CTO sign-off received (commit `4134b0038e`), Release Engineer deploying. Updated status throughout. |
-|| m6-v1.4 | 2026-08-25 | Auth migration now IN DEPLOYMENT (VOY-2197, commit `68da3ab`). Added billing defects VOY-2217 (checkout POST body parsing) + VOY-2218 (billing portal link 500) — limitations, troubleshooting rows, escalation entry. |
+||| m6-v1.4 | 2026-08-25 | Auth migration now IN DEPLOYMENT (VOY-2197, commit `68da3ab`). Added billing defects VOY-2217 (checkout POST body parsing) + VOY-2218 (billing portal link 500) — limitations, troubleshooting rows, escalation entry. |
+||| m6-v1.5 | 2026-08-25 | Billing defects VOY-2217/VOY-2218: fixes COMPLETE in code, awaiting QA re-verify + production deploy. Auth migration: merged to voyonder master (commit `c1a89b2`), CI/CD pipeline triggered for production deploy. |
 
 *Maintained by: Support Engineer (88b72065)*

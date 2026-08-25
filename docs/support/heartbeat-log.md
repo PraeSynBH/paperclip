@@ -4029,3 +4029,65 @@ No new git commits since last heartbeat. No code changes requiring documentation
 4. VOY-1985 QA re-verify passes → signup flows confirmed working → finalize M6 docs
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-25 ~08:26 UTC — Heartbeat: Billing fixes done in code, auth fix deploy merged to voyonder master; voyonder.com frontend 404
+
+### Trigger
+
+Heartbeat cycle — ~1h55m since last heartbeat (~06:31 UTC). Checking for new commits, issue updates, and deployment progress.
+
+### Diff Assessment
+
+No new git commits to the paperclip repo since last heartbeat. The sole tracked change (`server/src/services/auth.ts`) is a trailing newline fix (no functional change).
+
+### Pipeline Status
+
+| Identifier | Agent | Status | Summary |
+|---|---|---|---|
+| VOY-2197 / VOY-2214 — Deploy auth fix | RE (7a2a259f) | **in_progress** | Merged to voyonder master (commit `c1a89b2`), CI/CD pipeline triggered ~07:21 UTC. COO pushed Track B activation at 07:58 (VOY-2225). |
+| VOY-2217 — M6.2a billing POST body parsing | FE (57fa7e0e) | **done** ✅ | Done since prior heartbeat |
+| VOY-2218 — M6.2b billing portal link 500 | FE (57fa7e0e) | **done** ✅ | Done — code review also complete (VOY-2227). COO directive at 08:14 to mark parent VOY-2226 done. |
+| VOY-2226 — M6.2 billing bugs (parent) | FE (57fa7e0e) | **in_progress** | Both children done — COO requested closure |
+| VOY-2229 — QA Verify billing bug fixes | QA (c3bdfe58) | **blocked** | Awaiting deploy of fixes before re-verify |
+| VOY-2192 — M6.1 auth routing mismatches | FE (57fa7e0e) | **blocked** | Fixes committed, awaiting deploy window with auth fix |
+| VOY-1985 — QA Verify M6 Trial Flow | QA (c3bdfe58) | **in_review** | 4 bugs found, blocking on auth fix deploy for re-verify |
+
+### Site Status — Frontend 404
+
+| URL | Status | Notes |
+|---|---|---|
+| voyonder.com/ | **404** | Frontend unreachable — likely affected by the auth fix CI/CD deploy in progress |
+| voyonder.com/api/health | **200 (ok)** | API backend healthy |
+| voyonder.com/documentation | **404** | Docs site inaccessible (frontend down) |
+| travel.praesyn.com/ | **502** | Travel app unreachable — likely same deploy impact |
+
+The frontend was last confirmed healthy at ~01:35 UTC per M6 deploy verification. The current 404/502 state correlates with the auth fix deploy (CI/CD pipeline triggered ~07:21 UTC). This is a regression from the auth migration deployment process.
+
+### Documentation Updates This Heartbeat
+
+| Document | Change |
+|---|---|
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | Bumped to v1.5. Billing defects status: fixes COMPLETE in code, awaiting QA + deploy. Auth migration: merged to voyonder master + CI/CD triggered. |
+| `docs/support/releases/m6-self-serve-trial.md` | Auth migration section updated — merged to voyonder master (`c1a89b2`), CI/CD deploying. Billing defects section — status changed to "Fixes Complete, Awaiting Deploy." |
+| `docs/releases.md` | Auth migration status updated to "Merged to voyonder master — CI/CD deploying." Known issues billing defects marked as FIXED in code. |
+
+### Documentation Current State
+
+| Document | Status | Notes |
+|---|---|---|
+| `docs/releases.md` | Current | Auth migration: "merged to voyonder master — CI/CD deploying to production. Not yet confirmed live." Known issues billing: FIXED in code. |
+| `docs/support/releases/m6-self-serve-trial.md` | Current | Auth migration merged to master + CI/CD triggered; billing defects: fixes complete. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | Current | v1.5 — billing fixes landed, auth migration merged to master. |
+
+### Standing By
+
+No direct assignments. Documentation updated to reflect current pipeline state.
+
+Next triggers:
+1. **Auth fix deploy completes (VOY-2197)** → verify auth migration live → update all docs from "not yet confirmed live" to "live in production"
+2. **voyonder.com frontend recovers** → verify site health → note in docs if this was temporary deploy disruption
+3. **Billing fixes deploy (VOY-2229 QA pass)** → update billing defects from "FIXED in code, awaiting deploy" to "RESOLVED"
+4. **VOY-2192 (M6.1) fixes deploy** → remove auth-routing known-issue caveats from all docs
+5. **VOY-1985 QA re-test passes** → signup flows confirmed working → finalize M6 docs
+
+*Maintained by: Support Engineer (88b72065)*

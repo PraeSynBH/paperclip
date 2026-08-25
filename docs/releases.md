@@ -2,7 +2,7 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-25
+last_updated: 2026-08-25 (~07:45 UTC — restored missing Aug 21-23 entries lost in merge)
 ---
 
 # Release Notes
@@ -29,11 +29,119 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 - **Trial Expiry Grace Period** — Expired trials preserve your trips and data. Subscribe anytime to re-activate.
 
-- **Auth System Migration (VOY-2171)** — Background jobs, research, and export routes were partially migrated from Paperclip auth to Voyonder JWT auth. Structural issues (companyId boundary check + JWT expiration enforcement) were fixed in VOY-2200 and P1 blocker fixes landed in VOY-2201. **CTO sign-off complete** — Release Engineer deployment in progress (VOY-2197).
+- **Auth System Migration (VOY-2171)** — Background jobs, research, and export routes were partially migrated from Paperclip auth to Voyonder JWT auth. Structural issues (companyId boundary check + JWT expiration enforcement) were fixed in VOY-2200 and P1 blocker fixes landed in VOY-2201. **Merged to voyonder master — CI/CD pipeline deploying to production. Not yet confirmed live.**
 
 [Full release notes →](/support/releases/m6-self-serve-trial)
 
-> **⚠️ Known issues (2026-08-25):** Signup remains blocked in production — auth routing mismatches between the frontend and Voyonder API are fixed in code but not yet deployed (VOY-2192). Two billing defects are also in flight: checkout POST body parsing (VOY-2217) and billing portal link 500 (VOY-2218). See the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
+> **⚠️ Known issues (2026-08-25):** Signup remains blocked in production — auth routing mismatches between the frontend and Voyonder API are fixed in code but not yet deployed (VOY-2192). Two billing defects (checkout POST body parsing VOY-2217, billing portal link 500 VOY-2218) are **FIXED in code** — awaiting QA re-verify and production deployment. See the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
+
+---
+
+## M5 A/B Pricing Experiment — August 23, 2026
+
+**Status: Implementation complete. Shipped as part of M6 feature set.**
+
+### Highlights
+
+- **Server-side A/B pricing test** — Companies are deterministically assigned to control (current pricing) or treatment (adjusted lower pricing) on first visit to the pricing page. Assignment is persisted — the same company always sees the same variant.
+- **Variant B pricing** — Lower entry price: Adventurer $19/mo ($190/yr), Explorer $69/mo ($690/yr), Elite $179/mo ($1,790/yr). All tiers reduced by $10-20/mo to reduce signup friction.
+- **Env-var controlled** — Experiment is enabled/disabled via `PRICING_EXPERIMENT_CONFIG` JSON environment variable. No deploy needed to toggle.
+- **Stripe metadata tracking** — Checkout sessions include `pricingExperimentVariant` metadata for per-variant conversion analysis in Stripe dashboard.
+- **Graceful fallback** — When experiment is disabled, all companies see control pricing. If variant B tier overrides are not configured, variant B falls back to control prices.
+- **Board-only results endpoint** — `GET /billing/experiment-results` provides per-variant enrollment counts and conversion stats.
+
+### Implementation
+
+- Migration `0230_pricing_experiment_columns.sql` adds experiment columns to companies table
+- `pricing-experiment.ts` service handles deterministic assignment (SHA-256), config parsing, tier overrides
+- `GET /billing/experiment-variant` — variant lookup for any company member
+- `GET /billing/experiment-results` — board-only results summary
+- `POST /billing/create-checkout-session` includes variant in Stripe metadata
+- Full test suite: 14 unit tests + 14 integration tests
+
+---
+
+## SEO Metadata Infrastructure (v0.4.1) — August 23, 2026
+
+[Full release notes →](/support/releases/v0-4-1-seo-metadata)
+
+### Highlights
+
+- **Dynamic Sitemap at `/sitemap.xml`** — Paperclip now generates a live XML sitemap listing active companies and public issue pages, serving it with proper caching headers. Search engines discover your content automatically.
+- **Custom Robots.txt** — `/robots.txt` tells crawlers to index public content while blocking `/api/` paths, keeping internal APIs out of search results.
+- **Per-Page Titles and Meta Descriptions** — Every page now has a descriptive browser tab title (e.g., "Dashboard — Paperclip", "Agent Detail — Paperclip") and key pages include search-result summaries via `<meta name="description">`.
+- **Open Graph / Twitter Card Tags** — Every page with a title and description now automatically generates social media preview tags. Links shared on Slack, Twitter/X, LinkedIn, and Discord show a rich card with the page title, description, and optional image.
+- **No Configuration Required** — SEO improvements and social previews are automatic and server-side. Companies hosting on Paperclip get search-engine-friendly pages without any setup.
+- **Graceful Degradation** — If the database is temporarily unavailable, the sitemap returns an empty listing (HTTP 200) instead of an error, preventing crawler retry storms. Base social media tags in `index.html` provide fallback previews before React components render.
+
+[Full release notes →](/support/releases/v0-4-1-seo-metadata)
+
+---
+
+## Feature Gating / Paywall — August 22, 2026
+
+[Full release notes →](/support/releases/voy-1609-feature-gating)
+
+### Highlights
+
+- **Subscription Feature Gating** — Added `requireFeature` Express middleware that gates operations behind subscription tier features. Routes check `checkFeatureAccess` before proceeding; denied requests return `403 PAYWALL` with a descriptive message.
+- **Four Gated Operations** — API key creation (`api_access`), advanced agent creation (`advanced_agents`), member invites past seat limit (`unlimited_seats`), and marketplace plugin installation (`custom_plugins` — free feature).
+- **Ten Feature Keys** — The feature catalog includes `custom_plugins`, `advanced_agents`, `audit_logs`, `api_access`, `priority_support`, `extended_storage`, `sso`, `custom_roles`, `advanced_reporting`, and `unlimited_seats`.
+- **Degradation Handling** — When a subscription cancels at period end, paid features are denied once the paid period elapses — even if Stripe still reports the subscription as active.
+- **Free Feature Passthrough** — Features in the `FREE_FEATURES` set bypass all checks, ensuring core functionality is always available.
+
+[Full release notes →](/support/releases/voy-1609-feature-gating)
+
+---
+
+## P1-2 TOCTOU Billing Fix — August 22, 2026
+
+[Full release notes →](/support/releases/voy-1669-toctou-billing-fix)
+
+### Highlights
+
+- **TOCTOU Race Fix in Subscription Creation** — Two concurrent subscription creation requests can no longer produce duplicate subscriptions. The INSERT now uses `ON CONFLICT` — if the race is lost, the orphan Stripe subscription is cancelled and the winner's record is returned. No more double-billing risk from rapid button clicks or race conditions.
+- **Usage Report Race Fix** — Concurrent usage reports for the same metric and billing period are now handled safely via `INSERT ... ON CONFLICT DO UPDATE` (upsert). No more duplicate usage records.
+- **Seven More Stripe Calls Gain Retry** — `subscriptions.retrieve()`, `subscriptions.update()`, `subscriptions.create()`, `subscriptionItems.createUsageRecord()`, and `invoices.list()` are now wrapped in `withStripeRetry` for automatic exponential-backoff retry on transient Stripe failures. All 10 Stripe API call sites in the billing service are now protected.
+- **Zero Downtime/API Impact** — No endpoint changes, no request/response changes, no new environment variables, no configuration changes. All fixes are server-side.
+
+[Full release notes →](/support/releases/voy-1669-toctou-billing-fix)
+
+---
+
+## Post-v0.5.0 Incremental — August 21, 2026
+
+[Full release notes →](/support/releases/prx-46-heartbeat-failure-webhook)
+
+### Highlights
+
+- **Heartbeat Failure Webhook** — Server operators can now configure a webhook URL (`PAPERCLIP_HEARTBEAT_FAILURE_WEBHOOK_URL`) to receive real-time JSON POST notifications when a heartbeat run reaches a terminal failure status. Four failure paths covered: process lost, agent not found, adapter failure, and setup failure. Fire-and-forget delivery — never breaks the triggering operation. Webhook status is shown in the server startup banner.
+
+---
+
+## v0.5.0 Market Readiness Release — August 20, 2026
+
+[Full release notes →](/support/releases/v0.5.0-market-readiness)
+
+### Highlights
+
+- **Self-Service Onboarding** — New users can sign up with email/password and create a company in minutes via the onboarding wizard. `POST /api/start` creates a company, CEO agent, goal, project, and starter task in one request. Twelve role packs with tailored skills and knowledge assets.
+
+- **Stripe Billing Integration** — Full Stripe subscription management: tier plans, create/update/cancel/reactivate subscriptions, usage reporting (seats, agent runs, storage), invoice sync, and Stripe webhooks. Billing mutations are board-user-only — agents are blocked with 403.
+
+- **Multi-Channel Notifications** — Five notification types delivered via in-app panel, SMTP email, or web push (VAPID). Per-type preferences with instant/daily/weekly digest options. Delivery telemetry with per-channel status tracking. Fire-and-forget dispatch — failures never break the triggering operation.
+
+- **Agent Marketplace** — Browse pre-built agents and hire them with one click. Each agent ships with curated skills, default adapter config, and permissions. Hires are gated behind `agents:create` permission and board-approval policy.
+
+- **Company Templates (Production-Stable)** — Four pre-built templates (Travel Concierge, Support Ops, Engineering Team, CPA Firm) with atomic all-or-nothing deployment. Already graduated from alpha in Phase 1 with this release adding documentation and polish.
+
+- **Knowledge Starter Packs** — Pre-curated knowledge document bundles (Engineering, Travel Industry) that install directly into a company's knowledge base. Title-based deduplication, operator-extensible via JSON data files.
+
+- **Multi-User Invites** — Company invites with viewer/operator/admin roles, structured join-request flow, and a dedicated invite landing page.
+
+- **Documentation Expansion** — New setup guides for billing, notifications, marketplace, templates, and knowledge packs. Full FAQ. Updated quickstart covering the entire v0.5.0 feature surface. All new API reference docs for onboarding, billing, notifications, marketplace, company templates, and knowledge starter packs.
+
+[Full release notes →](/support/releases/v0.5.0-market-readiness)
 
 ---
 
