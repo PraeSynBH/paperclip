@@ -1,12 +1,10 @@
 # Support Case Assessment: Stripe Billing Robustness Fixes (v0.2.13)
 
-> ⚠️ **Fork-only implementation removed; upstream-compatible restoration in progress.** The fork-specific Stripe billing code was removed during upstream merge cleanup (commit `de8529fc03`). The Staff Engineer is restoring billing with upstream-compatible code (VOY-1590 in_progress). This assessment describes the **old fork-specific implementation** and may be stale. Pending: VOY-1590 completion.
-
-**Feature**: Stripe billing integration hardening — deleted customer detection, safe status mapping, auto-downgrade, stale-ref repair, trialing sync
+**Feature**: Stripe billing integration hardening — deleted customer detection, safe status mapping, auto-downgrade, stale-ref repair, trialing sync, webhook body parsing fix, portal link resilience, trial-to-paid upsert fix
 **Assessed by**: Support Engineer
-**Date**: 2026-08-15
-**Related**: VOY-944, VOY-896, VOY-905, VOY-1218, VOY-1227
-**Release**: v0.2.13
+**Date**: 2026-08-25 (updated)
+**Related**: VOY-944, VOY-896, VOY-905, VOY-1218, VOY-1227, VOY-2217, VOY-2218, VOY-2117
+**Release**: v0.2.13 / Voyonder billing bug fixes
 
 ## Feature Overview (User Perspective)
 
@@ -106,3 +104,44 @@ A: The safe status mapping fix eliminates crashes caused by unexpected Stripe st
 | Billing page crash persists after hard refresh | Medium | Staff Engineer | Likely unrelated to this fix — investigate root cause |
 | Stale customer reference not healing on checkout | Medium | CTO | Auto-repair may have a gap — provide Stripe customer ID |
 | Trial user wrongly assigned Free tier | High | CTO | Regression in trialing subscription logic (VOY-905) |
+
+## Recent Fixes (August 25, 2026)
+
+### Portal Link 500 Error (VOY-2218)
+
+**Symptom:** Trial-only customers see a 500 error when clicking "Billing" or "Manage Subscription."
+
+**Root cause:** `GET /api/billing/portal-link` called `stripe.billingPortal.sessions.create()` with a `null` `stripeCustomerId` for trial users who haven't entered a credit card.
+
+**Fix:** The endpoint now checks for `stripeCustomerId` before calling Stripe. Trial-only users are redirected to the dashboard billing settings page instead of hitting Stripe's portal API.
+
+**Troubleshooting:**
+1. Verify the company's `stripeCustomerId` in the database (it may be legitimately null for trial-only users)
+2. If `stripeCustomerId` is set but the portal still 500s, check Stripe dashboard for customer validity
+3. If the fix is deployed and a customer with an active Stripe subscription still gets redirected to the dashboard (not the Stripe portal), escalate to CTO
+
+### Webhook Body Parsing Fix (VOY-2217)
+
+**Symptom:** Stripe webhook events (subscription updates, invoice payments) are not being processed. Subscription status doesn't update after checkout.
+
+**Root cause:** The `express.raw()` middleware was not properly structured — the global `express.json()` parser was running before the webhook handler could access the raw body for signature verification.
+
+**Fix:** The webhook route now uses a local `express.raw()` parser mounted before the global JSON parser. The raw body is attached to `req.rawBody`.
+
+**Troubleshooting:**
+1. Check Stripe dashboard → Developers → Webhooks for recent delivery attempts
+2. If webhooks show "HTTP 400" or "Signature verification failed," verify `STRIPE_WEBHOOK_SECRET` is set correctly
+3. Confirm the webhook endpoint URL is `https://voyonder.com/api/billing/webhook`
+
+### Trial-to-Paid Conversion Crash (VOY-2117)
+
+**Symptom:** Trial user completes Stripe Checkout but gets an error instead of converting to paid.
+
+**Root cause:** The upsert `ON CONFLICT` target was `stripe_subscription_id`, but trial rows have `stripe_subscription_id = NULL`, so the conflict match never fired — causing a unique constraint violation.
+
+**Fix:** Changed `ON CONFLICT` target to `company_id`.
+
+**Troubleshooting:**
+1. Check server logs for unique constraint violations on the `companies` table
+2. Verify the company has a single row — if duplicate rows exist from before the fix, manual DB cleanup may be needed
+3. If the customer was charged but their subscription didn't activate, check Stripe dashboard for the subscription and manually update the company record via the admin panel

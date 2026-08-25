@@ -11,6 +11,24 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
+## Billing Bug Fixes — August 25, 2026
+
+[Full release notes →](/support/releases/voy-2217-2218-billing-bug-fixes)
+
+### Highlights
+
+- **Stripe Webhook Body Parsing Fix** — The Stripe webhook endpoint now correctly preserves the raw request body for signature verification. The `express.raw()` middleware is mounted before the global JSON parser, ensuring webhook events (subscription updates, invoice payments, trial conversions) are properly verified and processed. Previously, certain Stripe events could be silently rejected.
+
+- **Portal Link Resilience for Trial Users** — Trial-only customers without an active Stripe subscription no longer see a 500 error when accessing the billing portal. The `GET /api/billing/portal-link` endpoint now handles three states: active subscriptions get a real Stripe portal link, trial-only users get redirected to the dashboard billing settings, and unconfigured Stripe environments return a graceful fallback URL.
+
+- **Trial-to-Paid Conversion Fix** — The upsert conflict target was corrected from `stripe_subscription_id` to `company_id`, fixing a crash when trial users completed Stripe Checkout to upgrade to a paid plan. SQL's `NULL = NULL` semantics were preventing the conflict match on the old target.
+
+- **Zero Configuration Changes** — No new environment variables, no API contract changes, no UI changes. All fixes are server-side and invisible to end users under normal operation.
+
+[Full release notes →](/support/releases/voy-2217-2218-billing-bug-fixes)
+
+---
+
 ## M5 A/B Pricing Experiment — August 23, 2026
 
 **Status: Implementation complete. Awaiting Code Review and QA.**
