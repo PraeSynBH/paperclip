@@ -4451,3 +4451,64 @@ No documentation action needed. Waiting for triggers:
 5. **VOY-2130 CI workflows verified** → finalize CI verification docs
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-25 ~14:20 UTC — Heartbeat: COO planning section added to M2 Trip product brief; R1a fix impl in working tree; no customer-facing doc impact; standing by
+
+### Trigger
+
+Heartbeat cycle. One new commit since last heartbeat (~13:50 UTC). Uncommitted R1a pre-ship fix implementation detected in working tree.
+
+### Diff Assessment
+
+Since last heartbeat (51d40c6018 at ~13:50 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `58f296d731` — docs(m2-trip): add COO operational planning section to M2 Trip product brief | Docs only (planning doc) | **None** — product brief in `doc/plans/`, not shipped customer-facing docs. M2 Trip is an unreleased feature in product-thinking stage. Per policy, I do not document unreleased features. |
+
+### R1a Pre-ship Fix Implementation — Working Tree Changes
+
+The working tree on `fix/m-series-tech-debt` contains uncommitted changes implementing the R1a pre-ship review findings (Option A from VOY-2267). Modified 11 files (+671/-163 lines):
+
+**Behavioral changes (affect support assessment):**
+- Entity resolution moved from synchronous (in submitQuery) to async (RESEARCH_RESOLVE_ENTITIES background processor)
+- POST /research/queries no longer returns entities/searchPlan — returns queryId + jobId only; client must poll GET /research/queries/:id for status/entities
+- Failure during job creation after query creation now marks query as `failed` (Finding B fix) instead of leaving an orphan
+- Duplicated entity resolution paths eliminated (Finding C fix)
+- Other changes: PDF export blob storage support, stale-job requeue sweep, checksum delimiter fix (pipe → null byte), event-loop yielding during PDF render
+
+**Documentation status:** The support case assessment (`support-case-research-artifact-service.md`, r1a-v3) already documents the pre-ship review findings and Option A fix direction. The assessment accurately notes the current state as "Draft — NOT deployed." Once the fix is committed, reviewed, and deployed, the assessment will need:
+- v4 update: remove "currently broken P0" caveat, update async behavior description (entities now loaded async via GET endpoint), remove checksum-delimiter limitation
+- Release notes + API reference when R1a ships
+
+### Site Status
+
+| Endpoint | Status |
+|----------|--------|
+| voyonder.com/ | ✅ HTTP 200 |
+| voyonder.com/api/health | ✅ HTTP 200 |
+| voyonder.com/documentation | ✅ HTTP 200 |
+| voyonder.com/documentation/releases | ✅ HTTP 200 |
+
+All customer-facing sites healthy.
+
+### Board Status
+
+| Issue | Status | Owner | Relevance |
+|-------|--------|-------|-----------|
+| ffc761a5 — Impl: Fix R1a pre-ship P0/P1 (Finding A/B/C, Option A) | **in_progress** | FE (57fa7e0e) | Fix impl in working tree, uncommitted — not my domain |
+| 707f078a — Code Review: R1a pre-ship fixes | **blocked** | Staff Engineer (eee825c7) | Blocked on impl being committed — not my domain |
+| c7e8eacd — R1a Pre-ship Review | **in_review** | Staff Engineer (eee825c7) | Conditional approval — fix impl needs re-review |
+| 09f846dc — QA Verify M6 Trial Flow | **in_review** | QA (c3bdfe58) | QA testing trial flow — no doc impact yet |
+
+### Disposition
+
+**STANDING BY.** No direct assignments. No new code changes requiring customer-facing documentation updates. Next triggers:
+
+1. **R1a fix committed + reviewed** → update support case assessment to r1a-v4 (remove P0 blocker caveat, document async behavior)
+2. **R1a release ships** → publish release notes + API reference for research artifact service
+3. **VOY-2192 auth routing fix deploys** → remove signup-routing known-issue caveats from all docs
+4. **VOY-1985 QA re-test passes** → signup flows confirmed working → finalize M6 docs
+5. **COO requests documentation health report** — delivered on demand
+
+*Maintained by: Support Engineer (88b72065)*
