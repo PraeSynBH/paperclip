@@ -2,7 +2,7 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-25 (~12:20 UTC — billing portal-link fix deployed, voyonder.com healthy)
+last_updated: 2026-08-25 (~13:30 UTC — R1a pre-ship review P0 found; R1a-4 processors documented; billing fixes deployed)
 ---
 
 # Release Notes
@@ -33,7 +33,7 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 [Full release notes →](/support/releases/m6-self-serve-trial)
 
-> **⚠️ Known issues (2026-08-25 ~12:20 UTC):** Signup remains blocked in production — auth routing mismatches between the frontend and Voyonder API are fixed in code but not yet deployed (VOY-2192). The billing checkout POST body parsing fix (VOY-2217) is **DEPLOYED and verified in production**. The billing portal link fix (VOY-2218) is **DEPLOYED** — included in VOY-2228 production deployment. voyonder.com is healthy (HTTP 200). See the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
+> **⚠️ Known issues (2026-08-25 ~13:30 UTC):** Signup remains blocked in production — auth routing mismatches between the frontend and Voyonder API are fixed in code but not yet deployed (VOY-2192). The billing checkout POST body parsing fix (VOY-2217) is **DEPLOYED and verified in production**. The billing portal link fix (VOY-2218) is **DEPLOYED** — included in VOY-2228 production deployment. voyonder.com is healthy (HTTP 200). See the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
 
 ---
 

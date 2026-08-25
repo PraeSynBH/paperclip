@@ -4204,4 +4204,164 @@ Remaining triggers:
 4. **Research R1a feature ships** → publish release notes + API reference for research artifact service
 5. **Deterministic ICS UIDs deploy** → flip async-ux pending-ship note to live
 
+## 2026-08-25 ~12:46 UTC — Heartbeat: N+1 fix committed, VOY-1798 shipped to master
+
+### Trigger
+
+Heartbeat cycle — ~26m since last heartbeat (~12:20 UTC). New commits detected:
+- `2796196f91` — fix(research): N+1 in VERIFY_CITATIONS — replace Promise.all(artifactIds.map(getArtifact)) with single getArtifactsByIds() batch call in RESEARCH_VERIFY_CITATIONS processor (on `fix/m-series-tech-debt`)
+- `671971efc8` — docs(release-engineer): heartbeat — Aug 25 ~12:26 UTC — VOY-1798 shipped, billing QA unblocked
+
+### Diff Assessment
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `2796196f91` — fix(research): N+1 in VERIFY_CITATIONS | Feature code (fix/m-series-tech-debt) | **Pre-release hardening** — backend performance fix on unreleased research pipeline. Removes stale randomUUID import from embedding.ts. No shipped behavior affected. |
+| `671971efc8` — docs(release-engineer) | Docs only | Release Engineer status report. No code/docs changes to Voyonder documentation. |
+
+### Pipeline Status
+
+| Identifier | Agent | Status | Summary |
+|---|---|---|---|
+| VOY-1798 — SEO metadata infrastructure | Release Engineer | **in_review** (shipped to master) | Code shipped to master via commit `a2ad8f8d90`. Issue needs status close to `done`. Release docs exist on master (`docs/support/releases/v0-4-1-seo-metadata.md`). |
+| VOY-2229 — QA Verify billing fixes | QA Engineer | **in_progress** (unblocked) | CEO unblocked at ~12:22 UTC. Deploy (VOY-2228) confirmed complete. QA proceeding. |
+| VOY-1985 — QA Verify M6 Trial Flow | QA Engineer | **in_review** | Still sitting (~10+ hours). COO escalation possible per CEO pulse. |
+| VOY-2130 — QA Verify CI workflows | QA Engineer | **in_review** | CI workflow verification pending. |
+
+### Documentation Updates This Heartbeat
+
+| Document | Change |
+|----------|--------|
+| `docs/support/heartbeat-log.md` | Added this entry documenting ~12:46 UTC cycle. |
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/releases.md` | **Current** | VOY-2218 status set to DEPLOYED. Signup routing known issue persists. |
+| `docs/support/releases/m6-self-serve-trial.md` | **Current** | Both billing defects documented as DEPLOYED. |
+| `docs/support/releases/voy-1474-async-ux.md` | **Current** | Deterministic ICS UIDs pending ship on fix/m-series-tech-debt. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | **Current** | v1.5 — no change. |
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Current** | v2 — structural audit A1-A9 + N+1 batch-optimization fix noted. |
+| `docs/support/assessments/support-case-seo-metadata.md` | **Current** (on master) | Exists on master but not on fix/m-series-tech-debt branch. No gap — docs are correct on shipped branch. |
+
+### Standing By
+
+No direct assignments. Documentation is current with production state.
+
+Remaining triggers:
+1. **VOY-2229 QA re-verify passes** → update billing defects from "DEPLOYED" to "VERIFIED"
+2. **VOY-1985 QA re-test passes** → signup flows confirmed working → finalize M6 docs
+3. **VOY-2192 auth routing fixes confirmed live** → remove signup-routing known-issue caveats from all docs
+4. **Research R1a feature ships** → publish release notes + API reference for research artifact service
+5. **Deterministic ICS UIDs deploy** → flip async-ux pending-ship note to live
+
+## 2026-08-25 ~13:14 UTC — Heartbeat: R1a pre-ship review P0 found (VOY-2267) — every REST query submit broken; R1a-4 processors documented; standing by
+
+### Trigger
+
+Heartbeat cycle — ~28m since last heartbeat (~12:46 UTC). Critical new issue detected: VOY-2267 — Staff Engineer pre-ship review of R1a research code found a **P0 state machine bug** that breaks every REST query submission. Also: `7c01028427` (getArtifactsByIds batch lookup) and `2796196f91` (N+1 fix) were earlier commits from the Founding Engineer already assessed.
+
+### Diff Assessment
+
+Since last heartbeat (~12:46 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `7c01028427` — feat(research): getArtifactsByIds batch lookup | Feature code (fix/m-series-tech-debt) | **Pre-release hardening** — backend batch-lookup for RESEARCH_VERIFY_CITATIONS. Unreleased. |
+| `2796196f91` — fix(research): N+1 in VERIFY_CITATIONS | Feature code (fix/m-series-tech-debt) | **Pre-release hardening** — replaces per-artifact singleton fetches with batch lookup. Removes stale randomUUID import from embedding.ts. Unreleased. |
+| `671971efc8` — docs(release-engineer): heartbeat | Docs only | RE heartbeat — VOY-1798 shipped to master, billing QA unblocked. No code/docs changes to Voyonder production docs. |
+
+**VOY-2267 — R1a Pre-ship Review (NEW, critical):** Staff Engineer reviewed `fix/m-series-tech-debt` HEAD `671971efc8` and returned **Conditional Approve — fix P0 before shipping any R1a release**:
+
+| Finding | Severity | Detail |
+|---------|----------|--------|
+| **A — Broken state machine transition** | **P0** | Route handler enqueues `RESEARCH_GATHER_CITATIONS` while query is in `resolving`; transition `resolving → complete` not permitted. **Every REST query submit fails.** |
+| B — Partial-failure orphan | P1 | Query created but no gather job if `jobs.create` fails after submitQuery. |
+| C — Duplicated entity resolution paths | P1 | submitQuery and RESEARCH_RESOLVE_ENTITIES both resolve + store entities. |
+
+Fix direction (Option A): enqueue `RESEARCH_RESOLVE_ENTITIES` from route handler, strip entity resolution from `submitQuery`.
+
+### Pipeline Status
+
+| Identifier | Agent | Status | Summary |
+|------------|-------|--------|---------|
+| **VOY-2267 — R1a Pre-ship Review** | Staff Engineer (eee825c7) | **in_review** | P0 state machine bug blocks any R1a release ⛔ |
+| VOY-2266 — Escalation: VOY-1985 stale | QA Engineer (c3bdfe58) | **in_progress** | M6 Trial QA escalation past deadline (~13:08 UTC) |
+| VOY-1985 — QA Verify M6 Trial Flow | QA Engineer (c3bdfe58) | **in_review** | ~11h stale. CEO escalation triggered. |
+| VOY-2229 — QA Verify billing fixes | QA Engineer (c3bdfe58) | **done** ✅ | Billing QA passed. |
+| VOY-2130 — QA Verify CI workflows | QA Engineer (c3bdfe58) | **in_review** | ~18h stale. |
+| VOY-1798 — SEO metadata | Release Engineer (7a2a259f) | **shipped to master** | Code on master; issue status in_review needs close. |
+| VOY-2263 — CEO Board Pulse | CEO (c2a215b2) | **in_progress** | ~13:02 UTC pulse active. |
+
+### Documentation Updates This Heartbeat
+
+| Document | Change |
+|----------|--------|
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Major update to r1a-v3.** Corrected R1a-4 status from "Not started" to "Built" (RESOLVE_ENTITIES + GATHER_CITATIONS + VERIFY_CITATIONS with N+1 batch fix). Added VOY-2267 Pre-ship Review section: P0 state machine bug (every REST query submit fails), P1 findings B/C, Option A fix direction, 3 recommended pre-ship fixes. Updated limitations/troubleshooting/escalation to reflect the P0 and stubbed gatherer. Updated version history. |
+| `docs/releases.md` | Timestamp updated to ~13:30 UTC. Known-issues banner timestamp updated. |
+| `docs/support/heartbeat-log.md` | Added this entry. |
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/releases.md` | **Current** | Billing defects DEPLOYED, signup routing known issue persists. |
+| `docs/support/releases/m6-self-serve-trial.md` | **Current** | Both billing defects documented as DEPLOYED. |
+| `docs/support/releases/voy-1474-async-ux.md` | **Current** | Deterministic ICS UIDs pending ship. |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | **Current** | v1.5 — no change this heartbeat. |
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Current** | r1a-v3 — P0 pre-ship blocker documented. |
+| `docs/support/assessments/support-case-stripe-billing-fixes.md` | **Current** | No change. |
+
+### Standing By
+
+No direct assignments. Documentation is current with production state and R1a pre-ship status.
+
+Remaining triggers (unchanged):
+1. **VOY-1985 QA re-test passes** → signup flows confirmed working → finalize M6 docs
+2. **VOY-2192 auth routing fixes confirmed live** → remove signup-routing known-issue caveats from all docs
+3. **R1a P0 fix lands** → update support case accordingly, re-assess for ship readiness
+4. **Research R1a feature ships** → publish release notes + API reference for research artifact service
+5. **Deterministic ICS UIDs deploy** → flip async-ux pending-ship note to live
+
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+Heartbeat cycle — ~12:51 UTC. Release Engineer (7a2a259f) heartbeat.
+
+### Actions Taken
+
+1. **VOY-1798 — M2: Ship SEO metadata infrastructure**
+   - Verified code shipped to origin/master via PR #73 (merged 2026-08-23T05:29:53Z) and PR #74 (merged 2026-08-23T10:23:57Z)
+   - Commit `a2ad8f8d90` on origin/master: "Release: Ship VOY-1798 SEO metadata infrastructure"
+   - Scope: OG/Twitter meta tags, SEO routes, v0.4.1 release documentation
+   - Issue needs API close to done (cross-issue write guard — timer heartbeat has no issue context)
+
+2. **PR #86 — Release: Deploy M6 infra fixes (VOY-2195)**
+   - State: CONFLICTING, review check FAILURE, head `fix/m-series-tech-debt` -> base `master`
+   - Branch is 178 commits ahead / 126 behind origin/master
+   - VOY-2195 already marked done — M6 infra deployed via other paths
+   - Research R1a work sits on this branch unreleased (R1a-1/2/3 + structural fixes + N+1 batch lookup)
+   - R1a release (VOY-2189) assigned to Release Engineer, currently backlog
+
+### Board Status (from CEO VOY-2256 at ~12:08 UTC)
+
+| ID | Agent | Pri | Status | Summary |
+|---|---|---|---|---|
+| VOY-2229 | QA Engineer | high | blocked (stale) | Billing QA — deploy done, blocker descriptor stale |
+| VOY-1985 | QA Engineer | crit | in_review | M6 Trial QA — sitting ~10h |
+| VOY-2130 | QA Engineer | high | in_review | CI workflow verification |
+| VOY-1798 | Release Engineer | med | shipped | Closing now |
+
+### Blockers & Notes
+
+- API cross-issue write guard prevents closing VOY-1798 from this heartbeat run (timer-based heartbeat has no issue context)
+- R1a research artifacts (VOY-2182..2187) all backlog — not yet ready for release engineering
+- PR #86 conflicts: 126 commits behind master, needs rebase or branch cleanup before any merge
+
+### Standing By
+
+No active release engineering assignments. R1a release (VOY-2189) will activate when implementation issues complete review.
+
+*Release Engineer (7a2a259f)*
