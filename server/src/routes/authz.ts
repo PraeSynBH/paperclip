@@ -3,7 +3,7 @@ import type { AuthorizationAction, AuthorizationActor, AuthorizationResource } f
 import { forbidden, unauthorized } from "../errors.js";
 
 export function assertAuthenticated(req: Request) {
-  if (req.actor.type === "none") {
+  if (!req.actor || req.actor.type === "none") {
     throw unauthorized();
   }
 }
