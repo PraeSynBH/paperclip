@@ -260,13 +260,15 @@ The brief should be treated as directional — the CTO and engineers should chal
 
 ### Scope Summary
 
-| Item | Priority | Story Points (Est.) | Dependencies | Sprint |
-|------|----------|---------------------|-------------|--------|
-| **A. Trip Page Simplification** | P0 | 8-13 | M2 async infra complete, R1a research pipeline deployed | Sprint 1 |
-| **B. Research-as-Infrastructure** | P1 | 5-8 | R1a research pipeline deployed (artifacts + citations live) | Sprint 1 (after R1a) |
-| **C. Intelligent Urgency** | P1 | 5-8 | Item A (modes must exist before urgency can be mode-aware) | Sprint 2 |
-| **D. Background Process Tray Evolution** | P2 | 3-5 | Item A (tray inline display depends on new mode layout) | Sprint 2 |
-| **E. Shared Trip Experience** | P2 | 5-8 | Items A, B (share consolidation depends on phase model) | Sprint 3 |
+| Item | Issue | Priority | Story Points (Est.) | Dependencies | Sprint |
+|------|-------|----------|---------------------|-------------|--------|
+| **A. Trip Page Simplification** | VOY-2282 | P0 | 8-13 | M2 async infra complete, R1a research pipeline deployed | Sprint 1 |
+| **B. Research-as-Infrastructure** | VOY-2283 | P1 | 5-8 | R1a research pipeline deployed (artifacts + citations live) | Sprint 1 (after R1a) |
+| **C. Intelligent Urgency** | VOY-2284 | P1 | 5-8 | Item A (modes must exist before urgency can be mode-aware) | Sprint 2 |
+| **D. Background Process Tray Evolution** | VOY-2285 | P2 | 3-5 | Item A (tray inline display depends on new mode layout) | Sprint 2 |
+| **E. Shared Trip Experience** | VOY-2286 | P2 | 5-8 | Items A, B (share consolidation depends on phase model) | Sprint 3 |
+
+Child issues created on 2026-08-25 by COO; dependency chain wired via `blockedByIssueIds` (C, D → A; E → A, B).
 
 ### Sprint Placement Rationale
 
@@ -309,11 +311,12 @@ The brief should be treated as directional — the CTO and engineers should chal
 ### Next Steps
 
 1. ✅ Product brief delivered (this document)
-2. 🔲 **CEO:** Review simplified trip page mockup (before Sprint 1)
-3. 🔲 **CTO:** Technical assessment — mode detection, SSE transitions, offline support
-4. 🔲 **Founding Engineer:** Sprint 1 implementation — Items A + B
-5. 🔲 **Staff Engineer:** Sprint 2 architecture — Items C + D
-6. 🔲 **QA:** Cross-sprint verification plan
+2. ✅ COO operational planning complete — child issues created (VOY-2282 → VOY-2286)
+3. 🔲 **CEO:** Review simplified trip page mockup (before Sprint 1)
+4. 🔲 **CTO:** Technical assessment — mode detection, SSE transitions, offline support
+5. 🔲 **Founding Engineer:** Sprint 1 implementation — Items A + B
+6. 🔲 **Staff Engineer:** Sprint 2 architecture — Items C + D
+7. 🔲 **QA:** Cross-sprint verification plan
 
 ---
 
