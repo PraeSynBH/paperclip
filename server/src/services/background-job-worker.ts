@@ -10,6 +10,7 @@ import { resolveQuery, type ResolvedQuery } from "./entity-resolver.js";
 import { publishLiveEvent } from "./live-events.js";
 import { logger } from "../middleware/logger.js";
 import PDFDocument from "pdfkit";
+import type { StorageService } from "../storage/types.js";
 
 /**
  * Background job worker.
@@ -34,6 +35,14 @@ export interface BackgroundJobWorkerOptions {
   processorTimeoutMs?: number;
   /** Max retries for transient processor failures. Default 2. */
   maxRetries?: number;
+  /** Stale-job requeue sweep interval in ms. Default 5 minutes. */
+  staleSweepIntervalMs?: number;
+  /** Live events for requeued stale jobs. Default true. */
+  emitStaleRequeueEvents?: boolean;
+  /** Storage service for export artifacts (PDF/ICS). When provided, export
+   *  results are stored as objects and only the objectKey is kept in the job
+   *  result row, avoiding multi-megabyte base64 blobs in JSONB. */
+  storage?: StorageService;
 }
 
 type JobProcessor = (ctx: {
@@ -49,11 +58,15 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
   const batchSize = options?.batchSize ?? 5;
   const processorTimeoutMs = options?.processorTimeoutMs ?? 300_000; // 5 min default
   const maxRetries = options?.maxRetries ?? 2;
+  const staleSweepIntervalMs = options?.staleSweepIntervalMs ?? 300_000; // 5 min default
+  const emitStaleRequeueEvents = options?.emitStaleRequeueEvents ?? true;
+  const storage = options?.storage;
   const svc = backgroundJobService(db);
   const research = researchSearchService(db);
   const artifactSvc = researchArtifactService(db);
 
   let timer: ReturnType<typeof setInterval> | null = null;
+  let staleSweepTimer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
   let inFlight = 0;
 
@@ -99,9 +112,9 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
       return result;
     },
 
-    [BACKGROUND_JOB_TYPES.EXPORT_PDF]: async ({ payload, report }) => {
+    [BACKGROUND_JOB_TYPES.EXPORT_PDF]: async ({ companyId, payload, report }) => {
       const title = typeof payload.title === "string" ? payload.title : "Research Export";
-      await report(40, "Rendering PDF…");
+      await report(10, "Preparing PDF…");
 
       const items = Array.isArray(payload.items) ? payload.items : [];
       const buffers: Buffer[] = [];
@@ -116,54 +129,40 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
       });
 
       doc.on("data", (chunk: Buffer) => buffers.push(chunk));
-      await new Promise<void>((resolve, reject) => {
-        doc.on("end", () => resolve());
-        doc.on("error", (err) => reject(err));
 
-        // Title page
-        doc.fontSize(24).font("Helvetica-Bold").text(title, { align: "center" });
-        doc.moveDown(0.5);
-        doc.fontSize(10).font("Helvetica").fillColor("#666")
-          .text(`Generated: ${new Date().toISOString()}`, { align: "center" });
-        doc.moveDown(1.5);
-
-        // Items
-        doc.fontSize(12).font("Helvetica-Bold").fillColor("#000");
-        for (const item of items) {
-          const itemTitle = typeof item.title === "string" ? item.title : typeof item.name === "string" ? item.name : "Item";
-          const itemDesc = typeof item.description === "string" ? item.description : typeof item.body === "string" ? item.body : "";
-
-          doc.moveDown(0.75);
-          doc.fontSize(11).font("Helvetica-Bold").text(itemTitle, { underline: true });
-          doc.moveDown(0.25);
-
-          if (itemDesc) {
-            doc.fontSize(9).font("Helvetica").fillColor("#333").text(itemDesc, {
-              width: doc.page.width - 100,
-              align: "justify",
-            });
-          }
-
-          // Add a thin separator
-          doc.moveDown(0.25);
-          doc.fontSize(7).fillColor("#ccc").text("─".repeat(80));
-          doc.fillColor("#000");
-
-          // Page break safeguard — if we're near the bottom, start a new page
-          if (doc.y > doc.page.height - 120) {
-            doc.addPage();
-          }
-        }
-
-        doc.end();
-      });
+      // Render items with periodic event-loop yields so the worker doesn't
+      // starve other request handling during large PDF exports.
+      await renderPdfItems(doc, title, items);
 
       const pdfBuffer = Buffer.concat(buffers);
 
       await report(90, "PDF rendered — storing…");
-      // In production, upload pdfBuffer to blob storage (S3 etc.) and return a URL.
-      // For now we store the buffer as a base64 data-URL so the client can
-      // download it directly from the job result.
+
+      if (storage) {
+        // Store in blob storage and return a URL (avoids base64 bloat in JSONB).
+        const sanitizedTitle = title.replace(/[^a-zA-Z0-9._-]/g, "_").replace(/_{2,}/g, "_").slice(0, 80) || "export";
+        const pdfResult = await storage.putFile({
+          companyId,
+          namespace: "exports/pdf",
+          originalFilename: `${sanitizedTitle}.pdf`,
+          contentType: "application/pdf",
+          body: pdfBuffer,
+        });
+
+        await report(100, "Export complete");
+        return {
+          kind: "pdf",
+          title,
+          objectKey: pdfResult.objectKey,
+          provider: pdfResult.provider,
+          byteLength: pdfResult.byteSize,
+          itemCount: items.length,
+          generatedAt: new Date().toISOString(),
+        };
+      }
+
+      // Fallback: inline base64 data-URI (for development/test when no
+      // storage service is configured).
       const base64 = pdfBuffer.toString("base64");
 
       await report(100, "Export complete");
@@ -220,11 +219,15 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
 
       await report(40, `Resolved ${resolved.entities.length} entities`);
 
-      // Store resolved entities on the research query row and transition
-      // status from pending → resolving.
-      if (resolved.entities.length > 0) {
-        await artifactSvc.setQueryEntities(companyId, researchQueryId, resolved.entities as any);
-      }
+      // Store resolved entities (or empty array) on the research query row and
+      // transition status from pending → resolving. Always calling
+      // setQueryEntities (even with empty entities) ensures the state machine
+      // stays valid: pending → resolving, then resolving → gathering below.
+      // Without this, a query with no recognizable entities would stay in
+      // `pending` and the subsequent updateQueryStatus(..., "gathering") would
+      // fail with "Invalid query status transition: pending → gathering".
+      // (R1a pre-ship review Finding A — Option A fix)
+      await artifactSvc.setQueryEntities(companyId, researchQueryId, resolved.entities as any);
 
       await report(60, "Entities stored — transitioning to gathering…");
       // Advance to gathering so downstream consumers know citation work
@@ -666,7 +669,19 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
     try {
       const rows = await claimQueuedJobs();
       inFlight += rows.length;
-      await Promise.all(rows.map((row) => processJob(row).finally(() => { inFlight -= 1; })));
+      const results = await Promise.allSettled(
+        rows.map((row) =>
+          processJob(row).finally(() => {
+            inFlight -= 1;
+          }),
+        ),
+      );
+      // Log per-job outcomes for observability.
+      for (const result of results) {
+        if (result.status === "rejected") {
+          logger.error({ err: result.reason }, "Background job tick — individual job rejected (should not happen with per-job retry loop)");
+        }
+      }
     } catch (err) {
       logger.error({ err }, "Background job worker tick failed");
     } finally {
@@ -688,6 +703,16 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
       timer = setInterval(() => void tick(), pollIntervalMs);
       timer.unref?.();
       void tick();
+
+      // Periodic stale-job requeue sweep — runs alongside the poll timer
+      // so orphaned `running` jobs are caught even without a worker restart.
+      // Also cleans up terminal jobs older than the retention window to
+      // prevent unbounded growth of the background_jobs table.
+      staleSweepTimer = setInterval(() => {
+        void requeueStaleJobs().catch(() => {});
+      }, staleSweepIntervalMs);
+      staleSweepTimer.unref?.();
+
       logger.info({ pollIntervalMs, batchSize }, "Background job worker started");
     },
     stop: () => {
@@ -695,6 +720,10 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
       if (timer) {
         clearInterval(timer);
         timer = null;
+      }
+      if (staleSweepTimer) {
+        clearInterval(staleSweepTimer);
+        staleSweepTimer = null;
       }
       logger.info("Background job worker stopped");
     },
@@ -704,6 +733,10 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
       if (timer) {
         clearInterval(timer);
         timer = null;
+      }
+      if (staleSweepTimer) {
+        clearInterval(staleSweepTimer);
+        staleSweepTimer = null;
       }
       if (inFlight === 0) {
         logger.info("Background job worker shut down (no in-flight jobs)");
@@ -722,6 +755,8 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
     },
     /** Exposed for tests — runs one poll cycle. */
     tick,
+    /** Exposed for tests — runs the stale-job requeue sweep immediately. */
+    requeueStaleJobs,
   };
 }
 
@@ -746,7 +781,7 @@ function buildVEvent(event: Record<string, unknown>): string[] {
   // duplicate events every time the user re-exports. A 64-bit hex hash keeps
   // the UID short while remaining collision-safe for a trip's event set.
   const uidHash = createHash("sha256")
-    .update([title, start ?? "", end ?? ""].join("|"))
+    .update([title, start ?? "", end ?? ""].join("\0"))
     .digest("hex")
     .slice(0, 16);
 
@@ -777,9 +812,69 @@ function toIcsDate(value: string): string {
  * source data produces the same checksum across job retries.
  */
 function computeChecksum(content: string, source: string): string {
+  // Use null-byte delimiter to avoid delimiter collision with content
+  // (the previously-used pipe `|` could appear in content, producing
+  // false duplicate checksums — R1a pre-ship review Finding G).
   return createHash("sha256")
-    .update([content, source].join("|"))
+    .update([content, source].join("\0"))
     .digest("hex");
+}
+
+/**
+ * Render PDF pages with periodic event-loop yields to prevent CPU-bound
+ * PDFKit rendering from starving the event loop on large exports.
+ * Returns when `doc.end()` fires.
+ */
+async function renderPdfItems(doc: PDFKit.PDFDocument, title: string, items: unknown[]): Promise<void> {
+  const done = new Promise<void>((resolve, reject) => {
+    doc.on("end", () => resolve());
+    doc.on("error", (err) => reject(err));
+  });
+
+  // Title page
+  doc.fontSize(24).font("Helvetica-Bold").text(title, { align: "center" });
+  doc.moveDown(0.5);
+  doc.fontSize(10).font("Helvetica").fillColor("#666")
+    .text(`Generated: ${new Date().toISOString()}`, { align: "center" });
+  doc.moveDown(1.5);
+
+  // Items
+  doc.fontSize(12).font("Helvetica-Bold").fillColor("#000");
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i] as Record<string, unknown>;
+    const itemTitle = typeof item.title === "string" ? item.title : typeof item.name === "string" ? item.name : "Item";
+    const itemDesc = typeof item.description === "string" ? item.description : typeof item.body === "string" ? item.body : "";
+
+    doc.moveDown(0.75);
+    doc.fontSize(11).font("Helvetica-Bold").text(itemTitle, { underline: true });
+    doc.moveDown(0.25);
+
+    if (itemDesc) {
+      doc.fontSize(9).font("Helvetica").fillColor("#333").text(itemDesc, {
+        width: doc.page.width - 100,
+        align: "justify",
+      });
+    }
+
+    // Add a thin separator
+    doc.moveDown(0.25);
+    doc.fontSize(7).fillColor("#ccc").text("─".repeat(80));
+    doc.fillColor("#000");
+
+    // Page break safeguard — if we're near the bottom, start a new page
+    if (doc.y > doc.page.height - 120) {
+      doc.addPage();
+    }
+
+    // Yield to the event loop every 25 items so the worker doesn't
+    // starve other request handling during large PDF exports.
+    if (i > 0 && i % 25 === 0) {
+      await new Promise<void>((r) => setImmediate(r));
+    }
+  }
+
+  doc.end();
+  await done;
 }
 
 export type BackgroundJobWorker = ReturnType<typeof createBackgroundJobWorker>;

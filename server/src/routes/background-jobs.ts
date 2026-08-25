@@ -5,6 +5,9 @@ import { validate } from "../middleware/validate.js";
 import { backgroundJobService, type BackgroundJobService } from "../services/background-jobs.js";
 import { assertVoyonderAuth } from "../services/auth.js";
 import { subscribeCompanyLiveEvents } from "../services/index.js";
+import { getStorageService } from "../storage/index.js";
+import { BACKGROUND_JOB_TYPES } from "@paperclipai/shared";
+import { HttpError } from "../errors.js";
 
 const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(100).optional().default(50),
@@ -23,6 +26,12 @@ const SSE_HEARTBEAT_INTERVAL_SEC = 30;
 
 /** Max lifetime of a single SSE connection before forced cleanup (seconds). */
 const SSE_MAX_LIFETIME_SEC = 300;
+
+/** Set of job types that can be created via the direct POST endpoint.
+ *  Only types with registered processors are allowed — unregistered types
+ *  would get stuck in `queued` forever. See processJob() in the worker
+ *  for the one-to-one mapping between job types and processor functions. */
+const ALLOWED_JOB_TYPES = new Set<string>(Object.values(BACKGROUND_JOB_TYPES));
 
 export function backgroundJobRoutes(db: Db) {
   const router = Router();
@@ -108,6 +117,44 @@ export function backgroundJobRoutes(db: Db) {
   });
 
   /**
+   * GET /api/companies/:companyId/background-jobs/:id/download
+   * Stream a blob-stored export artifact (e.g. PDF) from the job result.
+   * Returns 404 when the job result has no storage objectKey (e.g. legacy
+   * inline dataUri results which the client fetches from getById directly).
+   */
+  router.get("/companies/:companyId/background-jobs/:id/download", async (req, res, next) => {
+    const auth = assertVoyonderAuth(req);
+    const companyId = auth.companyId;
+    const jobId = req.params.id as string;
+
+    const job = await svc.getById(jobId, companyId);
+    if (!job) {
+      res.status(404).json({ error: "Background job not found" });
+      return;
+    }
+    const result = job.result as Record<string, unknown> | null;
+    const objectKey = typeof result?.objectKey === "string" ? result.objectKey : null;
+    if (!objectKey || !result) {
+      res.status(404).json({ error: "Export artifact not stored on object storage" });
+      return;
+    }
+
+    const storage = getStorageService();
+    const object = await storage.getObject(companyId, objectKey);
+    const contentType =
+      object.contentType ?? (result.kind === "pdf" ? "application/pdf" : "application/octet-stream");
+    const safeName = result.kind === "pdf" ? "export.pdf" : "export.bin";
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `attachment; filename="${safeName}"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Content-Length", String(object.contentLength ?? 0));
+    object.stream.on("error", (err) => {
+      next(err);
+    });
+    object.stream.pipe(res);
+  });
+
+  /**
    * POST /api/companies/:companyId/background-jobs
    * Create a new background job (board-only).
    */
@@ -117,6 +164,13 @@ export function backgroundJobRoutes(db: Db) {
     async (req, res) => {
       const auth = assertVoyonderAuth(req);
       const companyId = auth.companyId;
+
+      // Restrict direct job creation to registered job types. Unregistered
+      // types would be claimed by the worker and then failed with "No
+      // processor registered" — better to reject at the API boundary.
+      if (!ALLOWED_JOB_TYPES.has(req.body.jobType)) {
+        throw new HttpError(400, `Unsupported background job type: ${req.body.jobType}`);
+      }
 
       const job = await svc.create({
         companyId,

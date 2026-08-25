@@ -39,7 +39,7 @@ export const researchQueries = pgTable(
     // --- Execution tracking ---
     status: text("status").notNull().default("pending"),
     /** Link to the background job processing this query. */
-    jobId: uuid("job_id").references(() => backgroundJobs.id),
+    jobId: uuid("job_id").references(() => backgroundJobs.id, { onDelete: "set null" }),
 
     // --- Provenance ---
     createdByActorId: text("created_by_actor_id"),
@@ -50,6 +50,7 @@ export const researchQueries = pgTable(
     companyIdx: index("research_queries_company_idx").on(table.companyId),
     tripIdx: index("research_queries_trip_idx").on(table.tripId),
     statusIdx: index("research_queries_status_idx").on(table.status),
+    jobIdx: index("research_queries_job_idx").on(table.jobId),
   }),
 );
 

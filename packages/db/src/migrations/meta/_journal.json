@@ -1029,6 +1029,20 @@
       "tag": "0146_research_artifacts_unique_checksum",
       "version": "7",
       "when": 1787227879000
+    },
+    {
+      "breakpoints": true,
+      "idx": 147,
+      "tag": "0147_research_search_trgm",
+      "version": "7",
+      "when": 1787663305654
+    },
+    {
+      "breakpoints": true,
+      "idx": 148,
+      "tag": "0148_research_queries_job_index",
+      "version": "7",
+      "when": 1787664000000
     }
   ],
   "version": "7"

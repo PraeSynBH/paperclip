@@ -127,4 +127,7 @@ export { subscriptionInvoices } from "./subscription_invoices.js";
 export { researchArtifacts } from "./research_artifacts.js";
 export { researchQueries } from "./research_queries.js";
 export { trips } from "./trips.js";
+export type { ResearchArtifact, NewResearchArtifact } from "./research_artifacts.js";
+export type { ResearchQuery, NewResearchQuery } from "./research_queries.js";
+export type { Trip, NewTrip } from "./trips.js";
 export type { ResolvedEntity, TripDestination } from "./research-types.js";

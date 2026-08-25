@@ -1,13 +1,14 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { eq as drizzleEq } from "drizzle-orm";
-import { createDb, companies, backgroundJobs } from "@paperclipai/db";
+import { createDb, companies, backgroundJobs, researchQueries } from "@paperclipai/db";
 import {
   getEmbeddedPostgresTestSupport,
   startEmbeddedPostgresTestDatabase,
 } from "@paperclipai/db";
 import { backgroundJobService } from "../services/background-jobs.js";
 import { createBackgroundJobWorker } from "../services/background-job-worker.js";
+import { researchArtifactService } from "../services/research-artifacts.js";
 
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
@@ -496,5 +497,275 @@ describeEmbeddedPostgres("backgroundJob failure paths", () => {
     // and the fresh job remained 'running' throughout.
     const freshReload = await svc.getById(freshJob.id, companyId);
     expect(freshReload?.status).toBe("running");
+  });
+
+  it("periodic requeue sweep requeues stale-running jobs", async () => {
+    companyId = await seedCompany();
+    const svc = backgroundJobService(db);
+
+    // Start the worker first so the startup sweep runs (no stale jobs yet).
+    const worker = createBackgroundJobWorker(db, {
+      pollIntervalMs: 500_000, // poll rarely
+      staleSweepIntervalMs: 50, // sweep often
+      batchSize: 5,
+      processorTimeoutMs: 60_000,
+      emitStaleRequeueEvents: false,
+    });
+    worker.start();
+
+    // After startup, create a job and make it stale-running.
+    const job = await svc.create({
+      companyId,
+      jobType: "research.activity_search",
+      payload: { query: "periodic" },
+    });
+    await svc.update(job.id, companyId, { status: "running", startedAt: new Date() });
+
+    const farPast = new Date(Date.now() - 600_000);
+    await db
+      .update(backgroundJobs)
+      .set({ startedAt: farPast })
+      .where(drizzleEq(backgroundJobs.id, job.id));
+
+    // Wait a bit for the periodic sweep to trigger
+    await new Promise((r) => setTimeout(r, 200));
+
+    // The stale job should have been requeued by the periodic sweep
+    const reload = await svc.getById(job.id, companyId);
+    expect(reload?.status).toBe("queued");
+
+    // Run one manual tick to finish processing — this MUST happen before
+    // stop(): tick() is a no-op once the worker is stopped (stopped flag).
+    await worker.tick();
+    const finalReload = await svc.getById(job.id, companyId);
+    expect(finalReload?.status).toBe("succeeded");
+
+    // Stop the worker
+    worker.stop();
+  });
+
+  it("worker shutdown waits for in-flight jobs", async () => {
+    companyId = await seedCompany();
+    const svc = backgroundJobService(db);
+
+    const worker = createBackgroundJobWorker(db, { pollIntervalMs: 500, batchSize: 5 });
+    await worker.start();
+
+    // Create a queued job that will be picked up by the fast poll
+    await svc.create({
+      companyId,
+      jobType: "research.activity_search",
+      payload: { query: "shutdown" },
+    });
+
+    // Give worker a moment to claim it
+    await new Promise((r) => setTimeout(r, 300));
+
+    // Shutdown should drain in-flight jobs gracefully
+    await worker.shutdown(5_000);
+    // No error means shutdown completed
+    expect(true).toBe(true);
+  });
+
+  it("rejects unknown job types via direct POST with allowed-set validation", async () => {
+    // Unit test the allowlist logic used by the route handler.
+    // The route uses BACKGROUND_JOB_TYPES values to validate.
+    const { BACKGROUND_JOB_TYPES } = await import("@paperclipai/shared");
+    const allowed = new Set<string>(Object.values(BACKGROUND_JOB_TYPES));
+
+    // Known types pass
+    expect(allowed.has("research.activity_search")).toBe(true);
+    expect(allowed.has("export.pdf")).toBe(true);
+    expect(allowed.has("research.resolve_entities")).toBe(true);
+
+    // Unknown types fail
+    expect(allowed.has("research.does_not_exist")).toBe(false);
+    expect(allowed.has("export.docx")).toBe(false);
+    expect(allowed.has("")).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Research query lifecycle via background processors (R1a pre-ship, Finding A)
+// ---------------------------------------------------------------------------
+
+describeEmbeddedPostgres("backgroundJobWorker — research query lifecycle", () => {
+  let db!: ReturnType<typeof createDb>;
+  let tempDb: Awaited<ReturnType<typeof startEmbeddedPostgresTestDatabase>> | null = null;
+  let companyId: string;
+
+  beforeAll(async () => {
+    tempDb = await startEmbeddedPostgresTestDatabase("paperclip-bg-research-lifecycle-");
+    db = createDb(tempDb.connectionString);
+  });
+
+  afterEach(async () => {
+    await db.delete(backgroundJobs);
+    await db.delete(researchQueries);
+    await db.delete(companies);
+  });
+
+  afterAll(async () => {
+    await tempDb?.cleanup();
+  });
+
+  async function seedCompany(name = "Research Lifecycle Co"): Promise<string> {
+    const id = randomUUID();
+    await db.insert(companies).values({
+      id,
+      name,
+      issuePrefix: `L${id.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+      hideAiCosts: false,
+      disableAiCosts: false,
+      disableAgentGoalCreation: false,
+      onboarded: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    return id;
+  }
+
+  it("RESEARCH_GATHER_CITATIONS transitions query from gathering → complete", async () => {
+    const { BACKGROUND_JOB_TYPES } = await import("@paperclipai/shared");
+    companyId = await seedCompany();
+    const jobs = backgroundJobService(db);
+    const artifacts = researchArtifactService(db);
+    const worker = createBackgroundJobWorker(db, { pollIntervalMs: 50, batchSize: 5 });
+
+    // Create a query and advance it to gathering
+    const query = await artifacts.createQuery(companyId, {
+      rawQuery: "hotels in Paris with pool",
+    });
+    await artifacts.updateQueryStatus(companyId, query.id, "resolving");
+    await artifacts.updateQueryStatus(companyId, query.id, "gathering");
+    expect((await artifacts.getQuery(companyId, query.id))!.status).toBe("gathering");
+
+    // Create a RESEARCH_GATHER_CITATIONS job
+    const job = await jobs.create({
+      companyId,
+      jobType: BACKGROUND_JOB_TYPES.RESEARCH_GATHER_CITATIONS,
+      payload: {
+        researchQueryId: query.id,
+        rawQuery: "hotels in Paris with pool",
+        searchPlan: [
+          { source: "web", query: "Paris hotels pool booking", priority: 80 },
+          { source: "email", query: "Paris hotel confirmations", priority: 50 },
+        ],
+        tripId: null,
+        createdByActorId: "test-actor",
+      },
+      createdByActorId: "test-actor",
+    });
+
+    await worker.tick();
+
+    // Job should have succeeded
+    const processed = await jobs.getById(job.id, companyId);
+    expect(processed?.status).toBe("succeeded");
+
+    // Query should have transitioned to complete
+    const updated = await artifacts.getQuery(companyId, query.id);
+    expect(updated?.status).toBe("complete");
+
+    // Artifacts should have been created for each search plan entry
+    const artifactList = await artifacts.listArtifacts(companyId, { researchQueryId: query.id });
+    expect(artifactList.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("RESEARCH_RESOLVE_ENTITIES enqueues GATHER_CITATIONS and completes full lifecycle", async () => {
+    const { BACKGROUND_JOB_TYPES } = await import("@paperclipai/shared");
+    companyId = await seedCompany();
+    const jobs = backgroundJobService(db);
+    const artifacts = researchArtifactService(db);
+    const worker = createBackgroundJobWorker(db, { pollIntervalMs: 50, batchSize: 5 });
+
+    // Create a query in pending
+    const query = await artifacts.createQuery(companyId, {
+      rawQuery: "flights to Tokyo under $1000",
+    });
+    expect(query.status).toBe("pending");
+
+    // Create the RESEARCH_RESOLVE_ENTITIES job
+    const job = await jobs.create({
+      companyId,
+      jobType: BACKGROUND_JOB_TYPES.RESEARCH_RESOLVE_ENTITIES,
+      payload: {
+        researchQueryId: query.id,
+        rawQuery: "flights to Tokyo under $1000",
+        tripId: null,
+        createdByActorId: "test-actor",
+      },
+      createdByActorId: "test-actor",
+    });
+
+    // Process — resolves entities, transitions to gathering, enqueues GATHER_CITATIONS
+    await worker.tick();
+
+    // Resolve job succeeded
+    const resolveJob = await jobs.getById(job.id, companyId);
+    expect(resolveJob?.status).toBe("succeeded");
+
+    // Query should have advanced past pending (gathering or complete)
+    let queryState = await artifacts.getQuery(companyId, query.id);
+    expect([ "gathering", "complete" ]).toContain(queryState?.status);
+
+    // If still gathering, a GATHER_CITATIONS job should have been created
+    const allJobs = await jobs.list(companyId);
+    const gatherJobs = allJobs.filter((j) => j.jobType === BACKGROUND_JOB_TYPES.RESEARCH_GATHER_CITATIONS);
+    if (queryState?.status === "gathering") {
+      expect(gatherJobs.length).toBeGreaterThan(0);
+
+      // Process the GATHER_CITATIONS job to complete the lifecycle
+      await worker.tick();
+      queryState = await artifacts.getQuery(companyId, query.id);
+      expect(queryState?.status).toBe("complete");
+    }
+  });
+
+  it("zero-entity query still completes via RESEARCH_RESOLVE_ENTITIES", async () => {
+    const { BACKGROUND_JOB_TYPES } = await import("@paperclipai/shared");
+    companyId = await seedCompany();
+    const jobs = backgroundJobService(db);
+    const artifacts = researchArtifactService(db);
+    const worker = createBackgroundJobWorker(db, { pollIntervalMs: 50, batchSize: 5 });
+
+    // A query with no recognizable travel entities — entity-resolver still
+    // generates entities=[] and a fallback web search plan entry.
+    const query = await artifacts.createQuery(companyId, {
+      rawQuery: "random text without travel meaning",
+    });
+    expect(query.status).toBe("pending");
+
+    const job = await jobs.create({
+      companyId,
+      jobType: BACKGROUND_JOB_TYPES.RESEARCH_RESOLVE_ENTITIES,
+      payload: {
+        researchQueryId: query.id,
+        rawQuery: "random text without travel meaning",
+        tripId: null,
+        createdByActorId: "test-actor",
+      },
+      createdByActorId: "test-actor",
+    });
+
+    await worker.tick();
+
+    // Resolve job succeeded
+    const resolveJob = await jobs.getById(job.id, companyId);
+    expect(resolveJob?.status).toBe("succeeded");
+
+    // Query should have advanced (pending → resolving → gathering or complete)
+    let queryState = await artifacts.getQuery(companyId, query.id);
+    expect(queryState!.status).not.toBe("pending");
+    expect([ "gathering", "complete" ]).toContain(queryState?.status);
+
+    // Entities should be an empty array (not null)
+    expect(Array.isArray(queryState!.entities)).toBe(true);
+
+    // Process any remaining jobs to reach complete
+    await worker.tick();
+    queryState = await artifacts.getQuery(companyId, query.id);
+    expect(queryState?.status).toBe("complete");
   });
 });

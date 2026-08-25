@@ -13,7 +13,6 @@ import {
   type ResolvedEntity,
 } from "@paperclipai/db";
 import { badRequest, notFound } from "../errors.js";
-import { resolveQuery } from "./entity-resolver.js";
 
 /**
  * Research artifact store service — CRUD operations for research artifacts,
@@ -61,16 +60,17 @@ export function researchArtifactService(db: Db) {
   }
 
   /**
-   * Create a query, resolve entities, and store them — all in the service layer.
+   * Create a research query record in `pending` status.
    *
-   * This is the primary entry point for submitting a research query. It handles
-   * the full flow that the route handler previously orchestrated manually:
-   * 1. Create the query record in `pending` status
-   * 2. Run regex-based entity resolution (synchronous)
-   * 3. Store resolved entities and transition to `resolving` status
+   * Entity resolution has been moved to the RESEARCH_RESOLVE_ENTITIES background
+   * processor (see Option A in R1a pre-ship review). The route handler should
+   * enqueue RESEARCH_RESOLVE_ENTITIES after calling this function; it must not
+   * try to resolve entities inline, which avoids the duplicated-resolution race
+   * (Finding C) and the orphaned-query partial-failure bug (Finding B).
    *
-   * Returns the created query and the resolved entities so the caller
-   * (route handler or background job) can enqueue follow-up work.
+   * Returns the created query with empty entities/searchPlan. The caller
+   * (route handler) can return the queryId immediately; entities will be
+   * populated by the background processor and are available via GET queries/:id.
    */
   async function submitQuery(
     companyId: string,
@@ -80,21 +80,12 @@ export function researchArtifactService(db: Db) {
       createdByActorId?: string;
     },
   ): Promise<{ query: ResearchQuery; entities: ResolvedEntity[]; searchPlan: Array<{ source: "web" | "email" | "portal"; query: string; priority: number }> }> {
-    // 1. Create the query record
     const query = await createQuery(companyId, data);
-
-    // 2. Run entity resolution
-    const resolved = resolveQuery(data.rawQuery);
-
-    // 3. Store resolved entities (if any)
-    if (resolved.entities.length > 0) {
-      await setQueryEntities(companyId, query.id, resolved.entities as any);
-    }
 
     return {
       query,
-      entities: resolved.entities,
-      searchPlan: resolved.searchPlan,
+      entities: [],
+      searchPlan: [],
     };
   }
 
@@ -228,7 +219,7 @@ export function researchArtifactService(db: Db) {
    */
   async function createArtifact(
     companyId: string,
-    data: Omit<NewResearchArtifact, "id" | "createdAt" | "updatedAt">,
+    data: Omit<NewResearchArtifact, "id" | "companyId" | "createdAt" | "updatedAt">,
   ): Promise<ResearchArtifact> {
     // Validate source type
     const validSources = ["web", "email", "portal", "manual"];

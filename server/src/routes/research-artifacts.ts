@@ -88,10 +88,12 @@ export function researchArtifactRoutes(db: Db) {
    *
    * Submit a natural language research query. The query is:
    * 1. Validated and stored as a pending research query
-   * 2. Run through entity resolution (synchronous, regex-based)
-   * 3. Enqueued as a background job for citation gathering
+   * 2. Enqueued as a RESEARCH_RESOLVE_ENTITIES background job which resolves
+   *    entities (async), transitions to gathering, and fans out citation
+   *    gathering jobs
    *
-   * Returns 202 with queryId and jobId.
+   * Returns 202 with queryId and jobId. Entity resolution is asynchronous —
+   * the client can poll GET /research/queries/:queryId for status.
    */
   router.post(
     "/companies/:companyId/research/queries",
@@ -101,36 +103,48 @@ export function researchArtifactRoutes(db: Db) {
         const auth = assertVoyonderAuth(req);
         const companyId = auth.companyId;
 
-        // 1. Submit the query through the service layer (creates query +
-        //    runs entity resolution atomically)
-        const { query, entities, searchPlan } = await artifacts.submitQuery(companyId, {
+        // 1. Create the query record (entity resolution moved to background
+        //    processor — see Option A in R1a pre-ship review)
+        const { query } = await artifacts.submitQuery(companyId, {
           rawQuery: req.body.query,
           tripId: req.body.tripId,
           createdByActorId: auth.userId,
         });
 
-        // 2. Enqueue background job for citation gathering using the search plan
-        const job = await jobs.create({
-          companyId,
-          jobType: BACKGROUND_JOB_TYPES.RESEARCH_GATHER_CITATIONS,
-          payload: {
-            researchQueryId: query.id,
-            rawQuery: req.body.query,
-            searchPlan,
-            tripId: req.body.tripId ?? null,
+        // 2. Enqueue background job for entity resolution; the processor will
+        //    resolve entities, transition to gathering, and fan out to
+        //    RESEARCH_GATHER_CITATIONS for each search plan entry.
+        let job;
+        try {
+          job = await jobs.create({
+            companyId,
+            jobType: BACKGROUND_JOB_TYPES.RESEARCH_RESOLVE_ENTITIES,
+            payload: {
+              researchQueryId: query.id,
+              rawQuery: req.body.query,
+              tripId: req.body.tripId ?? null,
+              createdByActorId: auth.userId,
+            },
             createdByActorId: auth.userId,
-          },
-          createdByActorId: auth.userId,
-        });
+          });
 
-        // Link the job to the query
-        await artifacts.linkQueryJob(companyId, query.id, job.id);
+          // Link the job to the query
+          await artifacts.linkQueryJob(companyId, query.id, job.id);
+        } catch (err) {
+          // Finding B (P1): if job creation/linking fails after the query was
+          // created, the query would otherwise orphan in `pending` with no
+          // processor ever advancing it. Mark it `failed` (pending → failed is
+          // a valid transition) so it's visible to the user and retryable,
+          // then surface the original error to the caller.
+          await artifacts
+            .updateQueryStatus(companyId, query.id, "failed")
+            .catch(() => { /* best effort — the original error takes precedence */ });
+          throw err;
+        }
 
         res.status(202).json({
           queryId: query.id,
           jobId: job.id,
-          entities,
-          searchPlan,
         });
       } catch (err) {
         next(err);

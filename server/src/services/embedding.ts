@@ -31,8 +31,39 @@ const DEFAULT_MODEL = "text-embedding-3-small";
 const DEFAULT_DIMENSIONS = 1536;
 
 // Simple in-memory cache: key = hash of (text, model), value = embedding
+// LRU eviction: on access, the key is re-inserted (delete + set) to move it
+// to the end of the Map's insertion-order iteration. The first-inserted key
+// is evicted when size exceeds the limit.
 const embeddingCache = new Map<string, { embedding: number[]; cachedAt: number }>();
 const CACHE_MAX_SIZE = 1000;
+
+// ─── LRU helpers ────────────────────────────────────────────────────────────
+
+function cacheSet(
+  cache: Map<string, { embedding: number[]; cachedAt: number }>,
+  key: string,
+  value: { embedding: number[]; cachedAt: number },
+): void {
+  if (cache.size >= CACHE_MAX_SIZE) {
+    // Evict least-recently-used entry (first key in insertion order)
+    const firstKey = cache.keys().next().value;
+    if (firstKey) cache.delete(firstKey);
+  }
+  cache.set(key, value);
+}
+
+function cacheGet(
+  cache: Map<string, { embedding: number[]; cachedAt: number }>,
+  key: string,
+): { embedding: number[]; cachedAt: number } | undefined {
+  const entry = cache.get(key);
+  if (entry) {
+    // Move to end (most-recently-used position) by re-inserting
+    cache.delete(key);
+    cache.set(key, entry);
+  }
+  return entry;
+}
 
 // ─── Embedding Service Factory ──────────────────────────────────────────────
 
@@ -112,7 +143,7 @@ export function embeddingService(config?: EmbeddingConfig) {
 
     // Check cache
     const cacheKey = buildCacheKey(text, resolvedConfig.model!);
-    const cached = embeddingCache.get(cacheKey);
+    const cached = cacheGet(embeddingCache, cacheKey);
     if (cached && Date.now() - cached.cachedAt < EMBEDDING_CACHE_TTL_MS) {
       return {
         embedding: cached.embedding,
@@ -141,12 +172,7 @@ export function embeddingService(config?: EmbeddingConfig) {
       const inputTokens = usage?.prompt_tokens ?? 0;
 
       // Update cache
-      if (embeddingCache.size >= CACHE_MAX_SIZE) {
-        // Evict oldest entry
-        const firstKey = embeddingCache.keys().next().value;
-        if (firstKey) embeddingCache.delete(firstKey);
-      }
-      embeddingCache.set(cacheKey, { embedding, cachedAt: Date.now() });
+      cacheSet(embeddingCache, cacheKey, { embedding, cachedAt: Date.now() });
 
       return {
         embedding,

@@ -472,7 +472,7 @@ export async function createApp(
   // Background job worker — processes research/export jobs queued via the
   // research + export routes. Polls every 2s for queued jobs (see
   // services/background-job-worker.ts). Stopped in shutdownAppServices().
-  const backgroundJobWorker = createBackgroundJobWorker(db);
+  const backgroundJobWorker = createBackgroundJobWorker(db, { storage: opts.storageService });
   backgroundJobWorker.start();
   let feedbackExportShuttingDown = false;
   let feedbackExportTimer: ReturnType<typeof setInterval> | null = null;

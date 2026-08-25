@@ -123,10 +123,50 @@ describeEmbeddedPostgres("researchArtifactService — query lifecycle", () => {
   it("rejects invalid query transition: pending → complete (skip resolving+gathering)", async () => {
     companyId = await seedCompany();
     const query = await svc.createQuery(companyId, {
+      rawQuery: "generic topic without entities",
+    });
+
+    // pending → complete remains an invalid transition in the state machine.
+    // No-entities queries still go through the processor which advances
+    // pending → resolving (via setQueryEntities with an empty array) →
+    // gathering → complete.
+    await expect(svc.updateQueryStatus(companyId, query.id, "complete")).rejects.toThrow(
+      /Invalid query status transition/i,
+    );
+    // Status should remain unchanged
+    const q = await svc.getQuery(companyId, query.id);
+    expect(q!.status).toBe("pending");
+  });
+
+  it("lets no-entities queries complete via the resolver path (pending → resolving → gathering → complete)", async () => {
+    companyId = await seedCompany();
+    const query = await svc.createQuery(companyId, {
+      rawQuery: "generic topic without entities",
+    });
+
+    // What the RESEARCH_RESOLVE_ENTITIES processor does for a query with no
+    // recognizable entities: always calls setQueryEntities (even with empty
+    // entities, which advances pending → resolving), then resolving →
+    // gathering, then gathering → complete when the search plan is empty.
+    let updated = await svc.setQueryEntities(companyId, query.id, []);
+    expect(updated).toBeUndefined(); // setQueryEntities returns void
+    let q = await svc.getQuery(companyId, query.id);
+    expect(q!.status).toBe("resolving");
+
+    updated = await svc.updateQueryStatus(companyId, query.id, "gathering");
+    expect(updated.status).toBe("gathering");
+
+    updated = await svc.updateQueryStatus(companyId, query.id, "complete");
+    expect(updated.status).toBe("complete");
+  });
+
+  it("still rejects invalid query transition: pending → gathering (skip resolving)", async () => {
+    companyId = await seedCompany();
+    const query = await svc.createQuery(companyId, {
       rawQuery: "things to do in NYC",
     });
 
-    await expect(svc.updateQueryStatus(companyId, query.id, "complete")).rejects.toThrow(
+    await expect(svc.updateQueryStatus(companyId, query.id, "gathering")).rejects.toThrow(
       /Invalid query status transition/i,
     );
     // Status should remain unchanged
