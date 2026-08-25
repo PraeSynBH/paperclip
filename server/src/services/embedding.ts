@@ -234,13 +234,6 @@ export function embeddingService(config?: EmbeddingConfig) {
   }
 
   /**
-   * Generate embeddings for multiple texts in batch.
-   */
-  async function embedBatch(texts: string[]): Promise<EmbeddingResult[]> {
-    return Promise.all(texts.map((t) => embed(t)));
-  }
-
-  /**
    * Check whether the embedding service is configured (has an API key).
    */
   function isConfigured(): boolean {

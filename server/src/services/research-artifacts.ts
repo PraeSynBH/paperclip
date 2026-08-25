@@ -100,12 +100,19 @@ export function researchArtifactService(db: Db) {
 
   /**
    * Update entities on a query and transition status to `resolving`.
+   * Only valid from `pending` status. Uses conditional UPDATE to prevent
+   * stale transitions — retries that find the query already past `pending`
+   * will silently no-op instead of rolling the state machine backward.
    */
   async function setQueryEntities(
     companyId: string,
     queryId: string,
     entities: ResolvedEntity[],
   ): Promise<void> {
+    const current = await getQuery(companyId, queryId);
+    if (!current) return; // query gone, nothing to do
+    if (current.status !== "pending") return; // already past pending, don't roll back
+
     await db
       .update(researchQueries)
       .set({
@@ -113,7 +120,11 @@ export function researchArtifactService(db: Db) {
         status: "resolving",
         updatedAt: sql`now()`,
       })
-      .where(and(eq(researchQueries.id, queryId), eq(researchQueries.companyId, companyId)));
+      .where(and(
+        eq(researchQueries.id, queryId),
+        eq(researchQueries.companyId, companyId),
+        eq(researchQueries.status, "pending"), // guard: only transition from pending
+      ));
   }
 
   /**
@@ -246,6 +257,7 @@ export function researchArtifactService(db: Db) {
       })
       .onConflictDoUpdate({
         target: [researchArtifacts.companyId, researchArtifacts.checksum],
+        targetWhere: sql`${researchArtifacts.checksum} IS NOT NULL`,
         set: { fetchedAt: sql`now()`, updatedAt: sql`now()` },
       })
       .returning();

@@ -351,7 +351,12 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
       }
 
       // Mark the query complete — all gathering attempts have been made.
-      await artifactSvc.updateQueryStatus(companyId, researchQueryId, "complete");
+      // Only transition if not already complete, making this safe to retry
+      // if the worker's post-processing fails after a successful run.
+      const currentQuery = await artifactSvc.getQuery(companyId, researchQueryId);
+      if (currentQuery && currentQuery.status !== "complete") {
+        await artifactSvc.updateQueryStatus(companyId, researchQueryId, "complete");
+      }
 
       const totalAttempts = Math.max(searchPlan.length, rawQuery ? 1 : 0);
       const succeeded = totalAttempts - failed;
