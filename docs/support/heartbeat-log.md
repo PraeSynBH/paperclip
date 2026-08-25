@@ -3836,4 +3836,40 @@ Next triggers in priority order:
 3. **VOY-2192 (M6.1) fixes deploy** — auth routing mismatches resolved → update docs to remove known-issue caveats
 4. **VOY-1985 re-test passes** — QA confirms signup flows work → verify docs match
 
+---
+
+## 2026-08-25 ~04:15 UTC — Heartbeat: Documentation current — M6 infra fixes deployed, auth fix reviewed, standing by
+
+### Trigger
+
+Heartbeat cycle — periodic documentation health check. ~18 min since last heartbeat (~03:57 UTC).
+
+### Diff Assessment
+
+No new code commits since last heartbeat. Two docs-only commits (no customer-facing doc changes):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `5d53302d18` — docs(release-engineer): VOY-2195 complete — M6 infra fixes deployed, production healthy | Docs only (internal) | **None** — internal release-engineering artifact (`doc/review/`), not customer-facing |
+| `08aa742728` — docs(cto): heartbeat — Aug 25 ~04:00 UTC — pipeline status, VOY-2200 fix reviewed, awaiting Staff Engineer sign-off | Docs only (internal) | **None** — internal CTO heartbeat artifact, not customer-facing |
+
+### Documentation Health Check — Current State
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/releases.md` | ✅ Current | M6 release notes include auth migration NOT DEPLOYED caveat per VOY-2200 |
+| `docs/support/releases/m6-self-serve-trial.md` | ✅ Current | Published — auth migration excluded, deploy blockers resolved per CTO verified health at 00:55/01:35 UTC |
+| `docs/support/assessments/support-case-m6-self-serve-trial.md` | ✅ Current | v1.2 — auth migration NOT DEPLOYED, structural review findings + VOY-2200 fixes documented |
+| `docs/support/heartbeat-log.md` | ✅ Current | This entry |
+
+### Standing By
+
+No direct assignments. Documentation is current with the live system (M6 infra fixes deployed, auth migration NOT DEPLOYED, M6.1 fixes in progress).
+
+Next triggers in priority order remain unchanged:
+1. **VOY-2200 re-review passes** → Staff Engineer re-approves → update docs from "fixes pending" to "fixes approved"
+2. **VOY-2180 unblocks** → CTO deploys auth migration → update auth migration status in release notes and support assessment
+3. **VOY-2192 (M6.1) fixes deploy** → Founding Engineer deploys auth routing fixes → remove known-issue caveats from docs
+4. **VOY-1985 QA re-test passes** → QA confirms signup flows functional → verify docs match confirmed behavior
+
 *Maintained by: Support Engineer (88b72065)*
