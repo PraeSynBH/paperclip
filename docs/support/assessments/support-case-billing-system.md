@@ -29,7 +29,7 @@ The Billing System provides Stripe-integrated subscription management for Voyond
 ### New billing endpoints
 
 | Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
+|---|---|---|---|
 | `GET` | `/api/companies/:companyId/billing/tiers` | Any company member | List subscription tiers |
 | `GET` | `/api/companies/:companyId/billing/subscription` | Any company member | Get current subscription |
 | `POST` | `/api/companies/:companyId/billing/subscription` | Board user only | Create subscription (tier + billing period) |
@@ -94,6 +94,8 @@ If `STRIPE_SECRET_KEY` is not set, billing operations return an error — all en
 7. **"Billing webhook errors in logs"** — Check that `STRIPE_WEBHOOK_SECRET` matches the endpoint secret configured in the Stripe dashboard. The webhook endpoint is mounted at `POST /api/billing/webhook`.
 
 8. **"The billing portal link sent me to settings instead of Stripe"** — This is expected when the company has no active Stripe subscription (e.g., trial-only or no subscription at all). The portal-link endpoint uses three-state routing: no subscription or trial-only → internal settings page; active Stripe subscription → Stripe Customer Portal.
+
+10. **"The billing portal link sent me to settings instead of Stripe"** — This is expected when the company has no active Stripe subscription (e.g., trial-only or no subscription at all). The portal-link endpoint uses three-state routing: no subscription or trial-only → internal settings page; active Stripe subscription → Stripe Customer Portal.
 
 ## Auto-Notifications
 

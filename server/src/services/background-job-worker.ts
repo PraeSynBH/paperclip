@@ -5,6 +5,8 @@ import { backgroundJobs } from "@paperclipai/db";
 import { BACKGROUND_JOB_TYPES, type BackgroundJobType } from "@paperclipai/shared";
 import { backgroundJobService } from "./background-jobs.js";
 import { researchSearchService } from "./research-search.js";
+import { researchArtifactService } from "./research-artifacts.js";
+import { resolveQuery, type ResolvedQuery } from "./entity-resolver.js";
 import { publishLiveEvent } from "./live-events.js";
 import { logger } from "../middleware/logger.js";
 import PDFDocument from "pdfkit";
@@ -49,6 +51,7 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
   const maxRetries = options?.maxRetries ?? 2;
   const svc = backgroundJobService(db);
   const research = researchSearchService(db);
+  const artifactSvc = researchArtifactService(db);
 
   let timer: ReturnType<typeof setInterval> | null = null;
   let stopped = false;
@@ -195,6 +198,258 @@ export function createBackgroundJobWorker(db: Db, options?: BackgroundJobWorkerO
         calendarText: lines.join("\r\n"),
         eventCount: events.length,
         generatedAt: new Date().toISOString(),
+      };
+    },
+
+    // ── R1a processors ───────────────────────────────────────────────────
+
+    [BACKGROUND_JOB_TYPES.RESEARCH_RESOLVE_ENTITIES]: async ({ companyId, payload, report }) => {
+      const rawQuery = typeof payload.rawQuery === "string" ? payload.rawQuery : "";
+      const researchQueryId = typeof payload.researchQueryId === "string" ? payload.researchQueryId : "";
+      const tripId = typeof payload.tripId === "string" ? payload.tripId : undefined;
+
+      if (!rawQuery) {
+        throw new Error("RESEARCH_RESOLVE_ENTITIES: missing rawQuery in payload");
+      }
+      if (!researchQueryId) {
+        throw new Error("RESEARCH_RESOLVE_ENTITIES: missing researchQueryId in payload");
+      }
+
+      await report(20, "Resolving entities from query…");
+      const resolved: ResolvedQuery = resolveQuery(rawQuery);
+
+      await report(40, `Resolved ${resolved.entities.length} entities`);
+
+      // Store resolved entities on the research query row and transition
+      // status from pending → resolving.
+      if (resolved.entities.length > 0) {
+        await artifactSvc.setQueryEntities(companyId, researchQueryId, resolved.entities as any);
+      }
+
+      await report(60, "Entities stored — transitioning to gathering…");
+      // Advance to gathering so downstream consumers know citation work
+      // is expected.
+      await artifactSvc.updateQueryStatus(companyId, researchQueryId, "gathering");
+
+      // Fan out to gather_citations for each search plan entry.
+      if (resolved.searchPlan.length > 0) {
+        await report(75, `Enqueuing citation gathering for ${resolved.searchPlan.length} sources…`);
+        const gatherJob = await svc.create({
+          companyId,
+          jobType: BACKGROUND_JOB_TYPES.RESEARCH_GATHER_CITATIONS,
+          payload: {
+            researchQueryId,
+            rawQuery,
+            searchPlan: resolved.searchPlan,
+            tripId: tripId ?? null,
+            createdByActorId: typeof payload.createdByActorId === "string" ? payload.createdByActorId : null,
+          },
+          createdByActorId: typeof payload.createdByActorId === "string" ? payload.createdByActorId : null,
+        });
+
+        // Link the gather job to the query
+        await artifactSvc.linkQueryJob(companyId, researchQueryId, gatherJob.id);
+      } else {
+        // No search plan — mark query complete (falls back to keyword search)
+        logger.info({ researchQueryId, rawQuery }, "No search plan generated — marking query complete");
+        await artifactSvc.updateQueryStatus(companyId, researchQueryId, "complete");
+      }
+
+      await report(100, `Entity resolution complete — ${resolved.entities.length} entities, ${resolved.searchPlan.length} search plan entries`);
+      return {
+        rawQuery,
+        researchQueryId,
+        entityCount: resolved.entities.length,
+        entities: resolved.entities,
+        searchPlan: resolved.searchPlan,
+        gatherJobId: resolved.searchPlan.length > 0 ? undefined : null, // populated if fan-out occurred
+      };
+    },
+
+    [BACKGROUND_JOB_TYPES.RESEARCH_GATHER_CITATIONS]: async ({ companyId, payload, report }) => {
+      const researchQueryId = typeof payload.researchQueryId === "string" ? payload.researchQueryId : "";
+      const rawQuery = typeof payload.rawQuery === "string" ? payload.rawQuery : "";
+      const searchPlan = Array.isArray(payload.searchPlan) ? payload.searchPlan : [];
+      const tripId = typeof payload.tripId === "string" ? payload.tripId : undefined;
+
+      if (!researchQueryId) {
+        throw new Error("RESEARCH_GATHER_CITATIONS: missing researchQueryId in payload");
+      }
+
+      const artifacts: Array<{ source: string; query: string; artifactId?: string }> = [];
+      let failed = 0;
+
+      for (let i = 0; i < searchPlan.length; i++) {
+        const entry = searchPlan[i] as { source?: string; query?: string; priority?: number } | undefined;
+        if (!entry || !entry.query) continue;
+
+        await report(
+          Math.round(10 + (i / searchPlan.length) * 80),
+          `Processing source ${i + 1}/${searchPlan.length}: ${entry.source ?? "web"} — "${entry.query.slice(0, 60)}…"`,
+        );
+
+        const source = entry.source ?? "web";
+
+        try {
+          // TODO(R1a-5): Wire up actual web search, email search, portal search.
+          // For R1a-4 we create placeholder artifacts from the search plan
+          // so the research query has visible progress in the UI instead of
+          // hanging at "gathering" forever.
+          const checksum = computeChecksum(rawQuery || entry.query, source);
+          const artifact = await artifactSvc.createArtifact(companyId, {
+            tripId: tripId ?? null,
+            researchQueryId,
+            sourceType: source === "web" ? "web" : source === "email" ? "email" : "portal",
+            sourceUrl: null,
+            sourceName: source === "web" ? "Web Search (stub)" : source === "email" ? "Email Index (stub)" : "Portal (stub)",
+            title: rawQuery
+              ? `Search: ${rawQuery.slice(0, 80)}`
+              : `Query: ${entry.query.slice(0, 80)}`,
+            snippet: `Search plan entry #${i + 1} for "${entry.query.slice(0, 120)}" — integration pending (R1a-5)`,
+            body: null,
+            confidence: 50,
+            relevanceScore: entry.priority ?? 50,
+            checksum,
+            status: "pending",
+            entities: [],
+            createdByActorId: typeof payload.createdByActorId === "string" ? payload.createdByActorId : null,
+          });
+          artifacts.push({ source, query: entry.query, artifactId: artifact.id });
+        } catch (err) {
+          logger.error({ err, source, query: entry.query, researchQueryId }, "Gather citations failed for source");
+          failed++;
+        }
+      }
+
+      // If the search plan is empty but we have a raw query, create a
+      // single fallback artifact so the query doesn't stall empty.
+      if (searchPlan.length === 0 && rawQuery) {
+        await report(90, "No search plan — creating fallback artifact…");
+        try {
+          const checksum = computeChecksum(rawQuery, "web");
+          const artifact = await artifactSvc.createArtifact(companyId, {
+            tripId: tripId ?? null,
+            researchQueryId,
+            sourceType: "web",
+            sourceUrl: null,
+            sourceName: "Web Search (fallback stub)",
+            title: `Search: ${rawQuery.slice(0, 80)}`,
+            snippet: `Fallback entry for "${rawQuery.slice(0, 120)}" — integration pending (R1a-5)`,
+            body: null,
+            confidence: 40,
+            relevanceScore: 50,
+            checksum,
+            status: "pending",
+            entities: [],
+            createdByActorId: typeof payload.createdByActorId === "string" ? payload.createdByActorId : null,
+          });
+          artifacts.push({ source: "fallback", query: rawQuery, artifactId: artifact.id });
+        } catch (err) {
+          logger.error({ err, researchQueryId }, "Fallback artifact creation failed");
+          failed++;
+        }
+      }
+
+      // Mark the query complete — all gathering attempts have been made.
+      await artifactSvc.updateQueryStatus(companyId, researchQueryId, "complete");
+
+      const totalAttempts = Math.max(searchPlan.length, rawQuery ? 1 : 0);
+      const succeeded = totalAttempts - failed;
+      await report(100, `Gathered ${succeeded}/${totalAttempts} sources — ${artifacts.length} artifacts created`);
+
+      return {
+        researchQueryId,
+        artifactsCreated: artifacts.length,
+        sourcesAttempted: totalAttempts,
+        sourcesFailed: failed,
+        artifacts,
+      };
+    },
+
+    [BACKGROUND_JOB_TYPES.RESEARCH_VERIFY_CITATIONS]: async ({ companyId, payload, report }) => {
+      const artifactIds = Array.isArray(payload.artifactIds)
+        ? payload.artifactIds.filter((id): id is string => typeof id === "string")
+        : undefined;
+      const limit = typeof payload.limit === "number" ? payload.limit : 50;
+
+      await report(20, "Fetching artifacts to verify…");
+
+      // List artifacts for this company, optionally filtered by specific IDs.
+      let artifactRows: Awaited<ReturnType<typeof artifactSvc.listArtifacts>>;
+      if (artifactIds && artifactIds.length > 0) {
+        // Fetch individual artifacts by ID.
+        const results = await Promise.all(
+          artifactIds.map((id) => artifactSvc.getArtifact(companyId, id)),
+        );
+        artifactRows = results.filter((a): a is NonNullable<typeof a> => a !== null);
+      } else {
+        artifactRows = await artifactSvc.listArtifacts(companyId, { limit });
+      }
+
+      if (artifactRows.length === 0) {
+        return { verified: 0, stale: 0, fresh: 0, artifacts: [] };
+      }
+
+      await report(50, `Checking freshness of ${artifactRows.length} artifacts…`);
+
+      const now = Date.now();
+      const STALE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days — citations older than this are stale
+      const FRESH_MS = 24 * 60 * 60 * 1000; // 24 hours — citations newer than this are fresh
+
+      const results: Array<{
+        id: string;
+        title: string;
+        freshness: "fresh" | "stale" | "unknown";
+        fetchedAt: string | null;
+        needsRefresh: boolean;
+      }> = [];
+
+      for (const artifact of artifactRows) {
+        const fetchedAt = artifact.fetchedAt;
+        let freshness: "fresh" | "stale" | "unknown";
+        let needsRefresh = false;
+
+        if (!fetchedAt) {
+          freshness = "unknown";
+          needsRefresh = true;
+        } else {
+          const ageMs = now - new Date(fetchedAt).getTime();
+          if (ageMs <= FRESH_MS) {
+            freshness = "fresh";
+          } else if (ageMs <= STALE_MS) {
+            freshness = "stale";
+            needsRefresh = true;
+          } else {
+            freshness = "unknown";
+            needsRefresh = true;
+          }
+        }
+
+        results.push({
+          id: artifact.id,
+          title: artifact.title ?? "",
+          freshness,
+          fetchedAt: fetchedAt ? new Date(fetchedAt).toISOString() : null,
+          needsRefresh,
+        });
+      }
+
+      const fresh = results.filter((r) => r.freshness === "fresh").length;
+      const stale = results.filter((r) => r.freshness === "stale").length;
+      const unknown = results.filter((r) => r.freshness === "unknown").length;
+
+      await report(
+        100,
+        `Verification complete — ${fresh} fresh, ${stale} stale, ${unknown} unknown (${results.filter((r) => r.needsRefresh).length} need refresh)`,
+      );
+
+      return {
+        verified: results.length,
+        fresh,
+        stale,
+        unknown,
+        needsRefresh: results.filter((r) => r.needsRefresh).length,
+        artifacts: results,
       };
     },
   };
@@ -511,6 +766,17 @@ function toIcsDate(value: string): string {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value.replace(/[-:]/g, "").replace(/\.\d{3}Z?$/, "Z");
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+}
+
+/**
+ * Deterministic SHA-256 checksum for deduplicating research artifacts.
+ * Uses the same inputs as createArtifact's dedup logic so that identical
+ * source data produces the same checksum across job retries.
+ */
+function computeChecksum(content: string, source: string): string {
+  return createHash("sha256")
+    .update([content, source].join("|"))
+    .digest("hex");
 }
 
 export type BackgroundJobWorker = ReturnType<typeof createBackgroundJobWorker>;

@@ -11,6 +11,12 @@ export const BACKGROUND_JOB_TYPES = {
   RESEARCH_AUTO_ASSESS: "research.auto_assess",
   /** Semantic upgrade of keyword search results via embedding/reranking */
   RESEARCH_SEMANTIC_SEARCH: "research.semantic_search",
+  /** Resolve entities from a natural language query (regex-based, Phase R1a) */
+  RESEARCH_RESOLVE_ENTITIES: "research.resolve_entities",
+  /** Gather citations from configured sources (web, email, portal) */
+  RESEARCH_GATHER_CITATIONS: "research.gather_citations",
+  /** Verify citation freshness and re-fetch stale ones */
+  RESEARCH_VERIFY_CITATIONS: "research.verify_citations",
   /** Generate a PDF export of research/trip results */
   EXPORT_PDF: "export.pdf",
   /** Generate an iCalendar (.ics) export of trip dates */

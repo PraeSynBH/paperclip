@@ -157,6 +157,7 @@ export function resolveQuery(query: string): ResolvedQuery {
 // ---------------------------------------------------------------------------
 
 function extractAirportCodes(query: string, entities: ResolvedEntity[]): void {
+  AIRPORT_CODE_RE.lastIndex = 0; // reset for safety (global regex with stale lastIndex)
   let match: RegExpExecArray | null;
   while ((match = AIRPORT_CODE_RE.exec(query)) !== null) {
     const code = match[1];
@@ -214,6 +215,7 @@ function extractAbsoluteDates(query: string, entities: ResolvedEntity[]): void {
   // Skip if we already have a date range (more specific)
   if (entities.some((e) => e.type === "date_range")) return;
 
+  ABSOLUTE_DATE_RE.lastIndex = 0; // reset for safety (global regex with stale lastIndex)
   let match: RegExpExecArray | null;
   while ((match = ABSOLUTE_DATE_RE.exec(query)) !== null) {
     entities.push({

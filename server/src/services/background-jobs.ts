@@ -23,13 +23,23 @@ export interface UpdateBackgroundJobInput {
   finishedAt?: Date | null;
 }
 
+/**
+ * Strip large binary result fields (e.g. dataUri/base64 PDF blobs) from
+ * background job results for list/SSE responses. The full result is
+ * available via the single-job getById() endpoint.
+ */
+function stripBinaryFields(result: Record<string, unknown> | null): Record<string, unknown> | null {
+  if (!result) return null;
+  return { ...result, dataUri: undefined };
+}
+
 export function backgroundJobService(db: Db) {
   function toApi(row: typeof backgroundJobs.$inferSelect, slim?: boolean) {
     // Strip large binary result data from list/slim responses to avoid
     // bandwidth amplification on tray polls and DB TOAST bloat on every
     // list query. The full result (including dataUri) is available via
     // the single-job getById() endpoint.
-    const result = slim && row.result ? { ...row.result, dataUri: undefined } : row.result;
+    const result = slim ? stripBinaryFields(row.result) : row.result;
     return {
       id: row.id,
       companyId: row.companyId,
@@ -53,7 +63,7 @@ export function backgroundJobService(db: Db) {
     // Strip large binary data from SSE payload — the client uses SSE as a
     // signal to re-fetch via getById(), never reads dataUri from the event.
     // Matches the slim projection in toApi().
-    const result = row.result ? { ...row.result, dataUri: undefined } : row.result;
+    const result = stripBinaryFields(row.result);
     try {
       publishLiveEvent({
         companyId: row.companyId,

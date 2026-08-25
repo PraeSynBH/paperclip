@@ -13,6 +13,7 @@ import {
   type ResolvedEntity,
 } from "@paperclipai/db";
 import { badRequest, notFound } from "../errors.js";
+import { resolveQuery } from "./entity-resolver.js";
 
 /**
  * Research artifact store service — CRUD operations for research artifacts,
@@ -57,6 +58,44 @@ export function researchArtifactService(db: Db) {
       .returning();
 
     return query;
+  }
+
+  /**
+   * Create a query, resolve entities, and store them — all in the service layer.
+   *
+   * This is the primary entry point for submitting a research query. It handles
+   * the full flow that the route handler previously orchestrated manually:
+   * 1. Create the query record in `pending` status
+   * 2. Run regex-based entity resolution (synchronous)
+   * 3. Store resolved entities and transition to `resolving` status
+   *
+   * Returns the created query and the resolved entities so the caller
+   * (route handler or background job) can enqueue follow-up work.
+   */
+  async function submitQuery(
+    companyId: string,
+    data: {
+      rawQuery: string;
+      tripId?: string;
+      createdByActorId?: string;
+    },
+  ): Promise<{ query: ResearchQuery; entities: ResolvedEntity[]; searchPlan: Array<{ source: "web" | "email" | "portal"; query: string; priority: number }> }> {
+    // 1. Create the query record
+    const query = await createQuery(companyId, data);
+
+    // 2. Run entity resolution
+    const resolved = resolveQuery(data.rawQuery);
+
+    // 3. Store resolved entities (if any)
+    if (resolved.entities.length > 0) {
+      await setQueryEntities(companyId, query.id, resolved.entities as any);
+    }
+
+    return {
+      query,
+      entities: resolved.entities,
+      searchPlan: resolved.searchPlan,
+    };
   }
 
   /**
@@ -122,6 +161,8 @@ export function researchArtifactService(db: Db) {
 
   /**
    * Update a research query's status with validation.
+   * Uses conditional UPDATE to prevent TOCTOU races: the UPDATE only
+   * succeeds if the row still has the status we validated against.
    */
   async function updateQueryStatus(
     companyId: string,
@@ -136,8 +177,19 @@ export function researchArtifactService(db: Db) {
     const [updated] = await db
       .update(researchQueries)
       .set({ status, updatedAt: sql`now()` })
-      .where(and(eq(researchQueries.id, queryId), eq(researchQueries.companyId, companyId)))
+      .where(and(
+        eq(researchQueries.id, queryId),
+        eq(researchQueries.companyId, companyId),
+        eq(researchQueries.status, query.status), // guard: only if status hasn't changed
+      ))
       .returning();
+
+    if (!updated) {
+      // Race detected — status changed between read and write
+      throw badRequest(
+        `Query status changed since read: expected ${query.status}, rejecting transition to ${status}`,
+      );
+    }
 
     return updated;
   }
@@ -157,7 +209,11 @@ export function researchArtifactService(db: Db) {
   // -----------------------------------------------------------------------
 
   /**
-   * Create a new research artifact.
+   * Create a new research artifact with atomic checksum-based dedup.
+   *
+   * Uses INSERT ... ON CONFLICT DO UPDATE to eliminate the read-then-write
+   * race window. Requires a unique partial index on (company_id, checksum)
+   * WHERE checksum IS NOT NULL (migration 0146).
    */
   async function createArtifact(
     companyId: string,
@@ -167,19 +223,6 @@ export function researchArtifactService(db: Db) {
     const validSources = ["web", "email", "portal", "manual"];
     if (!validSources.includes(data.sourceType)) {
       throw badRequest(`Invalid source type. Must be one of: ${validSources.join(", ")}`);
-    }
-
-    // Check dedup: if same checksum exists for this company, update fetchedAt instead
-    if (data.checksum) {
-      const existing = await findArtifactByChecksum(companyId, data.checksum);
-      if (existing) {
-        const [updated] = await db
-          .update(researchArtifacts)
-          .set({ fetchedAt: sql`now()`, updatedAt: sql`now()` })
-          .where(eq(researchArtifacts.id, existing.id))
-          .returning();
-        return updated;
-      }
     }
 
     const [artifact] = await db
@@ -200,6 +243,10 @@ export function researchArtifactService(db: Db) {
         checksum: data.checksum ?? null,
         status: data.status ?? "pending",
         createdByActorId: data.createdByActorId ?? null,
+      })
+      .onConflictDoUpdate({
+        target: [researchArtifacts.companyId, researchArtifacts.checksum],
+        set: { fetchedAt: sql`now()`, updatedAt: sql`now()` },
       })
       .returning();
 
@@ -386,6 +433,8 @@ export function researchArtifactService(db: Db) {
 
   /**
    * Update a trip's status with validation.
+   * Uses conditional UPDATE to prevent TOCTOU races: the UPDATE only
+   * succeeds if the row still has the status we validated against.
    */
   async function updateTripStatus(
     companyId: string,
@@ -400,8 +449,19 @@ export function researchArtifactService(db: Db) {
     const [updated] = await db
       .update(trips)
       .set({ status, updatedAt: sql`now()` })
-      .where(and(eq(trips.id, tripId), eq(trips.companyId, companyId)))
+      .where(and(
+        eq(trips.id, tripId),
+        eq(trips.companyId, companyId),
+        eq(trips.status, trip.status), // guard: only if status hasn't changed
+      ))
       .returning();
+
+    if (!updated) {
+      // Race detected — status changed between read and write
+      throw badRequest(
+        `Trip status changed since read: expected ${trip.status}, rejecting transition to ${status}`,
+      );
+    }
 
     return updated;
   }
@@ -491,6 +551,7 @@ export function researchArtifactService(db: Db) {
     updateQueryStatus,
     linkQueryJob,
     setQueryEntities,
+    submitQuery,
     // Artifacts
     createArtifact,
     getArtifact,

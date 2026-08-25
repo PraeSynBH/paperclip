@@ -5,7 +5,6 @@ import { BACKGROUND_JOB_TYPES } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
 import { researchArtifactService } from "../services/research-artifacts.js";
 import { backgroundJobService } from "../services/background-jobs.js";
-import { resolveQuery } from "../services/entity-resolver.js";
 import { assertVoyonderAuth } from "../services/auth.js";
 
 // ---------------------------------------------------------------------------
@@ -102,32 +101,24 @@ export function researchArtifactRoutes(db: Db) {
         const auth = assertVoyonderAuth(req);
         const companyId = auth.companyId;
 
-        // 1. Create the research query record
-        const query = await artifacts.createQuery(companyId, {
+        // 1. Submit the query through the service layer (creates query +
+        //    runs entity resolution atomically)
+        const { query, entities, searchPlan } = await artifacts.submitQuery(companyId, {
           rawQuery: req.body.query,
           tripId: req.body.tripId,
           createdByActorId: auth.userId,
         });
 
-        // 2. Run entity resolution (synchronous, regex-based)
-        const resolved = resolveQuery(req.body.query);
-
-        // Store resolved entities on the query record
-        if (resolved.entities.length > 0) {
-          // Use the service to update entities and transition status
-          // (direct DB access avoided — the service layer handles it)
-          await artifacts.setQueryEntities(companyId, query.id, resolved.entities as any);
-        }
-
-        // 3. Enqueue background job for citation gathering
+        // 2. Enqueue background job for citation gathering using the search plan
         const job = await jobs.create({
           companyId,
-          jobType: BACKGROUND_JOB_TYPES.RESEARCH_ACTIVITY_SEARCH,
+          jobType: BACKGROUND_JOB_TYPES.RESEARCH_GATHER_CITATIONS,
           payload: {
-            query: req.body.query,
-            resolvedEntities: resolved.entities,
-            searchPlan: resolved.searchPlan,
             researchQueryId: query.id,
+            rawQuery: req.body.query,
+            searchPlan,
+            tripId: req.body.tripId ?? null,
+            createdByActorId: auth.userId,
           },
           createdByActorId: auth.userId,
         });
@@ -138,8 +129,8 @@ export function researchArtifactRoutes(db: Db) {
         res.status(202).json({
           queryId: query.id,
           jobId: job.id,
-          entities: resolved.entities,
-          searchPlan: resolved.searchPlan,
+          entities,
+          searchPlan,
         });
       } catch (err) {
         next(err);
