@@ -955,10 +955,22 @@ export const LIVE_EVENT_TYPES = [
   "plugin.ui.updated",
   "plugin.worker.crashed",
   "plugin.worker.restarted",
-  "subscription.status.updated",
+  "plan.updated",
+  "plan.gate_created",
+  "plan.gate_resolved",
+  "notification.created",
   "background_job.status",
 ] as const;
 export type LiveEventType = (typeof LIVE_EVENT_TYPES)[number];
+
+/** Statuses for background jobs. */
+export const BACKGROUND_JOB_STATUSES = [
+  "queued",
+  "running",
+  "succeeded",
+  "failed",
+] as const;
+export type BackgroundJobStatus = (typeof BACKGROUND_JOB_STATUSES)[number];
 
 export const PRINCIPAL_TYPES = ["user", "agent"] as const;
 export type PrincipalType = (typeof PRINCIPAL_TYPES)[number];

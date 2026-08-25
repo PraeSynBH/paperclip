@@ -633,6 +633,7 @@ export {
   type PluginApiRouteCheckoutPolicy,
   type PluginEventType,
   type PluginBridgeErrorCode,
+  type BackgroundJobStatus,
 } from "./constants.js";
 
 export type { BillingPeriod } from "./constants.js";
@@ -649,6 +650,11 @@ export {
   type SummarySlotScopeSelectorInput,
   type WriteSummarySlotInput,
 } from "./validators/summary-slot.js";
+
+export {
+  BACKGROUND_JOB_TYPES,
+  type BackgroundJobType,
+} from "./background-job-types.js";
 
 export {
   ALL_INTERFACES_BIND_HOST,
@@ -2330,6 +2336,56 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./validators/index.js";
+
+export type {
+  MemoryBindingConfig,
+  MemoryCapabilities,
+  MemoryRecordType,
+  MemorySourceKind,
+  MemoryRecord,
+  MemoryScope,
+  MemorySourceRef,
+  MemoryQueryRequest,
+  MemoryContextBundle,
+  MemorySnippet,
+  MemoryRecordHandle,
+  MemoryUsage,
+  MemoryCaptureRequest,
+  MemoryRecordWriteEntry,
+  MemoryRecordWriteRequest,
+  MemoryListRequest,
+  MemoryListPage,
+  MemoryOperationType,
+  MemoryExtractionHookKind,
+  MemoryExtractionJobStatus,
+} from "./types/memory.js";
+
+export type {
+  KnowledgeDocumentStatus,
+  KnowledgeReviewStatus,
+  KnowledgeBacklinkSourceType,
+  KnowledgeDocument,
+  KnowledgeDocumentRevision,
+  KnowledgeDocumentReview,
+  KnowledgeSourceBacklink,
+  KnowledgeDocumentCreateRequest,
+  KnowledgeDocumentUpdateRequest,
+  KnowledgeDocumentPublishRequest,
+  KnowledgeDocumentSubmitReviewRequest,
+  KnowledgeDocumentReviewDecision,
+  KnowledgeDocumentListQuery,
+  KnowledgeDocumentListPage,
+  KnowledgeDocumentDiff,
+  KnowledgeCreateBacklinkRequest,
+  KnowledgeCreateBacklinkResponse,
+  KnowledgePromoteFromMemoryRequest,
+} from "./types/knowledge.js";
+
+export type {
+  BackgroundJob,
+  CreateBackgroundJobRequest,
+  BackgroundJobEvent,
+} from "./types/background-job.js";
 
 export { API_PREFIX, API } from "./api.js";
 export { normalizeAgentUrlKey, deriveAgentUrlKey, isUuidLike } from "./agent-url-key.js";

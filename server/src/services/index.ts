@@ -200,3 +200,19 @@ export {
   createPaperclipLogger,
 } from "./voyonder-bridge.js";
 export { createStorageServiceFromConfig, getStorageService } from "../storage/index.js";
+export { memoryBindingService, type MemoryBindingService } from "./memory-bindings.js";
+export { embeddingService, type EmbeddingService, type EmbeddingResult, type EmbeddingConfig } from "./embedding.js";
+export { builtinPgvectorAdapter, type BuiltinPgvectorAdapter, type BuiltinPgvectorAdapterInstance } from "./memory-adapter.js";
+export { memoryExtractionJobService, type MemoryExtractionJobService, type ExtractionJobResponse, type ExtractionJobListOptions } from "./memory-extraction-jobs.js";
+export { knowledgeDocumentService, type KnowledgeDocumentService } from "./knowledge-documents.js";
+export { companyTemplateService, type CompanyTemplateService } from "./company-templates.js";
+export { knowledgeStarterPackService, type KnowledgeStarterPackService } from "./knowledge-starter-packs.js";
+export { agentMarketplaceService, type AgentMarketplaceService } from "./agents-marketplace.js";
+export { installDbHealthWatchdog } from "./db-health-watchdog.js";
+export { notificationService } from "./notifications.js";
+export { billingService } from "./billing.js";
+export { backgroundJobService, type BackgroundJobService } from "./background-jobs.js";
+export { createBackgroundJobWorker, type BackgroundJobWorker } from "./background-job-worker.js";
+export { researchSearchService, type ResearchSearchService, type ResearchHit } from "./research-search.js";
+export { resolveQuery, type ResolvedQuery, type SearchPlanEntry } from "./entity-resolver.js";
+export { researchArtifactService, type ResearchArtifactService } from "./research-artifacts.js";

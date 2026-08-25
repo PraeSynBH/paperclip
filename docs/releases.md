@@ -2,7 +2,7 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-23
+last_updated: 2026-08-25 (~21:05 UTC — R1a pre-ship fixes release note created, CTO sign-off granted, deploying)
 ---
 
 # Release Notes
@@ -11,9 +11,56 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
+## R1a Pre-ship Fixes — August 25, 2026
+
+[Full release notes →](/support/releases/r1a-pre-ship-fixes)
+
+### Highlights
+
+- **Entity Resolution Stability** — Fixed a P0 infinite-loop bug where category/airline queries would spin at 100% CPU forever. All regex-based entity extraction now uses global flags with proper lastIndex resets. 33 regression tests added.
+- **State Machine Fix** — The `RESEARCH_RESOLVE_ENTITIES` routing now correctly enqueues the entity resolution → citation gathering flow. Previously the route handler was broken, causing every REST query submit to fail.
+- **Retry-Safe Entity Resolution** — If a background job retries, it no longer creates duplicate `GATHER_CITATIONS` jobs. Idempotency guard ensures entity resolution runs exactly once per query.
+- **No More Orphan Queries** — Query creation and job linkage are now wrapped in a database transaction. If a job fails after creating a query row, the transaction rolls back cleanly.
+- **Improved Query Performance** — Added index on `research_queries.job_id`, foreign key `ON DELETE CASCADE`, and fixed `computeChecksum` delimiter collision.
+- **Inline Process Display** — Trip pages now show mode-aware background job progress: inline progress bar in Plan mode, collapsible tray in Prepare mode, and hidden in Go mode. Shared SSE + polling hook ensures consistent background process tracking across the app.
+
+### Fixes Included
+
+This release addresses 5 findings from the R1a structural audit and 2 M2 P1 items, all verified by the Staff Engineer and signed off by the CTO.
+
+[Full release notes →](/support/releases/r1a-pre-ship-fixes)
+
+---
+
+## M6 Trial Feature — August 25, 2026
+
+[Full release notes →](/support/releases/m6-self-serve-trial)
+
+### Highlights
+
+- **Self-Serve Trial Signup** — Create a Voyonder account at voyonder.com/join with email + magic link or Google OAuth, and start a 7-day free trial immediately. No credit card required.
+
+- **Onboarding Wizard** — After signup, choose your travel role and get relevant starter packs deployed to your account automatically. Skip anytime.
+
+- **7-Day Free Trial** on the Explorer tier — full access to Sage AI, trip planning, and collaboration features. Trial reminders before expiry.
+
+- **Simple Conversion** — When your trial ends, pick a plan at voyonder.com/pricing and complete Stripe Checkout. Your data is preserved through the transition.
+
+- **Billing Portal** — Manage your subscription, update payment method, download invoices, or cancel at voyonder.com/settings/billing.
+
+- **Trial Expiry Grace Period** — Expired trials preserve your trips and data. Subscribe anytime to re-activate.
+
+||- **Auth System Migration (VOY-2171)** — Background jobs, research, and export routes were partially migrated from Paperclip auth to Voyonder JWT auth. Structural issues (companyId boundary check + JWT expiration enforcement) were fixed in VOY-2200 and P1 blocker fixes landed in VOY-2201. **Deployed to production 2026-08-25 10:32 UTC — voyonder.com healthy (HTTP 200).**|
+
+[Full release notes →](/support/releases/m6-self-serve-trial)
+
+> **⚠️ Known issues (2026-08-25 ~13:30 UTC):** Signup remains blocked in production — auth routing mismatches between the frontend and Voyonder API are fixed in code but not yet deployed (VOY-2192). The billing checkout POST body parsing fix (VOY-2217) is **DEPLOYED and verified in production**. The billing portal link fix (VOY-2218) is **DEPLOYED** — included in VOY-2228 production deployment. voyonder.com is healthy (HTTP 200). See the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
+
+---
+
 ## M5 A/B Pricing Experiment — August 23, 2026
 
-**Status: Implementation complete. Awaiting Code Review and QA.**
+**Status: Implementation complete. Shipped as part of M6 feature set.**
 
 ### Highlights
 
@@ -43,10 +90,10 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 - **Dynamic Sitemap at `/sitemap.xml`** — Paperclip now generates a live XML sitemap listing active companies and public issue pages, serving it with proper caching headers. Search engines discover your content automatically.
 - **Custom Robots.txt** — `/robots.txt` tells crawlers to index public content while blocking `/api/` paths, keeping internal APIs out of search results.
-|- **Per-Page Titles and Meta Descriptions** — Every page now has a descriptive browser tab title (e.g., "Dashboard — Paperclip", "Agent Detail — Paperclip") and key pages include search-result summaries via `<meta name="description">`.
-|- **Open Graph / Twitter Card Tags** — Every page with a title and description now automatically generates social media preview tags. Links shared on Slack, Twitter/X, LinkedIn, and Discord show a rich card with the page title, description, and optional image.
-|- **No Configuration Required** — SEO improvements and social previews are automatic and server-side. Companies hosting on Paperclip get search-engine-friendly pages without any setup.
-|- **Graceful Degradation** — If the database is temporarily unavailable, the sitemap returns an empty listing (HTTP 200) instead of an error, preventing crawler retry storms. Base social media tags in `index.html` provide fallback previews before React components render.
+- **Per-Page Titles and Meta Descriptions** — Every page now has a descriptive browser tab title (e.g., "Dashboard — Paperclip", "Agent Detail — Paperclip") and key pages include search-result summaries via `<meta name="description">`.
+- **Open Graph / Twitter Card Tags** — Every page with a title and description now automatically generates social media preview tags. Links shared on Slack, Twitter/X, LinkedIn, and Discord show a rich card with the page title, description, and optional image.
+- **No Configuration Required** — SEO improvements and social previews are automatic and server-side. Companies hosting on Paperclip get search-engine-friendly pages without any setup.
+- **Graceful Degradation** — If the database is temporarily unavailable, the sitemap returns an empty listing (HTTP 200) instead of an error, preventing crawler retry storms. Base social media tags in `index.html` provide fallback previews before React components render.
 
 [Full release notes →](/support/releases/v0-4-1-seo-metadata)
 

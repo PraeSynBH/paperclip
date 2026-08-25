@@ -27,6 +27,7 @@ const BOARD_ROUTE_ROOTS = new Set([
   "u",
   "design-guide",
   "search",
+  "trips",
   "settings",
   "timeline",
 ]);

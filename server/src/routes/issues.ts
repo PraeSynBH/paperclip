@@ -206,7 +206,8 @@ import { stalledReviewDecisionService } from "../services/stalled-review-decisio
 import { environmentService } from "../services/environments.js";
 import { environmentRuntimeService } from "../services/environment-runtime.js";
 import { redactSensitiveText } from "../redaction.js";
-import { createRunSecretRedactionRegistry } from "../services/run-secret-redaction.js";
+import { checkPremiumSLABreachDuplicate } from "../services/premium-sla-dedup.js";
+import { checkStandardSLABreachDuplicate } from "../services/standard-sla-dedup.js";
 import {
   createCompanySearchRateLimiter,
   type CompanySearchRateLimiter,
@@ -8530,6 +8531,51 @@ export function issueRoutes(
       watchdogDiscovery,
     );
     if (watchdogProductBugFollowUp === false) return;
+
+    const actor = getActorInfo(req);
+
+    // ---- PremiumSLABreach duplicate suppression ---------------------------
+    // When a PremiumSLABreach alert fires and a recent tracking issue for the
+    // same root cause already exists, suppress creation and link as a reference
+    // via comment rather than creating a standalone issue. Two matching
+    // strategies are tried, in order of precision:
+    //
+    // 1. Fingerprint match (originKind === 'sla_monitor' + originFingerprint) —
+    //    used when the external monitor sends structured metadata (Phase 2).
+    //    Handled inline below after createBody construction.
+    //
+    // 2. Title-pattern match — fallback for the legacy monitor (before Phase 2).
+    //    Matches on `[%]PremiumSLABreach: <client>` within the window.
+    if (!watchdogProductBugFollowUp && !rawCreateBody.parentId) {
+      // Title-pattern fallback — legacy SLA monitor (sends originKind="manual",
+      // originFingerprint="default", so fingerprint dedup would never match).
+      // Check PremiumSLA first, then StandardSLA as fallback.
+      const slaMatch = await checkPremiumSLABreachDuplicate(db, companyId, rawCreateBody.title)
+        ?? await checkStandardSLABreachDuplicate(db, companyId, rawCreateBody.title);
+      if (slaMatch) {
+        // Suppress creation entirely: add comment to tracking issue and return
+        // early instead of creating a new child issue. This closes the gap for
+        // legacy monitor payloads that send originKind="alert" (the inline
+        // fingerprint check below only activates for originKind="sla_monitor"
+        // with a non-default fingerprint).
+        await svc.addComment(
+          slaMatch.existingIssueId,
+          `## Duplicate SLA Alert Suppressed\n\nThis alert fired within the dedup window of existing incident ${slaMatch.existingIdentifier}. No new issue was created; the alert is linked as a reference to the tracking incident.\n\n*Triggered at: ${new Date().toISOString()}*`,
+          { agentId: actor.agentId ?? undefined, runId: actor.runId },
+          { authorType: "agent" },
+        );
+        const enriched = await svc.getById(slaMatch.existingIssueId);
+        res.status(200).json({
+          ...enriched,
+          deduplicated: true,
+          deduplicatedOfIssueId: slaMatch.existingIssueId,
+          deduplicatedOfIdentifier: slaMatch.existingIdentifier,
+        });
+        return;
+      }
+    }
+    // -----------------------------------------------------------------------
+
     const effectiveParentId = watchdogProductBugFollowUp ? null : rawCreateBody.parentId;
     let createParent: Awaited<ReturnType<typeof svc.getById>> | null = null;
     if (req.actor.type === "agent" && !effectiveParentId && !watchdogProductBugFollowUp && !isTaskBridgeKeyActor(req)) {
@@ -8646,33 +8692,46 @@ export function issueRoutes(
       actorResponsibleUserId: authenticatedActorResponsibleUserId(req),
       trustExplicitResponsibleUserId: actor.actorType === "user",
       watchdogActorRunId: actor.runId,
-      onDeduplicated: (reason: "idempotency_key" | "recent_open_title") => {
-        deduplicationReason = reason;
-      },
-    };
-    let issue: Awaited<ReturnType<typeof svc.create>>;
-    try {
-      issue = await svc.create(companyId, createInput);
-    } catch (error) {
-      // Concurrent onboarding creates can both pass the zero-count fast path;
-      // the issues_onboarding_first_task_uq index rejects the loser here. Fail
-      // closed: drop the privileged origin (and with it the agent-attributed
-      // greeting) and create an ordinary issue instead.
-      if (!(isOnboardingFirstTask && isOnboardingFirstTaskConflict(error))) throw error;
-      isOnboardingFirstTask = false;
-      const { originKind: _onboardingOriginKind, ...ordinaryCreateInput } = createInput;
-      issue = await svc.create(companyId, ordinaryCreateInput);
-    }
-    if (deduplicationReason) {
-      const referenceSummary = await issueReferencesSvc.listIssueReferenceSummary(issue.id);
-      res.status(200).json({
-        ...issue,
-        deduplicated: true,
-        deduplicationReason,
-        relatedWork: referenceSummary,
-        referencedIssueIdentifiers: referenceSummary.outbound.map((item) => item.issue.identifier ?? item.issue.id),
-      });
-      return;
+    });
+
+    // ---- Post-insert duplicate verification (C-2 TOCTOU safety net) ---------
+    // The title-pattern SLA dedup check above runs BEFORE the issue is created.
+    // Between that check and this INSERT, another concurrent request could also
+    // pass the check and create a duplicate.  Re-check now that we have a
+    // committed row and suppress if a near-simultaneous duplicate exists.
+    if (!watchdogProductBugFollowUp && !rawCreateBody.parentId) {
+      const postInsertDedup = await checkPremiumSLABreachDuplicate(
+        db, companyId, rawCreateBody.title
+      ) ?? await checkStandardSLABreachDuplicate(
+        db, companyId, rawCreateBody.title
+      );
+      if (postInsertDedup && postInsertDedup.existingIssueId !== issue.id) {
+        // Another request created a tracking issue between our SELECT and
+        // INSERT. Suppress this one: hide it and link it to the original.
+        await db
+          .update(issueRows)
+          .set({
+            hiddenAt: sql`now()`,
+            status: "cancelled",
+          })
+          .where(eq(issueRows.id, issue.id));
+
+        await svc.addComment(
+          postInsertDedup.existingIssueId,
+          `## Duplicate SLA Alert Suppressed\n\nThis alert fired within the dedup window of existing incident ${postInsertDedup.existingIdentifier}. A concurrent request also created issue ${issue.identifier ?? issue.id} at nearly the same time; it has been hidden and linked here as a reference.\n\n*Triggered at: ${new Date().toISOString()}*`,
+          { agentId: actor.agentId ?? undefined, runId: actor.runId },
+          { authorType: "agent" },
+        );
+
+        const enriched = await svc.getById(postInsertDedup.existingIssueId);
+        res.status(200).json({
+          ...enriched,
+          deduplicated: true,
+          deduplicatedOfIssueId: postInsertDedup.existingIssueId,
+          deduplicatedOfIdentifier: postInsertDedup.existingIdentifier,
+        });
+        return;
+      }
     }
     await issueReferencesSvc.syncIssue(issue.id);
     await externalObjectsSvc.syncIssueSafely(issue.id);

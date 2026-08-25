@@ -2,7 +2,7 @@
 title: Async UX Release — Background Jobs + Process Visibility (M1+M2)
 version: voy-1474
 date: 2026-08-20
-commits: 7211f8ba87, 01009090bf, daa8360578, f81d572a40, dd2a41f9a0, 10536a49ee, 953249ae19, 9949b6dfcb
+commits: 7211f8ba87, 01009090bf, daa8360578, f81d572a40, dd2a41f9a0, 10536a49ee, 953249ae19
 status: Released — deployed to production (VPS) 2026-08-20 ~17:20 UTC. All 4 P0/P1 hotfixes applied and verified (VOY-1527 resolved, VOY-1531 follow-up refinements landed)
 ---
 
@@ -65,6 +65,12 @@ All Staff Engineer findings from the M2 structural audit were addressed, and the
 | **Stale-job recovery startup sweep** (VOY-1527 P0) | `createBackgroundJobWorker()` runs `requeueStaleJobs()` on startup, requeueing jobs stuck in `running` for longer than `processorTimeoutMs` + 30s grace. Emits live events for reactive UI update |
 | **List endpoint slim projection** (VOY-1527 P1) | `toApi()` now supports `slim` parameter; `list()` passes `slim=true`, stripping `result.dataUri` from responses. Full result available via `getById()` |
 | **Email digest ordering fix** (VOY-1527 P1) | Digest preference query (`SELECT digestFrequency`) now runs *before* the `initUpdates` block, so `emailDeferredToDigest` is correctly resolved before the init-update decision |
+
+### Calendar Export Follow-up (commit 64e70b6131 — pending ship on `fix/m-series-tech-debt`)
+
+A Staff Engineer P2 follow-up makes iCalendar exports calendar-client friendly: VEVENT `UID` values are now derived deterministically from each event's identity (title + start + end) instead of a random UUID per export. This means when a user re-exports the same trip and imports the `.ics` into Google or Apple Calendar, the calendar **updates existing events instead of creating duplicates**. Exports made with the previous random-UID build may leave duplicate events that can be removed manually.
+
+> **Status:** committed on `fix/m-series-tech-debt`, awaiting deployment. This note will be updated to "live" once shipped.
 
 ## Job Types
 

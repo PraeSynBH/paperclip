@@ -1,4 +1,4 @@
-import type { BackgroundJobStatus } from "../background-job-types.js";
+import type { BackgroundJobStatus } from "../constants.js";
 
 /**
  * A background job record as returned by the API.
@@ -30,11 +30,11 @@ export interface CreateBackgroundJobRequest {
 }
 
 /**
- * The payload carried inside a background_job.status LiveEvent envelope.
- * This is what {@link BackgroundJobEvent.payload} contains.
+ * A background job event published via SSE or WebSocket.
  */
-export interface BackgroundJobEventPayload {
+export interface BackgroundJobEvent {
   jobId: string;
+  companyId: string;
   status: BackgroundJobStatus;
   progress: number;
   progressMessage: string | null;
@@ -44,18 +44,4 @@ export interface BackgroundJobEventPayload {
   startedAt: string | null;
   finishedAt: string | null;
   updatedAt: string;
-}
-
-/**
- * A background job event published via SSE or WebSocket.
- * Matches the LiveEvent envelope wire format: the event is wrapped in
- * `{ id, companyId, type, createdAt, payload }` where `payload` is a
- * {@link BackgroundJobEventPayload}.
- */
-export interface BackgroundJobEvent {
-  id: string;
-  companyId: string;
-  type: "background_job.status";
-  createdAt: string;
-  payload: BackgroundJobEventPayload;
 }

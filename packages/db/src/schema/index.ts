@@ -174,6 +174,37 @@ export { pluginState } from "./plugin_state.js";
 export { pluginEntities } from "./plugin_entities.js";
 export { pluginDatabaseNamespaces, pluginMigrations } from "./plugin_database.js";
 export { pluginJobs, pluginJobRuns } from "./plugin_jobs.js";
+export { backgroundJobs } from "./background_jobs.js";
 export { pluginWebhookDeliveries } from "./plugin_webhooks.js";
 export { pluginLogs } from "./plugin_logs.js";
-export { backgroundJobs } from "./background_jobs.js";
+export { planReviewGates } from "./plan_review_gates.js";
+export {
+  memoryBindings,
+  memoryBindingTargets,
+  memoryRecords,
+  memoryOperations,
+  memoryExtractionJobs,
+} from "./memory.js";
+export {
+  knowledgeDocuments,
+  knowledgeDocumentRevisions,
+  knowledgeDocumentReviews,
+  knowledgeSourceBacklinks,
+} from "./knowledge.js";
+
+// v0.5.0 feature tables
+export { notificationPreferences, notifications, pushSubscriptions } from "./notifications.js";
+export { subscriptionTiers } from "./subscription_tiers.js";
+export { stripeCustomers } from "./stripe_customers.js";
+export { companySubscriptions } from "./company_subscriptions.js";
+export { subscriptionUsage } from "./subscription_usage.js";
+export { subscriptionInvoices } from "./subscription_invoices.js";
+
+// Research pipeline (R1a)
+export { researchArtifacts } from "./research_artifacts.js";
+export { researchQueries } from "./research_queries.js";
+export { trips } from "./trips.js";
+export type { ResearchArtifact, NewResearchArtifact } from "./research_artifacts.js";
+export type { ResearchQuery, NewResearchQuery } from "./research_queries.js";
+export type { Trip, NewTrip } from "./trips.js";
+export type { ResolvedEntity, TripDestination } from "./research-types.js";

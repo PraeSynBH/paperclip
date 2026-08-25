@@ -1,30 +1,9 @@
 import type { Request, Response } from "express";
-import type { SecretBindingTargetType } from "@paperclipai/shared";
-import { forbidden, HttpError, unauthorized } from "../errors.js";
-import { logger } from "../middleware/logger.js";
-import { responsibleUserAuthzShadowMode } from "../services/authorization.js";
-
-function throwOrShadowResponsibleUserCompanyAccessDeny(
-  req: Request,
-  companyId: string,
-  code: "RESPONSIBLE_USER_UNAUTHORIZED" | "RESPONSIBLE_USER_UNAVAILABLE",
-  message: string,
-) {
-  logger.warn({
-    authzMode: responsibleUserAuthzShadowMode() ? "shadow" : "enforce",
-    code,
-    action: "company_access",
-    companyId,
-    actorAgentId: req.actor.agentId ?? null,
-    responsibleUserId: req.actor.onBehalfOfUserId ?? null,
-    method: req.method,
-  }, "responsible-user company access intersection denied");
-  if (responsibleUserAuthzShadowMode()) return;
-  throw new HttpError(403, message, { code });
-}
+import type { AuthorizationAction, AuthorizationActor, AuthorizationResource } from "../services/authorization.js";
+import { forbidden, unauthorized } from "../errors.js";
 
 export function assertAuthenticated(req: Request) {
-  if (req.actor.type === "none") {
+  if (!req.actor || req.actor.type === "none") {
     throw unauthorized();
   }
 }
@@ -121,77 +100,30 @@ export function assertCompanyAccess(req: Request, companyId: string) {
 }
 
 /**
- * Non-throwing access check for routes that look up a resource by id
- * before responding. Prefer this over `assertCompanyAccess` whenever the
- * route can reach the access check only after a successful `getById`
- * (i.e. after confirming the resource exists).
+ * Assert that the authenticated actor has `company_scope:read` permission
+ * in the given company.  Surfaces an error via `res` and returns `false`
+ * when denied; returns `true` when allowed.
  *
- * Using `assertCompanyAccess` in that position leaks resource existence
- * across tenants: a 404 means "no such resource" while a 403 means "exists
- * in another tenant". Any authenticated user can enumerate IDs and
- * distinguish the two responses.
+ * Note: `assertAuthenticated(req)` and `assertCompanyAccess(req, companyId)`
+ * must already have passed before calling this.
  *
- * Most routes should use `getAccessibleResource` below, which wraps the
- * whole pattern. When composing manually (bespoke not-found responses),
- * the shape is:
- *
- *     const issue = await svc.getById(id);
- *     if (!issue || !hasCompanyAccess(req, issue.companyId)) {
- *       res.status(404).json({ error: "Issue not found" });
- *       return;
- *     }
- *
- * so both "does not exist" and "exists but cross-tenant" return the same
- * 404, removing the oracle.
- *
- * Note: this intentionally does not replicate the write-path membership
- * checks in `assertCompanyAccess` (active membership, viewer read-only).
- * Routes that need those checks for authorized tenants should still call
- * `assertCompanyAccess` after the 404 gate — the oracle concern is only
- * about the existence check.
- *
- * The company-scope semantics must stay in lockstep with
- * `assertCompanyAccess`: in particular, signed-in instance admins do NOT
- * get blanket access to companies they are not a member of.
+ * @param access — an `accessService()` instance for the current request.
  */
-export function hasCompanyAccess(req: Request, companyId: string): boolean {
-  if (req.actor.type === "none") return false;
-  if (req.actor.type === "agent") return req.actor.companyId === companyId;
-  if (req.actor.source === "local_implicit") return true;
-  return (req.actor.companyIds ?? []).includes(companyId);
-}
-
-/**
- * Preferred way to fetch a company-scoped resource by id inside a route
- * handler. Wraps the two-step pattern described on `hasCompanyAccess` so
- * new routes cannot accidentally reintroduce the existence oracle:
- *
- *   - missing resource          → 404 `{ error: notFoundMessage }`, returns null
- *   - exists but cross-tenant   → identical 404, returns null
- *   - accessible                → runs `assertCompanyAccess` (write-path
- *     membership checks on non-safe methods) and returns the resource
- *
- * Usage:
- *
- *     const goal = await getAccessibleResource(req, res, svc.getById(id), "Goal not found");
- *     if (!goal) return;
- *
- * Routes with bespoke not-found behavior (legacy `200 []` contracts,
- * audit-logged denials) should still compose `hasCompanyAccess` directly.
- */
-export async function getAccessibleResource<T extends { companyId: string }>(
+export async function assertCompanyScopeReadAllowed(
   req: Request,
   res: Response,
-  resource: T | null | undefined | Promise<T | null | undefined>,
-  notFoundMessage: string,
-): Promise<T | null> {
-  const resolved = await resource;
-  if (!resolved || !hasCompanyAccess(req, resolved.companyId)) {
-    res.status(404).json({ error: notFoundMessage });
-    return null;
-  }
-  assertCompanyAccess(req, resolved.companyId);
-  return resolved;
+  companyId: string,
+  access: { decide: (input: { actor: AuthorizationActor; action: AuthorizationAction; resource: AuthorizationResource }) => Promise<{ allowed: boolean }> },
+  opts?: { errorMessage?: string },
+): Promise<boolean> {
+  const decision = await access.decide({
+    actor: req.actor,
+    action: "company_scope:read",
+    resource: { type: "company", companyId },
+  });
+  if (decision.allowed) return true;
+  res.status(403).json({ error: opts?.errorMessage ?? "Access denied" });
+  return false;
 }
 
 export function getActorInfo(req: Request): (

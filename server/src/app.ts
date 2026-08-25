@@ -88,6 +88,18 @@ import { pluginUiStaticRoutes } from "./routes/plugin-ui-static.js";
 import { seoRoutes } from "./routes/seo.js";
 import { readBrandedStaticIndexHtml } from "./static-index-html.js";
 import { applyUiBranding } from "./ui-branding.js";
+import { memoryRoutes } from "./routes/memory.js";
+import { knowledgeRoutes } from "./routes/knowledge.js";
+import { companyTemplateRoutes } from "./routes/company-templates.js";
+import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
+import { notificationRoutes } from "./routes/notifications.js";
+import { marketplaceRoutes } from "./routes/marketplace.js";
+import { onboardingRoutes } from "./routes/onboarding.js";
+import { backgroundJobRoutes } from "./routes/background-jobs.js";
+import { researchRoutes } from "./routes/research.js";
+import { researchArtifactRoutes } from "./routes/research-artifacts.js";
+import { exportRoutes } from "./routes/exports.js";
+import { createBackgroundJobWorker } from "./services/background-job-worker.js";
 import { logger } from "./middleware/logger.js";
 import { createPaperclipEventBus, createPaperclipAuthProvider, createPaperclipLogger } from "./services/voyonder-bridge.js";
 import type { EventBus, AuthProvider, LoggerProvider } from "@paperclipai/shared";
@@ -566,6 +578,17 @@ export async function createApp(
   api.use(resourceMembershipRoutes(db));
   api.use(inboxDismissalRoutes(db));
   api.use(instanceSettingsRoutes(db));
+  api.use(memoryRoutes(db));
+  api.use(knowledgeRoutes(db));
+  api.use("/company-templates", companyTemplateRoutes(db));
+  api.use(billingRoutes(db));
+  api.use(notificationRoutes(db));
+  api.use(marketplaceRoutes(db));
+  api.use("/onboarding", onboardingRoutes(db));
+  api.use(backgroundJobRoutes(db));
+  api.use(researchRoutes(db));
+  api.use(researchArtifactRoutes(db));
+  api.use(exportRoutes(db));
   if (opts.databaseBackupService) {
     api.use(instanceDatabaseBackupRoutes(opts.databaseBackupService));
   }
@@ -841,6 +864,11 @@ export async function createApp(
 
   jobCoordinator.start();
   scheduler.start();
+  // Background job worker — processes research/export jobs queued via the
+  // research + export routes. Polls every 2s for queued jobs (see
+  // services/background-job-worker.ts). Stopped in shutdownAppServices().
+  const backgroundJobWorker = createBackgroundJobWorker(db, { storage: opts.storageService });
+  backgroundJobWorker.start();
   let feedbackExportShuttingDown = false;
   let feedbackExportTimer: ReturnType<typeof setInterval> | null = null;
   const disableFeedbackExportFlushes = () => {
@@ -973,32 +1001,18 @@ export async function createApp(
   }).catch((err) => {
     logger.error({ err }, "Failed to load ready plugins on startup");
   });
-  app.locals.bundledPluginsStartup = bundledPluginsStartup;
-  // The shutdown hook runs at most once. It caches the in-flight promise, so a
-  // second caller (for example the `exit` handler) awaits the same completion
-  // instead of starting a second teardown.
-  let appServicesShutdown: Promise<void> | null = null;
-  const shutdownAppServices = (): Promise<void> => {
-    if (appServicesShutdown) return appServicesShutdown;
-    appServicesShutdown = (async () => {
-      disableFeedbackExportFlushes();
-      if (importTransferSweepTimer) {
-        clearInterval(importTransferSweepTimer);
-        importTransferSweepTimer = null;
-      }
-      devWatcher?.close();
-      viteHtmlRenderer?.dispose();
-      void viteDevServer?.close().catch(() => undefined);
-      viteHmrServer?.close();
-      hostServiceCleanup.disposeAll();
-      hostServiceCleanup.teardown();
-      // Cancel every live setup-token login session and AWAIT the cancellation,
-      // so each direct child stops and the server releases each lease before the
-      // caller stops the database and the provider. A lease release that
-      // fails stays a durable record for the startup reaper.
-      await setupTokenLoginService?.shutdown();
-    })();
-    return appServicesShutdown;
+  let appServicesShutdown = false;
+  const shutdownAppServices = () => {
+    if (appServicesShutdown) return;
+    appServicesShutdown = true;
+    backgroundJobWorker.shutdown(30_000).catch((err) => {
+      logger.error({ err }, "Background job worker shutdown error");
+    });
+    disableFeedbackExportFlushes();
+    devWatcher?.close();
+    viteHtmlRenderer?.dispose();
+    hostServiceCleanup.disposeAll();
+    hostServiceCleanup.teardown();
   };
   app.locals.paperclipShutdown = shutdownAppServices;
 

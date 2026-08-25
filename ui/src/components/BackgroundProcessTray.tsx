@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
-import { backgroundJobsApi } from "@/api/background-jobs";
 import type { BackgroundJob, BackgroundJobStatus } from "@paperclipai/shared";
+import { useBackgroundProcesses } from "@/hooks/useBackgroundProcesses";
+import { backgroundJobLabel, formatDuration } from "@/lib/background-jobs";
 
 interface BackgroundProcessTrayProps {
   companyId: string;
@@ -21,9 +22,9 @@ function isRunningStatus(status: BackgroundJobStatus): boolean {
 /**
  * Consolidated tray of background processes for a company.
  *
- * Subscribes to the SSE /events endpoint for live updates and falls back
- * to periodic polling. Shows running jobs at the top, then recently
- * completed ones. Each row has the label, a progress indicator, duration,
+ * Uses the shared `useBackgroundProcesses` hook for SSE + polling.
+ * Shows running jobs at the top, then recently completed ones.
+ * Each row has the label, a progress indicator, duration,
  * and the final result/error.
  */
 export function BackgroundProcessTray({
@@ -32,94 +33,13 @@ export function BackgroundProcessTray({
   jobTypeFilter,
   className = "",
 }: BackgroundProcessTrayProps) {
-  const [jobs, setJobs] = useState<BackgroundJob[]>([]);
   const [collapsed, setCollapsed] = useState(false);
-  const eventSourceRef = useRef<EventSource | null>(null);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const unmountedRef = useRef(false);
-
-  const listOpts = (): Parameters<typeof backgroundJobsApi.list>[1] => ({
-    limit: maxItems,
+  const { jobs, runningCount } = useBackgroundProcesses(companyId, {
+    maxItems,
     ...(jobTypeFilter ? { jobType: jobTypeFilter } : {}),
   });
 
-  const refresh = useCallback(() => {
-    backgroundJobsApi.list(companyId, listOpts()).then((list) => {
-      if (!unmountedRef.current) setJobs(list);
-    }).catch(() => {
-      // transient — poller/SSE retries
-    });
-  }, [companyId, maxItems, jobTypeFilter]);
-
-  // Initial fetch
-  useEffect(() => {
-    unmountedRef.current = false;
-    refresh();
-    return () => {
-      unmountedRef.current = true;
-    };
-  }, [refresh]);
-
-  // SSE subscription for live updates
-  useEffect(() => {
-    try {
-      const es = new EventSource(backgroundJobsApi.eventsUrl(companyId));
-      eventSourceRef.current = es;
-
-      es.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data) as { type?: string };
-          if (data.type === "background_job.status") refresh();
-        } catch {
-          // ignore malformed SSE
-        }
-      };
-      // SSE connected — stop the polling fallback
-      if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
-        pollTimerRef.current = null;
-      }
-
-      es.onerror = () => {
-        // SSE dropped — restart polling fallback
-        if (!pollTimerRef.current) {
-          pollTimerRef.current = setInterval(refresh, 5000);
-        }
-      };
-    } catch {
-      // SSE not available — polling fallback below handles it
-    }
-
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
-      }
-    };
-  }, [companyId, refresh]);
-
-  // Polling fallback when SSE never connects
-  useEffect(() => {
-    const timer = setInterval(() => {
-      if (!eventSourceRef.current) refresh();
-    }, 5000);
-    pollTimerRef.current = timer;
-    return () => {
-      clearInterval(timer);
-      pollTimerRef.current = null;
-    };
-  }, [refresh]);
-
-  const sorted = [...jobs].sort((a, b) => {
-    const aRunning = isRunningStatus(a.status);
-    const bRunning = isRunningStatus(b.status);
-    if (aRunning !== bRunning) return aRunning ? -1 : 1;
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-  });
-
-  const runningCount = sorted.filter((j) => isRunningStatus(j.status)).length;
-
-  if (sorted.length === 0) return null;
+  if (jobs.length === 0) return null;
 
   return (
     <div className={`rounded-lg border border-border bg-card ${className}`}>
@@ -145,7 +65,7 @@ export function BackgroundProcessTray({
 
       {!collapsed && (
         <div className="divide-y divide-border/50 max-h-[320px] overflow-y-auto">
-          {sorted.slice(0, maxItems).map((job) => (
+          {jobs.slice(0, maxItems).map((job) => (
             <JobRow key={job.id} job={job} />
           ))}
         </div>
@@ -177,7 +97,7 @@ function JobRow({ job }: { job: BackgroundJob }) {
       {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-xs">
-          <span className="font-medium text-foreground truncate">{jobTypeLabel(job.jobType)}</span>
+          <span className="font-medium text-foreground truncate">{backgroundJobLabel(job.jobType)}</span>
           <span
             className={`text-xs ${
               job.status === "running"
@@ -232,21 +152,4 @@ function JobRow({ job }: { job: BackgroundJob }) {
       </div>
     </div>
   );
-}
-
-function jobTypeLabel(type: string): string {
-  const labels: Record<string, string> = {
-    "research.activity_search": "Activity Search",
-    "research.auto_assess": "Auto-Assessment",
-    "research.semantic_search": "Semantic Search",
-    "export.pdf": "PDF Export",
-    "export.ics": "Calendar Export",
-  };
-  return labels[type] ?? type.replace(/_/g, " ").replace(/\./g, ": ");
-}
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${Math.floor(ms / 60_000)}m ${Math.floor((ms % 60_000) / 1000)}s`;
 }

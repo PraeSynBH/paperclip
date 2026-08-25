@@ -10,13 +10,10 @@ This directory contains support case assessments for Paperclip features. Each do
 ## Recently Shipped Features
 
 | Feature | Version | Shipped | Assessment |
-|---------|---------|---------|------------|
-||| Self-Serve Trial Onboarding — Free 14-day trial with auto-registration, trial banner, expiry reaper (M6) | m6-self-serve-trial | Aug 24, 2026 (SHIPPED — merged to master via 75c884f66d) | [Assessment](assessments/support-case-self-serve-trial-onboarding.md) · [Release Notes](releases/m6-self-serve-trial-onboarding.md) |
-|| A/B Pricing Experiment — Server-side A/B pricing test (M5) | voy-1685/1888 | Aug 23, 2026 (IMPLEMENTED — awaiting release) | [Assessment](assessments/support-case-billing-system.md) |
-| SEO Metadata — Sitemap, Robots.txt, Dynamic Page Titles/Meta, Open Graph + Twitter Card Tags | v0.4.1 (voy-1798/1815) | Aug 23, 2026 (SHIPPED via a2ad8f8d90 + 096b1ecdff) | [Assessment](assessments/support-case-seo-metadata.md) · [Release Notes](releases/v0-4-1-seo-metadata.md) |
-| TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | voy-1669/1671 | Aug 22, 2026 (SHIPPED via VOY-1682) | [Release Notes](releases/voy-1669-toctou-billing-fix.md) |
-| Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Assessment](assessments/support-case-async-ux-background-jobs.md) · [Release Notes](releases/voy-1474-async-ux.md) |
-|| Google OAuth & PostHog auth events + P2 fixes (ts_rank alias, DB client hardening) | voy-1420-posthog-p2-fixes (96faa13434+) | Documented, ready for release to fork/master | [Google OAuth](assessments/support-case-google-oauth.md) |
+|---|---|---|---|---|
+| Async UX — Background Jobs + Process Visibility (M1+M2) | voy-1474 | Aug 20, 2026 (VPS deploy ~17:20 UTC) | [Async UX](releases/voy-1474-async-ux.md) |
+| R1a Pre-ship Fixes — Async Job Hardening + Entity Resolution Stability | r1a-v6.2 | Aug 25, 2026 (CTO sign-off granted, deploying) | [R1a Pre-ship Fixes](releases/r1a-pre-ship-fixes.md) |
+| Google OAuth & PostHog auth events + P2 fixes (ts_rank alias, DB client hardening) | voy-1420-posthog-p2-fixes (96faa13434+) | Documented, ready for release to fork/master | [Google OAuth](assessments/support-case-google-oauth.md) |
 | Agent Marketplace — browse + one-click hire marketplace agents | v0.5.0 | Aug 18, 2026 (PR #48) | [Marketplace](assessments/support-case-v0.5.0-marketplace.md) + [API](/api/marketplace) |
 | Self-Service Onboarding — POST /start creates company + agents + goal + project + task | v0.5.0 | Aug 18, 2026 (PR #48) | [Onboarding](assessments/support-case-v0.5.0-onboarding.md) + [API](/api/onboarding) |
 | Knowledge Starter Packs — curated KB document bundles installed with company templates or via standalone API | v0.5.0 | Aug 18, 2026 (PR #48) | [Starter Packs](assessments/support-case-knowledge-starter-packs.md) + [API](/api/knowledge-starter-packs) |
@@ -95,9 +92,8 @@ Documents are updated when:
 
 | Release | Notes |
 |---|---|
-| TOCTOU Billing Fix — Subscription & Usage Race Elimination + Idempotency Key | [View](releases/voy-1669-toctou-billing-fix.md) *(SHIPPED — merged to main via VOY-1682 2026-08-22)* |
-| v0.5.0 Market Readiness — Self-Service Onboarding + Billing + Notifications + Agent Marketplace + Async UX + Docs | [View](releases/v0.5.0-market-readiness.md) *(Released — 2026-08-20)* |
-| Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
+|| R1a Pre-ship Fixes — Async Job Hardening + Entity Resolution Stability | [View](releases/r1a-pre-ship-fixes.md) *(Deploying — CTO sign-off granted, Release Engineer deploying to production)* |
+|| Async UX — Background Jobs + Process Visibility (M1+M2) | [View](releases/voy-1474-async-ux.md) *(Released — deployed to VPS production 2026-08-20 ~17:20 UTC)* |
 | Auth Improvements — Google OAuth + PostHog lifecycle events + structural hardening + P2 fixes | [View](releases/voy-1447-auth-improvements.md) *(Ready — documentation verified for release to fork/master)* |
 | PostHog Business Events + P2 Fixes — error telemetry, approval/notification events, PII redaction, stack trace preservation | [View](releases/voy-1420-posthog-business-events.md) |
 | Documentation Site v1 — Case Studies + Community Launch | [View](releases/docs-site-case-studies-and-community.md) |
@@ -110,5 +106,5 @@ Documents are updated when:
 
 ---
 
-*Last updated: 2026-08-24 ~17:00 UTC — M6 Self-Serve Trial Onboarding SHIPPED to master (75c884f66d). Release notes and support assessment updated to reflect merged state.*
+*Last updated: 2026-08-20 ~19:30 UTC — Known production issues (VOY-1527) documented in release notes, support impact section expanded with hotfix guidance*
 *Maintained by: Support Engineer (88b72065)*

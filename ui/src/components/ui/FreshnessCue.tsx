@@ -1,4 +1,4 @@
-import { Clock, AlertTriangle, CheckCircle2, HelpCircle } from "lucide-react";
+import { Clock, CheckCircle2, HelpCircle } from "lucide-react";
 
 interface FreshnessCueProps {
   /** Last-updated timestamp (ISO string or Date). */
@@ -37,9 +37,11 @@ const CONFIG: Record<FreshnessLevel, { color: string; label: string; icon: React
     icon: <CheckCircle2 className="h-3.5 w-3.5" />,
   },
   stale: {
-    color: "text-amber-600 dark:text-amber-400",
-    label: "Stale",
-    icon: <AlertTriangle className="h-3.5 w-3.5" />,
+    // Maps to the "grey — unknown" tier of the VOY-2284 urgency hierarchy:
+    // stale data needs fresh research, so it is muted, not alarming.
+    color: "text-muted-foreground",
+    label: "Needs refresh",
+    icon: <HelpCircle className="h-3.5 w-3.5" />,
   },
   unknown: {
     color: "text-muted-foreground",

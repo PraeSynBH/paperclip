@@ -201,7 +201,7 @@ export function billingRoutes(db: Db) {
         const companyId = req.params.companyId as string;
         assertCompanyAccess(req, companyId);
         requireBoardUser(req);
-        const result = await billing.getBillingPortalLink(companyId);
+        const result = await billing.getBillingPortalLink(companyId, req.body.returnUrl);
         res.json(result);
       } catch (err) {
         next(err);

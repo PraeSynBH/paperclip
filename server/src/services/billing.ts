@@ -1196,7 +1196,7 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
 
     listInvoices,
 
-    getBillingPortalLink: async (companyId: string) => {
+    getBillingPortalLink: async (companyId: string, returnUrl?: string) => {
       const subscription = await db
         .select({
           stripeSubscriptionId: companySubscriptionsTable.stripeSubscriptionId,
@@ -1209,7 +1209,6 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
 
       // No subscription or trial-only (no Stripe subscription) → settings page
       if (!subscription?.stripeSubscriptionId) {
-        // Determine the settings URL for this company
         const settingsUrl = `/settings/billing`;
         return { url: settingsUrl, via: "settings" as const };
       }
@@ -1221,9 +1220,11 @@ export function billingService(db: Db, experiment?: PricingExperimentService) {
       try {
         const portalSession = await stripe.billingPortal.sessions.create({
           customer: customer.stripeCustomerId,
-          return_url: `${
-            process.env.FRONTEND_URL ?? "http://localhost:5173"
-          }/settings/billing`,
+          return_url:
+            returnUrl ??
+            `${
+              process.env.FRONTEND_URL ?? "http://localhost:5173"
+            }/settings/billing`,
         });
         return { url: portalSession.url, via: "stripe" as const };
       } catch (err) {

@@ -2,7 +2,7 @@
 title: Billing
 summary: Stripe-integrated subscription management with tier plans, usage tracking, invoices, feature gating, and A/B pricing experiments
 version: v0.5.0
-last_updated: 2026-08-23
+last_updated: 2026-08-25
 status: active
 ---
 
@@ -15,7 +15,7 @@ The Billing API provides Stripe-integrated subscription management. Board users 
 | Access Level | What they can do |
 |---|---|
 | **All company members** | Read endpoints: tiers, subscription, usage, invoices, overview |
-| **Board users only** | All mutations: create/update/cancel/reactivate subscription, create checkout session, report usage, sync invoices |
+| **Board users only** | All mutations: create/update/cancel/reactivate subscription, create portal link, create checkout session, report usage, sync invoices |
 | **Agents** | Read-only — all billing mutations return `403` for agents |
 
 Every endpoint requires company access (`assertCompanyAccess`). Mutation endpoints additionally require a board-user context — agents are explicitly blocked with `403 Forbidden`.
@@ -42,6 +42,7 @@ Requires `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` environment variables. 
 | `GET` | `/api/companies/{companyId}/billing/overview` | Consolidated billing overview (subscription + usage + invoices) | All members |
 | `GET` | `/api/companies/{companyId}/billing/experiment-variant` | Get the A/B pricing experiment variant assigned to this company | All members |
 | `GET` | `/api/companies/{companyId}/billing/experiment-results` | Get A/B pricing experiment results summary | Board user only |
+| `POST` | `/api/companies/{companyId}/billing/portal-link` | Create or retrieve a billing portal URL (three-state: no sub → settings, trial-only → settings, active → Stripe portal) | Board user only |
 | `POST` | `/api/billing/webhook` | Stripe webhook receiver | Stripe signature verification only |
 
 ## Create or Update Subscription
@@ -90,6 +91,54 @@ Creates a Stripe Checkout Session (`mode: subscription`) so the customer can pro
 ```
 
 The client should redirect the user to `url`. Stripe handles card collection, then fires the `checkout.session.completed` webhook, which creates the subscription in the database. If the user cancels checkout, they are returned to `cancelUrl` and no subscription is created.
+
+## Create Billing Portal Link
+
+```text
+POST /api/companies/{companyId}/billing/portal-link
+```
+
+Creates or retrieves a URL for the company's billing management page. The endpoint uses **three-state logic** to determine the correct destination:
+
+| Subscription State | Returned URL | `via` value |
+|---|---|---|
+| No subscription exists | Internal settings page (`/settings/billing`) | `"settings"` |
+| Trial-only (no Stripe subscription ID) | Internal settings page (`/settings/billing`) | `"settings"` |
+| Active subscription (has Stripe subscription) | Stripe Customer Portal session URL | `"stripe"` |
+
+### Request Body
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `returnUrl` | `string` (url) | no | Custom return URL after portal interaction. Max 2048 characters. Defaults to `{FRONTEND_URL}/settings/billing` |
+
+### Response
+
+`200 OK` with the portal URL and routing method:
+
+```json
+{
+  "url": "/settings/billing",
+  "via": "settings"
+}
+```
+
+Or for active subscribers:
+
+```json
+{
+  "url": "https://billing.stripe.com/session/...",
+  "via": "stripe"
+}
+```
+
+### Access
+
+Board user only — requires `assertCompanyAccess` and `requireBoardUser`.
+
+### Error Handling
+
+Stripe API failures are caught and rethrown with a user-safe message: *"Billing portal is temporarily unavailable. Please try again later."* The original error is logged server-side with the company ID for debugging.
 
 ## Update Subscription
 

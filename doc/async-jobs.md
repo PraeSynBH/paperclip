@@ -1,8 +1,8 @@
 # Async Jobs (Background Jobs) — Internal Reference
 
-**Last updated:** 2026-08-20 (v6)
-**Applies to:** Commit `f81d572a40` (deployed to VPS production 2026-08-20), VOY-1493 (M2 post-review fixes), VOY-1527 (P0/P1 hotfixes), VOY-1531 (follow-up refinements)
-**Status:** Released to production (VPS). All M2 post-review fixes and P0/P1 hotfixes live: transaction-wrapped claim, candidateIds, processor timeout, retry, graceful shutdown, queued partial index, SSE authz, export payload cap, DB CHECK constraints, emitEvent try/catch guard, terminal-status WHERE guard, stale-job recovery startup sweep, list endpoint slim projection (strips dataUri), email digest ordering fix. Staff Engineer review (VOY-1494) complete — APPROVED. 31/31 tests passed, all routes verified post-deploy.
+**Last updated:** 2026-08-25 (v8)
+**Applies to:** Commit `f81d572a40` (deployed to VPS production 2026-08-20), VOY-1493 (M2 post-review fixes), VOY-1527 (P0/P1 hotfixes), VOY-1531 (follow-up refinements), commit `64e70b6131` (deterministic ICS UIDs — pending ship), commit `99b3917519` (VOY-2171 — Voyonder JWT auth migration)
+**Status:** Released to production (VPS). All M2 post-review fixes and P0/P1 hotfixes live. VOY-2171 deployed: background-jobs, exports, and research routes migrated from Paperclip auth (`assertAuthenticated`/`assertCompanyAccess`) to Voyonder JWT auth (`assertVoyonderAuth`). Auth now sourced from `Authorization: Bearer <token>` with `sub` (userId) and `company_id` claims — `companyId` derived from JWT, not URL path. Staff Engineer review (VOY-1494) complete — APPROVED. 31/31 tests passed, all routes verified post-deploy.
 
 ## Overview
 
@@ -54,15 +54,17 @@ Client                          Server                          DB
 
 | Method | Path | Auth | Description |
 |------|------|------|-------------|
-| `GET` | `/api/companies/:companyId/background-jobs` | Board/Agent (scope read) | List jobs (paginated, filterable by status/jobType) |
-| `GET` | `/api/companies/:companyId/background-jobs/:id` | Board/Agent (scope read) | Get single job by ID |
-| `GET` | `/api/companies/:companyId/background-jobs/events` | Board/Agent (scope read) | SSE stream of job status changes (post-review: now checks `assertCompanyScopeReadAllowed`) |
-| `POST` | `/api/companies/:companyId/background-jobs` | Board only | Create a background job |
-| `POST` | `/api/companies/:companyId/research/activities` | Board/Agent (scope read) | Submit an activity search (creates a background job) |
-| `POST` | `/api/companies/:companyId/research/auto-assess` | Board/Agent (scope read) | Submit an auto-assessment job (M2) |
-| `POST` | `/api/companies/:companyId/research/search` | Board/Agent (scope read) | Keyword-first search (sync) with optional async semantic upgrade via `semanticJobId` → SSE (M2) |
-| `POST` | `/api/companies/:companyId/exports/pdf` | Board/Agent (scope read) | Queue a PDF export job (M2) |
-| `POST` | `/api/companies/:companyId/exports/ics` | Board/Agent (scope read) | Queue an iCalendar (.ics) export job (M2) |
+| `GET` | `/api/companies/:companyId/background-jobs` | Voyonder JWT (Bearer token) | List jobs (paginated, filterable by status/jobType). `companyId` from JWT claims — URL param is validated but ignored. |
+| `GET` | `/api/companies/:companyId/background-jobs/:id` | Voyonder JWT (Bearer token) | Get single job by ID |
+| `GET` | `/api/companies/:companyId/background-jobs/events` | Voyonder JWT (Bearer token) | SSE stream of job status changes (post-review: now checks `assertCompanyScopeReadAllowed`) |
+| `POST` | `/api/companies/:companyId/background-jobs` | Voyonder JWT (Bearer token) | Create a background job (board-level equivalent — JWT must have adequate claims) |
+| `POST` | `/api/companies/:companyId/research/activities` | Voyonder JWT (Bearer token) | Submit an activity search (creates a background job) |
+| `POST` | `/api/companies/:companyId/research/auto-assess` | Voyonder JWT (Bearer token) | Submit an auto-assessment job (M2) |
+| `POST` | `/api/companies/:companyId/research/search` | Voyonder JWT (Bearer token) | Keyword-first search (sync) with optional async semantic upgrade via `semanticJobId` → SSE (M2) |
+| `POST` | `/api/companies/:companyId/exports/pdf` | Voyonder JWT (Bearer token) | Queue a PDF export job (M2) |
+| `POST` | `/api/companies/:companyId/exports/ics` | Voyonder JWT (Bearer token) | Queue an iCalendar (.ics) export job (M2) |
+
+**Auth migration (VOY-2171):** As of commit `99b3917519`, all routes above use `assertVoyonderAuth` instead of Paperclip's `assertAuthenticated`/`assertCompanyAccess`. The `Authorization` header must carry a Voyonder HS256 JWT (`Bearer <token>`) with `sub` (userId) and `company_id` claims. The `companyId` is sourced from the JWT claims, not the URL path parameter — passing a different `:companyId` in the URL is silently ignored. `createdByActorId` on job creation now records `auth.userId` (Voyonder user) instead of the Paperclip actor-type detection (`req.actor.type === "board"` etc.). Requires `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` env var.
 
 ### SSE Event Format
 
@@ -159,6 +161,11 @@ data: {
    calendar text. Both run inside the worker's 2s tick loop and
    briefly block the event loop during rendering. No blob storage
    integration yet — PDF content is embedded in the result object.
+   *(Pending ship — commit `64e70b6131` on `fix/m-series-tech-debt`):
+   VEVENT UIDs are now deterministic (SHA-256 hash of title|start|end)
+   instead of random per-export UUIDs, so Google/Apple Calendar
+   re-imports of the same trip update existing events rather than
+   duplicating them.*
 
 9. **Semantic upgrade requires an embedding provider.** Without
    `PAPERCLIP_EMBEDDING_API_KEY`, `research.semantic_search` falls back
@@ -175,15 +182,17 @@ data: {
     SSE authz with the list and get-by-id routes. Authenticated users
     without scope:read permission are denied SSE access.
 
-12. **Research routes use read-level auth for write operations.** The
-    `POST /research/activities`, `POST /research/auto-assess`, and
-    `POST /research/search` all gate on `assertCompanyScopeReadAllowed`
-    — a permission intended for read operations. By contrast, the
-    general `POST /background-jobs` endpoint is board-only. This means
-    any agent or user with company_scope:read can enqueue background
-    jobs. The Staff Engineer review flagged this as MEDIUM-severity
-    (recommended fix: require board-level auth or create a dedicated
-    `background_job:create` permission).
+12. **[MODIFIED in VOY-2171] Research and export routes auth unified.** The
+    `POST /research/activities`, `POST /research/auto-assess`,
+    `POST /research/search`, `POST /exports/pdf`, and `POST /exports/ics`
+    endpoints previously used `assertCompanyScopeReadAllowed` (a read-level
+    Paperclip permission) for write operations, while the general
+    `POST /background-jobs` endpoint was board-only. As of VOY-2171, all
+    routes use `assertVoyonderAuth` — a unified JWT verification that does
+    not distinguish between board/agent roles. The `companyId` is extracted
+    from JWT claims. **Note:** This change applies to the Voyonder standalone
+    deployment. The Paperclip monorepo may retain the old auth on different
+    branches.
 
 13. **Export payload size limited to 512 KB.** The `POST /exports/pdf`
     and `POST /exports/ics` routes now reject payloads whose serialized
@@ -381,7 +390,8 @@ data: {
 | Export job result contains dataUri (PDF) or calendarText (ICS) | PDF is a real pdfkit-rendered document (base64 dataUri). ICS is valid v2.0 calendar text. No blob storage yet — client downloads from the result object. Payloads over 512 KB rejected with 413. | Engineering (blob storage follow-up) |
 | Export returns HTTP 413 | Request payload exceeded the 512 KB cap — trim item lists before export | Support Engineer |
 | UI display issues (StatusCue blank, tray missing, etc.) | Check browser console for errors, refresh | Support Engineer + Engineering |
-| Research jobs submitted without board auth | Revoke agent's company_scope:read if abusive | Support Engineer + Engineering (authz fix) |
+| API auth failure (401 Unauthorized) | Verify `Authorization: Bearer <token>` header is set and JWT is valid (not expired, correct `sub`/`company_id` claims). Check `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` is configured. | Support Engineer + Engineering (JWT/secret config) |
+| Auth rejection on background-jobs/research/exports routes (VOY-2171) | Routes now use `assertVoyonderAuth` — legacy Paperclip tokens are rejected. Issue a valid Voyonder JWT. | Support Engineer + Engineering |
 | **Completed job shows wrong status after SSE disconnect** (known issue #17 — RESOLVED) | Fixed — `emitEvent` try/catch guard + terminal-status WHERE clause prevents overwrite | Engineering |\n| **Permanent "running" spinner after crash** (known issue #18 — RESOLVED) | Fixed — startup sweep requeues stale-running jobs automatically | Engineering |\n| **Slow tray responses** (known issue #19 — RESOLVED) | Fixed — list endpoint slim projection strips `result.dataUri`. Full result via `getById()`. | Engineering |\n| **Email shows "pending" for digest-deferred notifications** (known issue #20 — RESOLVED) | Fixed — digest preference query now runs before status init | Support Engineer |
 
 ## Version History
@@ -394,3 +404,5 @@ data: {
 | 4 | 2026-08-20 | Support Engineer | M2 post-review fixes (commit f81d572a40): resolved #6 (retries with exponential backoff) and #11 (SSE scope:read check now enforced); added #13 (512 KB export payload cap), #14 (candidateIds scoping), #15 (processor timeout), #16 (transaction-atomic claim); documented queued partial index + DB CHECK constraints; fixed stale "scaffolds" wording in export troubleshooting; added timeout/413 troubleshooting + escalation rows |
 | 5 | 2026-08-20 | Support Engineer | Added known issues #17-20 (P0/P1 items shipped unfixed, tracked under VOY-1527 hotfix): emitEvent failure, stale-job recovery, large export results in list endpoint, email digest ordering; added troubleshooting entries and escalation rows for each; updated header to reflect "in production, hotfix in progress" status |
 | 6 | 2026-08-20 | Support Engineer | VOY-1527 P0/P1 hotfixes resolved (commits dd2a41f9a0, 10536a49ee, 953249ae19): items #17-#20 marked RESOLVED; emitEvent try/catch guard + terminal-status WHERE clause (#17), stale-job recovery startup sweep (#18), list endpoint slim projection stripping dataUri (#19), email digest ordering fix (#20); updated header and status to reflect all fixes live |
+| 7 | 2026-08-24 | Support Engineer | Documented pending-ship deterministic ICS UIDs (commit 64e70b6131, Staff Engineer P2 follow-up): VEVENT UIDs now SHA-256-hash of (title, start, end) instead of random UUIDs, so calendar re-imports dedupe instead of duplicating events. Marked as pending ship on `fix/m-series-tech-debt` (not yet deployed). |
+| 8 | 2026-08-25 | Support Engineer | VOY-2171 auth migration (commit 99b3917519): background-jobs, exports, and research routes migrated from Paperclip auth (`assertAuthenticated`/`assertCompanyAccess`) to Voyonder JWT auth (`assertVoyonderAuth`). Auth column updated from Board/Agent to Voyonder JWT. Known issue #12 updated to reflect unified auth. Escalation table updated with auth failure entries. |

@@ -33,7 +33,7 @@ The Billing System provides Stripe-integrated subscription management for Voyond
 ### New billing endpoints
 
 | Method | Endpoint | Auth | Description |
-|--------|----------|------|-------------|
+|---|---|---|---|
 | `GET` | `/api/companies/:companyId/billing/tiers` | Any company member | List subscription tiers |
 | `GET` | `/api/companies/:companyId/billing/subscription` | Any company member | Get current subscription |
 | `POST` | `/api/companies/:companyId/billing/subscription` | Board user only | Create subscription (tier + billing period — direct admin use) |
@@ -46,15 +46,8 @@ The Billing System provides Stripe-integrated subscription management for Voyond
 | `GET` | `/api/companies/:companyId/billing/invoices` | Any company member | List invoices |
 | `POST` | `/api/companies/:companyId/billing/invoices/sync` | Board user only | Sync invoices from Stripe |
 | `GET` | `/api/companies/:companyId/billing/overview` | Any company member | Consolidated billing overview |
+| `POST` | `/api/companies/:companyId/billing/portal-link` | Board user only | Create or retrieve billing portal URL (three-state routing) |
 | `POST` | `/api/billing/webhook` | Stripe signature | Stripe webhook receiver |
-
-### Checkout Session flow (new)
-
-`POST /api/companies/:companyId/billing/create-checkout-session` creates a Stripe Checkout Session (`mode: subscription`) so the customer provides card details **before** the subscription is created. This is the recommended flow for new customers — it avoids `incomplete` subscriptions that result from `stripe.subscriptions.create()` without a payment method.
-
-The response returns `{ "url": "...", "sessionId": "..." }`; the client redirects the user to `url`. Stripe handles card collection, then fires `checkout.session.completed`, which creates the subscription in the database. If the user cancels checkout, they are returned to `cancelUrl` (defaults to `{PAPERCLIP_PUBLIC_URL}/pricing`) and no subscription is created.
-
-Supported request fields: `tierId` (required), `billingPeriod` (optional, defaults to `monthly`), `successUrl` and `cancelUrl` (optional URLs).
 
 ### Billing periods
 
@@ -105,9 +98,9 @@ If `STRIPE_SECRET_KEY` is not set, billing operations return an error — all en
 
 7. **"Billing webhook errors in logs"** — Check that `STRIPE_WEBHOOK_SECRET` matches the endpoint secret configured in the Stripe dashboard. The webhook endpoint is mounted at `POST /api/billing/webhook`.
 
-8. **"I completed Stripe checkout but no subscription was created"** — The `checkout.session.completed` webhook creates the subscription. Verify the webhook endpoint (`POST /api/billing/webhook`) is configured in the Stripe dashboard and `STRIPE_WEBHOOK_SECRET` is correct. If the user cancelled checkout, no subscription is created — that's expected.
+8. **"The billing portal link sent me to settings instead of Stripe"** — This is expected when the company has no active Stripe subscription (e.g., trial-only or no subscription at all). The portal-link endpoint uses three-state routing: no subscription or trial-only → internal settings page; active Stripe subscription → Stripe Customer Portal.
 
-9. **"Checkout Session URL doesn't return to where I expected"** — `successUrl` and `cancelUrl` default to `{PAPERCLIP_PUBLIC_URL}/boards/{companyId}` and `{PAPERCLIP_PUBLIC_URL}/pricing` respectively. Custom URLs must be valid absolute URLs.
+10. **"The billing portal link sent me to settings instead of Stripe"** — This is expected when the company has no active Stripe subscription (e.g., trial-only or no subscription at all). The portal-link endpoint uses three-state routing: no subscription or trial-only → internal settings page; active Stripe subscription → Stripe Customer Portal.
 
 ## Auto-Notifications
 
@@ -273,6 +266,7 @@ The billing system emits `subscription.status.updated` live events whenever a su
 | Billing webhook not processing events | High | Verify webhook signing secret; check Stripe dashboard for failed webhook deliveries |
 | Invoice sync fails or returns empty | High | Check Stripe dashboard for invoice existence; verify the Stripe customer is correctly linked |
 | Agent receives 403 on billing mutations | Low | Expected behavior — agents cannot mutate billing. Educate user that a board user must perform billing actions |
+| Portal link returns settings instead of Stripe | Low | Expected when company has no active Stripe subscription (trial-only or no subscription). Educate user that Stripe portal is only available after subscribing to a paid tier |
 | "Missing raw body for webhook verification" | High | Webhook endpoint expects `rawBody` to be available on the request object. Ensure the Express raw body parser is configured before the webhook route |
 | Usage reporting discrepancy | Medium | Verify the billing period alignment and metric name. Usage is reset at the start of each billing period |
 
