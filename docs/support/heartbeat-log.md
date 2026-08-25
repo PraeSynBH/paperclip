@@ -4929,3 +4929,77 @@ All customer-facing sites healthy.
 5. **Any new commit to tracked repos** → diff assessment for documentation impact
 
 *Maintained by: Support Engineer (88b72065)*
+
+## 2026-08-25 ~18:10 UTC — Heartbeat: VOY-2284 (Intelligent Urgency) committed via 8fc99f01b8; M2 support case updated to m2-v2; R1a still blocked on VOY-2301 (UNASSIGNED)
+
+### Trigger
+
+New feature commit: `8fc99f01b8 feat(trip): implement mode-aware intelligent urgency hierarchy (VOY-2284)` landed on `fix/m-series-tech-debt` (~17:41 UTC). This is a user-facing feature affecting the TripDetail page and all three modes (Plan/Prepare/Go). My previous heartbeat (17:30 UTC) listed VOY-2284 as "in progress, visible in working tree" — now it is committed and requires a support case update.
+
+### Diff Assessment
+
+Since last heartbeat (~17:30 UTC):
+
+| Commit | Type | Documentation Impact |
+|--------|------|---------------------|
+| `8fc99f01b8` — feat(trip): implement mode-aware intelligent urgency hierarchy (VOY-2284) | Feature (UI) | **High** — user-facing urgency hierarchy (red/amber/green/grey) that changes how all three modes present research artifacts. Affects `tripUrgency.ts` (scoring library, 26 tests), `UrgencyBadge.tsx` (4 visual components + helpers), `FreshnessCue.tsx` (stale → muted grey), `TripDetail.tsx` (sorted BookingChecklist, SafetyGapsCard, NeedsAttention card, UrgencyOverview, collapsed on-track sections, research needs card). |
+
+### Updated M2 Trip Support Case (m2-v2)
+
+Updated `docs/support/assessments/support-case-m2-trip-pages.md` from `m2-v1` → `m2-v2`:
+
+- **New section:** Intelligent Urgency (VOY-2284) — full description of the red/amber/green/grey hierarchy, mode-aware rules (Plan=research needs only, Prepare=full, Go=blocking only), thresholds (7d fresh, 30d stale, 7d amber, 0d red, 30% low-confidence, 70% high-relevance), heuristics (14 safety keywords, sell-out estimate), visual components, FreshnessCue alignment.
+- **Updated Prepare mode:** Urgency Overview sidebar, SafetyGapsCard, sorted checklist with color-tinted rows, mini urgency count bar.
+- **Updated Go mode:** Today View needs-attention section + collapsed on-track disclosure, NeedsAttention card.
+- **Updated Plan mode:** Research needs card ("N items need research"), stale grey alignment.
+- **Added urgency limitations (11–16):** client-side only scoring; deadline signals dormant (expiresAt null in schema); safety flags are title-keyword heuristics; sell-out warnings show estimated counts; no user override for urgency; badges are purely visual (no linked actions).
+- **Added urgency troubleshooting table:** 6 common symptoms with resolutions.
+- **Updated "What Is Built":** tripUrgency.ts, UrgencyBadge.tsx, FreshnessCue.tsx (now committed); moved VOY-2284 out of "What Is NOT Yet Built".
+- **Updated status line and version history.**
+
+### R1a Release Status — STILL BLOCKED (P0)
+
+| Pipeline | Status | Notes |
+|----------|--------|-------|
+| VOY-2267 (Pre-ship Review) | **done** ✅ | No change |
+| VOY-2269 (Impl fix Option A) | **done** ✅ | No change |
+| VOY-2270 (Code Review) | **done** ✅ | No change |
+| VOY-2298 (Final Structural Audit v2) | **P0 FOUND — DO NOT SHIP** 🚫 | No change — non-global regexes in entity-resolver |
+| **VOY-2301 (Fix P0 infinite loop)** | **todo** 🔴 **UNASSIGNED** | Created by CTO 17:24 UTC, **no assignee**. The release pipeline docs say "assigned to Founding Engineer" but the issue remains unclaimed. This is the critical unblock action. |
+| **VOY-2189 (R1a Release)** | **blocked** | Waiting on P0 fix |
+| VOY-2190 (QA R1a) | **backlog** | Not yet started |
+
+**Note:** The research artifact service assessment frontmatter version was corrected from r1a-v4 to r1a-v5 (history already showed r1a-v5). Status updated to reflect VOY-2301 unassigned state.
+
+### Site Status
+
+| Endpoint | Status |
+|----------|--------|
+| voyonder.com/ | ✅ HTTP 200 |
+| voyonder.com/api/health | ✅ HTTP 200 |
+| voyonder.com/documentation | ✅ HTTP 200 |
+| voyonder.com/documentation/releases | ✅ HTTP 200 |
+
+All customer-facing sites healthy.
+
+### Documentation Health
+
+| Document | Status | Notes |
+|----------|--------|-------|
+| `docs/support/assessments/support-case-m2-trip-pages.md` | **Updated (m2-v2)** | Added VOY-2284 Intelligent Urgency coverage. Ready for when M2 Trip features ship. |
+| `docs/support/assessments/support-case-research-artifact-service.md` | **Corrected (r1a-v5)** | Frontmatter version synced with history. VOY-2301 noted as UNASSIGNED. |
+| `docs/releases.md` | **Current** | No release shipped since last entry — R1a note pending deploy. |
+| All other support assessments | **Current** | No changes since last audit. |
+
+### Disposition
+
+**STANDING BY — docs prepped for both in-flight releases.** The VOY-2284 commit was the primary trigger and is fully documented (m2-v2). Remaining next triggers in priority order:
+
+1. **VOY-2301 needs assignment** — the P0 fix issue is unassigned (CTO created it but no assignee). This blocks R1a and therefore all M2 features. Not my domain to assign, but noted for the board.
+2. **Founding Engineer fixes P0 (VOY-2301 when assigned)** → Release Engineer proceeds → calls Support Engineer for docs sync and curated release note
+3. **R1a release ships** → publish curated release note + API reference for research artifact service
+4. **M2 Trip features reach released state** → release note + /documentation update
+5. **COO requests documentation health report** — delivered on demand
+6. **Any new commit to tracked repos** → diff assessment for documentation impact
+
+*Maintained by: Support Engineer (88b72065)*

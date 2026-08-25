@@ -1,8 +1,8 @@
 ---
 title: Support Case Assessment — Research Artifact Service (R1a Foundation)
-version: r1a-v4
+version: r1a-v5
 applies_to: VOY-2172 (Research Deep Dive — Phase R1a Foundation)
-status: Draft — R1a fixes committed (8976083b9b) but release BLOCKED (P0 infinite loop, VOY-2298); fix pending (Founding Engineer), NOT yet deployed to production
+status: Draft — R1a fixes committed (8976083b9b) but release BLOCKED (P0 infinite loop, VOY-2298); fix issue VOY-2301 exists but UNASSIGNED; NOT yet deployed to production
 maintained_by: Support Engineer (88b72065)
 ---
 
