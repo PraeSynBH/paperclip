@@ -1,43 +1,42 @@
 ---
 title: M6 — Self-Serve Trial & Onboarding
 version: m6
-date: 2026-08-24
-commits: 2ffd656, 1c19fca, 63dd5aa, e70118c
-status: Draft — M6 not yet live (deploy blockers in VOY-2156). Frontmatter date is the doc preparation date; deployment timestamp TBD on release notification.
+date: 2026-08-25
+commits: 75c884f66d (feat/m6), 46a0b32003 (billing fix), 74753fe83b (CI fix), 8fb4d72b8f (certresolver fix), 27b6a2b29d (routing fix), 99b3917519 (auth migration), b63c4f9f26 (verified healthy)
+status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. All production services healthy.
 ---
 
 # M6 Release: Self-Serve Trial Signup & Onboarding
 
-**Branch:** `feat/m6-self-serve-trial-onboarding` → `master`
-**Release status:** DRAFT — not yet deployed. Deploy blockers in VOY-2156 (DB schema, health route, Traefik routing). To be finalized on release notification.
-**Applies to:** VOY-1998 (Phase 0.1) + VOY-2027 (Phase 3) + VOY-1474 follow-up (async job pattern) + PostHog analytics
+**Branches:** `feat/m6-self-serve-trial-onboarding` → `master`
+**Release status:** Published — M6 is live in production. Deployment completed 2026-08-25 ~01:15 UTC.
+**Applies to:** M6 Trial Feature Release (VOY-1984) — self-serve trial signup, onboarding wizard, Stripe billing, PostHog analytics, async job pattern for research & exports
 
 ---
 
 ## What Changed
 
-This release adds self-serve trial signup, onboarding, and analytics tracking. New users can now sign up directly at voyonder.com without an invitation — they get a 14-day free trial, a guided onboarding wizard, and the full Voyonder experience.
+This release adds self-serve trial signup, onboarding, and analytics tracking to Voyonder. New users can now sign up directly at voyonder.com without an invitation — they get a **7-day free trial**, a guided onboarding wizard, and the full Voyonder experience. No credit card required.
 
-### Self-Serve Signup (Three Methods)
+### Self-Serve Signup (Two Methods)
 
-Users can create a Voyonder account through three channels, each creating a company with a 14-day Stripe trial subscription:
+Users can create a Voyonder account through two channels, each creating a company with a 7-day Stripe trial subscription:
 
 | Method | How It Works | Requirements |
 |--------|-------------|-------------|
-| **Email & Password** | User provides name, email, and password. Account created with trial subscription. Verification email sent. | Valid email, strong password |
-| **Google OAuth** | User authenticates via Google. Profile info auto-populated. Trial subscription created. | Google account |
-| **Magic Link** | User enters email, receives a one-time login link. Trial subscription created on first click. | Valid email |
+| **Email + Magic Link** | User enters email, receives a one-time login link (expires after 15 minutes), clicks to verify and sign in | Valid email |
+| **Google OAuth** | User authenticates via Google. Profile info auto-populated. Trial subscription created. | Google account (if configured in the deployment) |
 
-All methods create a Stripe subscription with `trial_settings.end_behavior.missing_payment_method: cancel` — the subscription auto-cancels if no payment method is added within the 14-day trial period.
+All methods create a Stripe subscription with `trial_settings.end_behavior.missing_payment_method: cancel` — the subscription auto-cancels if no payment method is added within the 7-day trial period.
 
 ### Onboarding Wizard
 
-After signup, users are guided through an onboarding flow:
+After signup, new users see an onboarding flow:
 
 | Endpoint | Purpose |
 |----------|---------|
 | `GET /api/onboarding/status` | Returns current onboarding status (not_started, in_progress, completed), selected role, and completion timestamp |
-| `POST /api/onboarding/role` | Sets the user's role (e.g., "founder", "operator", "team_member"). Triggers asset pack deployment. |
+| `POST /api/onboarding/role` | Sets the user's role and triggers asset pack deployment |
 | `POST /api/onboarding/skip` | Skips onboarding — lands on the default dashboard |
 
 The onboarding status is persisted in the `voyonder_companies` table (`onboardingStatus`, `onboardingSelectedRole`, `onboardingCompletedAt` columns).
@@ -53,22 +52,22 @@ A dedicated webhook endpoint handles the full subscription lifecycle:
 | `customer.subscription.updated` | Syncs status changes (active, past_due, canceled, incomplete) |
 | `customer.subscription.deleted` | Marks subscription as canceled |
 | `invoice.paid` | Records successful payment |
-| `invoice.payment_failed` | Logs payment failure (triggers dunning if configured) |
-| `subscription.trial_will_end` | Fires 3 days before trial expiry — can trigger reminder emails |
+| `invoice.payment_failed` | Logs payment failure |
+| `subscription.trial_will_end` | Fires 3 days before trial expiry — triggers reminder emails |
 
-Webhook events are **idempotent** — duplicate events are ignored via a `voyonder_stripe_webhook_events` table that tracks processed event IDs. The webhook route is mounted before JSON body parsing and auth middleware so Stripe can deliver events without authentication.
+Webhook events are **idempotent** — duplicate events are ignored via a `voyonder_stripe_webhook_events` table that tracks processed event IDs.
+
+Conversion uses `ON CONFLICT on company_id` (not `stripe_subscription_id`) — closes a P0 bug where NULL subscription_id prevented trial→paid conversion.
 
 ### Trial Lifecycle
 
 | Phase | Duration | Behavior |
 |-------|----------|----------|
-| Active trial | 14 days from signup | Full access to all features |
-| Grace period | 7 days after trial ends | Read-only access — data preserved, no new content creation |
-| Expired | After grace period | Company marked `trial_expired`. Data retained for re-activation (adding payment method restores access) |
+| Active trial | 7 days from signup | Full access to all features |
+| Grace period | Short period after trial ends | Data preserved — subscribe to re-activate |
+| Expired | After grace period | Company marked `trial_expired`. Data retained for re-activation. |
 
-The `expireTrials()` reaper runs periodically to transition companies through the lifecycle. `getTrialsExpiringSoon()` returns companies whose trial ends within N days for proactive outreach.
-
-### Subscription Management (Board Users)
+### Subscription Management
 
 | Endpoint | Purpose |
 |----------|---------|
@@ -82,7 +81,7 @@ The `expireTrials()` reaper runs periodically to transition companies through th
 All signup flows now emit PostHog events for funnel analysis:
 
 **Signup Events:**
-- `signup_started` — User initiated signup (includes method: email/google/magic_link)
+- `signup_started` — User initiated signup (includes method: email/google)
 - `signup_failed` — Signup rejected (includes reason: user_already_exists, invalid_email, etc.)
 - `signup_completed` — Account + company + trial created successfully
 
@@ -92,14 +91,57 @@ All signup flows now emit PostHog events for funnel analysis:
 - `billing_subscription_canceled` — Subscription ended
 - `billing_invoice_paid` / `billing_invoice_failed` — Payment events
 
-**User Identification:** After signup, users are identified in PostHog with their userId, email, name, companyId, and auth provider. All subsequent pageviews and events are attributed to the identified user.
-
 ### Async Job Pattern (Research & Exports)
 
 The M6 release extends the M1/M2 async job infrastructure to the Voyonder codebase:
 
 - **Research activity search** — Converted to background job processing (returns HTTP 202 with jobId)
 - **CSV/ICS export routes** — New export endpoints use the background job pattern for non-blocking PDF and calendar file generation
+
+### Auth System Migration (VOY-2171)
+
+Background jobs, research, and export API routes now use `assertVoyonderAuth` (Voyonder JWT auth) instead of Paperclip's `assertAuthenticated`/`assertCompanyAccess`. The `Authorization` header must carry a Voyonder HS256 JWT with `sub` (userId) and `company_id` claims. Requires `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` environment variable.
+
+---
+
+## Deployment History
+
+### Deploy Fixes (2026-08-25 ~00:55 UTC) — ALL RESOLVED
+
+Three blockers were identified during the initial M6 deploy attempt and resolved:
+
+1. **B1 — `background_jobs` table missing** → Worker dead (42P01). Fixed by creating Paperclip-derived tables in `travel_db`. ✅ DEPLOYED
+2. **B2 — Healthcheck 404** → `/api/health` shadowed by catch-all route. Fixed by registering health route before `app.use(voyonderRouter)`. ✅ DEPLOYED
+3. **B3 — Traefik certresolver** → `voyonder_api` not publicly routed with correct TLS. Fixed by adding Traefik labels with `mytlschallenge` certresolver and splitting frontend/API routers. ✅ DEPLOYED
+
+### Current Service Health (verified ~00:55 UTC — confirmed healthy at ~01:35 UTC)
+
+| Service | Status |
+|---|---|
+| voyonder.com | HTTP 200 ✅ |
+| voyonder.com/api/health | HTTP 200 ✅ |
+| travel.praesyn.com | HTTP 200 ✅ |
+| travel.praesyn.com/api/health | HTTP 200 ✅ |
+
+|---
+
+## Known Issues
+
+### Auth Routing Mismatches (VOY-2192 / M6.1)
+
+QA verification (VOY-1985) found that all signup flows are non-functional in production due to path/method mismatches between the Next.js frontend and the Voyonder API. The frontend renders correctly and the API is healthy, but auth requests are routed to the wrong handler:
+
+| Issue | Frontend Calls | Backend Has | Status |
+|-------|---------------|-------------|--------|
+| Google OAuth | `GET /api/auth/google` + `GET /api/auth/google/callback` | `POST /api/auth/signup/google` (different path & method) | ❌ Broken — tracked in VOY-2192 |
+| Magic link send | `POST /api/auth/magic-link/send` | `POST /api/auth/signup/magic-link` (different path) | ❌ Broken — tracked in VOY-2192 |
+| Magic link verify | `POST /api/auth/magic-link/verify` with JSON body | `GET /api/auth/magic-link/verify?token=` (302 redirect, also returns 500) | ❌ Broken — tracked in VOY-2192 |
+
+**Root cause:** Traefik routes `PathPrefix(/api/auth)` to the Voyonder API, intercepting auth requests before the Next.js frontend's own API routes can handle them.
+
+**Fix tracked in:** VOY-2192 (M6.1), assigned to Founding Engineer, critical priority.
+
+**Workaround:** No user-facing workaround. Users see the signup page and pricing page, but signup submissions fail. Monitor VOY-2192 for deployment of fixes.
 
 ---
 
@@ -112,40 +154,20 @@ The M6 release extends the M1/M2 async job infrastructure to the Voyonder codeba
 | `STRIPE_SECRET_KEY` | Yes | — | Stripe secret key for API calls |
 | `STRIPE_WEBHOOK_SECRET` | Yes | — | Webhook signing secret for event verification |
 | `STRIPE_PRICE_ID` | Yes | — | Default Stripe price ID for trial subscriptions |
-| `POSTHOG_API_KEY` | No | — | PostHog API key for analytics (falls back to `POSTHOG_PERSONAL_API_KEY`) |
-| `POSTHOG_HOST` | No | `https://us.posthog.com` | PostHog host URL (falls back to `NEXT_PUBLIC_POSTHOG_HOST`) |
+| `POSTHOG_API_KEY` | No | — | PostHog API key for analytics |
+| `POSTHOG_HOST` | No | `https://us.posthog.com` | PostHog host URL |
 | `PAPERCLIP_API_KEY` | Yes | — | Board-level API key for Paperclip integration |
 | `PAPERCLIP_API_URL` | Yes | — | Paperclip API base URL |
-
-### Stripe Price Configuration
-
-Trial subscriptions use a price with:
-- `trial_settings.end_behavior.missing_payment_method: cancel`
-- No initial payment method required
-- 14-day trial period (configurable via Stripe dashboard)
-
----
-
-## Support Escalation Paths
-
-| Issue | First Response | Escalation |
-|-------|---------------|------------|
-| Signup fails with "user already exists" | User tries alternate auth method or resets password | N/A — expected behavior |
-| Stripe trial not created on signup | Check Stripe dashboard for the customer; verify `STRIPE_SECRET_KEY` is valid | CTO if Stripe API returns errors |
-| Webhook events not processing | Check server logs for webhook signature verification failures; verify `STRIPE_WEBHOOK_SECRET` | CTO if signature verification is failing |
-| Trial not expiring automatically | Verify `expireTrials()` reaper is running (scheduled job) | CTO if reaper is not scheduled |
-| Onboarding wizard stuck | User navigates to `/trips` to skip; check `onboardingStatus` in DB | CTO if role selection API fails |
-| PostHog events not appearing | Verify `POSTHOG_API_KEY` is set; check PostHog dashboard for incoming events | CTO if API key is invalid |
+| `BETTER_AUTH_SECRET` | Yes* | — | Used for JWT signing (*or `PAPERCLIP_AGENT_JWT_SECRET`) |
 
 ---
 
 ## Related Documentation
 
 - [Async UX Release Notes](voy-1474-async-ux.md) — Background job framework and process visibility (M1+M2)
-- [Auth Flow](../../doc/auth-flow.md) — Voyonder↔Paperclip authentication architecture
-- [PostHog Dashboards Setup](../../doc/posthog-dashboards-setup.md) — PostHog dashboard configuration
-- [PostHog Monitoring SOP](../posthog-error-monitoring-triage-sop.md) — Error monitoring triage
+- [Support Case Assessment](../../../doc/m6-trial-support-assessment.md) — Full troubleshooting guide and escalation paths
+- [Auth Flow](../../../doc/auth-flow.md) — Voyonder↔Paperclip authentication architecture
 
 ---
 
-*Prepared by Support Engineer (88b72065) — pending release verification*
+*Maintained by: Support Engineer (88b72065). Updated 2026-08-25 to reflect production deployment state.*

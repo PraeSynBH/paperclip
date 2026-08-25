@@ -1,8 +1,8 @@
 ---
 title: Support Case Assessment — M6 Self-Serve Trial & Onboarding
-version: m6-draft
+version: m6-v1
 applies_to: M6 release (self-serve trial signup, onboarding, PostHog analytics)
-status: Draft — pending release verification
+status: Published — Live in production (deployed 2026-08-25 ~01:15 UTC)
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -10,7 +10,7 @@ maintained_by: Support Engineer (88b72065)
 
 ## Feature Summary
 
-M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder. Users can sign up directly at voyonder.com via email/password, Google OAuth, or magic link — each creates a company with a 14-day Stripe trial subscription. A guided onboarding wizard helps users select their role and deploy asset packs. PostHog tracks the full signup-to-conversion funnel. The release also extends the M1/M2 async job pattern to research and export routes in the Voyonder codebase.
+M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder. Users can sign up directly at voyonder.com via email + magic link or Google OAuth — each creates a company with a 7-day Stripe trial subscription (no credit card required). A guided onboarding wizard helps users select their role and deploy asset packs. PostHog tracks the full signup-to-conversion funnel. The release also extends the M1/M2 async job pattern to research and export routes in the Voyonder codebase, and migrates those routes from Paperclip auth to Voyonder JWT auth (VOY-2171).
 
 ### Key Components
 
@@ -88,6 +88,14 @@ M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder.
 15. **Export payload size is capped at 512 KB** — Payloads exceeding this limit are rejected with HTTP 413. This matches the M2 behavior.
 16. **No export progress tracking** — Unlike research jobs, export jobs do not expose progress updates. The client polls for completion.
 
+### Auth Routing Mismatches (VOY-2192 / M6.1)
+
+17. **Google OAuth routing mismatch (CRITICAL)** — Frontend calls `GET /api/auth/google` and `GET /api/auth/google/callback`. The Voyonder API has `POST /api/auth/signup/google` (different path AND method). Result: Google signup returns 404. Tracked in VOY-2192.
+18. **Magic link send routing mismatch (CRITICAL)** — Frontend calls `POST /api/auth/magic-link/send`. The Voyonder API has `POST /api/auth/signup/magic-link` (different path). Result: magic link signup returns 404. Tracked in VOY-2192.
+19. **Magic link verify routing mismatch (CRITICAL)** — Frontend calls `POST /api/auth/magic-link/verify` with `{token}` body expecting JSON response. The Voyonder API has `GET /api/auth/magic-link/verify?token=` which returns a 302 redirect (and currently throws 500). Result: cannot complete magic link signup. Tracked in VOY-2192.
+20. **GET /api/auth/magic-link/verify returns 500 (HIGH)** — Even the correct Voyonder API endpoint for magic link verification crashes due to missing env var or DB issue. Tracked in VOY-2192.
+21. **General /api/auth/* routing conflict (HIGH)** — Traefik routes ALL `/api/auth/*` paths to the Voyonder API, intercepting Next.js API routes at travel_app. The Voyonder API does not handle all auth routes the frontend expects. Tracked in VOY-2192.
+
 ## Troubleshooting
 
 ### Signup Failures
@@ -124,12 +132,22 @@ M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder.
 | Signup events show 0 users | Distinct ID discontinuity | Events before user creation use email; after use userId. This is expected. |
 | Duplicate events | Multiple signup attempts or retries | Check server logs for duplicate signup calls |
 
+### Auth Routing Issues (VOY-2192 / M6.1)
+
+| Symptom | Likely Cause | Resolution |
+|---------|-------------|------------|
+| Google signup button returns 404 | Route mismatch: frontend calls `GET /api/auth/google`, backend has `POST /api/auth/signup/google` | Tracked in VOY-2192. No user workaround. Escalate to Engineering. |
+| Magic link send returns 404 | Route mismatch: frontend calls `POST /api/auth/magic-link/send`, backend has `POST /api/auth/signup/magic-link` | Tracked in VOY-2192. No user workaround. Escalate to Engineering. |
+| Magic link verify returns 404 or 500 | Route mismatch: frontend calls `POST /api/auth/magic-link/verify` with JSON body, backend has `GET /api/auth/magic-link/verify?token=` (also returns 500) | Tracked in VOY-2192. No user workaround. Escalate to Engineering. |
+| "All signup methods broken" | Auth routing conflict: Traefik routes all `/api/auth/*` to Voyonder API, which doesn't handle frontend's expected paths | Tracked in VOY-2192 (M6.1). Critical priority. Founding Engineer assigned. |
+
 ## Support Escalation
 
 | Issue | Severity | Contact | SLA |
 |-------|----------|---------|-----|
 | Signup completely broken (all methods fail) | P0 | CTO | Immediate |
 | Stripe webhook not processing (cannot create trials) | P0 | CTO | Immediate |
+| Auth routing mismatches (VOY-2192 — signup flows 404/500) | P0 | CTO | Immediate |
 | Trial not expiring (revenue impact) | P1 | CTO | 1 hour |
 | PostHog analytics not reporting | P2 | CTO | 4 hours |
 | Onboarding wizard broken (non-blocking) | P2 | CTO | 4 hours |
@@ -144,5 +162,7 @@ M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder.
 | Version | Date | Changes |
 |---------|------|---------|
 | m6-draft | 2026-08-24 | Initial draft — pending release verification |
+| m6-v1 | 2026-08-25 | Published — M6 live in production. Updated trial period to 7 days (actual), removed email/password method (shipped with magic link + Google OAuth only), added VOY-2171 auth migration context. |
+| m6-v1.1 | 2026-08-25 | Added 5 auth routing mismatch limitations (VOY-2192 / M6.1) from QA findings. Added P0 escalation entry for auth routing. |
 
 *Maintained by: Support Engineer (88b72065)*

@@ -3,8 +3,10 @@
 **Status:** PUBLISHED — M6 is live in production
 **Version:** v0.3.0 (estimated)
 **Published:** 2026-08-25
-**Deployed commit:** TBD (confirm with Release Engineer)
+**Deployed commit:** `b63c4f9f26` (verified healthy 2026-08-25 ~01:35 UTC)
 **Verification:** All production services healthy per CTO (~00:55 UTC 2026-08-25)
+
+**⚠️ Known issues:** Auth routing mismatches (VOY-2192 / M6.1) block all signup flows. Frontend renders, API healthy, but signup submissions return 404/500. Fix in progress by Founding Engineer.
 
 ---
 
@@ -29,6 +31,6 @@ Self-serve trial signup — create an account and start planning with Sage in un
 
 ## Notes
 
-- Replace the "pending" commit hash on the /documentation/releases page with the actual deployed commit hash from the Release Engineer.
+- Deployment verification complete — healthy services confirmed by CTO at ~01:35 UTC 2026-08-25.
 - The version number v0.3.0 is estimated — confirm with the Release Engineer.
 - The "Under the hood" line is intentionally light on technical detail (no mention of Docker, Traefik, or database schemas).

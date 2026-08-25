@@ -2,12 +2,38 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-20
+last_updated: 2026-08-25
 ---
 
 # Release Notes
 
 Paperclip ships continuously. This page documents each release to the main branch with curated, customer-facing notes.
+
+---
+
+## M6 Trial Feature — August 25, 2026
+
+[Full release notes →](/support/releases/m6-self-serve-trial)
+
+### Highlights
+
+- **Self-Serve Trial Signup** — Create a Voyonder account at voyonder.com/join with email + magic link or Google OAuth, and start a 7-day free trial immediately. No credit card required.
+
+- **Onboarding Wizard** — After signup, choose your travel role and get relevant starter packs deployed to your account automatically. Skip anytime.
+
+- **7-Day Free Trial** on the Explorer tier — full access to Sage AI, trip planning, and collaboration features. Trial reminders before expiry.
+
+- **Simple Conversion** — When your trial ends, pick a plan at voyonder.com/pricing and complete Stripe Checkout. Your data is preserved through the transition.
+
+- **Billing Portal** — Manage your subscription, update payment method, download invoices, or cancel at voyonder.com/settings/billing.
+
+- **Trial Expiry Grace Period** — Expired trials preserve your trips and data. Subscribe anytime to re-activate.
+
+- **Auth System Migration** — Background jobs, research, and export routes migrated from Paperclip auth to Voyonder JWT auth for standalone deployment compatibility.
+
+[Full release notes →](/support/releases/m6-self-serve-trial)
+
+> **⚠️ Known issue (2026-08-25):** Auth routing mismatches between the frontend and Voyonder API currently block all signup methods. See [VOY-2192](/issues/VOY-2192) for fix progress and the [release notes](/support/releases/m6-self-serve-trial#known-issues) for details.
 
 ---
 

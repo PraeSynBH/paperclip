@@ -3,8 +3,10 @@
 **Status:** PUBLISHED — M6 is live in production
 **Applies to:** M6 Trial Feature Release (VOY-1984)
 **Version:** v0.3.0 (estimated)
-**Last updated:** 2026-08-25 ~01:00 UTC
-**Deployed commit:** TBD (confirm with Release Engineer)
+**Last updated:** 2026-08-25 ~02:20 UTC
+**Deployed commit:** b63c4f9f26
+
+**⚠️ Known issues:** Auth routing mismatches (VOY-2192 / M6.1) block all signup flows. See published support assessment for full limitations list.
 
 ---
 
@@ -193,7 +195,7 @@ The `travel_app` container was killed during the initial deploy. Restarted and c
 
 ## Version Tracking
 - **Release version:** v0.3.0 (expected)
-- **Deployed commit:** TBD (when confirmed by Release Engineer)
+- **Deployed commit:** `b63c4f9f26` (verified healthy 2026-08-25 ~01:35 UTC)
 - **Documentation version:** This document tracks the deployed state. Update with actual commit hash after confirmation.
 
 ## Monitoring
