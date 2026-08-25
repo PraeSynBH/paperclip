@@ -18,6 +18,12 @@ const createJobSchema = z.object({
   payload: z.record(z.unknown()).default({}),
 });
 
+/** Heartbeat interval for SSE connections (seconds). */
+const SSE_HEARTBEAT_INTERVAL_SEC = 30;
+
+/** Max lifetime of a single SSE connection before forced cleanup (seconds). */
+const SSE_MAX_LIFETIME_SEC = 300;
+
 export function backgroundJobRoutes(db: Db) {
   const router = Router();
   const svc = backgroundJobService(db);
@@ -39,6 +45,10 @@ export function backgroundJobRoutes(db: Db) {
    * GET /api/companies/:companyId/background-jobs/events
    * SSE endpoint that streams background job status changes.
    * NOTE: defined BEFORE the /:id wildcard to avoid "events" matching as an id.
+   *
+   * Includes a heartbeat interval and connection lifetime cap to prevent
+   * listener leaks on unclean TCP disconnects (network partition, laptop
+   * close, mobile signal loss — where `req.on("close")` may never fire).
    */
   router.get("/companies/:companyId/background-jobs/events", async (req, res) => {
     const auth = assertVoyonderAuth(req);
@@ -60,8 +70,23 @@ export function backgroundJobRoutes(db: Db) {
       }
     });
 
+    // Heartbeat — detect dead connections by sending a periodic comment.
+    // Browsers and proxies will drop the connection if the client has gone
+    // away, which triggers the `close` event for clean teardown.
+    const heartbeatTimer = setInterval(() => {
+      res.write(":heartbeat\n\n");
+    }, SSE_HEARTBEAT_INTERVAL_SEC * 1000);
+
+    // Connection lifetime cap — forcefully clean up after max lifetime
+    // even if the `close` event never fires (e.g. unclean TCP drop).
+    const lifetimeTimer = setTimeout(() => {
+      res.end();
+    }, SSE_MAX_LIFETIME_SEC * 1000);
+
     req.on("close", () => {
       unsubscribe();
+      clearInterval(heartbeatTimer);
+      clearTimeout(lifetimeTimer);
     });
   });
 

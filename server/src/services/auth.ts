@@ -7,6 +7,8 @@ export interface VoyonderAuth {
   companyId: string;
 }
 
+const SUPPORTED_JWT_ALG = "HS256";
+
 function base64UrlDecode(value: string): string {
   return Buffer.from(value, "base64url").toString("utf8");
 }
@@ -31,8 +33,24 @@ function signPayload(secret: string, signingInput: string): string {
   return createHmac("sha256", secret).update(signingInput).digest("base64url");
 }
 
-function jwtSecret(): string | null {
-  return process.env.BETTER_AUTH_SECRET?.trim() || process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim() || null;
+/**
+ * Return all configured JWT secrets in priority order.
+ *
+ * Both BETTER_AUTH_SECRET (used for user session JWTs) and
+ * PAPERCLIP_AGENT_JWT_SECRET (used for Paperclip agent JWTs) are tried
+ * during signature verification so that tokens signed with either secret
+ * are accepted. This mirrors the dual-secret pattern in agent-auth-jwt.ts.
+ *
+ * In production both variables should be set to distinct, independent values
+ * to maintain the trust boundary between user sessions and agent identities.
+ */
+function jwtSecrets(): string[] {
+  const secrets: string[] = [];
+  const betterAuth = process.env.BETTER_AUTH_SECRET?.trim();
+  const agentJwt = process.env.PAPERCLIP_AGENT_JWT_SECRET?.trim();
+  if (betterAuth) secrets.push(betterAuth);
+  if (agentJwt) secrets.push(agentJwt);
+  return secrets;
 }
 
 /**
@@ -57,8 +75,8 @@ export function assertVoyonderAuth(req: Request): VoyonderAuth {
     throw unauthorized("Missing authorization token");
   }
 
-  const secret = jwtSecret();
-  if (!secret) {
+  const secrets = jwtSecrets();
+  if (secrets.length === 0) {
     throw unauthorized("Auth secret not configured");
   }
 
@@ -68,9 +86,29 @@ export function assertVoyonderAuth(req: Request): VoyonderAuth {
   }
   const [headerB64, claimsB64, signature] = parts;
 
+  // Validate JWT header algorithm — reject tokens claiming non-HS256 alg.
+  // Even though we always verify with HMAC-SHA256, validating the header alg
+  // closes a standards-compliance gap and makes algorithm-related signing
+  // failures easier to diagnose.
+  const header = parseJson(base64UrlDecode(headerB64));
+  if (!header || typeof header.alg !== "string" || header.alg !== SUPPORTED_JWT_ALG) {
+    throw unauthorized("Unsupported JWT algorithm");
+  }
+
   const signingInput = `${headerB64}.${claimsB64}`;
-  const expectedSig = signPayload(secret, signingInput);
-  if (!safeCompare(signature, expectedSig)) {
+
+  // Try each configured secret — accept the token if ANY secret validates.
+  // This ensures both user-session JWTs (signed with BETTER_AUTH_SECRET) and
+  // Paperclip agent JWTs (signed with PAPERCLIP_AGENT_JWT_SECRET) are accepted.
+  let signatureValid = false;
+  for (const secret of secrets) {
+    const expectedSig = signPayload(secret, signingInput);
+    if (safeCompare(signature, expectedSig)) {
+      signatureValid = true;
+      break;
+    }
+  }
+  if (!signatureValid) {
     throw unauthorized("Invalid token signature");
   }
 
