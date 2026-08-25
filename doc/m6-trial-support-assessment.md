@@ -55,13 +55,14 @@ When a trial expires:
 - User data is **preserved** — the company can be re-activated by subscribing
 - No automatic data deletion after trial expiry
 
-## Key Architecture Changes
+### Key Architecture Changes
 
 - **Standalone Voyonder API** (`voyonder_api`) — a new Express service running alongside the existing `travel_app` (Next.js frontend). The API handles M6-specific routes: signup, onboarding, billing webhooks, PostHog events.
 - **New database tables** (in `travel_db`): `voyonder_companies`, `voyonder_users`, `voyonder_stripe_webhook_events`
 - **No migration runner** in the standalone deploy — schema must be applied manually or via SQL scripts
 - **PostHog integration** — signup events, onboarding completion, and conversion events are sent to PostHog for funnel analysis
 - **Stripe webhooks** — `checkout.session.completed` and `subscription.updated` handlers manage the trial→paid conversion
+- **Voyonder JWT auth (VOY-2171)** — the background-jobs, exports, and research API routes use `assertVoyonderAuth` instead of Paperclip's `assertAuthenticated`/`assertCompanyAccess`. The `Authorization` header must carry a Voyonder HS256 JWT (`Bearer <token>`) with `sub` (userId) and `company_id` claims. `companyId` is extracted from JWT claims, not the URL path. Requires `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` environment variable. **Support note:** If an API client receives 401 Unauthorized from these routes, the JWT is missing, expired, or carries invalid claims.
 
 ## Known Limitations
 
