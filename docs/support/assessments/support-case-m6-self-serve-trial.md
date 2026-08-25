@@ -1,6 +1,6 @@
 ---
 title: Support Case Assessment — M6 Self-Serve Trial & Onboarding
-version: m6-v1
+version: m6-v1.3
 applies_to: M6 release (self-serve trial signup, onboarding, PostHog analytics)
 status: Published — Live in production (deployed 2026-08-25 ~01:15 UTC)
 maintained_by: Support Engineer (88b72065)
@@ -12,7 +12,7 @@ maintained_by: Support Engineer (88b72065)
 
 M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder. Users can sign up directly at voyonder.com via email + magic link or Google OAuth — each creates a company with a 7-day Stripe trial subscription (no credit card required). A guided onboarding wizard helps users select their role and deploy asset packs. PostHog tracks the full signup-to-conversion funnel. The release extends the M1/M2 async job pattern to research and export routes in the Voyonder codebase.
 
-**Auth system migration (VOY-2171):** Research and export routes were partially migrated from Paperclip auth to Voyonder JWT auth, but the migration is **NOT DEPLOYED**. Structural review (VOY-2198) found 2 critical issues: the companyId authorization boundary was broken (JWT claim not checked against URL param) and JWT expiration was not enforced. These were fixed in commit `535f75fa15` (VOY-2200) on the `fix/m-series-tech-debt` branch, pending Staff Engineer re-review and CTO sign-off before deployment.
+**Auth system migration (VOY-2171):** Research and export routes were partially migrated from Paperclip auth to Voyonder JWT auth, but the migration is **NOT YET DEPLOYED TO PRODUCTION**. Structural issues found during review (VOY-2198) — broken companyId authorization boundary and missing JWT expiration — were fixed in commit `535f75fa15` (VOY-2200) and approved by Staff Engineer. Cross-system secret fallback and SSE listener leak fixes landed in commit `6dff29f449` (VOY-2201). CTO sign-off received (commit `4134b0038e`). Release Engineer is deploying to production.
 
 ### Key Components
 
@@ -163,9 +163,10 @@ M6 adds self-serve trial signup, onboarding, and analytics tracking to Voyonder.
 
 | Version | Date | Changes |
 |---------|------|---------|
-| m6-draft | 2026-08-24 | Initial draft — pending release verification |
-| m6-v1 | 2026-08-25 | Published — M6 live in production. Updated trial period to 7 days (actual), removed email/password method (shipped with magic link + Google OAuth only), added VOY-2171 auth migration context. |
+|| m6-draft | 2026-08-24 | Initial draft — pending release verification |
+|| m6-v1 | 2026-08-25 | Published — M6 live in production. Updated trial period to 7 days (actual), removed email/password method (shipped with magic link + Google OAuth only), added VOY-2171 auth migration context. |
 || m6-v1.1 | 2026-08-25 | Added 5 auth routing mismatch limitations (VOY-2192 / M6.1) from QA findings. Added P0 escalation entry for auth routing. |
 || m6-v1.2 | 2026-08-25 | Updated auth migration section — clarified NOT DEPLOYED, documented VOY-2198 structural review findings and VOY-2200 fixes (commit `535f75fa15`). |
+|| m6-v1.3 | 2026-08-25 | Auth migration pipeline complete — CTO sign-off received (commit `4134b0038e`), Release Engineer deploying. Updated status throughout. |
 
 *Maintained by: Support Engineer (88b72065)*

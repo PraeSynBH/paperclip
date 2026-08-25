@@ -3,7 +3,7 @@
 |version: m6
 |date: 2026-08-25
 |commits: 75c884f66d (feat/m6), 46a0b32003 (billing fix), 74753fe83b (CI fix), 8fb4d72b8f (certresolver fix), 27b6a2b29d (routing fix), b63c4f9f26 (verified healthy)
-|status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. All production services healthy. Auth migration (VOY-2171) is NOT deployed — BLOCKED on structural review fixes (VOY-2200), excluded from current deploy per CEO directive.
+||status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. All production services healthy. Auth migration (VOY-2171) NOT YET DEPLOYED — CTO sign-off received, Release Engineer deploying.
 ---
 
 # M6 Release: Self-Serve Trial Signup & Onboarding
@@ -98,15 +98,17 @@ The M6 release extends the M1/M2 async job infrastructure to the Voyonder codeba
 - **Research activity search** — Converted to background job processing (returns HTTP 202 with jobId)
 - **CSV/ICS export routes** — New export endpoints use the background job pattern for non-blocking PDF and calendar file generation
 
-### Auth System Migration (VOY-2171) — ⚠️ NOT DEPLOYED
+### Auth System Migration (VOY-2171) — ⚠️ NOT YET DEPLOYED TO PRODUCTION
 
-**Status:** BLOCKED — excluded from current deploy per CEO directive (VOY-2199). Structural review (VOY-2198) identified 2 critical issues requiring fixes (VOY-2200) before deployment. See pipeline below.
+**Status:** Pipeline complete — CTO sign-off received (commit `4134b0038e`). Routing to Release Engineer for production deployment.
 
-The auth migration code (commit `99b3917519`) is on the `fix/m-series-tech-debt` branch but has **not** been deployed to production. When it ships:
+The auth migration code (commit `99b3917519`) is on the `fix/m-series-tech-debt` branch. When deployed, background jobs, research, and export API routes will use `assertVoyonderAuth` (Voyonder JWT auth) instead of Paperclip's `assertAuthenticated`/`assertCompanyAccess`. The `Authorization` header must carry a Voyonder HS256 JWT with `sub` (userId) and `company_id` claims. Requires `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` environment variable.
 
-Background jobs, research, and export API routes will use `assertVoyonderAuth` (Voyonder JWT auth) instead of Paperclip's `assertAuthenticated`/`assertCompanyAccess`. The `Authorization` header must carry a Voyonder HS256 JWT with `sub` (userId) and `company_id` claims. Requires `BETTER_AUTH_SECRET` or `PAPERCLIP_AGENT_JWT_SECRET` environment variable.
+**Fixes applied before sign-off:**
+1. **VOY-2200** (commit `535f75fa15`) — Structural fixes: companyId authorization boundary check + JWT expiration enforcement. Staff Engineer approved.
+2. **VOY-2201 / P1 blockers** (commit `6dff29f449`) — Cross-system secret fallback (tries both `BETTER_AUTH_SECRET` and `PAPERCLIP_AGENT_JWT_SECRET`) + SSE listener leak fix (30s heartbeat + 300s connection lifetime cap).
 
-**Deploy pipeline:** VOY-2200 (fix structural issues) → VOY-2198 re-review → CTO sign-off → VOY-2201 (deploy).
+**Verification:** All 13 auth tests pass. All 15 agent-auth-jwt tests pass.
 
 ---
 
@@ -171,9 +173,9 @@ QA verification (VOY-1985) found that all signup flows are non-functional in pro
 ## Related Documentation
 
 - [Async UX Release Notes](voy-1474-async-ux.md) — Background job framework and process visibility (M1+M2)
-- [Support Case Assessment](../../../doc/m6-trial-support-assessment.md) — Full troubleshooting guide and escalation paths
-- [Auth Flow](../../../doc/auth-flow.md) — Voyonder↔Paperclip authentication architecture
+- [Support Case Assessment](../../../docs/support/assessments/support-case-m6-self-serve-trial.md) — Full troubleshooting guide and escalation paths
+- [Google OAuth Support Assessment](../../../docs/support/assessments/support-case-google-oauth.md) — Google OAuth configuration and troubleshooting
 
 ---
 
-*Maintained by: Support Engineer (88b72065). Updated 2026-08-25 to reflect production deployment state.*
+*Maintained by: Support Engineer (88b72065). Updated 2026-08-25 to reflect CTO sign-off and Release Engineer deploy status for auth migration (VOY-2171). Fixed broken links to support assessments.*
