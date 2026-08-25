@@ -215,3 +215,48 @@ describe("entity-resolver — search plan generation", () => {
     }
   });
 });
+
+describe("entity-resolver — P0 regression (infinite loop guard)", () => {
+  it("terminates and extracts all categories in a single query", () => {
+    const result = resolveQuery("flights and hotels and activities in Paris");
+    const cats = result.entities.filter((e) => e.type === "category");
+    expect(cats.some((c) => c.value === "flights")).toBe(true);
+    expect(cats.some((c) => c.value === "hotels")).toBe(true);
+    expect(cats.some((c) => c.value === "activities")).toBe(true);
+  });
+
+  it("resets module-level regex lastIndex between resolveQuery calls", () => {
+    // First call: must extract airline + category
+    const first = resolveQuery("Delta flights to London");
+    expect(first.entities.some((e) => e.type === "airline")).toBe(true);
+    expect(first.entities.some((e) => e.type === "category")).toBe(true);
+
+    // Second call: must still extract (not skip due to stale lastIndex)
+    const second = resolveQuery("Delta flights to London");
+    expect(second.entities.some((e) => e.type === "airline")).toBe(true);
+    expect(second.entities.some((e) => e.type === "category")).toBe(true);
+  });
+
+  it("terminates on airline-only query (AIRLINE_RE regression)", () => {
+    // This previously hung: "Delta" matched → infinite loop
+    const result = resolveQuery("Delta airlines to London");
+    const airlines = result.entities.filter((e) => e.type === "airline");
+    expect(airlines.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("terminates on date-range query with no spurious match", () => {
+    // Date-range regex must not match "to" in destination context
+    const result = resolveQuery("flights to Paris on December 15");
+    const dates = result.entities.filter((e) => e.type === "date_range");
+    // Must extract December 15, not "flights to Paris"
+    expect(dates.length).toBeGreaterThan(0);
+    expect(dates[0].value).toMatch(/December\s+15/i);
+  });
+
+  it("handles relative dates without false date-range interference", () => {
+    const result = resolveQuery("hotels in Tokyo next week");
+    const dates = result.entities.filter((e) => e.type === "date_range");
+    expect(dates.length).toBeGreaterThan(0);
+    expect(dates[0].value).toBe("next week");
+  });
+});

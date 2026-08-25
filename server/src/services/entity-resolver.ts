@@ -38,8 +38,9 @@ const KNOWN_AIRPORT_CODES = new Set([
 
 // Cities (non-airport-code destinations)
 const CITY_PATTERNS = [
-  /\b(?:to|in|from|visiting|going\s+to|travel(?:l?)ing\s+to|flying\s+to|heading\s+to)\s+([A-Z][a-zA-Z\s-]{1,30}?)(?:\s|$|,|\.|!|\?)/i,
-  /\b(?:in|at)\s+([A-Z][a-zA-Z\s-]{1,30}?)(?:\s|$|,|\.|!|\?)/i,
+  // Match city after known prefixes — captures up to two capitalized words (e.g. "New York")
+  /\b(?:to|in|from|visiting|going\s+to|travel(?:l?)ing\s+to|flying\s+to|heading\s+to)\s+([A-Z][a-zA-Z'-]*(?:\s+[A-Z][a-zA-Z'-]*)?)(?:\s|$|,|\.|!|\?)/i,
+  /\b(?:in|at)\s+([A-Z][a-zA-Z'-]*(?:\s+[A-Z][a-zA-Z'-]*)?)(?:\s|$|,|\.|!|\?)/i,
 ];
 
 // Date patterns
@@ -49,8 +50,12 @@ const ABSOLUTE_DATE_RE = /\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b|\b(Jan(?:uary
 // Relative dates
 const RELATIVE_DATE_RE = /\b(today|tomorrow|next\s+week|this\s+weekend|next\s+weekend|this\s+week|next\s+month|next\s+(?:mon(?:day)?|tue(?:sday)?|wed(?:nesday)?|thu(?:rsday)?|fri(?:day)?|sat(?:urday)?|sun(?:day)?))\b/i;
 
-// Date ranges
-const DATE_RANGE_RE = /\b(from\s+)?(\S[\w\s,]+?)\s*(?:to|until|through|thru|[-–])\s*(\S[\w\s,]+?)(?:\s|$|,|\.|!|\?)/i;
+// Date ranges — only match when both endpoints contain date-like tokens
+const MONTH_TOKEN = "(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)";
+const WEEKDAY_TOKEN = "(?:Mon(?:day)?|Tue(?:sday)?|Wed(?:nesday)?|Thu(?:rsday)?|Fri(?:day)?|Sat(?:urday)?|Sun(?:day)?)";
+const RELATIVE_TOKEN = "(?:today|tomorrow|yesterday)";
+const DATE_POINT = `(?:${MONTH_TOKEN}\\s+\\d{1,2}(?:st|nd|rd|th)?|\\d{1,2}\\s+${MONTH_TOKEN}|\\d{1,2}/\\d{1,2}(?:/\\d{2,4})?|${WEEKDAY_TOKEN}|${RELATIVE_TOKEN})`;
+const DATE_RANGE_RE = new RegExp(`\\b(from\\s+)?(${DATE_POINT.slice(3, -1)})\\s*(?:to|until|through|thru|[-–])\\s*(${DATE_POINT.slice(3, -1)})\\b`, "i");
 
 // Budget patterns
 const BUDGET_RE = /\b(?:under|less\s+than|below|max(?:imum)?|budget|at\s+most|up\s+to|no\s+more\s+than)\s+\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\b|\b\$?(\d+(?:,\d{3})*(?:\.\d{2})?)\s*(?:USD|dollars?|eur|euros?|gbp|pounds?)\b/gi;
@@ -59,10 +64,10 @@ const BUDGET_RE = /\b(?:under|less\s+than|below|max(?:imum)?|budget|at\s+most|up
 const HOTEL_RE = /\b(stay(?:ing)?\s+(?:at|in)\s+)?([A-Z][a-zA-Z\s&]{2,40}?(?:Hotel|Inn|Resort|Suites|Lodge|Hostel|Holiday\s+Inn|Marriott|Hilton|Hyatt|Sheraton|Ritz|Four\s+Seasons|Airbnb|Motel))\b/i;
 
 // Airline patterns
-const AIRLINE_RE = /\b(Delta|United|American|Southwest|JetBlue|Spirit|Alaska|Frontier|Hawaiian|Allegiant|British\s+Airways|Lufthansa|Air\s+France|Emirates|Qatar|Singapore|Cathay|ANA|JAL|Ryanair|EasyJet|Wizz|Turkish|KLM|Virgin|Aeromexico|Air\s+Canada|WestJet|Qantas|SWISS|Austrian|SAS|Norwegian|Finnair)\b/i;
+const AIRLINE_RE = /\b(Delta|United|American|Southwest|JetBlue|Spirit|Alaska|Frontier|Hawaiian|Allegiant|British\s+Airways|Lufthansa|Air\s+France|Emirates|Qatar|Singapore|Cathay|ANA|JAL|Ryanair|EasyJet|Wizz|Turkish|KLM|Virgin|Aeromexico|Air\s+Canada|WestJet|Qantas|SWISS|Austrian|SAS|Norwegian|Finnair)\b/gi;
 
 // Category patterns
-const CATEGORY_RE = /\b(flights?|plane|airfare|hotels?|accommodation|stays?|activities?|things?\s*to\s*do|attractions|dining|restaurants?|food|transport|transit|car\s+rental|rental\s+car|tours?|excursions?|nightlife|shopping|museums?|beaches?|hiking)\b/i;
+const CATEGORY_RE = /\b(flights?|plane|airfare|hotels?|accommodation|stays?|activities?|things?\s*to\s*do|attractions|dining|restaurants?|food|transport|transit|car\s+rental|rental\s+car|tours?|excursions?|nightlife|shopping|museums?|beaches?|hiking)\b/gi;
 
 // People/traveler count
 const PEOPLE_RE = /\b(\d+)\s*(?:adults?|people|travelers?|passengers?|guests?|kids?|children?)\b|\b(?:for|with)\s+(\d+)\s*(?:adults?|people|travelers?|passengers?|guests?)/i;
@@ -179,6 +184,21 @@ function extractCities(query: string, entities: ResolvedEntity[]): void {
     (e) => e.type === "destination" && e.metadata?.kind === "airport_code",
   );
 
+  // Standalone capitalized word — treat as destination (e.g. "Paris")
+  if (/^[A-Z][a-zA-Z'-]{2,30}$/.test(query.trim())) {
+    const city = query.trim();
+    if (!isStopWord(city) && !KNOWN_AIRPORT_CODES.has(city.toUpperCase())) {
+      entities.push({
+        type: "destination",
+        value: city,
+        normalized: city.toLowerCase(),
+        confidence: hasAirportDest ? 60 : 75,
+        metadata: { kind: "city" },
+      });
+      return; // standalone query, nothing else to match
+    }
+  }
+
   for (const pattern of CITY_PATTERNS) {
     const match = query.match(pattern);
     if (match) {
@@ -276,6 +296,7 @@ function extractHotels(query: string, entities: ResolvedEntity[]): void {
 }
 
 function extractAirlines(query: string, entities: ResolvedEntity[]): void {
+  AIRLINE_RE.lastIndex = 0; // reset for safety (global regex with stale lastIndex)
   let match: RegExpExecArray | null;
   while ((match = AIRLINE_RE.exec(query)) !== null) {
     entities.push({
@@ -288,12 +309,14 @@ function extractAirlines(query: string, entities: ResolvedEntity[]): void {
 }
 
 function extractCategories(query: string, entities: ResolvedEntity[]): void {
+  CATEGORY_RE.lastIndex = 0; // reset for safety (global regex with stale lastIndex)
   let match: RegExpExecArray | null;
   while ((match = CATEGORY_RE.exec(query)) !== null) {
+    const canon = normalizeCategory(match[1].toLowerCase());
     entities.push({
       type: "category",
-      value: match[1].toLowerCase(),
-      normalized: normalizeCategory(match[1].toLowerCase()),
+      value: canon,
+      normalized: canon,
       confidence: 85,
     });
   }
