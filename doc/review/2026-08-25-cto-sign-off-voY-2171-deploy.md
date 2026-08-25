@@ -39,10 +39,10 @@ Three route files (`background-jobs.ts`, `research.ts`, `exports.ts`) and a new 
 
 ## Deploy Instructions
 
-The remaining work (actual production deployment) is delegated. See child issue **VOY-2193** (unassigned - needs Release Engineer).
+The remaining work (actual production deployment) is delegated. See **VOY-2197** (assigned to Release Engineer).
 
 ### Merge Strategy
-The `fix/m-series-tech-debt` branch (11 commits, pushed to origin) has diverged significantly from `main` (M2 code vs M6 code). A manual merge is required:
+The `fix/m-series-tech-debt` branch (12 commits, pushed to origin) has diverged significantly from `master` (M2 code vs M6 code). A manual merge is required:
 
 1. **Auth-specific files** (new files on branch — no conflicts expected):
    - `server/src/services/auth.ts`
@@ -74,5 +74,5 @@ Production was confirmed healthy at last verification (2026-08-25 ~00:55 UTC):
 |---|---|---|---|
 | VOY-2171 | Fix auth system mismatch | ✅ DONE | Founding Engineer (57fa7e0e) |
 | VOY-2180 | Release: Deploy auth fix | ✅ CTO SIGN-OFF COMPLETE | CTO (5a914da0) |
-| VOY-2193 | Deploy VOY-2171 auth fix to production | ⏳ PENDING | Unassigned (needs Release Engineer) |
+| VOY-2197 | Deploy VOY-2171 auth fix to production | ⏳ PENDING | Release Engineer (7a2a259f) |
 | VOY-1985 | QA Verify — M6 Trial Flow | 🔄 IN REVIEW | QA Engineer (c3bdfe58) |
