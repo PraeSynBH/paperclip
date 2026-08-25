@@ -127,3 +127,4 @@ export { billingService } from "./billing.js";
 export { backgroundJobService, type BackgroundJobService } from "./background-jobs.js";
 export { createBackgroundJobWorker, type BackgroundJobWorker } from "./background-job-worker.js";
 export { researchSearchService, type ResearchSearchService, type ResearchHit } from "./research-search.js";
+export { resolveQuery, type ResolvedQuery, type SearchPlanEntry } from "./entity-resolver.js";
