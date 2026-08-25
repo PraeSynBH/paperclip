@@ -1791,9 +1791,13 @@ export {
   createSubscriptionSchema,
   updateSubscriptionSchema,
   reportUsageSchema,
+  createPortalSessionSchema,
+  completeRegistrationSchema,
   type CreateSubscription,
   type UpdateSubscription,
   type ReportUsage,
+  type CreatePortalSession,
+  type CompleteRegistration,
 } from "./validators/billing.js";
 
 export type {

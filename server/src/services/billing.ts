@@ -576,6 +576,46 @@ export function billingService(db: Db) {
 
     listInvoices,
 
+    getBillingPortalLink: async (companyId: string) => {
+      const subscription = await db
+        .select({
+          stripeSubscriptionId: companySubscriptionsTable.stripeSubscriptionId,
+          status: companySubscriptionsTable.status,
+          trialEnd: companySubscriptionsTable.trialEnd,
+        })
+        .from(companySubscriptionsTable)
+        .where(eq(companySubscriptionsTable.companyId, companyId))
+        .then((r) => r[0] ?? null);
+
+      // No subscription or trial-only (no Stripe subscription) → settings page
+      if (!subscription?.stripeSubscriptionId) {
+        // Determine the settings URL for this company
+        const settingsUrl = `/settings/billing`;
+        return { url: settingsUrl, via: "settings" as const };
+      }
+
+      // Has active Stripe subscription → create billing portal session
+      const stripe = getStripeClient();
+      const customer = await getOrCreateStripeCustomer(companyId);
+
+      try {
+        const portalSession = await stripe.billingPortal.sessions.create({
+          customer: customer.stripeCustomerId,
+          return_url: `${
+            process.env.FRONTEND_URL ?? "http://localhost:5173"
+          }/settings/billing`,
+        });
+        return { url: portalSession.url, via: "stripe" as const };
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : "Stripe portal session creation failed";
+        logger.error({ companyId, err: message }, "Failed to create billing portal session");
+        throw new Error(
+          "Billing portal is temporarily unavailable. Please try again later.",
+        );
+      }
+    },
+
     syncInvoicesFromStripe: async (companyId: string) => {
       const stripe = getStripeClient();
       const subscription = await db
