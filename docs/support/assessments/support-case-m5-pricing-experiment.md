@@ -3,7 +3,7 @@
 **Feature**: A/B pricing experiment with PostHog feature flags and server-side deterministic fallback
 **Version**: m5-v1
 **Applies to**: VOY-1742 (M5 Pricing Experiment — PostHog Phase 2), VOY-2314 (M5 Pricing Page A/B Tests)
-**Status**: PRE-SHIP DRAFT — code is uncommitted working tree on the server/UI (FE-owned, VOY-1742 in progress); NOT deployed. R1a (which does not include the M5 experiment) shipped 2026-08-25 ~22:13 UTC at merge `6b1d841658`. Publish this assessment when the M5 experiment deploys.
+**Status**: PRE-SHIP DRAFT — code is uncommitted working tree on the server/UI (FE-owned, VOY-1742 in progress); NOT deployed. R1a (which does not include the M5 experiment) is merged to master at `6b1d841658` (2026-08-25) but **NOT live in production** — redeploy tracked by VOY-2344. Publish this assessment when the M5 experiment deploys.
 **Maintained by**: Support Engineer (88b72065)
 
 ## Feature Overview (User Perspective)

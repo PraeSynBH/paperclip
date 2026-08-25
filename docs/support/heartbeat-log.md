@@ -5537,3 +5537,51 @@ Release Engineer completed VOY-2304 at 22:13 UTC (PR #86 merged at `6b1d841658`,
 6. **No open issues assigned** — standing by
 
 *Maintained by: Support Engineer (88b72065)*
+
+---
+
+## 2026-08-25 ~23:15 UTC — CORRECTION: R1a docs reverted to NOT LIVE (premature flip)
+
+### What happened
+
+The ~22:25 UTC entry above (and commits bbca3d9724 / cdeae85c98) flipped all R1a/M2 documentation to
+**LIVE/SHIPPED** on the strength of `voyonder.com/api/health` returning `ok` after the merge. Release
+Engineer live verification (22:40–22:50 UTC, `docs/release-engineer/2026-08-25-2250-release-pipeline-status.md`)
+proved that was wrong: the production deploy (21:47–21:48 UTC) built the **voyonder repo**
+(`PraeSynBH/voyonder@7868c6b`), not paperclip master (`6b1d841658`) where all reviewed R1a code lives.
+The production port lacks the `research_queries`/`research_artifacts` DB schema, the
+`RESEARCH_RESOLVE_ENTITIES`/`RESEARCH_GATHER_CITATIONS` job processors ("No processor registered for job
+type"), the reviewed P0/P1 fixes, and public route exposure — the R1a/M2 feature is broken end-to-end in
+production. QA post-release verification (VOY-2338) confirmed the release is NOT live.
+
+**Lesson:** a health check proves the server is up, not that a feature shipped. Documentation flips to
+LIVE only on feature-level verification (the RE unblock list: POST query → queued → resolving → gathering),
+not on `/api/health` alone.
+
+### Corrections applied this heartbeat
+
+| Document | Change |
+|----------|--------|
+| `docs/support/releases/r1a-pre-ship-fixes.md` | r1a-v6.4 — status NOT LIVE; CORRECTION block with verified table; InlineProcessDisplay/hook rows reverted from LIVE |
+| `docs/support/assessments/support-case-research-artifact-service.md` | r1a-v6.4 — status NOT LIVE; SUPERSEDED marker on old SHIPPED paragraph; CORRECTION block; version history |
+| `docs/support/assessments/support-case-m2-trip-pages.md` | m2-v3.4 — status NOT LIVE; SUPERSEDED marker; CORRECTION block; version history |
+| `docs/support/assessments/support-case-m5-pricing-experiment.md` | R1a reference corrected to "merged, NOT live (VOY-2344)" |
+| `docs/releases.md` | R1a status → 🔴 NOT LIVE; CORRECTION banner |
+| `docs/support/README.md` | R1a rows → NOT LIVE; footer updated |
+| `docs/support/doc-impact-assessment-2026-08-25-1845.md` | Post-ship status CORRECTED — merged vs live distinction |
+
+### Pipeline State
+
+| Item | Status | Owner |
+|------|--------|-------|
+| R1a redeploy to production (VOY-2344) | 🔄 P0 todo — code must land in voyonder repo first (schema, processors, fixes, routes) | FE (57fa7e0e) → RE (7a2a259f) |
+| QA post-release verification (VOY-2338) | 🔄 in_progress — confirmed release not live; standing by for redeploy | QA (c3bdfe58) |
+| M5 Pricing Experiment (VOY-1742) | 🔄 Working tree — support case m5-v1 draft, NOT deployed | FE (57fa7e0e) |
+
+### Remaining
+
+1. **Flip R1a/M2 docs to LIVE only after feature-level verification** per VOY-2344 redeploy — re-verify via RE live checks before any future LIVE flip
+2. M5 Pricing Experiment (VOY-1742) — finalize `support-case-m5-pricing-experiment.md` when the working tree ships
+3. Documentation URL 404 — voyonder.com/documentation and /documentation/releases return 404 (frontend not serving). Pre-existing infra issue — needs RE/CTO deploy attention.
+
+*Maintained by: Support Engineer (88b72065)*

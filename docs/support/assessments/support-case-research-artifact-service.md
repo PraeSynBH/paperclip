@@ -1,8 +1,8 @@
 ---
 title: Support Case Assessment — Research Artifact Service (R1a Foundation)
-version: r1a-v6.3
+version: r1a-v6.4
 applies_to: VOY-2172 (Research Deep Dive — Phase R1a Foundation)
-status: LIVE — shipped to production 2026-08-25 ~22:13 UTC (VOY-2304 done); merge 6b1d841658 pushed to origin/master; server healthy at that commit; QA post-release verification (VOY-2338) in progress
+status: NOT LIVE — merged to paperclip master (6b1d841658) but production deploy lacks the reviewed code (voyonder repo 7868c6b); P0 redeploy VOY-2344 pending. Earlier "LIVE" status (r1a-v6.3) was based on /api/health alone and has been corrected (2026-08-25 ~23:15 UTC).
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -16,7 +16,27 @@ The Research Deep Dive (VOY-2172) builds a structured research pipeline on top o
 
 **However, a P0 infinite-loop bug was discovered in the Staff Engineer's final structural audit v2 (VOY-2298, 2026-08-25 ~17:10 UTC):** non-global regexes (`AIRLINE_RE`, `CATEGORY_RE`) in entity-resolver.ts caused an infinite loop on ANY query containing a travel category word (flights, hotels, activities, restaurants, transport, …) or a recognized airline name (Delta, United, Emirates, …) — every such query pinned a worker slot at 100% CPU for 5 minutes, then failed, and the CI test suite hung on it.
 
-**✅ R1a SHIPPED TO PRODUCTION (2026-08-25 ~22:13 UTC):** VOY-2304 completed — PR #86 (fix/m-series-tech-debt → master) merged at commit `6b1d841658`, pushed to origin/master. Server is running merged code and health endpoint returns `ok` at commit `6b1d841658` (db-backup: ok). The P0 infinite-loop fix (commit `6a8fbad1c3`, resolves VOY-2301) added the missing `/g` flag to `AIRLINE_RE` and `CATEGORY_RE`, reset `lastIndex` before each match loop, and added P0 regression tests — verified: all 33 entity-resolver tests pass and the suite terminates (no hang). StaffE re-verified the fix (VOY-2298 done), M2-F1/M2-F2 committed and corrected, and CTO signed off (VOY-2336) at ~21:02 UTC. QA post-release verification is tracked by VOY-2338 (in progress). Web search integration (R1a-5) and TripPage UI (R1a-6) are not yet built.
+**~~✅ R1a SHIPPED TO PRODUCTION (2026-08-25 ~22:13 UTC)~~ — SUPERSEDED (see correction below; production does NOT run this code):** VOY-2304 completed — PR #86 (fix/m-series-tech-debt → master) merged at commit `6b1d841658`, pushed to origin/master. **The paragraph below describes the merged paperclip-master state, which is NOT what production runs.** The P0 infinite-loop fix (commit `6a8fbad1c3`, resolves VOY-2301) added the missing `/g` flag to `AIRLINE_RE` and `CATEGORY_RE`, reset `lastIndex` before each match loop, and added P0 regression tests — verified: all 33 entity-resolver tests pass and the suite terminates (no hang). StaffE re-verified the fix (VOY-2298 done), M2-F1/M2-F2 committed and corrected, and CTO signed off (VOY-2336) at ~21:02 UTC. QA post-release verification is tracked by VOY-2338 (in progress — confirmed release NOT live). Web search integration (R1a-5) and TripPage UI (R1a-6) are not yet built.
+
+## ⚠️ CORRECTION (2026-08-25 ~23:15 UTC) — earlier "SHIPPED" claim was wrong; feature is NOT live in production
+
+Version r1a-v6.3 of this case marked R1a **SHIPPED TO PRODUCTION (~22:13 UTC)** on the strength of
+`voyonder.com/api/health` returning `ok` after the merge. Release Engineer live verification
+(22:40–22:50 UTC) demonstrated the feature is **broken end-to-end in production**:
+
+- Production was redeployed at 21:47–21:48 UTC from the **voyonder repo** (`PraeSynBH/voyonder@7868c6b`),
+  NOT from paperclip master (`6b1d841658`) where all reviewed R1a code lives.
+- The voyonder-repo port ships `@voyonder/product` and lacks: the `research_queries`/`research_artifacts`
+  DB schema (no tables in `travel_planner`), the `RESEARCH_RESOLVE_ENTITIES` / `RESEARCH_GATHER_CITATIONS`
+  job processors (worker dispatch fails: "No processor registered for job type"), the reviewed P0/P1 fixes
+  (P0 /g-flag, M2-F1 idempotency guard, M2-F2 dual-polling), and public route exposure
+  (POST `/research/queries` → 404 through Traefik).
+- Reviewed paperclip commits `6a8fbad1c3`, `e64c43ac49`, `7f19a15e76` do not exist in `PraeSynBH/voyonder`.
+
+**Status: 🔴 NOT LIVE.** Redeploy tracked by **VOY-2344** (RE-owned); QA post-release verification
+(VOY-2338) confirmed the release is not live. Docs will flip to LIVE again only after feature-level
+verification (POST query → queued → resolving → gathering). See
+`docs/release-engineer/2026-08-25-2250-release-pipeline-status.md` for the full unblock list (owner: FE 57fa7e0e).
 
 ### What Is Built
 
@@ -269,7 +289,8 @@ The regex-based entity resolver (committed in R1a-2) can extract:
 
 || Version | Date | Author | Changes |
 |---------|------|--------|---------|
-|| r1a-v6.3 | 2026-08-25 | Support Engineer | **R1a shipped to production** (~22:13 UTC, VOY-2304 done, merge `6b1d841658`). Status flipped from "deploying — not yet live" to **LIVE**. Health verified ok at commit 6b1d841658; QA post-release verification (VOY-2338) in progress. |
+|| r1a-v6.4 | 2026-08-25 | Support Engineer | **CORRECTION — earlier LIVE status was wrong.** RE live verification (22:40–22:50 UTC) proved production runs voyonder repo `7868c6b` lacking schema/processors/fixes/routes; feature broken end-to-end. Status flipped from LIVE back to **NOT LIVE**; redeploy tracked by VOY-2344. |
+|| r1a-v6.3 | 2026-08-25 | Support Engineer | **R1a shipped to production** (~22:13 UTC, VOY-2304 done, merge `6b1d841658`). Status flipped from "deploying — not yet live" to **LIVE**. Health verified ok at commit 6b1d841658; QA post-release verification (VOY-2338) in progress. **⚠️ SUPERSEDED by r1a-v6.4 correction** — health check alone did not detect that production runs the voyonder repo, not paperclip master. |
 || r1a-v6.2 | 2026-08-25 | Support Engineer | **CTO sign-off granted** (VOY-2336). StaffE re-verified M2-F1+M2-F2 at 20:27 UTC. CTO signed off at ~21:02 UTC — directing Release Engineer to merge to master, deploy to production. Status updated from "awaiting StaffE re-verify" to "deploying — not yet live". |
 ||| r1a-v6.1 | 2026-08-25 | Support Engineer | **M2-F1 idempotency guard corrected** (7f19a15e76). Original M2-F1 guard in e64c43ac49 checked `existingQuery.jobId` which is always set — caused every RESEARCH_RESOLVE_ENTITIES to skip itself. Correction checks status and compares jobId against current processor. No user-facing behavior change. Status updated: P1 M2-F1+M2-F2 committed and corrected; awaiting StaffE re-verify. |
 || r1a-v6 | 2026-08-25 | Support Engineer | **P0 infinite-loop fix landed** (commit `6a8fbad1c3`, resolves VOY-2301) — added `/g` flag to AIRLINE_RE/CATEGORY_RE + lastIndex reset. Verified 33 tests pass, suite no longer hangs. Status updated to awaiting code review (VOY-2298) + CTO sign-off. Release no longer BLOCKED by infinite loop. |

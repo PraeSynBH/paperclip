@@ -73,19 +73,26 @@ Per Release Engineer (~18:16 UTC):
 - These working tree UI changes are designated "M2 improvements to ship after R1a"
 - Next step when R1a ships: Support Engineer called for docs sync and curated release note
 
-## Post-ship Status (added ~22:25 UTC, 2026-08-25)
+## Post-ship Status (added ~22:25 UTC, 2026-08-25) — ⚠️ CORRECTED ~23:15 UTC
 
-The M2 UI working tree assessed above **shipped with R1a** (VOY-2304 done ~22:13 UTC, merge `6b1d841658`). All recommended actions were executed:
+The M2 UI working tree assessed above **merged with R1a** (VOY-2304 done ~22:13 UTC, merge `6b1d841658`),
+but **neither shipped to production as claimed**: Release Engineer live verification (22:40–22:50 UTC)
+proved the production deploy builds the voyonder repo (`7868c6b`), not paperclip master. All "✅ Executed"
+rows below therefore describe the **merged code + docs state, not the live system**. R1a/M2 are
+**NOT LIVE in production** (redeploy VOY-2344 pending). The referenced doc updates (m2-v3.3/r1a-v6.3,
+LIVE status) have been corrected to **NOT LIVE** at m2-v3.4 / r1a-v6.4.
 
-| Recommended action | Executed |
-|---|---|
-| Update `support-case-m2-trip-pages.md` (Sage chat functional, InlineProcessDisplay, troubleshooting, version increment) | ✅ Done — m2-v3.3 (Sage chat, InlineProcessDisplay, useBackgroundProcesses documented; status LIVE) |
-| Update `support-case-research-artifact-service.md` (remove "no frontend" caveat) | ✅ Done — r1a-v6.3 (artifacts visible in TripDetail with 15s polling noted; status LIVE) |
-| Create release note for R1a incl. M2 UI | ✅ Done — `docs/support/releases/r1a-pre-ship-fixes.md` (shipped) + `docs/releases.md` entry |
+| Recommended action | Executed (merged) | Live in prod? |
+|---|---|---|
+||:---|:---|
+| Update `support-case-m2-trip-pages.md` (Sage chat functional, InlineProcessDisplay, troubleshooting, version increment) | ✅ Done — m2-v3.4 (corrected status NOT LIVE; prior m2-v3.3 LIVE superseded) | 🔴 No — VOY-2344 |
+| Update `support-case-research-artifact-service.md` (remove "no frontend" caveat) | ✅ Done — r1a-v6.4 (corrected status NOT LIVE; prior r1a-v6.3 LIVE superseded) | 🔴 No — VOY-2344 |
+| Create release note for R1a incl. M2 UI | ✅ Done — `docs/support/releases/r1a-pre-ship-fixes.md` (status NOT LIVE) + `docs/releases.md` entry | 🔴 No — VOY-2344 |
 
 ## Sign-off
 
 - Assessment: Complete
-- Action: **COMPLETE** — R1a shipped, docs synced to live system at r1a-v6.3 / m2-v3.3
+- Action: **CORRECTED** — earlier "R1a shipped, docs synced LIVE (r1a-v6.3/m2-v3.3)" claim was premature;
+  production verified NOT running the reviewed code. Docs now reflect NOT LIVE at r1a-v6.4 / m2-v3.4.
 
 *Maintained by: Support Engineer (88b72065)*

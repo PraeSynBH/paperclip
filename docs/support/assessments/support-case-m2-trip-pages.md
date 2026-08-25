@@ -1,8 +1,8 @@
 ---
 title: Support Case Assessment — M2 Trip Pages (Plan/Prepare/Go modes)
-version: m2-v3.3
+version: m2-v3.4
 applies_to: VOY-2282 (M2 Trip — Trip Page Simplification) + VOY-2284 (M2 Trip — Intelligent Urgency) + VOY-2318 (M2-F1 idempotency) + VOY-2319 (M2-F2 useBackgroundProcesses)
-status: LIVE — shipped to production 2026-08-25 ~22:13 UTC (VOY-2304 done); merge 6b1d841658 pushed to origin/master; server healthy at that commit; QA post-release verification (VOY-2338) in progress
+status: NOT LIVE — merged to paperclip master (6b1d841658) but production deploy lacks the reviewed code (voyonder repo 7868c6b); P0 redeploy VOY-2344 pending. Earlier "LIVE" status (m2-v3.3) was based on /api/health alone and has been corrected (2026-08-25 ~23:15 UTC).
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -12,7 +12,18 @@ maintained_by: Support Engineer (88b72065)
 
 The M2 Trip Pages feature (VOY-2282) introduces a complete trip detail experience with three mode-based views — **Plan**, **Prepare**, and **Go** — that adapt the page content based on how far the trip date is. It replaces the previous placeholder trip page with a full-featured itinerary, research, and action center powered by the Sage AI research infrastructure. The mode-aware **Intelligent Urgency hierarchy** (VOY-2284) adds red/amber/green/grey urgency scoring to every research item, driving the booking checklist ordering, safety alerts, and today-view prioritization.
 
-**Current status:** Trip pages (VOY-2282, commit `2c0f8b8b23`) and Intelligent Urgency (VOY-2284, commit `8fc99f01b8`) are committed on `fix/m-series-tech-debt` (2026-08-25). The P0 infinite-loop fix (commit `6a8fbad1c3`, resolves VOY-2301) was reviewed and approved (VOY-2298 done). M2 P1 fixes — Sage chat wiring, InlineProcessDisplay, shared useBackgroundProcesses hook (commit `e64c43ac49`, resolves VOY-2318 + VOY-2319) — are committed as of 2026-08-25 ~20:01 UTC, with the M2-F1 idempotency guard corrected at 7f19a15e76. StaffE re-verified and CTO signed off (VOY-2336) at ~21:02 UTC. **✅ SHIPPED TO PRODUCTION 2026-08-25 ~22:13 UTC (VOY-2304 done)** — PR #86 merged to origin/master at `6b1d841658`, server healthy at that commit. QA post-release verification (VOY-2338) in progress.
+**Current status:** Trip pages (VOY-2282, commit `2c0f8b8b23`) and Intelligent Urgency (VOY-2284, commit `8fc99f01b8`) are committed on `fix/m-series-tech-debt` (2026-08-25). The P0 infinite-loop fix (commit `6a8fbad1c3`, resolves VOY-2301) was reviewed and approved (VOY-2298 done). M2 P1 fixes — Sage chat wiring, InlineProcessDisplay, shared useBackgroundProcesses hook (commit `e64c43ac49`, resolves VOY-2318 + VOY-2319) — are committed as of 2026-08-25 ~20:01 UTC, with the M2-F1 idempotency guard corrected at 7f19a15e76. StaffE re-verified and CTO signed off (VOY-2336) at ~21:02 UTC. **~~✅ SHIPPED TO PRODUCTION 2026-08-25 ~22:13 UTC (VOY-2304 done)~~ — SUPERSEDED: production does NOT run this code.** PR #86 merged to origin/master at `6b1d841658`, but RE live verification (22:40–22:50 UTC) proved the production deploy builds the voyonder repo (`7868c6b`) which lacks the M2 UI and the reviewed R1a fixes. QA post-release verification (VOY-2338) confirmed the release is NOT live; P0 redeploy tracked by **VOY-2344**. **Status: 🔴 NOT LIVE — merged to master only.**
+
+## ⚠️ CORRECTION (2026-08-25 ~23:15 UTC) — earlier "LIVE" status was wrong
+
+Version m2-v3.3 marked M2 Trip Pages **LIVE in production (~22:13 UTC)** based on `voyonder.com/api/health`
+returning `ok`. Release Engineer live verification (22:40–22:50 UTC, see
+`docs/release-engineer/2026-08-25-2250-release-pipeline-status.md`) proved the trip pages and the
+M2-F1/M2-F2 backend fixes are **NOT in the production deploy** — production runs the voyonder repo port
+(`7868c6b`) which lacks the DB schema (`research_queries`/`research_artifacts` absent), the
+`RESEARCH_RESOLVE_ENTITIES`/`RESEARCH_GATHER_CITATIONS` processors, the reviewed P0/P1 fixes, and public
+route exposure. **Status: 🔴 NOT LIVE.** Redeploy tracked by **VOY-2344**; docs flip to LIVE again only
+after feature-level verification.
 
 ### Modes Overview
 
@@ -309,7 +320,8 @@ See the [Research Artifact Service support case](./support-case-research-artifac
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-||| m2-v3.3 | 2026-08-25 | Support Engineer | **R1a shipped to production** (~22:13 UTC, VOY-2304 done, merge `6b1d841658`). Status flipped from "deploying — not yet live" to **LIVE**. Health verified ok at commit 6b1d841658; QA post-release verification (VOY-2338) in progress. |
+||| m2-v3.4 | 2026-08-25 | Support Engineer | **CORRECTION — earlier LIVE status was wrong.** RE live verification proved production runs voyonder repo `7868c6b` lacking the M2 UI + reviewed fixes. Status flipped from LIVE back to **NOT LIVE**; redeploy tracked by VOY-2344. |
+|| m2-v3.3 | 2026-08-25 | Support Engineer | **R1a shipped to production** (~22:13 UTC, VOY-2304 done, merge `6b1d841658`). Status flipped from "deploying — not yet live" to **LIVE**. Health verified ok at commit 6b1d841658; QA post-release verification (VOY-2338) in progress. **⚠️ SUPERSEDED by m2-v3.4 correction** — health check alone did not detect that production runs the voyonder repo, not paperclip master. |
 || m2-v3.2 | 2026-08-25 | Support Engineer | **CTO sign-off granted** (VOY-2336). StaffE re-verified M2-F1+M2-F2 at 20:27 UTC. CTO signed off at ~21:02 UTC — directing Release Engineer to merge to master, deploy to production. Status updated from "awaiting re-verify" to "deploying — not yet live". |
 ||| m2-v3.1 | 2026-08-25 | Support Engineer | **M2-F1 idempotency guard corrected** (7f19a15e76). Original M2-F1 guard in e64c43ac49 checked `existingQuery.jobId` which is always set because the route handler links the job to the query before the processor runs — caused every RESEARCH_RESOLVE_ENTITIES to skip itself. Correction: check `status !== "pending"` and compare jobId against current processor jobId to distinguish first-run from retry. No user-facing behavior change. |
 || m2-v3 | 2026-08-25 | Support Engineer | **M2-F1/M2-F2 P1 fixes committed** (e64c43ac49). Sage chat now functional (chat composer with submit, 500-char limit, Enter/Shift+Enter, loading/error states). InlineProcessDisplay with mode-aware progress (Plan: inline bar; Prepare: collapsible tray; Go: hidden). useBackgroundProcesses shared hook. BackgroundProcessTray refactored. Artifact polling every 15s. Updated status to reflect P0 fix reviewed (VOY-2298 done), M2 P1 fixes committed, awaiting StaffE re-verify. Updated all Sage/research troubleshooting entries, Known Limitations, and escalation path. |

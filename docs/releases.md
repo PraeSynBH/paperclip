@@ -2,7 +2,7 @@
 title: Release Notes
 summary: Curated release notes for each Paperclip release
 version: docs-v1
-last_updated: 2026-08-25 (~22:20 UTC — R1a pre-ship fixes SHIPPED to production, VOY-2304 done)
+last_updated: 2026-08-25 (~23:15 UTC — CORRECTED: R1a reverted to NOT LIVE after RE verification; redeploy VOY-2344 pending)
 ---
 
 # Release Notes
@@ -11,9 +11,19 @@ Paperclip ships continuously. This page documents each release to the main branc
 
 ---
 
+## ⚠️ CORRECTION — R1a is NOT live (2026-08-25 ~23:15 UTC)
+
+The 22:20 UTC update below marked R1a **SHIPPED to production** based on `voyonder.com/api/health`
+returning `ok`. Release Engineer live verification (22:40–22:50 UTC) proved the production deploy builds
+the **voyonder repo** (`PraeSynBH/voyonder@7868c6b`), which lacks the R1a DB schema, the
+`RESEARCH_RESOLVE_ENTITIES`/`RESEARCH_GATHER_CITATIONS` job processors, the reviewed P0/P1 fixes, and
+public route exposure — the feature is broken end-to-end in production. QA (VOY-2338) confirmed the
+release is not live. **R1a is merged to master (`6b1d841658`) but NOT live; redeploy tracked by
+VOY-2344.** Release notes will be marked SHIPPED again only after feature-level verification.
+
 ## R1a Pre-ship Fixes — August 25, 2026
 
-**Status: ✅ SHIPPED to production 2026-08-25 ~22:13 UTC.**
+**Status: 🔴 NOT LIVE — merged to master 2026-08-25 (6b1d841658); production redeploy pending (VOY-2344).**
 
 [Full release notes →](/support/releases/r1a-pre-ship-fixes)
 

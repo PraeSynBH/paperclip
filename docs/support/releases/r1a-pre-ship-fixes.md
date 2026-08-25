@@ -1,15 +1,35 @@
 ---
 title: R1a Pre-ship Fixes — Async Job Hardening + Entity Resolution Stability
-version: r1a-v6.2
+version: r1a-v6.4
 date: 2026-08-25
 commits: 6a8fbad1c3, 8976083b9b, e64c43ac49, 7f19a15e76
-status: Deployed to production — branch merged to master (6b1d841658), server healthy at commit
+status: MERGED to master (6b1d841658) but NOT LIVE — production deploy lacks the reviewed code (VOY-2344 redeploy pending)
 ---
 
 # R1a Pre-ship Fixes: Async Job Hardening + Entity Resolution Stability
 
-**Branches:** `fix/m-series-tech-debt` (merging to `master`)
-**Release status:** ✅ **SHIPPED TO PRODUCTION 2026-08-25 ~22:13 UTC (VOY-2304 done)** — PR #86 (fix/m-series-tech-debt → master) merged at commit `6b1d841658`, pushed to origin/master. Server is running merged code, health endpoint returns `ok` at commit `6b1d841658` (db-backup: ok). QA post-release verification tracked by VOY-2338.
+**Branches:** `fix/m-series-tech-debt` (merged to `master` 6b1d841658)
+
+## ⚠️ CORRECTION (2026-08-25 ~23:15 UTC) — docs flipped LIVE prematurely; feature is NOT functional in production
+
+Previous versions of this note (r1a-v6.2/v6.3) marked this release **SHIPPED TO PRODUCTION** based on
+`voyonder.com/api/health` returning `ok` after the merge — that check cannot detect a missing feature.
+Release Engineer live verification (2026-08-25 ~22:40–22:50 UTC, see
+`docs/release-engineer/2026-08-25-2250-release-pipeline-status.md`) proved the opposite:
+
+| Claim | Verified reality |
+|------|------------------|
+| "R1a shipped to production ~22:13 UTC" | Merged to paperclip master (`6b1d841658`) and *pushed*, but the production deploy (21:47–21:48 UTC) built the **voyonder repo** (`PraeSynBH/voyonder@7868c6b`), not paperclip master. The reviewed R1a implementation is not the deployed artifact. |
+| "Server running merged code" | Container `/app/package.json` = `@voyonder/product`; reviewed fix markers (M2-F1 guard, M2-F2 grace period, idempotency) = **0 hits** in `/app/dist`. |
+| "R1a DB schema live" | `travel_planner` has **no** `research_queries` / `research_artifacts` tables; `submitQuery` would fail on insert. |
+| "Job processors registered" | Deployed worker registers only RESEARCH_SEMANTIC_SEARCH/AUTO_ASSESS/ACTIVITY_SEARCH/EXPORT_PDF/EXPORT_ICS — **no RESEARCH_RESOLVE_ENTITIES / GATHER_CITATIONS** processor. Every submitted query fails instantly. |
+| "Research endpoint live" | `POST /research/queries` → **404** through Traefik; research-artifacts router not mounted at a public path. |
+
+**Result:** the R1a/M2 feature is broken end-to-end in production. QA (VOY-2338) confirmed the release is
+not live; P0 redeploy tracked by **VOY-2344** (RE-owned). Docs will be flipped to LIVE again **only after**
+feature-level verification (POST query → queued → resolving → gathering) per the RE unblock list.
+
+**Release status: 🔴 NOT LIVE — merged to master 2026-08-25 (6b1d841658); production redeploy pending (VOY-2344).**
 **Applies to:** VOY-2172 (R1a Foundation) + VOY-2269 (Pre-ship Findings) + VOY-2301 (P0 Infinite Loop) + VOY-2318 (M2-F1 Idempotency) + VOY-2319 (M2-F2 useBackgroundProcesses)
 
 ---
@@ -61,8 +81,8 @@ The initial M2-F1 idempotency guard (commit `e64c43ac49`) had a logic error: it 
 | **Entity resolution is now stable** | The infinite loop bug that could pin CPU at 100% on category/airline queries is fixed. Research queries with words like "flights", "hotels", "Delta" no longer hang the worker. |
 | **No more orphan queries** | If a background job fails during query creation, the transaction rolls back cleanly — no leftover query rows without a job reference. |
 | **Retry-safe entity resolution** | If a `RESEARCH_RESOLVE_ENTITIES` job retries, it no longer creates a duplicate `GATHER_CITATIONS` job. Entity resolution runs exactly once per query. |
-| **InlineProcessDisplay added** | Trip pages now show mode-aware background process progress: inline progress bar in Plan mode, collapsible tray in Prepare mode, hidden in Go mode. **LIVE in production.** |
-| **useBackgroundProcesses shared hook** | Background process tracking across the app now uses a shared SSE + polling hook with consistent behavior. **LIVE in production.** |
+| **InlineProcessDisplay added** | Trip pages now show mode-aware background process progress: inline progress bar in Plan mode, collapsible tray in Prepare mode, hidden in Go mode. **⚠️ NOT LIVE in production — code merged to master 6b1d841658 but the production deploy lacks it (VOY-2344 redeploy pending).** |
+| **useBackgroundProcesses shared hook** | Background process tracking across the app now uses a shared SSE + polling hook with consistent behavior. **⚠️ NOT LIVE in production — same redeploy pending (VOY-2344).** |
 | **Improved query performance** | The `research_queries` table now has an index on `job_id` and cascading deletes — query joins and cleanup operations are faster and safer. |
 
 ## Known Limitations
@@ -75,7 +95,7 @@ The initial M2-F1 idempotency guard (commit `e64c43ac49`) had a logic error: it 
 | Research routes use `company_scope:read` (read-level auth) for write operations | Open (Staff Engineer recommendation C4) |
 | No blob storage — export results embed base64 data (PDF) or calendar text (ICS) in the result object | Open |
 | Semantic upgrade requires `PAPERCLIP_EMBEDDING_API_KEY` — falls back to keyword ranking without it | Open (infra config) |
-| M2 Trip Pages (Plan/Prepare/Go mode pages, Intelligent Urgency hierarchy, Sage chat composer) ship with R1a — the trip page is **live in production**; R1a-5 web search integration and R1a-6 TripPage UI refinements are still open | Open (follow-up) |
+| M2 Trip Pages (Plan/Prepare/Go mode pages, Intelligent Urgency hierarchy, Sage chat composer) merge with R1a — the trip page is **merged to master but NOT live in production** (VOY-2344 redeploy pending); R1a-5 web search integration and R1a-6 TripPage UI refinements are still open | Open (follow-up) |
 
 ## Related Documentation
 
@@ -85,5 +105,5 @@ The initial M2-F1 idempotency guard (commit `e64c43ac49`) had a logic error: it 
 - [Background Jobs API](/api/background-jobs) — API reference for background job endpoints
 - [Research API](/api/research) — API reference for research endpoints
 
-*Last updated: 2026-08-25 ~22:20 UTC — Shipped to production (VOY-2304 done), docs flipped to live*
+*Last updated: 2026-08-25 ~23:15 UTC — CORRECTED: R1a flipped to LIVE prematurely (health-check only); verified NOT functional in production; redeploy tracked by VOY-2344. Status: merged, NOT live.*
 *Maintained by: Support Engineer (88b72065)*
