@@ -2,7 +2,7 @@
 title: Support Case Assessment — Research Artifact Service (R1a Foundation)
 version: r1a-v6
 applies_to: VOY-2172 (Research Deep Dive — Phase R1a Foundation)
-status: Draft — P0 infinite-loop fix committed (6a8fbad1c3, resolves VOY-2301) and verified (33 tests pass); code review passed (VOY-2298 done); R1a release (VOY-2304) now blocked on M2 P1 fixes (VOY-2318, VOY-2319 awaiting StaffE re-verify); NOT yet deployed to production
+status: Draft — P0 infinite-loop fix committed (6a8fbad1c3, resolves VOY-2301) and verified (33 tests pass); code review passed (VOY-2298 done); P1 M2-F1/M2-F2 fixes committed and corrected (7f19a15e76, resolves VOY-2318 + VOY-2319); awaiting StaffE re-verify (VOY-2320) then Release Engineer deployment; NOT yet deployed to production
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -269,6 +269,7 @@ The regex-based entity resolver (committed in R1a-2) can extract:
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
+|| r1a-v6.1 | 2026-08-25 | Support Engineer | **M2-F1 idempotency guard corrected** (7f19a15e76). Original M2-F1 guard in e64c43ac49 checked `existingQuery.jobId` which is always set — caused every RESEARCH_RESOLVE_ENTITIES to skip itself. Correction checks status and compares jobId against current processor. No user-facing behavior change. Status updated: P1 M2-F1+M2-F2 committed and corrected; awaiting StaffE re-verify. |
 || r1a-v6 | 2026-08-25 | Support Engineer | **P0 infinite-loop fix landed** (commit `6a8fbad1c3`, resolves VOY-2301) — added `/g` flag to AIRLINE_RE/CATEGORY_RE + lastIndex reset. Verified 33 tests pass, suite no longer hangs. Status updated to awaiting code review (VOY-2298) + CTO sign-off. Release no longer BLOCKED by infinite loop. |
 || r1a-v5 | 2026-08-25 | Support Engineer | Updated status: release BLOCKED by new P0 infinite-loop bug (VOY-2298, non-global regexes in entity-resolver). Added finding details: category/airline queries spin forever at 100% CPU, CI test suite hangs. Assigned to Founding Engineer. |
 || r1a-v4 | 2026-08-25 | Support Engineer | Rebased on commit `8976083b9b` (R1a fix impl, VOY-2189): all pre-ship findings resolved (A/B/C + D/E/G). P0 removed. Documented async entity resolution (202 response = queryId+jobId only; poll GET query), compensating `failed` status (Finding B), single resolution path (Finding C), new `GET /background-jobs/:id/download` endpoint, POST background-jobs jobType validation (400), PDF blob-storage results vs inline dataUri fallback, embedding LRU cache, worker stale-sweep. Updated status → committed, release in progress (R1a-8), NOT deployed. |

@@ -1,8 +1,8 @@
 ---
 title: Support Case Assessment — M2 Trip Pages (Plan/Prepare/Go modes)
-version: m2-v2
-applies_to: VOY-2282 (M2 Trip — Trip Page Simplification) + VOY-2284 (M2 Trip — Intelligent Urgency)
-status: Committed — branch fix/m-series-tech-debt, NOT yet deployed to production (P0 fix landed 6a8fbad1c3, awaiting code review VOY-2298 + CTO sign-off)
+version: m2-v3
+applies_to: VOY-2282 (M2 Trip — Trip Page Simplification) + VOY-2284 (M2 Trip — Intelligent Urgency) + VOY-2318 (M2-F1 idempotency) + VOY-2319 (M2-F2 useBackgroundProcesses)
+status: Committed — branch fix/m-series-tech-debt, P0 fix reviewed (VOY-2298 done), M2-F1/M2-F2 P1 fixes committed and corrected (7f19a15e76); awaiting StaffE re-verify (VOY-2320) then Release Engineer deployment; NOT yet deployed to production
 maintained_by: Support Engineer (88b72065)
 ---
 
@@ -12,7 +12,7 @@ maintained_by: Support Engineer (88b72065)
 
 The M2 Trip Pages feature (VOY-2282) introduces a complete trip detail experience with three mode-based views — **Plan**, **Prepare**, and **Go** — that adapt the page content based on how far the trip date is. It replaces the previous placeholder trip page with a full-featured itinerary, research, and action center powered by the Sage AI research infrastructure. The mode-aware **Intelligent Urgency hierarchy** (VOY-2284) adds red/amber/green/grey urgency scoring to every research item, driving the booking checklist ordering, safety alerts, and today-view prioritization.
 
-**Current status:** Trip pages (VOY-2282, commit `2c0f8b8b23`) and Intelligent Urgency (VOY-2284, commit `8fc99f01b8`) are committed on `fix/m-series-tech-debt` (2026-08-25). **NOT yet deployed to production** — the R1a release (VOY-2189) was blocked on a P0 infinite-loop bug (VOY-2298); the P0 fix (commit `6a8fbad1c3`, resolves VOY-2301) landed at ~18:10 UTC and is verified (33 tests pass, no hang). Release now awaiting code review (VOY-2298) and CTO sign-off before deployment.
+**Current status:** Trip pages (VOY-2282, commit `2c0f8b8b23`) and Intelligent Urgency (VOY-2284, commit `8fc99f01b8`) are committed on `fix/m-series-tech-debt` (2026-08-25). The P0 infinite-loop fix (commit `6a8fbad1c3`, resolves VOY-2301) was reviewed and approved (VOY-2298 done). M2 P1 fixes — Sage chat wiring, InlineProcessDisplay, shared useBackgroundProcesses hook (commit `e64c43ac49`, resolves VOY-2318 + VOY-2319) — are committed as of 2026-08-25 ~20:01 UTC. **Awaiting Staff Engineer re-verify (VOY-2320) then Release Engineer deployment.** NOT yet deployed to production.
 
 ### Modes Overview
 
@@ -24,14 +24,14 @@ The M2 Trip Pages feature (VOY-2282) introduces a complete trip detail experienc
 
 Mode detection is automatic based on the trip start date, with a manual override persisted per-trip in localStorage.
 
-### What Is Built (Committed in VOY-2282)
+### What Is Built (Committed in VOY-2282 + M2-F1/M2-F2)
 
 | Component | Description | Status |
 |-----------|-------------|--------|
 | **tripMode.ts** | Pure mode detection logic with 12 unit tests covering all mode transitions and edge cases | ✅ Committed |
 | **useTripMode.ts** | React hook with localStorage-persisted manual override | ✅ Committed |
 | **TripsList.tsx** | Trip listing page with search, create dialog, status badges | ✅ Committed |
-| **TripDetail.tsx** | Full trip page with three mode-based views | ✅ Committed |
+| **TripDetail.tsx** | Full trip page with three mode-based views, Sage chat composer, artifact polling | ✅ Committed (m2-v3) |
 | **App.tsx** routes | Route registration with UnprefixedBoardRedirect for trips | ✅ Committed |
 | **company-routes.ts** | 'trips' in BOARD_ROUTE_ROOTS | ✅ Committed |
 | **research-trips.ts** | API client for all trip/research endpoints | ✅ Committed |
@@ -40,11 +40,16 @@ Mode detection is automatic based on the trip start date, with a manual override
 | **tripUrgency.test.ts** | 26 unit tests covering all modes and edge cases (VOY-2284) | ✅ Committed |
 | **UrgencyBadge.tsx** | UrgencyBadge, SellOutWarning, BookingDeadlineBadge, UrgencyRow, UrgencyDotLegend components (VOY-2284) | ✅ Committed |
 | **FreshnessCue.tsx** | Stale state aligned to muted grey per urgency hierarchy (VOY-2284) | ✅ Committed |
+| **chat composer (TripDetail.tsx)** | Sage AI natural language chat — Textarea + submit button, `researchTripsApi.submitQuery()`, loading/error states, Enter-to-send, Shift+Enter for newline, 500-char cap | ✅ Committed (M2-F2) |
+| **InlineProcessDisplay.tsx** | Mode-aware background process display: Plan mode (inline progress after 5s delay with job label, %, mini bar), Prepare mode (collapsible tray, auto-expands on completion, dismissible), Go mode (hidden) | ✅ Committed (M2-F2) |
+| **BackgroundProcessTray.tsx** | Refactored to use shared `useBackgroundProcesses` hook | ✅ Committed (M2-F2) |
+| **useBackgroundProcesses.ts** | Shared SSE + polling hook with `isWorking` delay signal, prefix filtering, derived state | ✅ Committed (M2-F2) |
+| **background-jobs.ts** | Shared helpers: `backgroundJobLabel()` (user-facing copy) + `formatDuration()` | ✅ Committed (M2-F2) |
+| **Artifact polling** | Artifacts poll every 15s via existing GET /research/trips/:id endpoint | ✅ Committed (M2-F2) |
 
 ### What Is NOT Yet Built
 
-- **Research-as-Infrastructure invisible pipeline (VOY-2283)** — background job SSE, confidence indicators, FreshnessCue (in progress, visible in working tree)
-- Sage AI natural language chat on Plan mode — the dual-panel layout exists but Sage suggestion wiring depends on VOY-2283
+- **Research-as-Infrastructure invisible pipeline (VOY-2283)** — confidence indicators, FreshnessCue data pipeline (background job SSE for real-time progress is not yet wired; polling fallback is in place via `useBackgroundProcesses`)
 - PDF/ICS export from trip page — export infra exists (R1a) but trip-page integration is pending
 - Real web search / email search integration — R1a-5 not yet wired
 
@@ -54,8 +59,8 @@ Mode detection is automatic based on the trip start date, with a manual override
 
 Plan mode is the trip research and brainstorming view, shown when the trip start date is more than 7 days away. It presents a dual-panel layout:
 
-- **Left panel: Chat** — Designed for conversational interaction with Sage AI. Users can ask research questions, get suggestions, and explore destination options. *(Note: full Sage chat wiring is pending VOY-2283; the panel layout exists with placeholder content.)*
-- **Right panel: Itinerary** — Displays research artifacts, activity cards, and a growing itinerary built from Sage's findings. Artifacts show title, snippet, source type, status, and confidence indicators (when confidence data is available).
+- **Left panel: Chat** — Functional Sage AI chat composer. Users type research questions, press Enter to send (Shift+Enter for newline), and see results appear inline as artifacts with title, snippet, source type, and status. The chat supports loading states, error handling, and a 500-character limit.
+- **Right panel: Itinerary** — Displays research artifacts, activity cards, and a growing itinerary built from Sage's findings. Artifacts show title, snippet, source type, status, and confidence indicators (when confidence data is available). Artifacts poll every 15 seconds to pick up new results from background processing.
 
 ### Key Behaviors
 
@@ -78,7 +83,7 @@ Prepare mode is the booking and logistics view, shown when the trip start is wit
 - **"Book soon" badges** — Prominent badges on activities approaching booking deadlines (VOY-2284)
 - **Urgency Overview sidebar** — Per-level counts (Blocking/Soon/On track/Unknown), needs-attention total, booking progress, and a dot legend (VOY-2284)
 - **Safety items card** — Red-bordered card listing items whose titles carry safety/health keywords (VOY-2284)
-- **Background process summary** — "Sage is looking into that…" indicator when research jobs are queued/running
+- **Background process summary** — Mode-aware `InlineProcessDisplay` component: in Prepare mode, a collapsible tray with per-job progress labels (e.g. "Sage is researching activities\u2026"), percentage bars, auto-expansion on completion, and dismissible completed jobs
 
 ### Key Behaviors
 
@@ -203,7 +208,7 @@ The Intelligent Urgency feature (VOY-2284, commit `8fc99f01b8`) scores every res
 
 ### Research & Sage AI
 
-4. **Sage suggestions are placeholder until VOY-2283** — The Plan mode chat panel has the layout for Sage interaction, but full conversational research is not wired. Users may see placeholder states or "Ask Sage" prompts without actual Sage responses until the Research-as-Infrastructure pipeline (VOY-2283) ships.
+4. **Sage chat is functional** — The Plan mode chat panel is now wired with query submission, loading states, error handling, and inline results. This is no longer gated on VOY-2283. However, real-time progress via SSE is not yet wired; the chat uses polling (15s interval) to pick up results from background processing.
 5. **Research is asynchronous** — Submitting a query returns immediately (202 status), but results appear only after background processing completes. Users unfamiliar with async patterns may expect instant results.
 6. **Confidence indicators are best-effort** — The dot-based confidence meter (when available) reflects Sage's internal confidence score. It may not always be accurate for subjective recommendations.
 7. **No query editing** — Once a research query is submitted, there's no endpoint to modify it. Users must submit a new query.
@@ -250,9 +255,9 @@ See the [Research Artifact Service support case](./support-case-research-artifac
 | Symptom | Likely Cause | Resolution |
 |---------|-------------|------------|
 | Trip page shows wrong mode | Auto-detection based on trip start date; manual override may be set | Check trip start date; clear localStorage (`trip-mode-override-${tripId}`) to reset to auto |
-| "No Sage finds yet" shown | No research artifacts exist for this trip | Navigate to Plan mode and submit a research query (requires VOY-2283 to be functional) |
+| "No Sage finds yet" shown | No research artifacts exist for this trip | Navigate to Plan mode and submit a research query via the Sage chat panel |
 | Activity cards show no confidence dots | Research artifacts lack confidence data | Expected when artifacts come from R1a stub gatherer (no real search integration yet) |
-| "Sage is looking into that..." persists | Background research job is running or stuck | Wait for job completion; if stuck for >5 minutes, check background jobs page for status |
+| Background job stuck | `InlineProcessDisplay` shows a job running with no progress for >5 minutes | Check background jobs page for status; if stuck, the worker may be saturated or crashed — escalate to Engineering |
 | Research query returns 202 but no results appear | Async processing in progress; or query failed silently | Poll trip page; check background jobs list; if failed, resubmit the query |
 | Trip not found (404) | Wrong company scope or trip ID | Verify trip ID belongs to the authenticated company |
 | Cannot delete a trip | DELETE sets status to "cancelled" (soft-delete) | The trip remains in the database but hidden from default list queries; no hard-delete endpoint exists |
@@ -270,7 +275,7 @@ See the [Research Artifact Service support case](./support-case-research-artifac
 
 | Symptom | Likely Cause | Resolution |
 |---------|-------------|------------|
-| Sage chat panel empty | VOY-2283 not deployed; chat wiring pending | Expected for pre-release builds; basic functionality arrives with VOY-2283 |
+| Sage chat panel empty | No queries submitted yet; or API error on submission | Start typing in the Sage chat input and press Enter to submit your first query. If submission fails, check the error message displayed below the input. |
 | Research artifacts show as stale | Freshness threshold exceeded (7 days fresh, 30 days stale) | Re-submit research query to refresh; this is by design |
 | Artifact status shows "unverified" | Research artifact has not been verified | Review and verify manually via PATCH endpoint; or wait for citation verification (R1a) |
 | Source shows "integration pending (R1a-5)" | Web search / email search not wired | Expected pre-release; actual sources arrive with R1a-5 |
@@ -295,7 +300,7 @@ See the [Research Artifact Service support case](./support-case-research-artifac
 | Mode detection consistently wrong | Verify trip start dates; check for localStorage corruption | Support Engineer + Engineering |
 | Manual override not working | Clear localStorage and retry; if persists, browser compatibility issue | Support Engineer |
 | "Sage is looking into that..." stuck for >10 minutes | Background worker may be saturated or crashed | Engineering (Founding Engineer) |
-| Missing features (export, Sage chat, urgency indicators) | Feature not yet deployed — depends on VOY-2283 | Support Engineer (document known limitation) |
+| Missing features (export, urgency indicators) | Feature not yet deployed — depends on VOY-2283 | Support Engineer (document known limitation) |
 | Urgency colors don't match expectations | Client-side heuristic — may not reflect actual booking data | See urgency troubleshooting section; escalate if systemic misclassification |
 | API returns 401/403 | JWT expired or invalid | Support Engineer + Engineering (auth config) |
 | API returns 500 on any endpoint | Server-side error | Engineering (Founding Engineer / CTO) |
@@ -304,5 +309,7 @@ See the [Research Artifact Service support case](./support-case-research-artifac
 
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
-| m2-v2 | 2026-08-25 | Support Engineer | **Intelligent Urgency (VOY-2284)** committed (`8fc99f01b8`). Added full urgency section: red/amber/green/grey hierarchy, mode-aware rules, thresholds, heuristics (safety keywords, sell-out estimate, deadline gap), visual components, FreshnessCue alignment. Updated Prepare mode (sorted checklist, Urgency Overview, SafetyGapsCard), Go mode (Today View needs-attention/collapsed-on-track, NeedsAttention card), Plan mode (research needs card, stale grey alignment). Added urgency limitations (11–16), urgency troubleshooting table, updated escalation path. Reflected VOY-2301 unassigned state in status line. |
-| m2-v1 | 2026-08-25 | Support Engineer | Initial assessment for VOY-2282 (M2 Trip — Trip Page Simplification). Covers Plan/Prepare/Go mode trip pages, mode detection logic, manual override, trip listing. Notes dependencies on VOY-2283 (Research-as-Infrastructure) and VOY-2284 (Intelligent Urgency) for full functionality. R1a release blocked on P0 VOY-2298. |
+|| m2-v3.1 | 2026-08-25 | Support Engineer | **M2-F1 idempotency guard corrected** (7f19a15e76). Original M2-F1 guard in e64c43ac49 checked `existingQuery.jobId` which is always set because the route handler links the job to the query before the processor runs — caused every RESEARCH_RESOLVE_ENTITIES to skip itself. Correction: check `status !== "pending"` and compare jobId against current processor jobId to distinguish first-run from retry. No user-facing behavior change. |
+|| m2-v3 | 2026-08-25 | Support Engineer | **M2-F1/M2-F2 P1 fixes committed** (e64c43ac49). Sage chat now functional (chat composer with submit, 500-char limit, Enter/Shift+Enter, loading/error states). InlineProcessDisplay with mode-aware progress (Plan: inline bar; Prepare: collapsible tray; Go: hidden). useBackgroundProcesses shared hook. BackgroundProcessTray refactored. Artifact polling every 15s. Updated status to reflect P0 fix reviewed (VOY-2298 done), M2 P1 fixes committed, awaiting StaffE re-verify. Updated all Sage/research troubleshooting entries, Known Limitations, and escalation path. |
+|| m2-v2 | 2026-08-25 | Support Engineer | **Intelligent Urgency (VOY-2284)** committed (`8fc99f01b8`). Added full urgency section: red/amber/green/grey hierarchy, mode-aware rules, thresholds, heuristics (safety keywords, sell-out estimate, deadline gap), visual components, FreshnessCue alignment. Updated Prepare mode (sorted checklist, Urgency Overview, SafetyGapsCard), Go mode (Today View needs-attention/collapsed-on-track, NeedsAttention card), Plan mode (research needs card, stale grey alignment). Added urgency limitations (11–16), urgency troubleshooting table, updated escalation path. Reflected VOY-2301 unassigned state in status line. |
+|| m2-v1 | 2026-08-25 | Support Engineer | Initial assessment for VOY-2282 (M2 Trip — Trip Page Simplification). Covers Plan/Prepare/Go mode trip pages, mode detection logic, manual override, trip listing. Notes dependencies on VOY-2283 (Research-as-Infrastructure) and VOY-2284 (Intelligent Urgency) for full functionality. R1a release blocked on P0 VOY-2298. |
