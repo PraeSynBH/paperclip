@@ -1,9 +1,9 @@
 ---
 |title: M6 — Self-Serve Trial & Onboarding
-|version: m6
-|date: 2026-08-25
-|commits: 75c884f66d (feat/m6), 46a0b32003 (billing fix), 74753fe83b (CI fix), 8fb4d72b8f (certresolver fix), 27b6a2b29d (routing fix), b63c4f9f26 (verified healthy)
-|||status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. Auth migration (VOY-2171) merged to voyonder master — CI/CD deploying (voyonder.com returning 502/404 as deploy completes). Known issues: VOY-2192 signup routing (fixes committed, awaiting deploy), VOY-2217 billing checkout body parsing (DEPLOYED ✅), VOY-2218 billing portal link 500 (MERGED to master, awaiting deploy).
+||version: m6
+||date: 2026-08-25
+||commits: 75c884f66d (feat/m6), 46a0b32003 (billing fix), 74753fe83b (CI fix), 8fb4d72b8f (certresolver fix), 27b6a2b29d (routing fix), b63c4f9f26 (verified healthy), 78d44ce (deploy fix), 68da3ab (auth migration)
+||||status: Published — Live in production. Deployed 2026-08-25 ~01:15 UTC. All deploy blockers resolved per CTO 00:55 UTC verification. Auth migration (VOY-2171) deployed on 2026-08-25 10:32 UTC — assertVoyonderAuth live on background-jobs, research, exports routes. voyonder.com healthy (200). Docker image includes wget fix. Known issues: VOY-2192 signup routing (fixes committed, awaiting deploy), VOY-2217 billing checkout body parsing (DEPLOYED ✅), VOY-2218 billing portal link 500 (MERGED to master, awaiting deploy).
 ---
 
 # M6 Release: Self-Serve Trial Signup & Onboarding
