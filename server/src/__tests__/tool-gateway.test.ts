@@ -3218,7 +3218,43 @@ rl.on("line", (line) => {
       .get("/api/tool-gateway/audit")
       .query({ companyId: company.id });
     expect(audit.status).toBe(403);
-    expect(audit.body.error).toBe("Board access required");
+    expect(audit.body.error).toBe("Missing permission: tools:view_audit");
+  });
+
+  it("allows an agent actor to read gateway audit through an explicit principal permission grant", async () => {
+    const company = await createCompany(db);
+    const agent = await createAgent(db, company.id);
+    const { run } = await createIssueAndRun(db, company.id, agent.id);
+    await db.insert(companyMemberships).values({
+      companyId: company.id,
+      principalType: "agent",
+      principalId: agent.id,
+      status: "active",
+      membershipRole: "member",
+    });
+    await db.insert(principalPermissionGrants).values({
+      companyId: company.id,
+      principalType: "agent",
+      principalId: agent.id,
+      permissionKey: "tools:view_audit",
+      scope: null,
+      grantedByUserId: "owner",
+    });
+    const gateway = createTestToolGatewayService(db);
+    const app = createGatewayRouteApp(db, gateway, {
+      type: "agent",
+      companyId: company.id,
+      agentId: agent.id,
+      runId: run.id,
+      source: "agent_jwt",
+    });
+
+    const audit = await request(app)
+      .get("/api/tool-gateway/audit")
+      .query({ companyId: company.id });
+    expect(audit.status, JSON.stringify(audit.body)).toBe(200);
+    expect(audit.body).toHaveProperty("events");
+    expect(audit.body).toHaveProperty("nextCursor");
   });
 
   it("allows board runtime control and audit reads through explicit board permissions", async () => {

@@ -22,6 +22,7 @@ const mockIssueService = vi.hoisted(() => ({
 const mockAccessService = vi.hoisted(() => ({
   decide: vi.fn(),
   canUser: vi.fn(),
+  hasPermission: vi.fn(),
 }));
 
 const mockAgentActionAuditService = vi.hoisted(() => ({
@@ -33,6 +34,10 @@ vi.mock("../services/activity.js", () => ({
   normalizeActivityLimit: (limit: number | undefined) => {
     if (!Number.isFinite(limit)) return 100;
     return Math.max(1, Math.min(500, Math.floor(limit ?? 100)));
+  },
+  normalizeActivityOffset: (offset: number | undefined) => {
+    if (!Number.isFinite(offset) || (offset ?? 0) < 0) return 0;
+    return Math.floor(offset ?? 0);
   },
 }));
 
@@ -108,6 +113,7 @@ describe.sequential("activity routes", () => {
     for (const mock of Object.values(mockIssueService)) mock.mockReset();
     mockAccessService.decide.mockReset();
     mockAccessService.canUser.mockReset();
+    mockAccessService.hasPermission.mockReset();
     mockAgentActionAuditService.list.mockReset();
     mockAccessService.decide.mockResolvedValue({
       allowed: true,
@@ -116,6 +122,7 @@ describe.sequential("activity routes", () => {
       explanation: "Allowed by test mock.",
     });
     mockAccessService.canUser.mockResolvedValue(false);
+    mockAccessService.hasPermission.mockResolvedValue(false);
   });
 
   it("returns redacted all-actors rows to a basic company reader", async () => {
@@ -216,10 +223,15 @@ describe.sequential("activity routes", () => {
     expect(mockActivityService.list).toHaveBeenCalledWith({
       companyId: "company-1",
       agentId: undefined,
+      actorId: undefined,
       entityType: undefined,
       entityId: undefined,
-      limit: 100,
+      limit: 101,
+      offset: 0,
     });
+    expect(res.headers["x-page-limit"]).toBe("100");
+    expect(res.headers["x-page-offset"]).toBe("0");
+    expect(res.headers["x-next-offset"]).toBeUndefined();
   });
 
   it("caps requested company activity list limits", async () => {
@@ -234,10 +246,39 @@ describe.sequential("activity routes", () => {
     expect(mockActivityService.list).toHaveBeenCalledWith({
       companyId: "company-1",
       agentId: undefined,
+      actorId: undefined,
       entityType: "issue",
       entityId: undefined,
-      limit: 500,
+      limit: 501,
+      offset: 0,
     });
+  });
+
+  it("filters company activity by actorId and pages backward with offset", async () => {
+    mockActivityService.list.mockResolvedValue(
+      Array.from({ length: 3 }, (_, i) => ({ id: `activity-${i}` })),
+    );
+
+    const app = await createApp();
+    const res = await requestApp(app, (baseUrl) =>
+      request(baseUrl).get("/api/companies/company-1/activity?actorId=agent-9&limit=2&offset=4"),
+    );
+
+    expect(res.status).toBe(200);
+    expect(mockActivityService.list).toHaveBeenCalledWith({
+      companyId: "company-1",
+      agentId: undefined,
+      actorId: "agent-9",
+      entityType: undefined,
+      entityId: undefined,
+      limit: 3,
+      offset: 4,
+    });
+    // The service returned 3 rows for a page size of 2 → there is a next page.
+    expect(res.body).toHaveLength(2);
+    expect(res.headers["x-page-limit"]).toBe("2");
+    expect(res.headers["x-page-offset"]).toBe("4");
+    expect(res.headers["x-next-offset"]).toBe("6");
   });
 
   it("resolves alphanumeric issue identifiers before loading runs", async () => {

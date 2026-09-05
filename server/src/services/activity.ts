@@ -22,9 +22,11 @@ import { classifyRunLiveness } from "./run-liveness.js";
 export interface ActivityFilters {
   companyId: string;
   agentId?: string;
+  actorId?: string;
   entityType?: string;
   entityId?: string;
   limit?: number;
+  offset?: number;
 }
 
 const DEFAULT_ACTIVITY_LIMIT = 100;
@@ -33,6 +35,22 @@ const MAX_ACTIVITY_LIMIT = 500;
 export function normalizeActivityLimit(limit: number | undefined) {
   if (!Number.isFinite(limit)) return DEFAULT_ACTIVITY_LIMIT;
   return Math.max(1, Math.min(MAX_ACTIVITY_LIMIT, Math.floor(limit ?? DEFAULT_ACTIVITY_LIMIT)));
+}
+
+export function normalizeActivityOffset(offset: number | undefined) {
+  if (!Number.isFinite(offset) || (offset ?? 0) < 0) return 0;
+  return Math.floor(offset ?? 0);
+}
+
+/**
+ * Unlike `normalizeActivityLimit` (which enforces the public [1, MAX] ceiling
+ * for query-string input), this only guards against non-finite/non-positive
+ * values so the route can safely request `limit + 1` rows to detect a next
+ * page without a second silent reclamp at the MAX boundary.
+ */
+function safeQueryLimit(limit: number | undefined) {
+  if (!Number.isFinite(limit) || (limit ?? 0) <= 0) return DEFAULT_ACTIVITY_LIMIT;
+  return Math.floor(limit as number);
 }
 
 export function activityService(db: Db) {
@@ -328,10 +346,14 @@ export function activityService(db: Db) {
   return {
     list: (filters: ActivityFilters) => {
       const conditions = [eq(activityLog.companyId, filters.companyId)];
-      const limit = normalizeActivityLimit(filters.limit);
+      const limit = safeQueryLimit(filters.limit);
+      const offset = normalizeActivityOffset(filters.offset);
 
       if (filters.agentId) {
         conditions.push(eq(activityLog.agentId, filters.agentId));
+      }
+      if (filters.actorId) {
+        conditions.push(eq(activityLog.actorId, filters.actorId));
       }
       if (filters.entityType) {
         conditions.push(eq(activityLog.entityType, filters.entityType));
@@ -361,6 +383,7 @@ export function activityService(db: Db) {
         )
         .orderBy(desc(activityLog.createdAt))
         .limit(limit)
+        .offset(offset)
         .then((rows) => rows.map((r) => r.activityLog));
     },
 
