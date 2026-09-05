@@ -91,7 +91,6 @@ import { applyUiBranding } from "./ui-branding.js";
 import { memoryRoutes } from "./routes/memory.js";
 import { knowledgeRoutes } from "./routes/knowledge.js";
 import { companyTemplateRoutes } from "./routes/company-templates.js";
-import { billingRoutes, billingWebhookRoute } from "./routes/billing.js";
 import { notificationRoutes } from "./routes/notifications.js";
 import { marketplaceRoutes } from "./routes/marketplace.js";
 import { onboardingRoutes } from "./routes/onboarding.js";
