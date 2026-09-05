@@ -495,3 +495,6 @@ Then fix forward with a new stable release.
 - [`doc/RELEASE-CHECKLIST.md`](RELEASE-CHECKLIST.md)
 - [`doc/PUBLISHING.md`](PUBLISHING.md)
 - [`doc/RELEASE-AUTOMATION-SETUP.md`](RELEASE-AUTOMATION-SETUP.md)
+- [`doc/PRIMARY-DEPLOY-GAP.md`](PRIMARY-DEPLOY-GAP.md) — the manual steps after npm publish (global
+  install upgrade + process restart) that this file does not cover, and the verification rule that
+  applies until an operator performs them

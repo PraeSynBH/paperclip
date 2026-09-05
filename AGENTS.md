@@ -240,6 +240,13 @@ Run the browser suites only when your change touches them or when you are explic
 
 For normal issue work, run the smallest relevant verification first. Do not default to repo-wide typecheck/build/test on every heartbeat when a narrower check is enough to prove the change.
 
+For any change you intend to verify against a live, already-running server rather than a freshly
+started one, first confirm which commit that server is actually running (`GET /api/health` ->
+`commit`) — a long-lived primary/production instance can be many commits behind `master`. See
+`doc/PRIMARY-DEPLOY-GAP.md` for the deploy path, the operator-restart requirement, and the required
+disclosure ("verified against local dev on commit X" vs. "verified against the primary instance")
+when reporting a server-side fix as verified.
+
 Run this full check before claiming repo work done in a PR-ready hand-off, or when the change scope is broad enough that targeted checks are not sufficient:
 
 ```sh
