@@ -8692,7 +8692,7 @@ export function issueRoutes(
       actorResponsibleUserId: authenticatedActorResponsibleUserId(req),
       trustExplicitResponsibleUserId: actor.actorType === "user",
       watchdogActorRunId: actor.runId,
-    });
+    };
 
     // ---- Post-insert duplicate verification (C-2 TOCTOU safety net) ---------
     // The title-pattern SLA dedup check above runs BEFORE the issue is created.

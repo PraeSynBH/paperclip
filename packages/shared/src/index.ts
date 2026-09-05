@@ -1,7 +1,7 @@
 export { agentAdapterTypeSchema, optionalAgentAdapterTypeSchema } from "./adapter-type.js";
 
 // ── Background job types (generic Paperclip contract) ──
-export { type BackgroundJobStatus, BACKGROUND_JOB_TYPES } from "./background-job-types.js";
+export { BACKGROUND_JOB_TYPES } from "./background-job-types.js";
 export type {
   BackgroundJob,
   CreateBackgroundJobRequest,
@@ -652,7 +652,6 @@ export {
 } from "./validators/summary-slot.js";
 
 export {
-  BACKGROUND_JOB_TYPES,
   type BackgroundJobType,
 } from "./background-job-types.js";
 
@@ -2336,56 +2335,6 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./validators/index.js";
-
-export type {
-  MemoryBindingConfig,
-  MemoryCapabilities,
-  MemoryRecordType,
-  MemorySourceKind,
-  MemoryRecord,
-  MemoryScope,
-  MemorySourceRef,
-  MemoryQueryRequest,
-  MemoryContextBundle,
-  MemorySnippet,
-  MemoryRecordHandle,
-  MemoryUsage,
-  MemoryCaptureRequest,
-  MemoryRecordWriteEntry,
-  MemoryRecordWriteRequest,
-  MemoryListRequest,
-  MemoryListPage,
-  MemoryOperationType,
-  MemoryExtractionHookKind,
-  MemoryExtractionJobStatus,
-} from "./types/memory.js";
-
-export type {
-  KnowledgeDocumentStatus,
-  KnowledgeReviewStatus,
-  KnowledgeBacklinkSourceType,
-  KnowledgeDocument,
-  KnowledgeDocumentRevision,
-  KnowledgeDocumentReview,
-  KnowledgeSourceBacklink,
-  KnowledgeDocumentCreateRequest,
-  KnowledgeDocumentUpdateRequest,
-  KnowledgeDocumentPublishRequest,
-  KnowledgeDocumentSubmitReviewRequest,
-  KnowledgeDocumentReviewDecision,
-  KnowledgeDocumentListQuery,
-  KnowledgeDocumentListPage,
-  KnowledgeDocumentDiff,
-  KnowledgeCreateBacklinkRequest,
-  KnowledgeCreateBacklinkResponse,
-  KnowledgePromoteFromMemoryRequest,
-} from "./types/knowledge.js";
-
-export type {
-  BackgroundJob,
-  CreateBackgroundJobRequest,
-  BackgroundJobEvent,
-} from "./types/background-job.js";
 
 export { API_PREFIX, API } from "./api.js";
 export { normalizeAgentUrlKey, deriveAgentUrlKey, isUuidLike } from "./agent-url-key.js";
