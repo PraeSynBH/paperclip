@@ -3,8 +3,8 @@ import { z } from "zod";
 import type { Db } from "@paperclipai/db";
 import { normalizeIssueIdentifier } from "@paperclipai/shared";
 import { validate } from "../middleware/validate.js";
-import { activityService, normalizeActivityLimit } from "../services/activity.js";
-import { assertAuthenticated, assertBoard, assertCompanyAccess, getAccessibleResource, hasCompanyAccess } from "./authz.js";
+import { activityService, normalizeActivityLimit, normalizeActivityOffset } from "../services/activity.js";
+import { assertAuthenticated, assertBoard, assertBoardOrAgent, assertCompanyAccess, getAccessibleResource, hasCompanyAccess } from "./authz.js";
 import { accessService, heartbeatService, issueService } from "../services/index.js";
 import { sanitizeRecord } from "../redaction.js";
 import { badRequest, forbidden } from "../errors.js";
@@ -125,16 +125,27 @@ export function activityRoutes(db: Db) {
   const agentAudit = agentActionAuditService(db);
 
   async function hasAgentAuditPermission(req: import("express").Request, companyId: string) {
-    if (req.actor.type !== "board") return false;
-    if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) return true;
-    return Boolean(
-      req.actor.userId
-      && await access.canUser(companyId, req.actor.userId, "audit:view_agent_actions"),
-    );
+    if (req.actor.type === "board") {
+      if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) return true;
+      return Boolean(
+        req.actor.userId
+        && await access.canUser(companyId, req.actor.userId, "audit:view_agent_actions"),
+      );
+    }
+    if (req.actor.type === "agent") {
+      // AgentBearerAuth per the route's declared `board_or_agent` policy: an
+      // agent needs the same explicit `audit:view_agent_actions` principal
+      // grant a board user would need — no implicit same-company access.
+      return Boolean(
+        req.actor.agentId
+        && await access.hasPermission(companyId, "agent", req.actor.agentId, "audit:view_agent_actions"),
+      );
+    }
+    return false;
   }
 
   async function assertAgentAuditPermission(req: import("express").Request, companyId: string) {
-    assertBoard(req);
+    assertBoardOrAgent(req);
     assertCompanyAccess(req, companyId);
     if (await hasAgentAuditPermission(req, companyId)) return;
     throw forbidden("Missing permission: audit:view_agent_actions");
@@ -224,15 +235,31 @@ export function activityRoutes(db: Db) {
     assertCompanyAccess(req, companyId);
     if (!(await assertCompanyScopeReadAllowed(req, res, companyId))) return;
 
+    const limit = normalizeActivityLimit(Number(req.query.limit));
+    const offset = normalizeActivityOffset(Number(req.query.offset));
     const filters = {
       companyId,
       agentId: req.query.agentId as string | undefined,
+      // `actorId` mirrors the persisted activity_log.actor_id column
+      // directly (agent-driven rows set actorId === agentId, so this also
+      // covers non-agent actors like board users, system, and plugins that
+      // `agentId` cannot address).
+      actorId: req.query.actorId as string | undefined,
       entityType: req.query.entityType as string | undefined,
       entityId: req.query.entityId as string | undefined,
-      limit: normalizeActivityLimit(Number(req.query.limit)),
+      // Fetch one extra row so `hasMore`/`X-Next-Offset` can be derived
+      // without a separate count query; the client-visible page still caps
+      // at `limit`.
+      limit: limit + 1,
+      offset,
     };
-    const result = await svc.list(filters);
-    res.json(result);
+    const rows = await svc.list(filters);
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    res.setHeader("X-Page-Limit", String(limit));
+    res.setHeader("X-Page-Offset", String(offset));
+    if (hasMore) res.setHeader("X-Next-Offset", String(offset + limit));
+    res.json(page);
   });
 
   router.get("/companies/:companyId/audit/agent-actions", async (req, res) => {

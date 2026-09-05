@@ -180,6 +180,37 @@ describePostgres("agent action audit routes", () => {
     expect(invalidBoardResponse.body.error).toContain("audit:view_agent_actions");
   }, 30_000);
 
+  it("allows an agent bearer with an explicit audit:view_agent_actions grant (AgentBearerAuth board_or_agent contract)", async () => {
+    const { company, agent } = await seed();
+    await db.insert(companyMemberships).values({
+      companyId: company.id,
+      principalType: "agent",
+      principalId: agent.id,
+      status: "active",
+      membershipRole: "member",
+    });
+    await db.insert(principalPermissionGrants).values({
+      companyId: company.id,
+      principalType: "agent",
+      principalId: agent.id,
+      permissionKey: "audit:view_agent_actions",
+      scope: null,
+      grantedByUserId: null,
+    });
+    const app = await createApp(db, {
+      type: "agent", agentId: agent.id, companyId: company.id, runId: null, source: "agent_jwt",
+    });
+
+    const response = await request(app).get(`/api/companies/${company.id}/audit/agent-actions`);
+    expect(response.status, JSON.stringify(response.body)).toBe(200);
+    expect(response.body.accessTier).toBe("full");
+    expect(response.body.items).toHaveLength(3);
+
+    const csvResponse = await request(app).get(`/api/companies/${company.id}/audit/agent-actions.csv`);
+    expect(csvResponse.status, JSON.stringify(csvResponse.body)).toBe(200);
+    expect(csvResponse.headers["content-type"]).toContain("text/csv");
+  });
+
   it("lets a company member read basic all-actor rows without attribution", async () => {
     const { company } = await seed();
     await seedActorOnlyRows(company.id);

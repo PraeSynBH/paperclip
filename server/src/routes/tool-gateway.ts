@@ -266,6 +266,25 @@ export function toolGatewayRoutes(db: Db, toolGateway: ToolGatewayService) {
     throw forbidden(`Missing permission: ${permissionKey}`);
   }
 
+  /**
+   * Board-or-agent variant of `assertBoardPermission`, for the routes whose
+   * OpenAPI contract declares `AgentBearerAuth` + `x-paperclip-authorization:
+   * {actor: board_or_agent}` (e.g. `/tool-gateway/audit`). An agent actor
+   * needs the same explicit principal-permission grant a board user without
+   * default access would need — no implicit same-company agent access.
+   */
+  async function assertBoardOrAgentPermission(req: import("express").Request, companyId: string, permissionKey: PermissionKey) {
+    assertBoardOrAgent(req);
+    assertCompanyAccess(req, companyId);
+    if (req.actor.type === "board") {
+      if (req.actor.source === "local_implicit" || req.actor.isInstanceAdmin) return;
+      if (req.actor.userId && await access.canUser(companyId, req.actor.userId, permissionKey)) return;
+      throw forbidden(`Missing permission: ${permissionKey}`);
+    }
+    if (req.actor.agentId && await access.hasPermission(companyId, "agent", req.actor.agentId, permissionKey)) return;
+    throw forbidden(`Missing permission: ${permissionKey}`);
+  }
+
   function assertBoardMutationAccess(req: import("express").Request, companyId: string) {
     assertBoard(req);
     assertCompanyAccess(req, companyId);
@@ -635,13 +654,12 @@ export function toolGatewayRoutes(db: Db, toolGateway: ToolGatewayService) {
 
   router.get("/tool-gateway/audit", async (req, res) => {
     try {
-      assertBoard(req);
       const companyId = typeof req.query.companyId === "string" ? req.query.companyId : null;
       if (!companyId) {
         res.status(400).json({ error: "companyId is required" });
         return;
       }
-      await assertBoardPermission(req, companyId, "tools:view_audit");
+      await assertBoardOrAgentPermission(req, companyId, "tools:view_audit");
       const limitRaw = Number(req.query.limit ?? 100);
       const limit = Number.isFinite(limitRaw) ? Math.max(1, Math.min(100, Math.floor(limitRaw))) : 100;
       const appFilter = typeof req.query.app === "string" ? req.query.app.trim() : null;
