@@ -84,11 +84,21 @@ PRICING_EXPERIMENT_CONFIG='{
 - `084747c520` — fix(analytics): use correct heartbeatRuns.agentId column instead of actorAgentId
 - `25d841f802` — fix(analytics): rename retained to activeAgents in UsageAnalytics UI to match server column rename
 
-## Status
+## Status (updated by Release Engineer heartbeat at ~10:53 UTC Aug 23)
 - [x] Implementation
 - [x] Code Review
 - [x] CTO Sign-off
 - [x] Docs Verification
-- [ ] Ship to staging
-- [ ] Verify staging
-- [ ] Ship to production
+- [x] Code merged to origin/master (PR #76)
+- [x] CHANGELOG updated
+- [x] Docker workflow fix (PR #77) — resolves mixed-case repo name issue on fork
+- [ ] Push to production Paperclip repo (paperclipai/paperclip master)
+- [ ] Auto-deploy via Railway (watches ghcr.io)
+- [ ] Verify experiment is live
+- [ ] Monitor for errors
+
+## Notes
+- The Docker workflow on PraeSynBH/paperclip fork has a pre-existing issue: mixed-case repo name (`PraeSynBH/paperclip`) is rejected by ghcr.io. Fix submitted in PR #77.
+- The production deploy path is: push master to paperclipai/paperclip → Docker build → ghcr.io → Railway auto-deploy
+- Migration 0230 is idempotent (`ADD COLUMN IF NOT EXISTS`) — safe to apply to production
+- Experiment is DISABLED by default — enable via `PRICING_EXPERIMENT_CONFIG` env var when ready
