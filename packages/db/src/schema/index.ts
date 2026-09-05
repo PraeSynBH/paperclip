@@ -194,11 +194,9 @@ export {
 
 // v0.5.0 feature tables
 export { notificationPreferences, notifications, pushSubscriptions } from "./notifications.js";
-export { subscriptionTiers } from "./subscription_tiers.js";
-export { stripeCustomers } from "./stripe_customers.js";
-export { companySubscriptions } from "./company_subscriptions.js";
-export { subscriptionUsage } from "./subscription_usage.js";
-export { subscriptionInvoices } from "./subscription_invoices.js";
+// subscriptionTiers/stripeCustomers/companySubscriptions/subscriptionUsage/subscriptionInvoices
+// are already re-exported above (lines 118-122); this block duplicated those exports verbatim,
+// which esbuild rejects as "Multiple exports with the same name" and breaks any build.
 
 // Research pipeline (R1a)
 export { researchArtifacts } from "./research_artifacts.js";
