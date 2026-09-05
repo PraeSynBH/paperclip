@@ -839,7 +839,7 @@ export type {
   InstanceSchedulerHeartbeatAgent,
 } from "./heartbeat.js";
 export type { LiveEvent } from "./live.js";
-export type { BackgroundJob, BackgroundJobEvent, BackgroundJobEventPayload, CreateBackgroundJobRequest } from "./background-job.js";
+export type { BackgroundJob, BackgroundJobEvent, CreateBackgroundJobRequest } from "./background-job.js";
 export type { EventBus } from "./event-bus.js";
 export type { AuthProvider, AuthActor, AuthRequest } from "./auth-provider.js";
 export type { LoggerProvider } from "./logger.js";
