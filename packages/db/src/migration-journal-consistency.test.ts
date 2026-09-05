@@ -422,10 +422,18 @@ describe("parseMigrationJournalIdxBaseline", () => {
 describe("the shipped repository journal", () => {
   // RBR-1033 fork-retarget note: RBR-968 pinned upstream/paperclipai/paperclip's known
   // defects at the time (duplicate idx 178, gaps at 126/130/177). This fork's journal
-  // diverged from upstream before those defects existed on this line of history, so its
-  // journal is clean: no duplicates, no gaps, 128 entries with max idx 127. These tests
-  // pin that clean state so a regression is caught; if this fork's journal legitimately
-  // grows a defect, the fix belongs in the journal, not in loosening this assertion.
+  // originally diverged from upstream before those defects existed on this line of
+  // history (128 entries, max idx 127, no gaps/dupes).
+  //
+  // RBR-1033-followup / VOY-1637 / VOY-1640 (018d6ec97): the fork was subsequently
+  // synced with upstream/main and inherited the gaps at idx 126 and 130 (both
+  // pre-existing drops from before this fork's history, not introduced here) — the
+  // sibling scripts/check-migration-journal.mjs guard and its
+  // scripts/__tests__/check-migration-journal.test.mjs were already updated to match;
+  // this file had drifted from that update and is corrected here (RBR-1190) so the two
+  // implementations stay in agreement (see the "agrees with the TS source of truth"
+  // anti-drift test). Gaps are warnings, not errors: no duplicates, no orphaned/missing
+  // files, journal/file bijection intact.
   it("has no duplicate idx groups on the fork's journal", async () => {
     const result = await checkMigrationJournalConsistency();
     const baseline = await loadMigrationJournalIdxBaseline();
@@ -434,22 +442,24 @@ describe("the shipped repository journal", () => {
     expect(baseline.duplicateIdx).toEqual([]);
   });
 
-  it("has no idx gaps on the fork's journal", async () => {
+  it("has the known idx gaps on the fork's journal (126, 130)", async () => {
     const result = await checkMigrationJournalConsistency();
 
-    expect(result.idxGaps).toEqual([]);
+    expect(result.idxGaps).toEqual([126, 130]);
   });
 
-  it("audits clean against the (empty) shipped baseline, with no warnings", async () => {
+  it("audits clean against the (empty) shipped baseline, with only the known gap warning", async () => {
     const audit = await auditMigrationJournal({
       baseline: await loadMigrationJournalIdxBaseline(),
     });
 
     expect(audit.errors).toEqual([]);
-    expect(audit.warnings).toEqual([]);
+    expect(audit.warnings).toEqual([
+      "Gaps in journal idx sequence: 126, 130. Gaps are tolerated (they usually mean a migration was dropped before merge) but they make \"latest idx\" an unreliable count of applied migrations.",
+    ]);
   });
 
-  it("passes under --strict too, since the fork's journal has no baselined defects", async () => {
+  it("passes under --strict too, since the fork's journal has no baselined duplicate-idx defects", async () => {
     const audit = await auditMigrationJournal({ strict: true });
 
     expect(audit.errors).toEqual([]);
