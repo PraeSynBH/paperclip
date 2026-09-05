@@ -33,11 +33,13 @@ CREATE INDEX IF NOT EXISTS "documents_latest_body_expr_search_idx"
 --> statement-breakpoint
 
 -- Issue comments: expression index for body searches (subquery in issues search)
+-- paperclip:migration-safety-ignore large-create-index-not-concurrently: Drizzle migrations run transactionally, so CONCURRENTLY is unavailable; this expression index is required to serve function-wrapped LIKE search patterns that the existing plain trgm indexes cannot satisfy.
 CREATE INDEX IF NOT EXISTS "issue_comments_body_expr_search_idx"
   ON "issue_comments" USING gin (lower("body") gin_trgm_ops);
 
 --> statement-breakpoint
 
 -- Activity log: expression index for action token-match and LIKE
+-- paperclip:migration-safety-ignore large-create-index-not-concurrently: Drizzle migrations run transactionally, so CONCURRENTLY is unavailable; this expression index is required to serve function-wrapped LIKE search patterns that the existing plain trgm indexes cannot satisfy.
 CREATE INDEX IF NOT EXISTS "activity_log_action_expr_search_idx"
   ON "activity_log" USING gin (lower(coalesce("action", '')) gin_trgm_ops);
