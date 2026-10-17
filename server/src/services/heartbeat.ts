@@ -88,6 +88,14 @@ export { scrubGitCredentialText };
 import { publishLiveEvent } from "./live-events.js";
 import { normalizeResponsibleUserDenialCode } from "./responsible-user-denial-run-outcomes.js";
 import { getRunLogStore, type RunLogHandle } from "./run-log-store.js";
+import {
+  evaluateInfraRetryGate,
+  isInfraCausedFailure,
+  probeGatewayHealth,
+  type GatewayProbeResult,
+  type InfraRetryGateDecision,
+  type InfraRetryRunSample,
+} from "./infra-retry-policy.js";
 import { getServerAdapter, listAdapterModelProfiles, runningProcesses } from "../adapters/index.js";
 import type {
   AdapterExecutionResult,
@@ -479,6 +487,12 @@ export const INTERACTION_CONTINUATION_INFRA_RETRY_REASON = "interaction_continua
 export const INTERACTION_CONTINUATION_INFRA_WAKE_REASON = "interaction_continuation_infra_retry";
 const INTERACTION_CONTINUATION_INFRA_MAX_ATTEMPTS = 3;
 const RESOLVED_INTERACTION_CONTINUATION_STATUSES = new Set(["accepted", "answered", "rejected"]);
+// PRX-5350: automatic retries for infrastructure-caused failures are bounded and
+// spaced, gated on a gateway health probe, and suppressed per-agent once the
+// circuit breaker opens. Policy lives in ./infra-retry-policy.ts.
+const INFRA_RETRY_SCHEDULED_REASON = "infra_retry_bounded";
+const INFRA_RETRY_HISTORY_LIMIT = 8;
+const INFRA_GATEWAY_PROBE_TIMEOUT_MS = 2_000;
 const WORKSPACE_VALIDATION_FAILURE_CODE = "workspace_validation_failed";
 const WORKSPACE_VALIDATION_RECOVERY_CAUSE = "workspace_validation_failed";
 const CONFIGURATION_INCOMPLETE_FAILURE_CODE = "configuration_incomplete";
@@ -17126,6 +17140,49 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         }
   }
 
+
+  /**
+   * PRX-5350: gateway health probe used as the "is it safe to spend a retry yet?"
+   * gate. Implementation lives in the policy module so the recovery sweeper and
+   * the run-finalization path agree on what "healthy" means.
+   */
+  async function probeAgentGatewayHealth(
+    agent: typeof agents.$inferSelect,
+  ): Promise<GatewayProbeResult> {
+    return probeGatewayHealth(agent.adapterConfig, { timeoutMs: INFRA_GATEWAY_PROBE_TIMEOUT_MS });
+  }
+
+  /**
+   * Evaluate the bounded-retry policy for an infrastructure-caused run failure.
+   * Returns null when the failure is not infrastructure-caused, so callers keep
+   * their pre-existing behaviour for every other failure class.
+   */
+  async function evaluateInfraRetryForRun(
+    run: typeof heartbeatRuns.$inferSelect,
+    agent: typeof agents.$inferSelect,
+  ): Promise<InfraRetryGateDecision | null> {
+    if (!isInfraCausedFailure(run.errorCode)) return null;
+
+    const recentRuns = (await db
+      .select({ status: heartbeatRuns.status, errorCode: heartbeatRuns.errorCode })
+      .from(heartbeatRuns)
+      .where(
+        and(
+          eq(heartbeatRuns.companyId, run.companyId),
+          eq(heartbeatRuns.agentId, run.agentId),
+        ),
+      )
+      .orderBy(desc(heartbeatRuns.createdAt), desc(heartbeatRuns.id))
+      .limit(INFRA_RETRY_HISTORY_LIMIT)) as InfraRetryRunSample[];
+
+    return evaluateInfraRetryGate({
+      errorCode: run.errorCode,
+      recentRuns,
+      scheduledRetryAttempt: run.scheduledRetryAttempt ?? 0,
+      gatewayProbe: await probeAgentGatewayHealth(agent),
+    });
+  }
+
   async function releaseIssueExecutionAndPromote(
     run: typeof heartbeatRuns.$inferSelect,
     options: { suppressImmediateRecovery?: boolean } = {},
@@ -17143,6 +17200,20 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       ? await resolveSessionBeforeForWakeup(recoveryAgent, taskKey)
       : null;
     const recoveryAgentNameKey = normalizeAgentNameKey(recoveryAgent?.name);
+
+    // PRX-5350: an infrastructure-caused failure is no longer retried immediately.
+    // Decide — before the transaction touches any run rows — whether a retry may be
+    // spent at all, and if so how long to wait. Null means "not an infrastructure
+    // failure", in which case the pre-existing behaviour is preserved exactly.
+    const infraRetryDecision =
+      recoveryAgent && recoveryAgentInvokable
+        ? await evaluateInfraRetryForRun(run, recoveryAgent)
+        : null;
+    // Flattened for the transaction below: no narrowing is needed on the other
+    // side of a closure boundary, and the deferral path stays explicit.
+    const infraRetryBlocked = Boolean(infraRetryDecision && !infraRetryDecision.allowed);
+    const infraRetrySchedule = infraRetryDecision?.allowed ? infraRetryDecision.schedule : null;
+    const infraRetryAttempt = infraRetryDecision?.attempt ?? null;
 
     const promotionResult = await db.transaction(async (tx) => {
       // Lock the context issue (if any) AND every issue that still references this run.
@@ -17752,6 +17823,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         };
       }
 
+      if (infraRetryBlocked) {
+        // PRX-5350: do not spend a retry while the gateway health probe fails or
+        // the per-agent circuit breaker is open. This mirrors the `released` shape
+        // (so the transaction's normal lock handling still runs) but is reported as
+        // its own outcome so the deferral is recorded once, on the failed run, with
+        // its reason — rather than firing a hot retry into a sick gateway.
+        return { kind: "infra_retry_deferred" as const };
+      }
+
       const retryReason = issue.status === "todo" ? "assignment_recovery" : "issue_continuation_needed";
       const recoveryReason = issue.status === "todo" ? "issue_assignment_recovery" : "issue_continuation_needed";
       const recoverySource =
@@ -17764,6 +17844,14 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         retryReason,
         source: recoverySource,
         retryOfRunId: run.id,
+        // PRX-5350: carry the bounded-retry schedule in the snapshot as well as on
+        // the run row, so the retry is legible from the context alone.
+        ...(infraRetrySchedule
+          ? {
+              scheduledRetryAttempt: infraRetrySchedule.attempt,
+              scheduledRetryAt: infraRetrySchedule.dueAt.toISOString(),
+            }
+          : {}),
       }, "normal_model");
       const responsibleUserId = await resolveResponsibleUserIdForRunSeed({
         companyId: issue.companyId,
@@ -17813,12 +17901,20 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
           agentId: recoveryAgent.id,
           invocationSource: "automation",
           triggerDetail: "system",
-          status: "queued",
+          // PRX-5350: an infrastructure-caused recovery is spaced, not immediate.
+          status: infraRetrySchedule ? "scheduled_retry" : "queued",
           wakeupRequestId: wakeupRequest.id,
           contextSnapshot: recoveryContextSnapshot,
           responsibleUserId,
           sessionIdBefore: recoverySessionBefore,
           retryOfRunId: run.id,
+          ...(infraRetrySchedule
+            ? {
+                scheduledRetryAt: infraRetrySchedule.dueAt,
+                scheduledRetryAttempt: infraRetrySchedule.attempt,
+                scheduledRetryReason: INFRA_RETRY_SCHEDULED_REASON,
+              }
+            : {}),
           updatedAt: now,
         })
         .returning()
@@ -17847,6 +17943,49 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         run: queuedRun,
       };
     });
+
+    // PRX-5350 AC4: the retry attempt, its backoff delay, and — when the attempt is
+    // not spent — the deferral reason are recorded on the failed run, so the
+    // behaviour is observable after the fact rather than inferred from run counts.
+    if (promotionResult?.kind === "infra_retry_deferred" && infraRetryDecision && !infraRetryDecision.allowed) {
+      await appendRunEvent(run, await nextRunEventSeq(run.id), {
+        eventType: "lifecycle",
+        stream: "system",
+        level: "warn",
+        message: infraRetryDecision.reason,
+        payload: {
+          retryAttempt: infraRetryDecision.attempt,
+          backoffDelayMs: null,
+          scheduledRetryAt: null,
+          deferralReason: infraRetryDecision.deferralReason,
+          consecutiveInfraFailures: infraRetryDecision.consecutiveInfraFailures,
+          errorCode: run.errorCode,
+          retryQueued: false,
+        },
+      });
+      return;
+    }
+
+    if (promotionResult?.kind === "queued_recovery" && infraRetrySchedule) {
+      await appendRunEvent(run, await nextRunEventSeq(run.id), {
+        eventType: "lifecycle",
+        stream: "system",
+        level: "info",
+        message:
+          `Bounded infrastructure retry scheduled: attempt ${infraRetrySchedule.attempt}, ` +
+          `backoff ${infraRetrySchedule.delayMs}ms`,
+        payload: {
+          retryAttempt: infraRetrySchedule.attempt,
+          backoffDelayMs: infraRetrySchedule.delayMs,
+          scheduledRetryAt: infraRetrySchedule.dueAt.toISOString(),
+          maxAttempts: infraRetrySchedule.maxAttempts,
+          deferralReason: null,
+          consecutiveInfraFailures: infraRetryDecision?.consecutiveInfraFailures ?? null,
+          errorCode: run.errorCode,
+          retryQueued: true,
+        },
+      });
+    }
 
     if (promotionResult?.kind === "blocked") {
       await recovery.escalateStrandedAssignedIssue({

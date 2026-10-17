@@ -6981,6 +6981,49 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     }
   });
 
+  it("defers an infrastructure-caused retry instead of spending it while the gateway probe fails", async () => {
+    const { companyId, agentId, issueId, runId } = await seedStrandedIssueFixture({
+      status: "in_progress",
+      runStatus: "failed",
+      retryReason: "issue_continuation_needed",
+      runErrorCode: "adapter_failed",
+      runError: "Hermes exited with code 1",
+    });
+    // PRX-5350 AC2: unroutable gateway -> the probe fails and the attempt is deferred.
+    await db
+      .update(agents)
+      .set({ adapterConfig: { apiBaseUrl: "http://127.0.0.1:1", apiKey: "test-key" } })
+      .where(eq(agents.id, agentId));
+    const heartbeat = heartbeatService(db);
+
+    await heartbeat.reconcileStrandedAssignedIssues();
+
+    // No retry run was created at all: the attempt was not consumed.
+    const runs = await db.select().from(heartbeatRuns).where(eq(heartbeatRuns.agentId, agentId));
+    expect(runs).toHaveLength(1);
+    expect(runs[0]?.id).toBe(runId);
+
+    const events = await db
+      .select()
+      .from(heartbeatRunEvents)
+      .where(eq(heartbeatRunEvents.runId, runId));
+    const deferredEvent = events.find((event) =>
+      (event.payload as Record<string, unknown> | null)?.deferralReason === "deferred_gateway_unhealthy"
+    );
+    expect(deferredEvent).toBeDefined();
+    expect(deferredEvent?.level).toBe("warn");
+    expect(deferredEvent?.payload).toMatchObject({
+      retryAttempt: 2,
+      backoffDelayMs: null,
+      scheduledRetryAt: null,
+      deferralReason: "deferred_gateway_unhealthy",
+      errorCode: "adapter_failed",
+      retryQueued: false,
+    });
+    expect(companyId).toBeTruthy();
+    expect(issueId).toBeTruthy();
+  });
+
   it("escalates after repeated adapter_failed continuation retries with the cause in the comment", async () => {
     const { companyId, agentId, issueId, runId } = await seedStrandedIssueFixture({
       status: "in_progress",

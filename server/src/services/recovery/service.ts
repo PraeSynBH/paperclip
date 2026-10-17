@@ -56,6 +56,12 @@ import {
 import { evaluateAgentInvokabilityFromDb } from "../agent-invokability.js";
 import { isHeartbeatWakeOnDemandEnabled } from "../heartbeat-policy.js";
 import {
+  evaluateInfraRetryGate,
+  isInfraCausedFailure,
+  probeGatewayHealth,
+  type InfraRetryGateDecision,
+} from "../infra-retry-policy.js";
+import {
   DEFAULT_MAX_SUCCESSFUL_RUN_HANDOFF_ATTEMPTS,
   FINISH_SUCCESSFUL_RUN_HANDOFF_REASON,
   SUCCESSFUL_RUN_MISSING_STATE_REASON,
@@ -1148,6 +1154,70 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         .then((rows) => rows[0] ?? null),
     ]);
     return Boolean(comment || attachment);
+  }
+
+  /**
+   * PRX-5350: automatic continuation retries for infrastructure-caused failures
+   * are bounded and spaced, and are not spent at all while the gateway health
+   * probe fails or the per-agent circuit breaker is open.
+   *
+   * Returns null when the policy does not apply (the latest run did not fail for
+   * an infrastructure reason), so callers keep their pre-existing behaviour.
+   */
+  async function evaluateInfraRetryGateForIssue(input: {
+    companyId: string;
+    issueId: string;
+    agentId: string;
+    errorCode: string | null;
+    maxAttempts: number;
+  }): Promise<InfraRetryGateDecision | null> {
+    if (!isInfraCausedFailure(input.errorCode)) return null;
+
+    const [agent, recentRuns, retrySummary] = await Promise.all([
+      db
+        .select()
+        .from(agents)
+        .where(eq(agents.id, input.agentId))
+        .then((rows) => rows[0] ?? null),
+      db
+        .select({ status: heartbeatRuns.status, errorCode: heartbeatRuns.errorCode })
+        .from(heartbeatRuns)
+        .where(
+          and(
+            eq(heartbeatRuns.companyId, input.companyId),
+            eq(heartbeatRuns.agentId, input.agentId),
+          ),
+        )
+        .orderBy(desc(heartbeatRuns.createdAt), desc(heartbeatRuns.id))
+        .limit(8),
+      summarizeRecentContinuationRetries(
+        input.companyId,
+        input.issueId,
+        input.agentId,
+        input.errorCode,
+      ),
+    ]);
+
+    return evaluateInfraRetryGate({
+      errorCode: input.errorCode,
+      recentRuns,
+      // The continuation chain length *is* the number of retries already spent.
+      scheduledRetryAttempt: retrySummary.consecutive,
+      // The sweep reuses the platform's existing continuation cap so it does not
+      // change how many attempts a chain gets — only how they are spaced and gated.
+      maxAttempts: input.maxAttempts,
+      // The agent-wide circuit breaker is enforced on the run-finalization path
+      // (heartbeat service). Here the platform's own per-issue cap plus escalation
+      // already stops a chain that keeps failing, so tripping a second, agent-wide
+      // suppression at this seam would double-count the same failures.
+      consecutiveLimit: Number.POSITIVE_INFINITY,
+      // Backoff is measured from the last attempt, not from "now". When no
+      // last-attempt timestamp is recorded we cannot claim the backoff is still
+      // running, so the schedule is anchored far enough back that the spacing
+      // check below does not fire.
+      now: retrySummary.latestFinishedAt ?? new Date(0),
+      gatewayProbe: await probeGatewayHealth(agent?.adapterConfig),
+    });
   }
 
   async function enqueueStrandedIssueRecovery(input: {
@@ -4545,6 +4615,51 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       if (await isInvocationBudgetBlocked(issue, agentId)) {
         result.skipped += 1;
         continue;
+      }
+
+      // PRX-5350: an infrastructure-caused continuation retry is spaced, and is not
+      // spent at all while the gateway health probe fails or the per-agent circuit
+      // breaker is open. This is the path the 2026-10-17 incident used
+      // (`source: issue.continuation_recovery`), where retries were previously queued
+      // for immediate dispatch — three full attempts in 101s.
+      const infraRetryDecision = await evaluateInfraRetryGateForIssue({
+        companyId: issue.companyId,
+        issueId: issue.id,
+        agentId,
+        errorCode: latestRun?.errorCode ?? null,
+        maxAttempts: classifyContinuationFailure(latestRun).maxAttempts,
+      });
+      const latestRunEventTarget = latestRun
+        ? { id: latestRun.id, companyId: issue.companyId, agentId: latestRun.agentId }
+        : null;
+      if (infraRetryDecision) {
+        const deferredForBackoff =
+          infraRetryDecision.allowed &&
+          Date.now() < infraRetryDecision.schedule.dueAt.getTime();
+        if (!infraRetryDecision.allowed || deferredForBackoff) {
+          if (latestRunEventTarget) {
+            await appendRecoveryRunEvent(latestRunEventTarget, {
+              level: infraRetryDecision.allowed ? "info" : "warn",
+              message: infraRetryDecision.allowed
+                ? `Bounded infrastructure retry deferred until its backoff elapses ` +
+                  `(attempt ${infraRetryDecision.attempt}, ${infraRetryDecision.schedule.delayMs}ms after the last attempt)`
+                : infraRetryDecision.reason,
+              payload: {
+                retryAttempt: infraRetryDecision.attempt,
+                backoffDelayMs: deferredForBackoff ? infraRetryDecision.schedule.delayMs : null,
+                scheduledRetryAt: deferredForBackoff
+                  ? infraRetryDecision.schedule.dueAt.toISOString()
+                  : null,
+                deferralReason: infraRetryDecision.allowed ? null : infraRetryDecision.deferralReason,
+                consecutiveInfraFailures: infraRetryDecision.consecutiveInfraFailures,
+                errorCode: latestRun?.errorCode ?? null,
+                retryQueued: false,
+              },
+            });
+          }
+          result.skipped += 1;
+          continue;
+        }
       }
 
       const queued = await enqueueStrandedIssueRecovery({
