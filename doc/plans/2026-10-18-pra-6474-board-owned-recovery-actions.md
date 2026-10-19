@@ -117,9 +117,24 @@ The control plane runs from the installed `paperclipai` package under
 `~/.paperclip/cli/current`, not from this workspace, so this does not take
 effect until a release that contains the change is installed and the server is
 restarted. Do not hand-patch `dist` for this (see the boot-path defect issue).
-After deploy, the operational cleanup is one resolve call per board-owned card,
-each carrying a note; the 14 real work items go back to `todo` and their
-assignees are woken by the existing recovery-restored wakeup.
+
+Two ways to clear the remaining rows:
+
+1. **After deploy — agent path.** Any agent run can call
+   `POST /api/issues/{id}/recovery-actions/resolve` with a note. `pra-6474-board-recovery.sh`
+   works with either credential; run it without `--execute` first to see the plan.
+2. **Before deploy — board path.** The board user runs
+   `doc/plans/pra-6474-board-recovery.sh --execute` with `PAPERCLIP_BOARD_TOKEN`.
+   Rollups go to `done`, real work items go to `todo`, agent-owned rows are
+   skipped (their owners resolve them). A 404 is reported as `ALREADY`, so the
+   script is safe to re-run.
+
+Live census at the time of writing (2026-10-19): 19 active actions — 16
+board-owned (9 real work items, 7 heartbeat/status rollups) and 3 agent-owned.
+The original 63 have been worked down by the COO and other runs.
+
+After resolution, real work items in `todo` are woken by the existing
+recovery-restored wakeup, so their assignees resume without another nudge.
 
 ## Non-goals
 
