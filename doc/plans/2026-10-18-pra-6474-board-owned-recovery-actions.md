@@ -141,3 +141,11 @@ recovery-restored wakeup, so their assignees resume without another nudge.
 - Bulk resolve endpoint (option 1) for board users
 - Automatic expiry sweeper (option 2)
 - UI badge for board-owned active actions
+
+## Known limitation
+
+An action created as agent-owned (`owner_type='agent'`) whose owner agent row is later deleted
+becomes `owner_agent_id IS NULL` with `owner_type` still `'agent'`. That row is the same kind of dead
+end but is intentionally out of scope here: the issue's census and the fix are scoped to
+`owner_type='board'`. If such rows appear, widen `isBoardOwnedRecoveryAction` to treat any null agent
+owner as claimable; the note and audit-event guards already exist.
