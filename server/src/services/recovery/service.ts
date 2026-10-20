@@ -31,7 +31,7 @@ import {
 import { parseObject, asBoolean, asNumber } from "../../adapters/utils.js";
 import { runningProcesses } from "../../adapters/index.js";
 import { visibleIssueCondition } from "../issue-visibility.js";
-import { forbidden, notFound } from "../../errors.js";
+import { HttpError, forbidden, notFound } from "../../errors.js";
 import { logger } from "../../middleware/logger.js";
 import { isPidAlive, isProcessGroupAlive, terminateLocalService } from "../local-service-supervisor.js";
 import { redactSensitiveText } from "../../redaction.js";
@@ -40,6 +40,7 @@ import { logActivity } from "../activity-log.js";
 import { budgetService } from "../budgets.js";
 import { instanceSettingsService } from "../instance-settings.js";
 import { issueRecoveryActionService } from "../issue-recovery-actions.js";
+import { issueThreadInteractionService } from "../issue-thread-interactions.js";
 import { issueTreeControlService } from "../issue-tree-control.js";
 import { TERMINAL_HEARTBEAT_RUN_STATUSES, issueService } from "../issues.js";
 import {
@@ -103,6 +104,20 @@ const EXECUTION_REVIEW_PARTICIPANT_RECOVERY_REASON = "execution_review_participa
 const STRANDED_BOARD_ESCALATION_POLICY = "board_escalation_no_takeover_v1";
 const DISPOSITION_REPAIR_IDEMPOTENCY_INDEX = "agent_wakeup_requests_disposition_repair_idempotency_uq";
 const RESOLVED_DEPENDENCY_WAKE_BACKSTOP_CANDIDATE_LIMIT = 500;
+// PRA-6483: a board-owned recovery action with no owner, no board interaction,
+// and no expiry is the exact shape that froze 63 issues in PRA-6474.  The
+// sweeper returns such an action to the agent that owned the issue before the
+// park (strictly better than expiring — work resumes with an owner that can
+// act), and only expires the remainder once the park is older than this many
+// days.  Rows that carry a pending board interaction are never touched: the
+// human is being asked, and expiring under them is the same bug in reverse.
+export const DEFAULT_BOARD_OWNED_RECOVERY_ACTION_MAX_AGE_DAYS = 7;
+const MIN_BOARD_OWNED_RECOVERY_ACTION_MAX_AGE_DAYS = 1;
+const MAX_BOARD_OWNED_RECOVERY_ACTION_MAX_AGE_DAYS = 90;
+// Restoring to `in_progress` would immediately re-arm stranded recovery, and
+// restoring to `blocked` would re-park the card; both are excluded so the sweep
+// cannot loop on its own output.
+const BOARD_OWNED_RECOVERY_RESTORABLE_STATUSES = new Set(["backlog", "todo", "in_review"]);
 const SESSIONED_LOCAL_ADAPTERS = new Set([
   "claude_local",
   "codex_local",
@@ -2188,6 +2203,14 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       maxAttempts: null,
       lastAttemptAt: now,
     });
+
+    // PRA-6483: a promotion to `board` that names neither a human nor an
+    // interaction is the freeze shape from PRA-6474.  Every ownerless board park
+    // therefore gets a durable question on its source issue, so the action can
+    // never sit unreachable and unanswered.
+    if (action.ownerType === "board" && !action.ownerUserId) {
+      await ensureBoardOwnedRecoveryActionQuestion({ action, issue: input.issue });
+    }
 
     return action;
   }
@@ -5669,6 +5692,386 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     return { terminalized: true, status: updated.status };
   }
 
+  // A 409 from the restore write means the source issue moved between the
+  // sweep's read and its write. A timer must never fight another writer, so the
+  // row is skipped and the next sweep re-evaluates it.
+  function isBoardOwnedSweepWriteConflict(error: unknown): boolean {
+    return error instanceof HttpError && error.status === 409;
+  }
+
+  function readBoardOwnedRecoveryActionMaxAgeDays(raw?: number) {
+    const parsed = typeof raw === "number" && Number.isFinite(raw)
+      ? raw
+      : Number(process.env.PAPERCLIP_BOARD_RECOVERY_ACTION_MAX_AGE_DAYS);
+    const days = Number.isFinite(parsed) && parsed > 0
+      ? parsed
+      : DEFAULT_BOARD_OWNED_RECOVERY_ACTION_MAX_AGE_DAYS;
+    return Math.min(
+      MAX_BOARD_OWNED_RECOVERY_ACTION_MAX_AGE_DAYS,
+      Math.max(MIN_BOARD_OWNED_RECOVERY_ACTION_MAX_AGE_DAYS, Math.floor(days)),
+    );
+  }
+
+  // PRA-6483: the root cause of PRA-6474 is a promotion to `board` that asks
+  // nobody.  Every board-owned action without a named human owner gets exactly
+  // one durable question on the source issue, so the park is at least visible
+  // to the board instead of silently unreachable.  Idempotent per action
+  // attempt: re-promotions (attemptCount++) ask again, repeated sweeps do not.
+  async function ensureBoardOwnedRecoveryActionQuestion(input: {
+    action: Awaited<ReturnType<typeof recoveryActionsSvc.listActiveBoardOwned>>[number];
+    issue: typeof issues.$inferSelect;
+  }): Promise<"created" | "failed"> {
+    const interactions = issueThreadInteractionService(db);
+    const identifier = input.issue.identifier ?? input.issue.id;
+    try {
+      await interactions.create(
+        { id: input.issue.id, companyId: input.issue.companyId },
+        {
+          kind: "ask_user_questions",
+          idempotencyKey: `board_recovery_action:${input.action.id}:${input.action.attemptCount}`,
+          title: "Recovery action parked on the board has no owner",
+          summary:
+            `${identifier} was parked for recovery (${input.action.cause}) but the action names no agent and no human, `
+            + "so no one can resolve it. Answer below or assign an owner.",
+          continuationPolicy: "none",
+          payload: {
+            version: 1,
+            title: "Who should resolve this recovery park?",
+            submitLabel: "Record decision",
+            questions: [
+              {
+                id: "owner",
+                prompt: "Who should resolve this recovery park?",
+                selectionMode: "single",
+                required: true,
+                options: [
+                  {
+                    id: "return_to_agent",
+                    label: "Return it to the agent that held the issue",
+                    description: "Hand the recovery action back so an agent can repair or re-disposition the issue.",
+                  },
+                  {
+                    id: "assign_human",
+                    label: "Assign a human owner",
+                    description: "Name a person who will drive the repair outside the agent loop.",
+                  },
+                  {
+                    id: "close_false_positive",
+                    label: "Close it as a false positive",
+                    description: "The park was wrong; restore the issue to its pre-park status and clear the action.",
+                  },
+                  {
+                    id: "keep_parked",
+                    label: "Keep the issue parked",
+                    description: "Leave it blocked and accept that no one is working on it yet.",
+                  },
+                ],
+              },
+            ],
+          },
+        },
+        {},
+      );
+      return "created";
+    } catch (error) {
+      logger.warn(
+        { err: error, issueId: input.issue.id, recoveryActionId: input.action.id },
+        "failed to record board-owned recovery action question",
+      );
+      return "failed";
+    }
+  }
+
+  function restoreStatusForExpiredBoardOwnedAction(input: {
+    action: Awaited<ReturnType<typeof recoveryActionsSvc.listActiveBoardOwned>>[number];
+    issue: typeof issues.$inferSelect;
+  }): string | null {
+    if (input.issue.status === "done" || input.issue.status === "cancelled") return null;
+    const evidencePrevious = parseObject(input.action.evidence).previousStatus;
+    if (typeof evidencePrevious === "string" && BOARD_OWNED_RECOVERY_RESTORABLE_STATUSES.has(evidencePrevious)) {
+      return evidencePrevious;
+    }
+    return "todo";
+  }
+
+  // PRA-6483 step 2: expire an ownerless board park that outlived the age
+  // bound.  The action is resolved as `false_positive` and the source issue is
+  // restored to its pre-park status (never auto-`done`: a timer cannot know the
+  // work is complete, and closing real work is worse than a visible park).
+  async function expireBoardOwnedRecoveryAction(input: {
+    action: Awaited<ReturnType<typeof recoveryActionsSvc.listActiveBoardOwned>>[number];
+    issue: typeof issues.$inferSelect;
+    now: Date;
+    maxAgeDays: number;
+  }): Promise<"expired" | "skipped" | "failed"> {
+    const restoreStatus = restoreStatusForExpiredBoardOwnedAction(input);
+    const resolutionNote =
+      `PRA-6483 sweep: expired board-owned recovery action (kind=${input.action.kind}, cause=${input.action.cause}) `
+      + `after ${input.maxAgeDays}d with no return owner and no open board interaction. `
+      + `Source issue restored to ${restoreStatus ?? input.issue.status}.`;
+    try {
+      const resolved = await db.transaction(async (tx) => {
+        if (restoreStatus) {
+          // This base has no `expectedStatus` guard on issueService.update, so the
+          // sweep takes the row lock itself and re-checks the status it decided
+          // from. Without that, a timer could overwrite a resolution that landed
+          // between the sweep's read and this write.
+          const current = await tx
+            .select({ id: issues.id, status: issues.status })
+            .from(issues)
+            .where(eq(issues.id, input.issue.id))
+            .for("update")
+            .then((rows) => rows[0] ?? null);
+          if (!current || current.status !== input.issue.status) return null;
+          const updated = await issuesSvc.update(input.issue.id, { status: restoreStatus }, tx);
+          if (!updated) return null;
+        }
+        return recoveryActionsSvc.resolveActiveForIssue(
+          {
+            companyId: input.action.companyId,
+            sourceIssueId: input.action.sourceIssueId,
+            actionId: input.action.id,
+            status: "resolved",
+            outcome: "false_positive",
+            resolutionNote,
+          },
+          tx,
+        );
+      });
+      if (!resolved) return "skipped";
+      await logActivity(db, {
+        companyId: input.action.companyId,
+        actorType: "system",
+        actorId: "system",
+        agentId: null,
+        runId: null,
+        action: "issue.recovery_action_expired",
+        entityType: "issue",
+        entityId: input.action.sourceIssueId,
+        details: {
+          identifier: input.issue.identifier,
+          recoveryActionId: input.action.id,
+          recoveryActionKind: input.action.kind,
+          cause: input.action.cause,
+          outcome: "false_positive",
+          restoreStatus,
+          maxAgeDays: input.maxAgeDays,
+          source: "recovery.sweep_board_owned_recovery_actions",
+        },
+      });
+      return "expired";
+    } catch (error) {
+      if (isBoardOwnedSweepWriteConflict(error)) return "skipped";
+      logger.error(
+        { err: error, issueId: input.issue.id, recoveryActionId: input.action.id },
+        "failed to expire board-owned recovery action",
+      );
+      return "failed";
+    }
+  }
+
+  // PRA-6483: sweeper over `issue_recovery_actions` where
+  // `status='active' AND owner_type='board'`.
+  //
+  // Order of resolution is deliberate:
+  //   1. named human owner  -> never return/expire; only make sure the human is
+  //      actually being asked (create the interaction if none is pending);
+  //   2. open board interaction -> skip entirely (the board is being asked);
+  //   3. live return owner  -> hand the action back and wake that agent once;
+  //   4. older than N days  -> expire as false positive and restore the issue;
+  //   5. otherwise          -> record the board question so it cannot sit silent.
+  async function sweepBoardOwnedRecoveryActions(opts?: {
+    now?: Date;
+    companyId?: string;
+    maxAgeDays?: number;
+    limit?: number;
+  }) {
+    const now = opts?.now ?? new Date();
+    const maxAgeDays = readBoardOwnedRecoveryActionMaxAgeDays(opts?.maxAgeDays);
+    const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
+    const result = {
+      scanned: 0,
+      returned: 0,
+      expired: 0,
+      questionsCreated: 0,
+      skipped: 0,
+      failed: 0,
+      maxAgeDays,
+      returnedActionIds: [] as string[],
+      expiredActionIds: [] as string[],
+      skippedActionIds: [] as string[],
+    };
+
+    const actions = await recoveryActionsSvc.listActiveBoardOwned({
+      companyId: opts?.companyId,
+      limit: opts?.limit ?? 200,
+    });
+    result.scanned = actions.length;
+    if (actions.length === 0) return result;
+
+    const issueIds = [...new Set(actions.map((action) => action.sourceIssueId))];
+    const [issueRows, pendingInteractionRows] = await Promise.all([
+      db.select().from(issues).where(inArray(issues.id, issueIds)),
+      db
+        .select({ id: issueThreadInteractions.id, issueId: issueThreadInteractions.issueId })
+        .from(issueThreadInteractions)
+        .where(
+          and(
+            inArray(issueThreadInteractions.issueId, issueIds),
+            inArray(issueThreadInteractions.status, ["pending"]),
+          ),
+        ),
+    ]);
+    const issueById = new Map(issueRows.map((issue) => [issue.id, issue]));
+    const issueIdsWithPendingInteraction = new Set(pendingInteractionRows.map((row) => row.issueId));
+
+    for (const action of actions) {
+      const issue = issueById.get(action.sourceIssueId);
+      if (!issue) {
+        result.skipped += 1;
+        result.skippedActionIds.push(action.id);
+        continue;
+      }
+      const hasOpenInteraction = issueIdsWithPendingInteraction.has(issue.id);
+
+      // Step 3 of the proposal: never touch a named human's park.
+      if (action.ownerUserId) {
+        if (hasOpenInteraction) {
+          result.skipped += 1;
+          result.skippedActionIds.push(action.id);
+          continue;
+        }
+        if ((await ensureBoardOwnedRecoveryActionQuestion({ action, issue })) === "created") {
+          result.questionsCreated += 1;
+        } else {
+          result.failed += 1;
+        }
+        continue;
+      }
+
+      if (hasOpenInteraction) {
+        result.skipped += 1;
+        result.skippedActionIds.push(action.id);
+        continue;
+      }
+
+      const returnOwner = action.returnOwnerAgentId ? await getAgent(action.returnOwnerAgentId) : null;
+      // `assertAgentIssueMutationAllowed` only lets an agent mutate an issue it
+      // is assigned to (or an unassigned one).  Returning the action to an agent
+      // that still cannot write the source issue would just re-freeze the card in
+      // a different shape, so leave such rows on the question/expire path.
+      const canWriteSourceIssue = issue.assigneeAgentId == null || issue.assigneeAgentId === returnOwner?.id;
+      const returnable = Boolean(
+        returnOwner
+        && returnOwner.companyId === action.companyId
+        && canWriteSourceIssue
+        && await isAgentInvokable(returnOwner),
+      );
+      if (returnable && returnOwner) {
+        const returned = await recoveryActionsSvc.returnToAgent({
+          companyId: action.companyId,
+          sourceIssueId: action.sourceIssueId,
+          actionId: action.id,
+          agentId: returnOwner.id,
+        });
+        if (!returned) {
+          // Lost the CAS: another sweep or a route already changed the row.
+          result.skipped += 1;
+          result.skippedActionIds.push(action.id);
+          continue;
+        }
+        result.returned += 1;
+        result.returnedActionIds.push(action.id);
+        try {
+          await deps.enqueueWakeup(returnOwner.id, {
+            source: "automation",
+            triggerDetail: "system",
+            reason: "board_recovery_action_returned",
+            idempotencyKey: `board_recovery_action_returned:${returned.id}:${returned.attemptCount}`,
+            payload: withRecoveryModelProfileHint({
+              issueId: issue.id,
+              recoveryActionId: returned.id,
+              mutation: "board_recovery_action_returned",
+            }, "normal_model"),
+            requestedByActorType: "system",
+            requestedByActorId: null,
+            contextSnapshot: withRecoveryModelProfileHint({
+              issueId: issue.id,
+              taskId: issue.id,
+              recoveryActionId: returned.id,
+            }, "normal_model"),
+          });
+        } catch (error) {
+          // The ownership transfer already persisted; a failed wake is retried
+          // by the normal heartbeat resume path, so do not unwind the return.
+          logger.warn(
+            { err: error, issueId: issue.id, agentId: returnOwner.id },
+            "failed to wake return owner for board-owned recovery action",
+          );
+        }
+        await logActivity(db, {
+          companyId: action.companyId,
+          actorType: "system",
+          actorId: "system",
+          agentId: null,
+          runId: null,
+          action: "issue.recovery_action_returned",
+          entityType: "issue",
+          entityId: action.sourceIssueId,
+          details: {
+            identifier: issue.identifier,
+            recoveryActionId: returned.id,
+            recoveryActionKind: returned.kind,
+            cause: returned.cause,
+            ownerAgentId: returnOwner.id,
+            previousOwnerAgentId: action.previousOwnerAgentId,
+            source: "recovery.sweep_board_owned_recovery_actions",
+          },
+        });
+        continue;
+      }
+
+      const createdAtMs = action.createdAt instanceof Date
+        ? action.createdAt.getTime()
+        : new Date(action.createdAt).getTime();
+      const ageMs = now.getTime() - createdAtMs;
+      if (ageMs >= maxAgeMs) {
+        const outcome = await expireBoardOwnedRecoveryAction({ action, issue, now, maxAgeDays });
+        if (outcome === "expired") {
+          result.expired += 1;
+          result.expiredActionIds.push(action.id);
+        } else if (outcome === "failed") {
+          result.failed += 1;
+        } else {
+          result.skipped += 1;
+          result.skippedActionIds.push(action.id);
+        }
+        continue;
+      }
+
+      if ((await ensureBoardOwnedRecoveryActionQuestion({ action, issue })) === "created") {
+        result.questionsCreated += 1;
+      } else {
+        result.failed += 1;
+      }
+    }
+
+    if (result.returned > 0 || result.expired > 0 || result.questionsCreated > 0 || result.failed > 0) {
+      logger.warn(
+        {
+          returned: result.returned,
+          expired: result.expired,
+          questionsCreated: result.questionsCreated,
+          failed: result.failed,
+          skipped: result.skipped,
+        },
+        "swept board-owned recovery actions",
+      );
+    }
+
+    return result;
+  }
+
   // Backstop sweeper: clears stale lock columns on issues whose checkoutRunId
   // or executionRunId points at a heartbeat_runs row that is either missing or
   // in a terminal status. Provides self-heal for stale locks that fell outside
@@ -5841,6 +6244,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     recordWatchdogDecision,
     scanSilentActiveRuns,
     reconcileStrandedAssignedIssues,
+    sweepBoardOwnedRecoveryActions,
     sweepStaleIssueLocks,
     buildIssueGraphLivenessAutoRecoveryPreview,
     reconcileResolvedDependencyWakeBackstop,

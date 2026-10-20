@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
 import { issueRecoveryActions } from "@paperclipai/db";
 import type {
@@ -51,6 +51,18 @@ export type UpsertIssueRecoveryActionInput = {
   // evidence/attempt metadata without silently changing the recorded owner or
   // the wake/monitor contract that made that owner authoritative.
   preserveExistingOwner?: boolean;
+};
+
+export type ReturnIssueRecoveryActionToAgentInput = {
+  companyId: string;
+  sourceIssueId: string;
+  actionId: string;
+  agentId: string;
+};
+
+export type ListActiveBoardOwnedInput = {
+  companyId?: string;
+  limit?: number;
 };
 
 export type ResolveIssueRecoveryActionInput = {
@@ -371,6 +383,61 @@ export function issueRecoveryActionService(db: Db) {
     return runExclusiveUpsert(input, () => upsertSourceScopedUnlocked(input));
   }
 
+  // PRA-6483: board-owned actions are the shape that freezes an issue — the
+  // board is never notified, so an action parked on `board` with no owner waits
+  // forever.  The sweeper needs a company-scoped read of exactly those rows.
+  async function listActiveBoardOwned(input: ListActiveBoardOwnedInput = {}): Promise<IssueRecoveryAction[]> {
+    const predicates = [
+      inArray(issueRecoveryActions.status, [...ACTIVE_RECOVERY_ACTION_STATUSES]),
+      eq(issueRecoveryActions.ownerType, "board"),
+    ];
+    if (input.companyId) predicates.push(eq(issueRecoveryActions.companyId, input.companyId));
+    const rows = await db
+      .select()
+      .from(issueRecoveryActions)
+      .where(and(...predicates))
+      // Oldest first: the age bound only stays bounded if the sweep drains the
+      // stalest parks first instead of re-scanning the most recently touched.
+      .orderBy(asc(issueRecoveryActions.createdAt))
+      .limit(Math.max(1, Math.min(input.limit ?? 200, 1000)));
+    return rows.map(toReadModel);
+  }
+
+  // PRA-6483: hand an existing board-owned action back to the agent that owned
+  // the issue before it was escalated.  CAS on `owner_type='board'` so two
+  // concurrent sweeps cannot both "return" the same row or overwrite a return
+  // that already happened.
+  async function returnToAgent(
+    input: ReturnIssueRecoveryActionToAgentInput,
+  ): Promise<IssueRecoveryAction | null> {
+    const now = new Date();
+    const [updated] = await db
+      .update(issueRecoveryActions)
+      .set({
+        ownerType: "agent",
+        ownerAgentId: input.agentId,
+        ownerUserId: null,
+        wakePolicy: {
+          type: "wake_owner",
+          reason: "board_recovery_action_returned",
+          ownerAgentId: input.agentId,
+        },
+        lastAttemptAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(issueRecoveryActions.id, input.actionId),
+          eq(issueRecoveryActions.companyId, input.companyId),
+          eq(issueRecoveryActions.sourceIssueId, input.sourceIssueId),
+          inArray(issueRecoveryActions.status, [...ACTIVE_RECOVERY_ACTION_STATUSES]),
+          eq(issueRecoveryActions.ownerType, "board"),
+        ),
+      )
+      .returning();
+    return updated ? toReadModel(updated) : null;
+  }
+
   async function resolveActiveForIssue(
     input: ResolveIssueRecoveryActionInput,
     dbOrTx: DbOrTransaction = db,
@@ -411,8 +478,10 @@ export function issueRecoveryActionService(db: Db) {
 
   return {
     getActiveForIssue,
+    listActiveBoardOwned,
     listActiveForIssues,
     resolveActiveForIssue,
+    returnToAgent,
     upsertSourceScoped,
   };
 }

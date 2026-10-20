@@ -13895,6 +13895,15 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     return recovery.sweepStaleIssueLocks();
   }
 
+  async function sweepBoardOwnedRecoveryActions(opts?: {
+    now?: Date;
+    companyId?: string;
+    maxAgeDays?: number;
+    limit?: number;
+  }) {
+    return recovery.sweepBoardOwnedRecoveryActions(opts);
+  }
+
   function issueIdFromRunContext(contextSnapshot: unknown) {
     const context = parseObject(contextSnapshot);
     return readNonEmptyString(context.issueId) ?? readNonEmptyString(context.taskId);
@@ -19734,6 +19743,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     terminalizeRunOnLeaseRelease,
 
     releaseEnvironmentLeasesForRun,
+
+    sweepBoardOwnedRecoveryActions,
 
     sweepStaleIssueLocks,
 

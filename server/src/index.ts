@@ -1392,6 +1392,16 @@ export async function startServer(): Promise<StartedServer> {
           logger.warn({ ...swept }, "startup stale-lock sweeper cleared issue locks");
         }
 
+        const boardRecoverySweep = await heartbeat.sweepBoardOwnedRecoveryActions();
+        if (
+          boardRecoverySweep.returned > 0
+          || boardRecoverySweep.expired > 0
+          || boardRecoverySweep.questionsCreated > 0
+          || boardRecoverySweep.failed > 0
+        ) {
+          logger.warn({ ...boardRecoverySweep }, "startup board-owned recovery action sweep changed actions");
+        }
+
         const reviewed = await heartbeat.reconcileProductivityReviews();
         if (reviewed.created > 0 || reviewed.updated > 0 || reviewed.failed > 0) {
           logger.warn({ ...reviewed }, "startup productivity reconciliation created or updated review work");
@@ -1630,6 +1640,15 @@ export async function startServer(): Promise<StartedServer> {
               }
             })
             .then(async () => {
+              // PRA-6483: return board-owned recovery actions to a live return
+              // owner before expiring them, so ownerless parks cannot accumulate
+              // unnoticed the way they did in PRA-6474.
+              const swept = await heartbeat.sweepBoardOwnedRecoveryActions();
+              if (swept.returned > 0 || swept.expired > 0 || swept.questionsCreated > 0 || swept.failed > 0) {
+                logger.warn({ ...swept }, "periodic board-owned recovery action sweep changed actions");
+              }
+            })
+            .then(async () => {
               const reviewed = await heartbeat.reconcileProductivityReviews();
               if (reviewed.created > 0 || reviewed.updated > 0 || reviewed.failed > 0) {
                 logger.warn({ ...reviewed }, "periodic productivity reconciliation created or updated review work");
@@ -1654,7 +1673,7 @@ export async function startServer(): Promise<StartedServer> {
       scheduleEnvironmentLeaseCleanupSweep();
     });
   }
-  
+
   if (config.databaseBackupEnabled) {
     const backupIntervalMs = config.databaseBackupIntervalMinutes * 60 * 1000;
 
