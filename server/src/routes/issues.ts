@@ -11910,7 +11910,10 @@ export function issueRoutes(
         },
       });
 
-      if (actor.agentId !== issue.assigneeAgentId) {
+      // A card withdrawn after its issue closed cannot resume anything: there
+      // is no live assignee path to wake on a terminal issue, and queueing one
+      // leaves a wakeup that can only fail or run comment-only. Skip it.
+      if (actor.agentId !== issue.assigneeAgentId && !isClosedIssueStatus(issue.status)) {
         await queueResolvedInteractionContinuationWakeup({
           db,
           heartbeat,

@@ -2649,9 +2649,55 @@ describeEmbeddedPostgres("issueThreadInteractionService", () => {
     }, created.id, {}, { userId: "local-board" })).rejects.toThrow(
       "Interaction is no longer actionable because the issue is closed",
     );
+    // The board keeps the escape hatch: retracting a card on a closed issue
+    // changes no decision, it only removes dead weight from the queue.
     await expect(interactionsSvc.withdrawInteraction({ id: issueId, companyId, status: "done" }, created.id, {}, {
       userId: "local-board",
+    })).resolves.toMatchObject({
+      status: "cancelled",
+      result: { version: 1, outcome: "withdrawn" },
+    });
+  });
+
+  it("lets the card's creator withdraw it after the issue closes, but refuses every other agent", async () => {
+    const { companyId, issueId } = await seedConfirmationIssue("Withdrawal after the issue closed");
+    const creatorAgentId = randomUUID();
+    const strangerAgentId = randomUUID();
+    await db.insert(agents).values([
+      { id: creatorAgentId, name: "Creator" },
+      { id: strangerAgentId, name: "Stranger" },
+    ].map((agent) => ({
+      ...agent,
+      companyId,
+      role: "engineer",
+      status: "active",
+      adapterType: "codex_local",
+      adapterConfig: {},
+      runtimeConfig: {},
+      permissions: {},
+    })));
+
+    const created = await interactionsSvc.create({ id: issueId, companyId }, {
+      kind: "request_confirmation",
+      payload: { version: 1, prompt: "Proceed?" },
+    }, { agentId: creatorAgentId });
+    await db.update(issues).set({ status: "done" }).where(eq(issues.id, issueId));
+
+    const closedIssue = { id: issueId, companyId, status: "done" };
+
+    // A different agent is still refused, and the refusal must not consume the card.
+    await expect(interactionsSvc.withdrawInteraction(closedIssue, created.id, {}, {
+      agentId: strangerAgentId,
     })).rejects.toThrow("Interaction is no longer actionable because the issue is closed");
+
+    const withdrawn = await interactionsSvc.withdrawInteraction(closedIssue, created.id, {
+      reason: "Issue closed with the ask still pending",
+    }, { agentId: creatorAgentId });
+    expect(withdrawn).toMatchObject({
+      status: "cancelled",
+      resolvedByAgentId: creatorAgentId,
+      result: { version: 1, outcome: "withdrawn", reason: "Issue closed with the ask still pending" },
+    });
   });
 
   it("does not supersede request confirmations for agent, system, or older user comments", async () => {

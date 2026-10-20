@@ -3230,12 +3230,11 @@ export function issueThreadInteractionService(db: Db, opts: IssueThreadInteracti
     },
 
     withdrawInteraction: async (
-      issue: { id: string; companyId: string },
+      issue: { id: string; companyId: string; status?: string },
       interactionId: string,
       input: WithdrawIssueThreadInteraction,
       actor: InteractionActor,
     ) => {
-      assertIssueOpenForInteractionResolution(issue);
       const data = withdrawIssueThreadInteractionSchema.parse(input);
       const current = await db
         .select()
@@ -3244,6 +3243,19 @@ export function issueThreadInteractionService(db: Db, opts: IssueThreadInteracti
         .then((rows) => rows[0] ?? null);
       if (!current || current.companyId !== issue.companyId || current.issueId !== issue.id) {
         throw interactionNotFoundError();
+      }
+      // Withdrawal is not a resolution, so a terminal issue does not make it
+      // impossible to perform — but it does make it meaningless for anyone
+      // except the card's own author or a board user. Accepting/answering a
+      // card on a closed issue would change a decision that has already been
+      // made; retracting one only keeps the review queue honest. So the
+      // creator and the board keep the escape hatch, every other actor still
+      // gets the closed-issue conflict.
+      if (issue.status && isTerminalIssueStatus(issue.status)) {
+        const isCreator =
+          (actor.agentId != null && current.createdByAgentId === actor.agentId)
+          || (actor.userId != null && current.createdByUserId === actor.userId);
+        if (!isCreator && !actor.userId) throw interactionIssueClosedError();
       }
       if (current.status !== "pending") throw interactionTerminalError(current);
 

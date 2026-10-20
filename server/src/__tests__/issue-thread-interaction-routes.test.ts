@@ -882,6 +882,34 @@ describe.sequential("issue thread interaction routes", () => {
     expect(mockHeartbeatService.wakeup).toHaveBeenCalledWith(ASSIGNEE_AGENT_ID, expect.anything());
   });
 
+  it("lets the creator withdraw on a closed issue and queues no continuation wake", async () => {
+    mockIssueService.getById.mockResolvedValueOnce(createIssue({ status: "done" }));
+    mockInteractionService.getForIssue.mockResolvedValueOnce({
+      id: "interaction-withdraw",
+      kind: "request_confirmation",
+      status: "pending",
+      createdByAgentId: CREATED_AGENT_ID,
+      sourceRunId: RUN_1,
+      requestedResolverPolicy: "anyone",
+      effectiveResolverPolicy: "anyone",
+      payload: { version: 1, prompt: "Proceed?" },
+    });
+    const app = await createApp({ type: "agent", agentId: CREATED_AGENT_ID, companyId: "company-1", runId: RUN_1 });
+    const res = await request(app)
+      .post("/api/issues/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/interactions/interaction-withdraw/withdraw")
+      .send({ reason: "Issue closed with the ask still pending" });
+
+    expect(res.status).toBe(200);
+    expect(mockInteractionService.withdrawInteraction).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", status: "done" }),
+      "interaction-withdraw",
+      { reason: "Issue closed with the ask still pending" },
+      expect.objectContaining({ agentId: CREATED_AGENT_ID, runId: RUN_1 }),
+    );
+    // Nothing can consume a continuation on a closed card.
+    expect(mockHeartbeatService.wakeup).not.toHaveBeenCalled();
+  });
+
   it("allows the assignee agent to withdraw without waking itself", async () => {
     mockIssueService.getById.mockResolvedValueOnce(createIssue({ status: "todo" }));
     const app = await createApp({ type: "agent", agentId: ASSIGNEE_AGENT_ID, companyId: "company-1", runId: RUN_2 });
