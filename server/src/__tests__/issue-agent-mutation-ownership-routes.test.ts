@@ -1886,6 +1886,117 @@ describe("agent issue mutation checkout ownership", () => {
     expect(mockIssueRecoveryActionService.resolveActiveForIssue).toHaveBeenCalled();
   });
 
+  it("allows an agent to claim a board-owned recovery action with a resolution note (PRA-6474)", async () => {
+    mockIssueService.getById.mockResolvedValue(
+      makeIssue({ status: "blocked", assigneeAgentId: null, assigneeUserId: null }),
+    );
+    mockIssueService.update.mockImplementation(async (_id: string, patch: Record<string, unknown>) => ({
+      ...makeIssue({ status: "blocked", assigneeAgentId: null, assigneeUserId: null }),
+      ...patch,
+    }));
+    mockIssueRecoveryActionService.getActiveForIssue.mockResolvedValue({
+      id: recoveryActionId,
+      ownerType: "board",
+      ownerAgentId: null,
+    } as never);
+    mockIssueRecoveryActionService.resolveActiveForIssue.mockResolvedValue({
+      id: recoveryActionId,
+      status: "resolved",
+      outcome: "restored",
+      resolutionNote: "Board park cleared: work is still valid, returning to todo.",
+    } as never);
+
+    const res = await request(await createApp(peerActor()))
+      .post(`/api/issues/${issueId}/recovery-actions/resolve`)
+      .send({
+        actionId: recoveryActionId,
+        outcome: "restored",
+        sourceIssueStatus: "todo",
+        resolutionNote: "Board park cleared: work is still valid, returning to todo.",
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(mockIssueRecoveryActionService.resolveActiveForIssue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        companyId,
+        sourceIssueId: issueId,
+        actionId: recoveryActionId,
+        outcome: "restored",
+        resolutionNote: "Board park cleared: work is still valid, returning to todo.",
+      }),
+      expect.anything(),
+    );
+  });
+
+  it("requires a resolution note before an agent claims a board-owned recovery action (PRA-6474)", async () => {
+    mockIssueService.getById.mockResolvedValue(
+      makeIssue({ status: "blocked", assigneeAgentId: null, assigneeUserId: null }),
+    );
+    mockIssueRecoveryActionService.getActiveForIssue.mockResolvedValue({
+      id: recoveryActionId,
+      ownerType: "board",
+      ownerAgentId: null,
+    } as never);
+
+    const res = await request(await createApp(peerActor()))
+      .post(`/api/issues/${issueId}/recovery-actions/resolve`)
+      .send({
+        actionId: recoveryActionId,
+        outcome: "restored",
+        sourceIssueStatus: "todo",
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(422);
+    expect(res.body.error).toBe(
+      "Board-owned recovery actions require a resolution note when resolved by an agent",
+    );
+    expect(mockIssueService.update).not.toHaveBeenCalled();
+    expect(mockIssueRecoveryActionService.resolveActiveForIssue).not.toHaveBeenCalled();
+  });
+
+  it("keeps generic issue updates gated by board-owned recovery actions (PRA-6474)", async () => {
+    mockIssueService.getById.mockResolvedValue(
+      makeIssue({ status: "blocked", assigneeAgentId: null, assigneeUserId: null }),
+    );
+    mockIssueRecoveryActionService.getActiveForIssue.mockResolvedValue({
+      id: recoveryActionId,
+      ownerType: "board",
+      ownerAgentId: null,
+    } as never);
+
+    const res = await request(await createApp(peerActor()))
+      .patch(`/api/issues/${issueId}`)
+      .send({ status: "todo" });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect(res.body.error).toBe("Agent cannot resolve another owner's recovery action");
+    expect(mockIssueService.update).not.toHaveBeenCalled();
+  });
+
+  it("does not let an agent bypass an agent-owned recovery action with a note (PRA-6474)", async () => {
+    mockIssueService.getById.mockResolvedValue(
+      makeIssue({ status: "blocked", assigneeAgentId: null, assigneeUserId: null }),
+    );
+    mockIssueRecoveryActionService.getActiveForIssue.mockResolvedValue({
+      id: recoveryActionId,
+      ownerType: "agent",
+      ownerAgentId: ownerAgentId,
+    } as never);
+
+    const res = await request(await createApp(peerActor()))
+      .post(`/api/issues/${issueId}/recovery-actions/resolve`)
+      .send({
+        actionId: recoveryActionId,
+        outcome: "restored",
+        sourceIssueStatus: "todo",
+        resolutionNote: "Trying to take over an agent-owned park.",
+      });
+
+    expect(res.status, JSON.stringify(res.body)).toBe(403);
+    expect(res.body.error).toBe("Agent cannot resolve another owner's recovery action");
+    expect(mockIssueRecoveryActionService.resolveActiveForIssue).not.toHaveBeenCalled();
+  });
+
   it("wakes the assigned agent when recovery resolution restores a source issue to todo", async () => {
     mockIssueService.getById.mockResolvedValue(
       makeIssue({ status: "blocked", assigneeAgentId: ownerAgentId }),

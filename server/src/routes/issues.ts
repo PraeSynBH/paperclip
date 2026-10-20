@@ -1902,6 +1902,19 @@ function isExplicitResumeCapableStatus(status: string | null | undefined) {
   return status === "done" || status === "cancelled" || status === "blocked" || status === "todo" || status === "in_progress";
 }
 
+// PRA-6474: a recovery action with no agent owner is board-owned. There is no
+// agent id to compare an actor against, so the owner check in
+// requireRecoveryActionAuthority can never pass for any agent and the issue
+// behind the action is permanently frozen. Board-owned actions are claimable
+// by any agent in the company through the dedicated resolve route (which
+// requires a resolution note and writes a distinct audit event); generic
+// issue updates still go through the normal ownership checks.
+function isBoardOwnedRecoveryAction(
+  action: { ownerType?: string | null; ownerAgentId: string | null } | null | undefined,
+): boolean {
+  return Boolean(action && action.ownerAgentId == null && (action.ownerType ?? "board") === "board");
+}
+
 // Log-class comment from the assignee agent on a terminal (done/cancelled)
 // issue is not a reopen signal. When the caller did not pass `resume: true`,
 // this forces the reopen path off even if `reopen: true` was sent.
@@ -5146,6 +5159,12 @@ export function issueRoutes(
     if (!actorAgentId) {
       throw forbidden("Agent authentication required");
     }
+    // PRA-6474: the dedicated resolve route may claim a board-owned action on
+    // the board's behalf. The route requires a resolution note for this path
+    // and logs it under issue.recovery_action_board_owned_resolved.
+    if (input.source === "recovery_action_resolution" && isBoardOwnedRecoveryAction(activeRecoveryAction)) {
+      return true;
+    }
     if (issue.assigneeAgentId === actorAgentId) return true;
     if (
       issue.assigneeAgentId &&
@@ -5193,18 +5212,27 @@ export function issueRoutes(
       executionRunId?: string | null;
       executionState?: unknown;
     },
+    input?: { boardOwnedRecoveryClaim?: boolean },
   ) {
     if (req.actor.type !== "agent") return;
     const actorAgentId = req.actor.agentId;
     if (!actorAgentId) throw forbidden("Agent authentication required");
 
+    // PRA-6474: claiming a board-owned action through the dedicated resolve
+    // route already requires a resolution note and is recorded under
+    // issue.recovery_action_board_owned_resolved. A board-owned park has no
+    // agent owner to derive source authority from — neither the assignee nor
+    // the execution participant — so the claim itself is the grant. The run
+    // lock below still applies: an agent may not reset an issue another run is
+    // actively executing.
+    const boardOwnedRecoveryClaim = input?.boardOwnedRecoveryClaim === true;
     const isSourceOwner = issue.assigneeAgentId === actorAgentId;
     const isExecutionParticipant = activeExecutionParticipantAgentId(issue) === actorAgentId;
     const hasPolicyGrant = Boolean(
       issue.assigneeAgentId &&
       await hasActiveCheckoutManagementOverride(actorAgentId, issue.companyId, issue.assigneeAgentId)
     );
-    if (!isSourceOwner && !isExecutionParticipant && !hasPolicyGrant) {
+    if (!isSourceOwner && !isExecutionParticipant && !hasPolicyGrant && !boardOwnedRecoveryClaim) {
       throw forbidden(
         "Recovery ownership does not authorize this source issue mutation",
         {
@@ -6880,6 +6908,22 @@ export function issueRoutes(
       if (!activeRecoveryAction || (actionId && activeRecoveryAction.id !== actionId)) {
         throw notFound("Active recovery action not found");
       }
+      // PRA-6474: an agent claiming a board-owned action acts on the board's
+      // behalf, so it must record why the board park is being cleared. The
+      // check sits inside the transaction so it reads the same locked row the
+      // resolution writes, and it runs before any mutation.
+      const boardOwnedRecoveryAction = isBoardOwnedRecoveryAction(activeRecoveryAction);
+      const agentResolvingBoardOwnedAction = boardOwnedRecoveryAction && req.actor.type === "agent";
+      if (agentResolvingBoardOwnedAction && !(resolutionNote ?? "").trim()) {
+        throw unprocessable(
+          "Board-owned recovery actions require a resolution note when resolved by an agent",
+          {
+            issueId: existing.id,
+            recoveryActionId: activeRecoveryAction.id,
+            actorAgentId: req.actor.agentId ?? null,
+          },
+        );
+      }
       await requireRecoveryActionAuthority(
         req,
         lockedIssue,
@@ -6921,7 +6965,9 @@ export function issueRoutes(
             recoveryAction: activeRecoveryAction,
           });
         } else {
-          await requireRecoverySourceMutationAuthority(req, lockedIssue);
+          await requireRecoverySourceMutationAuthority(req, lockedIssue, {
+            boardOwnedRecoveryClaim: agentResolvingBoardOwnedAction,
+          });
         }
 
         if (
@@ -7019,7 +7065,14 @@ export function issueRoutes(
       );
       if (!recoveryAction) throw notFound("Active recovery action not found");
 
-      return { issue, recoveryAction };
+      return {
+        issue,
+        recoveryAction,
+        boardOwnedRecoveryAction,
+        agentResolvingBoardOwnedAction,
+        sourceRecoveryOwnerType: activeRecoveryAction.ownerType ?? null,
+        sourceRecoveryOwnerAgentId: activeRecoveryAction.ownerAgentId ?? null,
+      };
     });
     for (const publication of postCommitActivityPublications) publishActivity(publication);
 
@@ -7065,8 +7118,33 @@ export function issueRoutes(
         outcome: result.recoveryAction.outcome,
         sourceIssueStatus: sourceIssueStatus ?? null,
         resolutionNote: result.recoveryAction.resolutionNote,
+        boardOwnedRecoveryAction: result.boardOwnedRecoveryAction,
+        resolvedByAgentOnBehalfOfBoard: result.agentResolvingBoardOwnedAction,
       },
     });
+
+    if (result.agentResolvingBoardOwnedAction) {
+      await logActivity(db, {
+        companyId: result.issue.companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "issue.recovery_action_board_owned_resolved",
+        entityType: "issue",
+        entityId: result.issue.id,
+        details: {
+          identifier: result.issue.identifier,
+          recoveryActionId: result.recoveryAction.id,
+          recoveryActionStatus: result.recoveryAction.status,
+          outcome: result.recoveryAction.outcome,
+          sourceIssueStatus: sourceIssueStatus ?? null,
+          resolutionNote: result.recoveryAction.resolutionNote,
+          sourceRecoveryOwnerType: result.sourceRecoveryOwnerType,
+          sourceRecoveryOwnerAgentId: result.sourceRecoveryOwnerAgentId,
+        },
+      });
+    }
 
     if (
       sourceIssueStatus === "todo" &&
