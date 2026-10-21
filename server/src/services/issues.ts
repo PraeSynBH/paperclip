@@ -5130,13 +5130,26 @@ export function issueService(db: Db) {
     for (const blockerIssueId of blockerIssueIds) {
       const queue = [...(adjacency.get(issueId) ?? [])];
       const visited = new Set<string>([issueId]);
+      // PRA-6673: a validation 422 raised from a retry loop carries no actor and
+      // no issue id, so the offender is invisible in the log. Track the edge that
+      // closes the cycle and name the issue with the refusal.
+      const predecessor = new Map<string, string>(
+        (adjacency.get(issueId) ?? []).map((next) => [next, issueId]),
+      );
       while (queue.length > 0) {
         const current = queue.shift()!;
         if (current === blockerIssueId) {
-          throw unprocessable("Blocking relations cannot contain cycles");
+          throw unprocessable("Blocking relations cannot contain cycles", {
+            issueId,
+            proposedBlockedByIssueIds: blockerIssueIds,
+            firstCycleEdge: [predecessor.get(blockerIssueId) ?? issueId, blockerIssueId],
+          });
         }
         if (visited.has(current)) continue;
         visited.add(current);
+        for (const next of adjacency.get(current) ?? []) {
+          if (!predecessor.has(next)) predecessor.set(next, current);
+        }
         queue.push(...(adjacency.get(current) ?? []));
       }
     }

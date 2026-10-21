@@ -2454,6 +2454,141 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     return existingUnresolvedBlockerIssues(companyId, issueId).then((rows) => rows.map((row) => row.id));
   }
 
+  // ---------------------------------------------------------------- PRA-6673
+  // A desired `blockedBy` set is only writable if it stays acyclic: issues.update()
+  // asserts that and throws a 422. Before this, a reconcile that built an
+  // unsatisfiable set threw out of the pass loop and re-tried the same write every
+  // ~30s forever, aborting active-recovery reconciliation for every row behind it.
+  // The refusal is now decided here, before the write.
+  //
+  // The contradiction it was found on: a source issue that already blocks its own
+  // child (a stored `blocks` edge) is asked to wait on that child because the child
+  // is a "healthy open child". That set is cyclic by construction.
+  async function transitiveBlockedIssueIds(companyId: string, issueId: string) {
+    const rows = await db
+      .select({ blocker: issueRelations.issueId, blocked: issueRelations.relatedIssueId })
+      .from(issueRelations)
+      .where(and(eq(issueRelations.companyId, companyId), eq(issueRelations.type, "blocks")));
+
+    const adjacency = new Map<string, string[]>();
+    for (const row of rows) {
+      const list = adjacency.get(row.blocker) ?? [];
+      list.push(row.blocked);
+      adjacency.set(row.blocker, list);
+    }
+
+    const reachable = new Set<string>();
+    const queue = [...(adjacency.get(issueId) ?? [])];
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current === issueId || reachable.has(current)) continue;
+      reachable.add(current);
+      queue.push(...(adjacency.get(current) ?? []));
+    }
+    return reachable;
+  }
+
+  async function partitionCyclicBlockerIssueIds(
+    companyId: string,
+    issueId: string,
+    candidateIds: string[],
+  ) {
+    const reachable = await transitiveBlockedIssueIds(companyId, issueId);
+    const accepted: string[] = [];
+    const refused: string[] = [];
+    for (const candidate of [...new Set(candidateIds)]) {
+      if (candidate === issueId || reachable.has(candidate)) refused.push(candidate);
+      else accepted.push(candidate);
+    }
+    return { accepted, refused };
+  }
+
+  // The desired set is unreachable: record a named blocker on the action once and
+  // stop re-deriving it every pass. Idempotent through the evidence flag — the
+  // action stays visible to the board without a repeating log line.
+  async function recordBlockedByCycleRefusal(input: {
+    action: typeof issueRecoveryActions.$inferSelect;
+    issue: typeof issues.$inferSelect;
+    refusedIssueIds: string[];
+  }) {
+    const { action, issue, refusedIssueIds } = input;
+    const evidence = parseObject(action.evidence);
+    if (evidence.blockedByCycleRefusal) return false;
+
+    const refusedRows = await db
+      .select({ id: issues.id, identifier: issues.identifier })
+      .from(issues)
+      .where(and(eq(issues.companyId, issue.companyId), inArray(issues.id, refusedIssueIds)));
+    const refusedIdentifiers = refusedRows.map((row) => row.identifier);
+    const links = refusedIdentifiers.length > 0
+      ? refusedIdentifiers.join(", ")
+      : refusedIssueIds.join(", ");
+    const recorded = {
+      reason: "blocked_by_cycle",
+      refusedIssueIds,
+      refusedIdentifiers,
+      detectedAt: new Date().toISOString(),
+      recoveryActionId: action.id,
+    };
+
+    await db
+      .update(issueRecoveryActions)
+      .set({
+        status: "active",
+        ownerType: "board",
+        ownerAgentId: null,
+        ownerUserId: null,
+        nextAction:
+          `Automatic recovery cannot write this issue's blocked-by set: ${links} already cannot be a blocker ` +
+          `because this issue already blocks it, so the dependency graph would contain a cycle. ` +
+          `Fix the relation (remove the blocks edge, or re-parent ${links}) and move the issue back to todo/in_progress. ` +
+          `Automatic recovery will not retry this write.`,
+        evidence: { ...evidence, blockedByCycleRefusal: recorded },
+        updatedAt: new Date(),
+      })
+      .where(eq(issueRecoveryActions.id, action.id));
+
+    logger.warn(
+      {
+        issueId: issue.id,
+        identifier: issue.identifier,
+        recoveryActionId: action.id,
+        refusedIssueIds,
+        refusedIdentifiers,
+      },
+      "recovery action blockedBy set is unreachable (cycle); recorded named blocker instead of retrying",
+    );
+
+    try {
+      await issuesSvc.addComment(
+        issue.id,
+        `Automatic recovery could not park this issue: the blocked-by set it needs is cyclic. ` +
+          `${links} cannot block this issue because this issue already blocks ${refusedIdentifiers.length === 1 ? "it" : "them"}. ` +
+          `Remove that \`blocks\` relation (or re-parent) and move this issue back to \`todo\`/\`in_progress\`. ` +
+          `Recovery will not retry this write.`,
+        {},
+        {
+          authorType: "system",
+          presentation: compactRecoveryPresentation("Recovery: dependency write refused (cycle)"),
+          metadata: {
+            version: 1,
+            sections: [{
+              title: "Recovery",
+              rows: [
+                { type: "key_value", label: "Cause", value: "blocked_by_cycle" },
+                { type: "key_value", label: "Refused blocker", value: links.slice(0, 2000) },
+              ],
+            }],
+          },
+        },
+      );
+    } catch (err) {
+      logger.warn({ err, issueId: issue.id }, "could not comment the blocked-by cycle refusal on the source issue");
+    }
+
+    return true;
+  }
+
   async function openChildIssues(issue: typeof issues.$inferSelect) {
     return db
       .select({ id: issues.id, identifier: issues.identifier })
@@ -2898,8 +3033,25 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       )
       .where(inArray(issueRecoveryActions.status, ["active", "escalated"]));
 
-    const result = { requeued: 0, escalated: 0, resolved: 0, skipped: 0, issueIds: [] as string[] };
+    const result = {
+      requeued: 0,
+      escalated: 0,
+      resolved: 0,
+      skipped: 0,
+      cycleRefused: 0,
+      failed: 0,
+      failures: [] as Array<{
+        actionId: string | null;
+        issueId: string | null;
+        identifier: string | null;
+        message: string;
+        status: number | null;
+        details: unknown;
+      }>,
+      issueIds: [] as string[],
+    };
     for (const { action, issue } of rows) {
+      try {
       const wakePolicy = parseObject(action.wakePolicy);
       const wakePolicyType = readNonEmptyString(wakePolicy.type);
       if (
@@ -2935,12 +3087,32 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       if (durablePathRestored || healthyChildren.length > 0 || hasNewSourcePath) {
         if (healthyChildren.length > 0 && !sourceState.hasDurableWaitingPath) {
           const blockerIds = await existingUnresolvedBlockerIssueIds(issue.companyId, issue.id);
+          // PRA-6673: a healthy child is not a legal blocker when this issue already
+          // blocks that child — the pair would close a cycle and the write below
+          // 422s. Partition first so the refusal is decided here, not thrown out of
+          // the reconcile.
+          const { accepted, refused } = await partitionCyclicBlockerIssueIds(
+            issue.companyId,
+            issue.id,
+            [...blockerIds, ...healthyChildren.map((child) => child.id)],
+          );
+          if (accepted.length === 0) {
+            // PRA-6673: the refusal is recorded on the action's evidence, so a later
+            // pass must not re-derive it or re-log it every ~30s. First detection
+            // counts as cycleRefused; once recorded, this row is a skip and the pass
+            // returns to silence.
+            const recorded = await recordBlockedByCycleRefusal({ action, issue, refusedIssueIds: refused });
+            if (recorded) {
+              result.cycleRefused += 1;
+              result.issueIds.push(issue.id);
+            } else {
+              result.skipped += 1;
+            }
+            continue;
+          }
           await issuesSvc.update(issue.id, {
             status: "blocked",
-            blockedByIssueIds: [...new Set([
-              ...blockerIds,
-              ...healthyChildren.map((child) => child.id),
-            ])],
+            blockedByIssueIds: accepted,
           });
         }
         const resolved = await recoveryActionsSvc.resolveActiveForIssue({
@@ -2998,6 +3170,38 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       // Legacy takeover actions remain readable and resolvable, but recovery no
       // longer schedules another agent-owned wake for them.
       result.skipped += 1;
+      } catch (err) {
+        // PRA-6673: one unsatisfiable recovery action must not abort active recovery
+        // for every action behind it, nor the whole reconcile pass.
+        result.failed += 1;
+        result.failures.push({
+          actionId: action?.id ?? null,
+          issueId: issue?.id ?? null,
+          identifier: issue?.identifier ?? null,
+          message: err instanceof Error ? err.message : String(err),
+          status: err instanceof HttpError ? err.status : null,
+          details: err instanceof HttpError ? err.details ?? null : null,
+        });
+        logger.warn(
+          {
+            err,
+            actionId: action?.id ?? null,
+            issueId: issue?.id ?? null,
+            identifier: issue?.identifier ?? null,
+          },
+          "active recovery action failed; continuing with the remaining actions",
+        );
+      }
+    }
+    if (result.failed > 0 || result.cycleRefused > 0) {
+      logger.warn(
+        {
+          failed: result.failed,
+          cycleRefused: result.cycleRefused,
+          failures: result.failures,
+        },
+        "active recovery action reconcile completed with refused rows",
+      );
     }
     return result;
   }
@@ -3584,10 +3788,20 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       recentProgressExempted: 0,
       operatorCancelExempted: 0,
       skipped: 0,
+      cycleRefused: 0,
+      failed: 0,
+      failures: [] as Array<{
+        issueId: string | null;
+        identifier: string | null;
+        message: string;
+        status: number | null;
+        details: unknown;
+      }>,
       issueIds: [] as string[],
     };
 
     for (const issue of candidates) {
+      try {
       const executionState = issue.status === "in_review"
         ? parseIssueExecutionState(issue.executionState)
         : null;
@@ -4324,6 +4538,27 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       } else {
         result.skipped += 1;
       }
+      } catch (err) {
+        // PRA-6673: one problematic candidate must not stop stranded recovery for
+        // every issue behind it — that is what turned one 422 into an
+        // instance-wide outage of the pass.
+        result.failed += 1;
+        result.failures.push({
+          issueId: issue?.id ?? null,
+          identifier: issue?.identifier ?? null,
+          message: err instanceof Error ? err.message : String(err),
+          status: err instanceof HttpError ? err.status : null,
+          details: err instanceof HttpError ? err.details ?? null : null,
+        });
+        logger.warn(
+          {
+            err,
+            issueId: issue?.id ?? null,
+            identifier: issue?.identifier ?? null,
+          },
+          "stranded issue recovery candidate failed; continuing with the remaining candidates",
+        );
+      }
     }
 
     const orphanBlockerRecovery = await reconcileUnassignedBlockingIssues();
@@ -4331,11 +4566,45 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     result.skipped += orphanBlockerRecovery.skipped;
     result.issueIds.push(...orphanBlockerRecovery.issueIds);
 
-    const activeRecovery = await reconcileActiveRecoveryActions();
+    let activeRecovery = {
+      requeued: 0,
+      escalated: 0,
+      resolved: 0,
+      skipped: 0,
+      cycleRefused: 0,
+      failed: 0,
+      failures: [] as Array<{
+        actionId: string | null;
+        issueId: string | null;
+        identifier: string | null;
+        message: string;
+        status: number | null;
+        details: unknown;
+      }>,
+      issueIds: [] as string[],
+    };
+    try {
+      activeRecovery = await reconcileActiveRecoveryActions();
+    } catch (err) {
+      logger.error({ err }, "active recovery action reconcile failed; the stranded pass continues");
+    }
     result.continuationRequeued += activeRecovery.requeued;
     result.escalated += activeRecovery.escalated;
     result.skipped += activeRecovery.skipped;
+    result.cycleRefused = (result.cycleRefused ?? 0) + (activeRecovery.cycleRefused ?? 0);
+    result.failed += activeRecovery.failed ?? 0;
+    result.failures.push(...(activeRecovery.failures ?? []));
     result.issueIds.push(...activeRecovery.issueIds);
+    if (result.failed > 0 || result.cycleRefused > 0) {
+      logger.warn(
+        {
+          failed: result.failed,
+          cycleRefused: result.cycleRefused,
+          failures: result.failures.slice(0, 20),
+        },
+        "stranded issue reconcile completed with refused rows",
+      );
+    }
     result.issueIds = [...new Set(result.issueIds)];
 
     return result;
