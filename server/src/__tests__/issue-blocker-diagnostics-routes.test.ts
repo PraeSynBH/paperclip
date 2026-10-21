@@ -110,7 +110,11 @@ async function seedIssue(
     title: string;
     status?: string;
     assigneeAgentId?: string | null;
+    assigneeUserId?: string | null;
     parentId?: string | null;
+    monitorNextCheckAt?: Date | null;
+    executionPolicy?: Record<string, unknown> | null;
+    unblockDescriptor?: { owner: Record<string, string>; action: string } | null;
   },
 ) {
   const [issue] = await db.insert(issues).values({
@@ -121,6 +125,10 @@ async function seedIssue(
     status: input.status ?? "todo",
     priority: "medium",
     assigneeAgentId: input.assigneeAgentId ?? null,
+    assigneeUserId: input.assigneeUserId ?? null,
+    monitorNextCheckAt: input.monitorNextCheckAt ?? null,
+    executionPolicy: input.executionPolicy ?? null,
+    unblockDescriptor: input.unblockDescriptor ?? null,
     responsibleUserId: "board-user",
   }).returning();
   return issue!;
@@ -270,6 +278,163 @@ describeEmbeddedPostgres("issue blocker diagnostics route", () => {
       unresolvedBlockerCount: 0,
       pendingFinalizeBlockerCount: 0,
     });
+  });
+
+  it("flags a blocked agent-owned issue with no armed monitor as will_not_resume_on_its_own", async () => {
+    const company = await seedCompany(db);
+    const agent = await seedAgent(db, company.id);
+    const issue = await seedIssue(db, {
+      companyId: company.id,
+      title: "Nothing wakes this",
+      status: "blocked",
+      assigneeAgentId: agent.id,
+      unblockDescriptor: {
+        owner: { agentId: agent.id },
+        action: "Wait for the upstream gate to open on 2099-01-01T00:00:00Z, then resume.",
+      },
+    });
+
+    const res = await request(createApp(db, boardActor(company)))
+      .get(`/api/issues/${issue.id}/diagnostics/blockers`);
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.resume).toMatchObject({
+      code: "will_not_resume_on_its_own",
+      resumeAt: "2099-01-01T00:00:00.000Z",
+    });
+    expect(res.body.resume.detail).toContain("nothing is scheduled to wake it then");
+
+    // The same diagnosis has to reach readers that only look at `wakes`.
+    const wakes = await request(createApp(db, boardActor(company)))
+      .get(`/api/issues/${issue.id}/diagnostics/wakes`);
+    expect(wakes.status, JSON.stringify(wakes.body)).toBe(200);
+    expect(
+      JSON.stringify(wakes.body).includes("will_not_resume_on_its_own"),
+      JSON.stringify(wakes.body).slice(0, 600),
+    ).toBe(true);
+  });
+
+  it("uses the earliest instant named in the unblock action as resumeAt", async () => {
+    const company = await seedCompany(db);
+    const agent = await seedAgent(db, company.id);
+    const issue = await seedIssue(db, {
+      companyId: company.id,
+      title: "Two dated gates",
+      status: "blocked",
+      assigneeAgentId: agent.id,
+      unblockDescriptor: {
+        owner: { agentId: agent.id },
+        action:
+          "Repoint DNS by 2099-02-01T00:00:00Z; if it is still wrong, escalate on 2099-05-01T00:00:00Z.",
+      },
+    });
+
+    const res = await request(createApp(db, boardActor(company)))
+      .get(`/api/issues/${issue.id}/diagnostics/blockers`);
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.resume).toMatchObject({ resumeAt: "2099-02-01T00:00:00.000Z" });
+  });
+
+  it("reports a null resumeAt when the unblock action names no instant", async () => {
+    const company = await seedCompany(db);
+    const agent = await seedAgent(db, company.id);
+    const issue = await seedIssue(db, {
+      companyId: company.id,
+      title: "Undated human gate",
+      status: "blocked",
+      assigneeAgentId: agent.id,
+      unblockDescriptor: {
+        owner: { agentId: agent.id },
+        action: "Ben has to approve the spend before this moves.",
+      },
+    });
+
+    const res = await request(createApp(db, boardActor(company)))
+      .get(`/api/issues/${issue.id}/diagnostics/blockers`);
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.resume).toMatchObject({
+      code: "will_not_resume_on_its_own",
+      resumeAt: null,
+    });
+    expect(res.body.resume.detail).toContain("names no instant");
+  });
+
+  it("says an already-passed gate has passed instead of promising a future wake", async () => {
+    const company = await seedCompany(db);
+    const agent = await seedAgent(db, company.id);
+    const issue = await seedIssue(db, {
+      companyId: company.id,
+      title: "Expired dated gate",
+      status: "blocked",
+      assigneeAgentId: agent.id,
+      unblockDescriptor: {
+        owner: { agentId: agent.id },
+        action: "Re-check after 2020-01-01T00:00:00Z.",
+      },
+    });
+
+    const res = await request(createApp(db, boardActor(company)))
+      .get(`/api/issues/${issue.id}/diagnostics/blockers`);
+
+    expect(res.status, JSON.stringify(res.body)).toBe(200);
+    expect(res.body.resume).toMatchObject({ resumeAt: "2020-01-01T00:00:00.000Z" });
+    expect(res.body.resume.detail).toContain("already passed");
+  });
+
+  it("does not flag the shape when a monitor is armed on either field", async () => {
+    const company = await seedCompany(db);
+    const agent = await seedAgent(db, company.id);
+    const viaColumn = await seedIssue(db, {
+      companyId: company.id,
+      title: "Monitor armed on the column",
+      status: "blocked",
+      assigneeAgentId: agent.id,
+      monitorNextCheckAt: new Date("2099-01-01T00:00:00Z"),
+    });
+    const viaPolicy = await seedIssue(db, {
+      companyId: company.id,
+      title: "Monitor armed inside the execution policy",
+      status: "blocked",
+      assigneeAgentId: agent.id,
+      executionPolicy: { monitor: { nextCheckAt: "2099-01-01T00:00:00Z" } },
+    });
+
+    for (const issue of [viaColumn, viaPolicy]) {
+      const res = await request(createApp(db, boardActor(company)))
+        .get(`/api/issues/${issue.id}/diagnostics/blockers`);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.resume, issue.title).toBeNull();
+    }
+  });
+
+  it("does not flag a human-owned blocked issue or an unblocked agent-owned issue", async () => {
+    const company = await seedCompany(db);
+    const agent = await seedAgent(db, company.id);
+    const humanOwned = await seedIssue(db, {
+      companyId: company.id,
+      title: "Human owns the unblock",
+      status: "blocked",
+      assigneeUserId: "board-user",
+      unblockDescriptor: {
+        owner: { userId: "board-user" },
+        action: "Board decision on 2099-01-01T00:00:00Z.",
+      },
+    });
+    const notBlocked = await seedIssue(db, {
+      companyId: company.id,
+      title: "Agent-owned but running",
+      status: "in_progress",
+      assigneeAgentId: agent.id,
+    });
+
+    for (const issue of [humanOwned, notBlocked]) {
+      const res = await request(createApp(db, boardActor(company)))
+        .get(`/api/issues/${issue.id}/diagnostics/blockers`);
+      expect(res.status, JSON.stringify(res.body)).toBe(200);
+      expect(res.body.resume, issue.title).toBeNull();
+    }
   });
 
   it("omits unauthorized blocker nodes and derives diagnosis only from visible data", async () => {

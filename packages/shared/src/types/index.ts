@@ -620,6 +620,8 @@ export type {
   IssueBlockerDiagnosticIssueSummary,
   IssueBlockerDiagnosticNode,
   IssueBlockerDiagnosticsReadiness,
+  IssueBlockerDiagnosticResume,
+  IssueBlockerDiagnosticResumeCode,
   IssueBlockerDiagnosticsResponse,
   IssueWakeDiagnosticActivityRecord,
   IssueWakeDiagnosticEvent,

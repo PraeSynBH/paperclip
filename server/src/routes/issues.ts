@@ -81,6 +81,7 @@ import {
   type IssueBlockerDiagnosticIssueSummary,
   type IssueBlockerDiagnosticNode,
   type IssueBlockerDiagnosticsReadiness,
+  type IssueBlockerDiagnosticResume,
   type IssueBlockerDiagnosticsResponse,
   type IssueSubtreeDiagnosticEdge,
   type IssueSubtreeDiagnosticNode,
@@ -937,6 +938,17 @@ type IssueBlockerDiagnosticReadableIssue = {
   priority: string;
   assigneeAgentId: string | null;
   assigneeUserId: string | null;
+  /**
+   * Optional execution fields. Only the diagnostics root issue carries them;
+   * blocker rows are structurally typed by this same shape, so everything here
+   * stays optional. `executionPolicy` is `unknown` because the column is free
+   * form JSON.
+   */
+  executionPolicy?: unknown;
+  monitorNextCheckAt?: string | Date | null;
+  unblockDescriptor?: {
+    action?: string | null;
+  } | null;
 };
 
 type IssueBlockerDiagnosticAuthzIssue = IssueBlockerDiagnosticReadableIssue & {
@@ -961,6 +973,72 @@ function toIssueBlockerDiagnosticSummary(
 
 function blockerDiagnosticLabel(issue: IssueBlockerDiagnosticIssueSummary) {
   return issue.identifier ?? issue.title;
+}
+
+const RESUME_INSTANT_PATTERN = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?Z/g;
+
+/**
+ * Earliest unambiguous (UTC, `Z`-suffixed) instant named in an unblock action.
+ * The earliest match is the first moment the named gate could lift, which is the
+ * instant a reader wants when asking "when can this card move again?".
+ */
+export function firstResumeInstantNamedInAction(action: string | null | undefined): string | null {
+  if (typeof action !== "string" || action.length === 0) return null;
+  const instants = [...action.matchAll(RESUME_INSTANT_PATTERN)]
+    .map((match) => Date.parse(match[0]))
+    .filter((value) => Number.isFinite(value));
+  if (instants.length === 0) return null;
+  return new Date(Math.min(...instants)).toISOString();
+}
+
+function toResumeInstant(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function hasArmedMonitor(issue: IssueBlockerDiagnosticReadableIssue): boolean {
+  const policy = issue.executionPolicy;
+  const monitor =
+    policy && typeof policy === "object" ? (policy as { monitor?: unknown }).monitor : null;
+  const policyNextCheckAt =
+    monitor && typeof monitor === "object"
+      ? ((monitor as { nextCheckAt?: unknown }).nextCheckAt as string | null | undefined)
+      : null;
+  if (toResumeInstant(policyNextCheckAt)) return true;
+  return toResumeInstant(issue.monitorNextCheckAt) !== null;
+}
+
+/**
+ * R4 shape: `blocked`, owned by an agent (not a human), and no armed monitor.
+ * Nothing in the control plane is scheduled to look at it again, so it stays
+ * blocked until a person happens to read it.
+ */
+export function buildIssueBlockerResumeDiagnosis(input: {
+  issue: IssueBlockerDiagnosticIssueSummary;
+  raw: IssueBlockerDiagnosticReadableIssue;
+  now?: number;
+}): IssueBlockerDiagnosticResume | null {
+  const { issue, raw } = input;
+  if (issue.status !== "blocked") return null;
+  if (!issue.assigneeAgentId || issue.assigneeUserId) return null;
+  if (hasArmedMonitor(raw)) return null;
+
+  const label = blockerDiagnosticLabel(issue);
+  const resumeAt = firstResumeInstantNamedInAction(raw.unblockDescriptor?.action);
+  const now = input.now ?? Date.now();
+  const detail = (() => {
+    if (!resumeAt) {
+      return `${label} is blocked on an agent-owned card with no armed monitor and its unblock action names no instant, so nothing will wake it again. Arm a monitor (executionPolicy.monitor.nextCheckAt) or hand it to a human.`;
+    }
+    const parsed = Date.parse(resumeAt);
+    if (parsed <= now) {
+      return `${label} is blocked on an agent-owned card with no armed monitor; its unblock action names ${resumeAt}, which has already passed, so nothing will wake it.`;
+    }
+    return `${label} is blocked on an agent-owned card with no armed monitor; its unblock action names ${resumeAt} but nothing is scheduled to wake it then. Arm a monitor (executionPolicy.monitor.nextCheckAt) on this card if that date is a gate.`;
+  })();
+
+  return { code: "will_not_resume_on_its_own", detail, resumeAt };
 }
 
 function buildIssueBlockerDiagnosticsResponse(input: {
@@ -1025,6 +1103,7 @@ function buildIssueBlockerDiagnosticsResponse(input: {
       truncated: input.truncated,
       maxBlockers: input.maxBlockers ?? ISSUE_BLOCKER_DIAGNOSTICS_MAX_BLOCKERS,
     }),
+    resume: buildIssueBlockerResumeDiagnosis({ issue, raw: input.issue }),
     readiness,
     blockers,
     omittedUnauthorizedBlockerCount: reportedOmittedUnauthorizedBlockerCount,
@@ -1395,6 +1474,7 @@ function buildIssueWakeDiagnosticsResponse(input: {
   return {
     issue,
     diagnosis,
+    resume: input.blockerDiagnostics.resume,
     likelyReason: diagnosis,
     events,
     wakeRequestCount: input.wakeRequests.length,
