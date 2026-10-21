@@ -4240,10 +4240,52 @@ export function issueRoutes(
     return false;
   }
 
-  async function rejectTaskWatchdogConfigMutation(req: Request, res: Response) {
+  type ResolvedTaskWatchdogMutationScope = Awaited<
+    ReturnType<typeof resolveTaskWatchdogMutationScope>
+  >;
+
+  /**
+   * A watchdog run may supersede the gate text on the watchdog record it owns
+   * ("refuse to correct stale gate text" was the defect): same record it was
+   * dispatched for, same watchdog agent, instructions only. Reassigning the
+   * watchdog agent, nesting a new watchdog, or touching any other record all
+   * stay refused.
+   */
+  function taskWatchdogRunSupersedesOwnGateText(input: {
+    scope: ResolvedTaskWatchdogMutationScope;
+    issueId: string;
+    body: { agentId?: unknown; instructions?: unknown } | undefined;
+    actorAgentId: string | null | undefined;
+  }): boolean {
+    if (input.scope.kind !== "watchdog") return false;
+    if (input.issueId !== input.scope.watchedIssueId) return false;
+    if (!input.actorAgentId || input.body?.agentId !== input.actorAgentId) return false;
+    return typeof input.body?.instructions !== "undefined";
+  }
+
+  async function rejectTaskWatchdogConfigMutation(
+    req: Request,
+    res: Response,
+    opts: {
+      scope?: ResolvedTaskWatchdogMutationScope;
+      issueId?: string;
+      allowOwnGateTextSupersede?: boolean;
+    } = {},
+  ) {
     if (req.actor.type !== "agent") return false;
-    const scope = await resolveTaskWatchdogMutationScope(db, req.actor);
+    const scope = opts.scope ?? await resolveTaskWatchdogMutationScope(db, req.actor);
     if (scope.kind !== "watchdog") return false;
+    if (
+      opts.allowOwnGateTextSupersede &&
+      taskWatchdogRunSupersedesOwnGateText({
+        scope,
+        issueId: opts.issueId ?? "",
+        body: req.body,
+        actorAgentId: req.actor.agentId,
+      })
+    ) {
+      return false;
+    }
     res.status(403).json({
       error: "Task-watchdog runs cannot change watchdog configuration.",
       details: {
@@ -6831,8 +6873,22 @@ export function issueRoutes(
     if (!issue) return;
     if (!(await assertIssueReadAllowed(req, res, issue))) return;
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
-    if (await rejectTaskWatchdogConfigMutation(req, res)) return;
     if (await assertLowTrustControlPlaneDenied(req, res, issue.companyId, issue)) return;
+
+    const watchdogScope = await resolveTaskWatchdogMutationScope(db, req.actor);
+    const supersedesOwnGateText = taskWatchdogRunSupersedesOwnGateText({
+      scope: watchdogScope,
+      issueId: issue.id,
+      body: req.body,
+      actorAgentId: req.actor.agentId,
+    });
+    if (
+      await rejectTaskWatchdogConfigMutation(req, res, {
+        scope: watchdogScope,
+        issueId: issue.id,
+        allowOwnGateTextSupersede: true,
+      })
+    ) return;
 
     const actor = getActorInfo(req);
     const existingWatchdog = await taskWatchdogsSvc.getActiveForIssue(issue.companyId, issue.id);
@@ -6860,6 +6916,11 @@ export function issueRoutes(
         watchdogId: watchdog.id,
         watchdogAgentId: watchdog.watchdogAgentId,
         instructionsChanged: (existingWatchdog?.instructions ?? null) !== (watchdog.instructions ?? null),
+        // True when the watchdog run itself superseded its own gate text; the
+        // before/after pair is kept here because the record only stores the new
+        // instructions.
+        gateTextSupersededByWatchdogRun: supersedesOwnGateText,
+        previousInstructions: supersedesOwnGateText ? existingWatchdog?.instructions ?? null : undefined,
       },
     });
     await queueTaskWatchdogEvaluation(issue, actor.runId);

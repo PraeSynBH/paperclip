@@ -518,6 +518,79 @@ describeEmbeddedPostgres("issue watchdog routes", () => {
     expect(allowedChild.body.parentId).toBe(watchedChildId);
   });
 
+  it("lets a watchdog run supersede the gate text on its own record and refuses every other config change", async () => {
+    const companyId = await seedCompany("Gate text");
+    const watchdogAgentId = await seedAgent(companyId, { name: "Gate Text Watchdog" });
+    const otherAgentId = await seedAgent(companyId, { name: "Other Watchdog" });
+    const watchedRootId = await seedIssue(companyId, { title: "Watched root" });
+    const unrelatedRootId = await seedIssue(companyId, { title: "Unrelated root" });
+    const watchdogIssueId = await seedIssue(companyId, {
+      title: "Reusable watchdog issue",
+      parentId: watchedRootId,
+      assigneeAgentId: watchdogAgentId,
+      originKind: "task_watchdog",
+      originId: watchedRootId,
+    });
+    const staleGateText = "STALE: re-check at 2026-10-21T16:00:37Z";
+    const correctedGateText = "SUPERSEDED: the real stop was 2026-10-21T17:18:47Z";
+    const runId = await seedWatchdogRun({
+      companyId,
+      watchdogAgentId,
+      watchedIssueId: watchedRootId,
+      watchdogIssueId,
+    });
+    await db
+      .update(issueWatchdogs)
+      .set({ instructions: staleGateText })
+      .where(and(eq(issueWatchdogs.companyId, companyId), eq(issueWatchdogs.issueId, watchedRootId)));
+    const app = createApp(companyId, {
+      type: "agent",
+      agentId: watchdogAgentId,
+      companyId,
+      runId,
+      source: "agent_jwt",
+    });
+
+    const superseded = await request(app)
+      .put(`/api/issues/${watchedRootId}/watchdog`)
+      .send({ agentId: watchdogAgentId, instructions: correctedGateText });
+    expect(superseded.status, JSON.stringify(superseded.body)).toBe(200);
+    expect(superseded.body).toMatchObject({
+      issueId: watchedRootId,
+      watchdogAgentId,
+      instructions: correctedGateText,
+    });
+    await drainHeartbeatRunsToQuiescence(db, heartbeatService(db));
+
+    const [supersedeActivity] = await db
+      .select({ details: activityLog.details })
+      .from(activityLog)
+      .where(and(
+        eq(activityLog.companyId, companyId),
+        eq(activityLog.entityId, watchedRootId),
+        eq(activityLog.action, "issue.watchdog_updated"),
+      ));
+    expect(supersedeActivity?.details).toMatchObject({
+      gateTextSupersededByWatchdogRun: true,
+      previousInstructions: staleGateText,
+      instructionsChanged: true,
+    });
+
+    const reassigned = await request(app)
+      .put(`/api/issues/${watchedRootId}/watchdog`)
+      .send({ agentId: otherAgentId, instructions: "Hand the watchdog to someone else" });
+    expect(reassigned.status, JSON.stringify(reassigned.body)).toBe(403);
+    expect(reassigned.body.error).toBe("Task-watchdog runs cannot change watchdog configuration.");
+
+    const unrelatedRecord = await request(app)
+      .put(`/api/issues/${unrelatedRootId}/watchdog`)
+      .send({ agentId: watchdogAgentId, instructions: "Watch an unrelated issue too" });
+    expect(unrelatedRecord.status, JSON.stringify(unrelatedRecord.body)).toBe(403);
+
+    const stillCannotRemove = await request(app).delete(`/api/issues/${watchedRootId}/watchdog`);
+    expect(stillCannotRemove.status, JSON.stringify(stillCannotRemove.body)).toBe(403);
+  });
+
   it("routes watchdog-discovered product bugs outside the watched source tree with evidence links", async () => {
     const companyId = await seedCompany();
     const watchdogAgentId = await seedAgent(companyId, { name: "Product Bug Watchdog" });
