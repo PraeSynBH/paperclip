@@ -202,6 +202,7 @@ import {
   ISSUE_WAKE_DIAGNOSTICS_LOOKBACK_DAYS,
   ISSUE_WAKE_DIAGNOSTICS_MAX_ACTIVITY_RECORDS,
   ISSUE_WAKE_DIAGNOSTICS_MAX_WAKE_REQUESTS,
+  countBlockerResumeSweep as countBlockerResumeSweepDirect,
   readAcceptedPlanConfirmationTarget,
 } from "../services/issues.js";
 import { authorizationDeniedDetails } from "../services/authorization.js";
@@ -6393,6 +6394,13 @@ export function issueRoutes(
       q: req.query.q as string | undefined,
     } as const;
 
+    // The resume sweep is a structural company-scope tally of the R4 shape
+    // (blocked, agent-owned, no armed monitor). A `q` text query narrows `count`
+    // through the comment/doc scan in countBlockedInboxIssues, which the sweep
+    // cannot reproduce in one aggregate, so a narrowed read omits the sweep
+    // instead of reporting totals that disagree with the count beside them.
+    const emitResumeSweep = !blockedCountFilters.q?.trim();
+
     if (!(await actorCanReadCompanyScope(req, companyId))) {
       const trustResolution = req.actor.type === "agent"
         ? await resolveAgentTrustForIssue({
@@ -6404,11 +6412,20 @@ export function issueRoutes(
         throw forbidden(trustResolution.detail);
       }
       if (trustResolution?.kind === "low_trust_review") {
-        const count = await svc.count(companyId, {
+        // Boundary-scoped, not company-wide: the sweep rides the same low-trust
+        // boundary condition as the count, so a low-trust actor never sees the
+        // whole company's R4 totals.
+        const boundaryFilters = {
           ...blockedCountFilters,
           lowTrustBoundary: trustResolution.boundary,
-        });
-        res.json({ count });
+        };
+        const [count, resumeSweep] = await Promise.all([
+          svc.count(companyId, boundaryFilters),
+          emitResumeSweep
+            ? countBlockerResumeSweepDirect(db, companyId, boundaryFilters)
+            : Promise.resolve(null),
+        ]);
+        res.json({ count, ...(resumeSweep ? { resumeSweep } : {}) });
         return;
       }
 
@@ -6424,12 +6441,19 @@ export function issueRoutes(
         if (rows.length < ISSUE_LIST_MAX_LIMIT) break;
         offset += rows.length;
       }
+      // This path filters row by row for the actor, so a sweep would need the
+      // same per-issue walk. Omit it rather than guess at a scope.
       res.json({ count: visibleCount });
       return;
     }
 
-    const count = await svc.count(companyId, blockedCountFilters);
-    res.json({ count });
+    const [count, resumeSweep] = await Promise.all([
+      svc.count(companyId, blockedCountFilters),
+      emitResumeSweep
+        ? countBlockerResumeSweepDirect(db, companyId, blockedCountFilters)
+        : Promise.resolve(null),
+    ]);
+    res.json({ count, ...(resumeSweep ? { resumeSweep } : {}) });
   });
 
   router.get("/companies/:companyId/labels", async (req, res) => {

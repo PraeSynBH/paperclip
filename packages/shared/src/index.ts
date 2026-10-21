@@ -993,6 +993,7 @@ export type {
   IssueBlockerDiagnosticsReadiness,
   IssueBlockerDiagnosticResume,
   IssueBlockerDiagnosticResumeCode,
+  IssueBlockerResumeSweep,
   IssueBlockerDiagnosticsResponse,
   IssueWakeDiagnosticActivityRecord,
   IssueWakeDiagnosticEvent,

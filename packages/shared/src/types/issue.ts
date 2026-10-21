@@ -267,6 +267,22 @@ export interface IssueBlockerDiagnosticResume {
   resumeAt: string | null;
 }
 
+/**
+ * Company-scope tally of the "R4" shape above, so a board header can say
+ * "N cards will never resume" without walking issues one by one.
+ *
+ * The counts nest: `withoutMonitor` ⊆ `blockedAgentOwned`, `withNamedInstant` ⊆
+ * `withoutMonitor`, `withFutureInstant` ⊆ `withNamedInstant`. `withFutureInstant`
+ * counts cards whose earliest named instant (the per-card `resumeAt`) is still
+ * ahead of the sweep time; nothing is scheduled to wake them at that instant.
+ */
+export interface IssueBlockerResumeSweep {
+  blockedAgentOwned: number;
+  withoutMonitor: number;
+  withNamedInstant: number;
+  withFutureInstant: number;
+}
+
 export interface IssueBlockerDiagnosticsResponse {
   issue: IssueBlockerDiagnosticIssueSummary;
   diagnosis: string | null;
