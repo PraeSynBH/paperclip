@@ -171,6 +171,7 @@ type ResolvedDependencyWakeBackstopOptions = {
 type LatestIssueRun = Pick<
   typeof heartbeatRuns.$inferSelect,
   | "id"
+  | "companyId"
   | "agentId"
   | "status"
   | "error"
@@ -183,6 +184,73 @@ type LatestIssueRun = Pick<
   resultJson?: unknown;
 } | null;
 type SuccessfulLatestIssueRun = NonNullable<LatestIssueRun> & { status: "succeeded" };
+
+// PRX-5836 / PRX-5843: the narrowed heartbeat_runs projections below are not read-only
+// conveniences — their rows are handed to appendRecoveryRunEvent(), which derives the NOT NULL
+// heartbeat_run_events columns company_id / run_id / agent_id from them. When a selector quietly
+// omits companyId, Postgres rejects the insert, the candidate is re-derived and re-fails on the
+// next ~30 s recovery cycle, and the recovery decision is never recorded (the defect that made
+// stranded issues unexplainable). Keeping one projection map is what stops a future fourth
+// selector from drifting out of the contract again: add a column here, never per-selector.
+export const RECOVERY_LATEST_RUN_PROJECTION = {
+  id: heartbeatRuns.id,
+  companyId: heartbeatRuns.companyId,
+  agentId: heartbeatRuns.agentId,
+  status: heartbeatRuns.status,
+  error: heartbeatRuns.error,
+  errorCode: heartbeatRuns.errorCode,
+  contextSnapshot: heartbeatRuns.contextSnapshot,
+  livenessState: heartbeatRuns.livenessState,
+  resultJson: heartbeatRuns.resultJson,
+  startedAt: heartbeatRuns.startedAt,
+  createdAt: heartbeatRuns.createdAt,
+} satisfies Record<string, unknown>;
+
+export type RecoveryRunEventSource = Pick<
+  typeof heartbeatRuns.$inferSelect,
+  "id" | "companyId" | "agentId"
+>;
+
+export type RecoveryRunEventInput = {
+  level: "info" | "warn" | "error";
+  message: string;
+  payload?: Record<string, unknown>;
+};
+
+/**
+ * Builds the heartbeat_run_events lifecycle row for one recovery decision.
+ *
+ * Exported so the regression guard (`service.recovery-run-event-columns.test.ts`) can prove a
+ * row shaped like `getLatestIssueRun()` output satisfies every NOT NULL column of
+ * `heartbeat_run_events`. The PRX-5836 defect was exactly this: the insert was fine, the
+ * projection feeding it was not.
+ */
+export function buildRecoveryRunEventInsert(
+  run: RecoveryRunEventSource,
+  event: RecoveryRunEventInput,
+  seq: number,
+) {
+  // PRX-5836: defence in depth. If a caller hands us a narrowed projection that dropped
+  // companyId, fail legibly here instead of letting Drizzle emit `values (default, ...)` and
+  // Postgres reject it with an opaque NOT NULL violation that the recovery loop then retries
+  // forever (each retry re-deriving the same candidate).
+  if (!run.companyId) {
+    throw new Error(
+      `appendRecoveryRunEvent: run ${run.id} has no companyId (select projection dropped it)`,
+    );
+  }
+  return {
+    companyId: run.companyId,
+    runId: run.id,
+    agentId: run.agentId,
+    seq,
+    eventType: "lifecycle" as const,
+    stream: "system",
+    level: event.level,
+    message: event.message,
+    payload: event.payload ?? null,
+  };
+}
 
 type StrandedRecoveryCause =
   | "stranded_assigned_issue"
@@ -779,18 +847,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
 
   async function getLatestIssueRun(companyId: string, issueId: string): Promise<LatestIssueRun> {
     return db
-      .select({
-        id: heartbeatRuns.id,
-        agentId: heartbeatRuns.agentId,
-        status: heartbeatRuns.status,
-        error: heartbeatRuns.error,
-        errorCode: heartbeatRuns.errorCode,
-        contextSnapshot: heartbeatRuns.contextSnapshot,
-        livenessState: heartbeatRuns.livenessState,
-        resultJson: heartbeatRuns.resultJson,
-        startedAt: heartbeatRuns.startedAt,
-        createdAt: heartbeatRuns.createdAt,
-      })
+      .select(RECOVERY_LATEST_RUN_PROJECTION)
       .from(heartbeatRuns)
       .where(
         and(
@@ -809,18 +866,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     agentId: string,
   ): Promise<LatestIssueRun> {
     return db
-      .select({
-        id: heartbeatRuns.id,
-        agentId: heartbeatRuns.agentId,
-        status: heartbeatRuns.status,
-        error: heartbeatRuns.error,
-        errorCode: heartbeatRuns.errorCode,
-        contextSnapshot: heartbeatRuns.contextSnapshot,
-        livenessState: heartbeatRuns.livenessState,
-        resultJson: heartbeatRuns.resultJson,
-        startedAt: heartbeatRuns.startedAt,
-        createdAt: heartbeatRuns.createdAt,
-      })
+      .select(RECOVERY_LATEST_RUN_PROJECTION)
       .from(heartbeatRuns)
       .where(
         and(
@@ -1048,18 +1094,7 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
 
   async function getLatestIssueRunSince(companyId: string, issueId: string, agentId: string, since: Date): Promise<LatestIssueRun> {
     return db
-      .select({
-        id: heartbeatRuns.id,
-        agentId: heartbeatRuns.agentId,
-        status: heartbeatRuns.status,
-        error: heartbeatRuns.error,
-        errorCode: heartbeatRuns.errorCode,
-        contextSnapshot: heartbeatRuns.contextSnapshot,
-        livenessState: heartbeatRuns.livenessState,
-        resultJson: heartbeatRuns.resultJson,
-        startedAt: heartbeatRuns.startedAt,
-        createdAt: heartbeatRuns.createdAt,
-      })
+      .select(RECOVERY_LATEST_RUN_PROJECTION)
       .from(heartbeatRuns)
       .where(
         and(
@@ -1490,24 +1525,12 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
   }
 
   async function appendRecoveryRunEvent(
-    run: typeof heartbeatRuns.$inferSelect,
-    event: {
-      level: "info" | "warn" | "error";
-      message: string;
-      payload?: Record<string, unknown>;
-    },
+    run: RecoveryRunEventSource,
+    event: RecoveryRunEventInput,
   ) {
-    await db.insert(heartbeatRunEvents).values({
-      companyId: run.companyId,
-      runId: run.id,
-      agentId: run.agentId,
-      seq: await nextRunEventSeq(run.id),
-      eventType: "lifecycle",
-      stream: "system",
-      level: event.level,
-      message: event.message,
-      payload: event.payload ?? null,
-    });
+    await db.insert(heartbeatRunEvents).values(
+      buildRecoveryRunEventInsert(run, event, await nextRunEventSeq(run.id)),
+    );
   }
 
   async function cleanupSourceResolvedRunProcess(input: {
