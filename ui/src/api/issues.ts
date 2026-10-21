@@ -11,6 +11,7 @@ import type {
   Issue,
   IssueChanges,
   IssueAttachment,
+  IssueBlockerResumeSweep,
   IssueCostSummary,
   IssueComment,
   IssueDocument,
@@ -143,7 +144,9 @@ export const issuesApi = {
     if (filters.projectId) params.set("projectId", filters.projectId);
     if (filters.labelId) params.set("labelId", filters.labelId);
     if (filters.q) params.set("q", filters.q);
-    return api.get<{ count: number }>(`/companies/${companyId}/issues/count?${params.toString()}`);
+    return api.get<{ count: number; resumeSweep?: IssueBlockerResumeSweep }>(
+      `/companies/${companyId}/issues/count?${params.toString()}`,
+    );
   },
   listLabels: (companyId: string) => api.get<IssueLabel[]>(`/companies/${companyId}/labels`),
   createLabel: (companyId: string, data: { name: string; color: string }) =>

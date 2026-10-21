@@ -44,6 +44,7 @@ import type {
   IssueCommentMetadata,
   IssueCommentPresentation,
   IssueBlockerAttention,
+  IssueBlockerResumeSweep,
   IssueReviewAttention,
   IssueReviewAttentionPath,
   IssueBlockedInboxAttention,
@@ -4446,6 +4447,75 @@ async function countBlockedInboxIssues(dbOrTx: any, companyId: string, filters?:
     ) return count;
     return count + 1;
   }, 0);
+}
+
+/**
+ * SQL twin of `RESUME_INSTANT_PATTERN` / `firstResumeInstantNamedInAction` in
+ * `routes/issues.ts`: the same Z-suffixed ISO shape, same optional seconds and
+ * fraction. The capture group is what the aggregate parses, so keep the two in
+ * step; `issue-blocker-resume-sweep-routes.test.ts` asserts they classify the
+ * same descriptors.
+ */
+const RESUME_INSTANT_SQL_PATTERN = "([0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}(:[0-9]{2}(\\.[0-9]{1,3})?)?Z)";
+
+/**
+ * Company-scope tally of the R4 shape (blocked, agent-owned, no armed monitor).
+ *
+ * One aggregate over one statement - no per-issue reads - so a board header can
+ * render "N cards will never resume" from a single company-scope call. Scoped
+ * exactly like `count`: company boundary, visibility, plugin-operation
+ * exclusion, and the low-trust boundary when the caller passes one.
+ *
+ * `withFutureInstant` uses the card's earliest named instant (the same value the
+ * per-card diagnosis reports as `resumeAt`), so a card whose action names both a
+ * past and a future instant is not counted as waiting on the future one.
+ */
+export async function countBlockerResumeSweep(
+  dbOrTx: any,
+  companyId: string,
+  filters?: IssueFilters,
+): Promise<IssueBlockerResumeSweep> {
+  const { conditions } = await blockedInboxIssueConditions(dbOrTx, companyId, filters);
+  const where = and(
+    ...conditions,
+    eq(issues.status, "blocked"),
+    isNotNull(issues.assigneeAgentId),
+    isNull(issues.assigneeUserId),
+  );
+
+  const rows = await dbOrTx.execute(sql`
+    WITH r4 AS (
+      SELECT
+        ${issues.id} AS id,
+        (${issues.monitorNextCheckAt} IS NULL
+          AND (${issues.executionPolicy} #>> '{monitor,nextCheckAt}') IS NULL) AS without_monitor,
+        named.earliest_resume_at AS earliest_resume_at
+      FROM ${issues}
+      LEFT JOIN LATERAL (
+        SELECT min((match[1])::timestamptz) AS earliest_resume_at
+        FROM regexp_matches(
+          coalesce(${issues.unblockDescriptor} ->> 'action', ''),
+          ${RESUME_INSTANT_SQL_PATTERN},
+          'g'
+        ) AS match
+      ) named ON TRUE
+      WHERE ${where}
+    )
+    SELECT
+      count(*)::int AS blocked_agent_owned,
+      count(*) FILTER (WHERE without_monitor)::int AS without_monitor,
+      count(*) FILTER (WHERE without_monitor AND earliest_resume_at IS NOT NULL)::int AS with_named_instant,
+      count(*) FILTER (WHERE without_monitor AND earliest_resume_at > now())::int AS with_future_instant
+    FROM r4
+  `);
+
+  const row = (Array.isArray(rows) ? rows[0] : null) as Record<string, unknown> | null;
+  return {
+    blockedAgentOwned: Number(row?.blocked_agent_owned ?? 0),
+    withoutMonitor: Number(row?.without_monitor ?? 0),
+    withNamedInstant: Number(row?.with_named_instant ?? 0),
+    withFutureInstant: Number(row?.with_future_instant ?? 0),
+  };
 }
 
 export function issueService(db: Db) {

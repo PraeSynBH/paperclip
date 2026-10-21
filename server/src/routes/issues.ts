@@ -81,6 +81,7 @@ import {
   type IssueBlockerDiagnosticIssueSummary,
   type IssueBlockerDiagnosticNode,
   type IssueBlockerDiagnosticsReadiness,
+  type IssueBlockerDiagnosticResume,
   type IssueBlockerDiagnosticsResponse,
   type IssueSubtreeDiagnosticEdge,
   type IssueSubtreeDiagnosticNode,
@@ -201,6 +202,7 @@ import {
   ISSUE_WAKE_DIAGNOSTICS_LOOKBACK_DAYS,
   ISSUE_WAKE_DIAGNOSTICS_MAX_ACTIVITY_RECORDS,
   ISSUE_WAKE_DIAGNOSTICS_MAX_WAKE_REQUESTS,
+  countBlockerResumeSweep as countBlockerResumeSweepDirect,
   readAcceptedPlanConfirmationTarget,
 } from "../services/issues.js";
 import { authorizationDeniedDetails } from "../services/authorization.js";
@@ -937,6 +939,17 @@ type IssueBlockerDiagnosticReadableIssue = {
   priority: string;
   assigneeAgentId: string | null;
   assigneeUserId: string | null;
+  /**
+   * Optional execution fields. Only the diagnostics root issue carries them;
+   * blocker rows are structurally typed by this same shape, so everything here
+   * stays optional. `executionPolicy` is `unknown` because the column is free
+   * form JSON.
+   */
+  executionPolicy?: unknown;
+  monitorNextCheckAt?: string | Date | null;
+  unblockDescriptor?: {
+    action?: string | null;
+  } | null;
 };
 
 type IssueBlockerDiagnosticAuthzIssue = IssueBlockerDiagnosticReadableIssue & {
@@ -961,6 +974,72 @@ function toIssueBlockerDiagnosticSummary(
 
 function blockerDiagnosticLabel(issue: IssueBlockerDiagnosticIssueSummary) {
   return issue.identifier ?? issue.title;
+}
+
+const RESUME_INSTANT_PATTERN = /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?Z/g;
+
+/**
+ * Earliest unambiguous (UTC, `Z`-suffixed) instant named in an unblock action.
+ * The earliest match is the first moment the named gate could lift, which is the
+ * instant a reader wants when asking "when can this card move again?".
+ */
+export function firstResumeInstantNamedInAction(action: string | null | undefined): string | null {
+  if (typeof action !== "string" || action.length === 0) return null;
+  const instants = [...action.matchAll(RESUME_INSTANT_PATTERN)]
+    .map((match) => Date.parse(match[0]))
+    .filter((value) => Number.isFinite(value));
+  if (instants.length === 0) return null;
+  return new Date(Math.min(...instants)).toISOString();
+}
+
+function toResumeInstant(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function hasArmedMonitor(issue: IssueBlockerDiagnosticReadableIssue): boolean {
+  const policy = issue.executionPolicy;
+  const monitor =
+    policy && typeof policy === "object" ? (policy as { monitor?: unknown }).monitor : null;
+  const policyNextCheckAt =
+    monitor && typeof monitor === "object"
+      ? ((monitor as { nextCheckAt?: unknown }).nextCheckAt as string | null | undefined)
+      : null;
+  if (toResumeInstant(policyNextCheckAt)) return true;
+  return toResumeInstant(issue.monitorNextCheckAt) !== null;
+}
+
+/**
+ * R4 shape: `blocked`, owned by an agent (not a human), and no armed monitor.
+ * Nothing in the control plane is scheduled to look at it again, so it stays
+ * blocked until a person happens to read it.
+ */
+export function buildIssueBlockerResumeDiagnosis(input: {
+  issue: IssueBlockerDiagnosticIssueSummary;
+  raw: IssueBlockerDiagnosticReadableIssue;
+  now?: number;
+}): IssueBlockerDiagnosticResume | null {
+  const { issue, raw } = input;
+  if (issue.status !== "blocked") return null;
+  if (!issue.assigneeAgentId || issue.assigneeUserId) return null;
+  if (hasArmedMonitor(raw)) return null;
+
+  const label = blockerDiagnosticLabel(issue);
+  const resumeAt = firstResumeInstantNamedInAction(raw.unblockDescriptor?.action);
+  const now = input.now ?? Date.now();
+  const detail = (() => {
+    if (!resumeAt) {
+      return `${label} is blocked on an agent-owned card with no armed monitor and its unblock action names no instant, so nothing will wake it again. Arm a monitor (executionPolicy.monitor.nextCheckAt) or hand it to a human.`;
+    }
+    const parsed = Date.parse(resumeAt);
+    if (parsed <= now) {
+      return `${label} is blocked on an agent-owned card with no armed monitor; its unblock action names ${resumeAt}, which has already passed, so nothing will wake it.`;
+    }
+    return `${label} is blocked on an agent-owned card with no armed monitor; its unblock action names ${resumeAt} but nothing is scheduled to wake it then. Arm a monitor (executionPolicy.monitor.nextCheckAt) on this card if that date is a gate.`;
+  })();
+
+  return { code: "will_not_resume_on_its_own", detail, resumeAt };
 }
 
 function buildIssueBlockerDiagnosticsResponse(input: {
@@ -1025,6 +1104,7 @@ function buildIssueBlockerDiagnosticsResponse(input: {
       truncated: input.truncated,
       maxBlockers: input.maxBlockers ?? ISSUE_BLOCKER_DIAGNOSTICS_MAX_BLOCKERS,
     }),
+    resume: buildIssueBlockerResumeDiagnosis({ issue, raw: input.issue }),
     readiness,
     blockers,
     omittedUnauthorizedBlockerCount: reportedOmittedUnauthorizedBlockerCount,
@@ -1395,6 +1475,7 @@ function buildIssueWakeDiagnosticsResponse(input: {
   return {
     issue,
     diagnosis,
+    resume: input.blockerDiagnostics.resume,
     likelyReason: diagnosis,
     events,
     wakeRequestCount: input.wakeRequests.length,
@@ -4173,10 +4254,52 @@ export function issueRoutes(
     return false;
   }
 
-  async function rejectTaskWatchdogConfigMutation(req: Request, res: Response) {
+  type ResolvedTaskWatchdogMutationScope = Awaited<
+    ReturnType<typeof resolveTaskWatchdogMutationScope>
+  >;
+
+  /**
+   * A watchdog run may supersede the gate text on the watchdog record it owns
+   * ("refuse to correct stale gate text" was the defect): same record it was
+   * dispatched for, same watchdog agent, instructions only. Reassigning the
+   * watchdog agent, nesting a new watchdog, or touching any other record all
+   * stay refused.
+   */
+  function taskWatchdogRunSupersedesOwnGateText(input: {
+    scope: ResolvedTaskWatchdogMutationScope;
+    issueId: string;
+    body: { agentId?: unknown; instructions?: unknown } | undefined;
+    actorAgentId: string | null | undefined;
+  }): boolean {
+    if (input.scope.kind !== "watchdog") return false;
+    if (input.issueId !== input.scope.watchedIssueId) return false;
+    if (!input.actorAgentId || input.body?.agentId !== input.actorAgentId) return false;
+    return typeof input.body?.instructions !== "undefined";
+  }
+
+  async function rejectTaskWatchdogConfigMutation(
+    req: Request,
+    res: Response,
+    opts: {
+      scope?: ResolvedTaskWatchdogMutationScope;
+      issueId?: string;
+      allowOwnGateTextSupersede?: boolean;
+    } = {},
+  ) {
     if (req.actor.type !== "agent") return false;
-    const scope = await resolveTaskWatchdogMutationScope(db, req.actor);
+    const scope = opts.scope ?? await resolveTaskWatchdogMutationScope(db, req.actor);
     if (scope.kind !== "watchdog") return false;
+    if (
+      opts.allowOwnGateTextSupersede &&
+      taskWatchdogRunSupersedesOwnGateText({
+        scope,
+        issueId: opts.issueId ?? "",
+        body: req.body,
+        actorAgentId: req.actor.agentId,
+      })
+    ) {
+      return false;
+    }
     res.status(403).json({
       error: "Task-watchdog runs cannot change watchdog configuration.",
       details: {
@@ -6299,6 +6422,13 @@ export function issueRoutes(
       q: req.query.q as string | undefined,
     } as const;
 
+    // The resume sweep is a structural company-scope tally of the R4 shape
+    // (blocked, agent-owned, no armed monitor). A `q` text query narrows `count`
+    // through the comment/doc scan in countBlockedInboxIssues, which the sweep
+    // cannot reproduce in one aggregate, so a narrowed read omits the sweep
+    // instead of reporting totals that disagree with the count beside them.
+    const emitResumeSweep = !blockedCountFilters.q?.trim();
+
     if (!(await actorCanReadCompanyScope(req, companyId))) {
       const trustResolution = req.actor.type === "agent"
         ? await resolveAgentTrustForIssue({
@@ -6310,11 +6440,20 @@ export function issueRoutes(
         throw forbidden(trustResolution.detail);
       }
       if (trustResolution?.kind === "low_trust_review") {
-        const count = await svc.count(companyId, {
+        // Boundary-scoped, not company-wide: the sweep rides the same low-trust
+        // boundary condition as the count, so a low-trust actor never sees the
+        // whole company's R4 totals.
+        const boundaryFilters = {
           ...blockedCountFilters,
           lowTrustBoundary: trustResolution.boundary,
-        });
-        res.json({ count });
+        };
+        const [count, resumeSweep] = await Promise.all([
+          svc.count(companyId, boundaryFilters),
+          emitResumeSweep
+            ? countBlockerResumeSweepDirect(db, companyId, boundaryFilters)
+            : Promise.resolve(null),
+        ]);
+        res.json({ count, ...(resumeSweep ? { resumeSweep } : {}) });
         return;
       }
 
@@ -6330,12 +6469,19 @@ export function issueRoutes(
         if (rows.length < ISSUE_LIST_MAX_LIMIT) break;
         offset += rows.length;
       }
+      // This path filters row by row for the actor, so a sweep would need the
+      // same per-issue walk. Omit it rather than guess at a scope.
       res.json({ count: visibleCount });
       return;
     }
 
-    const count = await svc.count(companyId, blockedCountFilters);
-    res.json({ count });
+    const [count, resumeSweep] = await Promise.all([
+      svc.count(companyId, blockedCountFilters),
+      emitResumeSweep
+        ? countBlockerResumeSweepDirect(db, companyId, blockedCountFilters)
+        : Promise.resolve(null),
+    ]);
+    res.json({ count, ...(resumeSweep ? { resumeSweep } : {}) });
   });
 
   router.get("/companies/:companyId/labels", async (req, res) => {
@@ -6779,8 +6925,22 @@ export function issueRoutes(
     if (!issue) return;
     if (!(await assertIssueReadAllowed(req, res, issue))) return;
     if (!(await assertAgentIssueMutationAllowed(req, res, issue))) return;
-    if (await rejectTaskWatchdogConfigMutation(req, res)) return;
     if (await assertLowTrustControlPlaneDenied(req, res, issue.companyId, issue)) return;
+
+    const watchdogScope = await resolveTaskWatchdogMutationScope(db, req.actor);
+    const supersedesOwnGateText = taskWatchdogRunSupersedesOwnGateText({
+      scope: watchdogScope,
+      issueId: issue.id,
+      body: req.body,
+      actorAgentId: req.actor.agentId,
+    });
+    if (
+      await rejectTaskWatchdogConfigMutation(req, res, {
+        scope: watchdogScope,
+        issueId: issue.id,
+        allowOwnGateTextSupersede: true,
+      })
+    ) return;
 
     const actor = getActorInfo(req);
     const existingWatchdog = await taskWatchdogsSvc.getActiveForIssue(issue.companyId, issue.id);
@@ -6808,6 +6968,11 @@ export function issueRoutes(
         watchdogId: watchdog.id,
         watchdogAgentId: watchdog.watchdogAgentId,
         instructionsChanged: (existingWatchdog?.instructions ?? null) !== (watchdog.instructions ?? null),
+        // True when the watchdog run itself superseded its own gate text; the
+        // before/after pair is kept here because the record only stores the new
+        // instructions.
+        gateTextSupersededByWatchdogRun: supersedesOwnGateText,
+        previousInstructions: supersedesOwnGateText ? existingWatchdog?.instructions ?? null : undefined,
       },
     });
     await queueTaskWatchdogEvaluation(issue, actor.runId);

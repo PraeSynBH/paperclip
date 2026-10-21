@@ -104,7 +104,9 @@ describeEmbeddedPostgres("issue list parentIssueId query alias", () => {
 
   it("filters the blocked count by ?parentIssueId=", async () => {
     const seeded = await seed();
-    expect(await blockedCount(seeded, { parentIssueId: seeded.parentId })).toEqual({ count: 1 });
+    // `resumeSweep` is an additive field on this response (PRA-6709); the count
+    // contract this test pins is unchanged.
+    expect(await blockedCount(seeded, { parentIssueId: seeded.parentId })).toMatchObject({ count: 1 });
   });
 
   it("returns the same blocked count for both spellings", async () => {

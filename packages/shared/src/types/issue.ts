@@ -252,9 +252,41 @@ export interface IssueBlockerDiagnosticsReadiness {
   pendingFinalizeBlockerCount: number;
 }
 
+/**
+ * Diagnosis for the "R4" shape: a blocked issue that an agent owns, that has no
+ * armed monitor, so no wall clock event and no board action path will ever move
+ * it again. Reported separately from `diagnosis` so readers can branch on the
+ * code instead of matching prose.
+ */
+export type IssueBlockerDiagnosticResumeCode = "will_not_resume_on_its_own";
+
+export interface IssueBlockerDiagnosticResume {
+  code: IssueBlockerDiagnosticResumeCode;
+  detail: string;
+  /** Instant named in the unblock action text, if it names one. */
+  resumeAt: string | null;
+}
+
+/**
+ * Company-scope tally of the "R4" shape above, so a board header can say
+ * "N cards will never resume" without walking issues one by one.
+ *
+ * The counts nest: `withoutMonitor` ⊆ `blockedAgentOwned`, `withNamedInstant` ⊆
+ * `withoutMonitor`, `withFutureInstant` ⊆ `withNamedInstant`. `withFutureInstant`
+ * counts cards whose earliest named instant (the per-card `resumeAt`) is still
+ * ahead of the sweep time; nothing is scheduled to wake them at that instant.
+ */
+export interface IssueBlockerResumeSweep {
+  blockedAgentOwned: number;
+  withoutMonitor: number;
+  withNamedInstant: number;
+  withFutureInstant: number;
+}
+
 export interface IssueBlockerDiagnosticsResponse {
   issue: IssueBlockerDiagnosticIssueSummary;
   diagnosis: string | null;
+  resume: IssueBlockerDiagnosticResume | null;
   readiness: IssueBlockerDiagnosticsReadiness | null;
   blockers: IssueBlockerDiagnosticNode[];
   omittedUnauthorizedBlockerCount: number | null;
@@ -302,6 +334,8 @@ export type IssueWakeDiagnosticEvent =
 export interface IssueWakeDiagnosticsResponse {
   issue: IssueBlockerDiagnosticIssueSummary;
   diagnosis: string | null;
+  /** Same shape-level diagnosis as `diagnostics/blockers`, so wake readers see it too. */
+  resume: IssueBlockerDiagnosticResume | null;
   likelyReason: string | null;
   events: IssueWakeDiagnosticEvent[];
   wakeRequestCount: number;
