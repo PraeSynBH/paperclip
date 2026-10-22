@@ -173,6 +173,12 @@ import { createToolGatewayService } from "./tool-gateway.js";
 import { toolAccessService } from "./tool-access.js";
 import { visibleIssueCondition } from "./issue-visibility.js";
 import { ISSUE_BLOCKERS_RESOLVED_WAKE_REASON } from "./issue-dependency-wakeups.js";
+// PRA-6499: queued runs must be reaped by age and coalesced per (agent, issue).
+import {
+  classifyQueuedRunBackpressure,
+  resolveQueuedRunReapBoundSec,
+  type QueuedRunBackpressureDecision,
+} from "./queued-run-backpressure.js";
 import {
   buildIssueMonitorClearedPatch,
   buildIssueMonitorTriggeredPatch,
@@ -14031,6 +14037,101 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     }
   }
 
+  // PRA-6499: age-reap + per-(agent, issue) coalesce for queued runs.
+  //
+  // `claimQueuedRun` -> `evaluateQueuedRunStaleness` cancels a queued row only when
+  // the *issue* went stale (terminal, reassigned, blocked, review participant
+  // changed). A queued row for an issue that is still assigned, open and unblocked is
+  // never stale by that definition, so on a single-slot agent with a permanently
+  // occupied slot the backlog grows without bound: measured 30 rows / oldest 12.6 h on
+  // 2026-10-19, 19 rows / oldest 2 h on 2026-10-20, every row startedAt: null. Resume
+  // sweeps cannot help either: they call startNextQueuedRunForAgent, which returns at
+  // the slot gate.
+  //
+  // The sweep is bookkeeping only (one select, one conditional update per row, no
+  // agent turn), so like the staleness sweep it runs before the slot gate.
+  async function enforceQueuedRunBackpressureForAgent(
+    agentId: string,
+    policy: { intervalSec?: number | null } | null | undefined,
+    cutoff?: Date | null,
+  ) {
+    const boundSec = resolveQueuedRunReapBoundSec(policy?.intervalSec);
+    const queued = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(
+        and(
+          eq(heartbeatRuns.agentId, agentId),
+          eq(heartbeatRuns.status, "queued"),
+          cutoff ? gte(heartbeatRuns.createdAt, cutoff) : undefined,
+        ),
+      );
+    if (queued.length === 0) return { reaped: 0, superseded: 0 };
+
+    const verdict = classifyQueuedRunBackpressure({ rows: queued, now: new Date(), boundSec });
+    let reaped = 0;
+    let superseded = 0;
+    for (const decision of [...verdict.reap, ...verdict.supersede]) {
+      const cancelled = await cancelQueuedRunForBackpressure(decision, boundSec);
+      if (!cancelled) continue;
+      if (decision.errorCode === "queued_run_expired") reaped += 1;
+      else superseded += 1;
+    }
+    if (reaped > 0 || superseded > 0) {
+      logger.info(
+        { agentId, reaped, superseded, boundSec },
+        "enforceQueuedRunBackpressureForAgent: reaped/coalesced queued heartbeat runs",
+      );
+    }
+    return { reaped, superseded };
+  }
+
+  // Terminal shape mirrors cancelQueuedRunForBlockedDependencies: cancelled run,
+  // skipped wakeup, named errorCode + resultJson stopReason, one lifecycle event.
+  // The update is a compare-and-set on status='queued', so a run that another path
+  // claimed in the meantime keeps its real outcome instead of being overwritten.
+  async function cancelQueuedRunForBackpressure(
+    decision: QueuedRunBackpressureDecision,
+    boundSec: number,
+  ) {
+    const now = new Date();
+    const write = await setRunStatusFromLive(decision.runId, "cancelled", ["queued"], {
+      finishedAt: now,
+      error: decision.reason,
+      errorCode: decision.errorCode,
+      resultJson: {
+        stopReason: decision.errorCode,
+        queuedAgeSec: decision.ageSec,
+        queueReapBoundSec: boundSec,
+        effectiveTimeoutSec: 0,
+        timeoutConfigured: false,
+        timeoutSource: "queued_run_backpressure",
+        timeoutFired: false,
+      },
+    });
+    if (!write.updated || !write.run) return null;
+    const cancelled = write.run;
+
+    await setWakeupStatus(decision.wakeupRequestId, "skipped", {
+      finishedAt: now,
+      error: decision.reason,
+    });
+
+    await appendRunEvent(cancelled, await nextRunEventSeq(cancelled.id), {
+      eventType: "lifecycle",
+      stream: "system",
+      level: "warn",
+      message: decision.reason,
+      payload: {
+        issueId: decision.issueId ?? null,
+        errorCode: decision.errorCode,
+        queuedAgeSec: decision.ageSec,
+      },
+    });
+
+    return cancelled;
+  }
+
   async function startNextQueuedRunForAgent(agentId: string) {
     if ((await getSchedulingSuppression()).suppressed) return [];
     const cutoff = await getWorktreeExecutionCutoff();
@@ -14046,6 +14147,9 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         return [];
       }
       const policy = parseHeartbeatPolicy(agent);
+      // PRA-6499: age-reap + per-(agent, issue) coalesce runs before the slot gate,
+      // otherwise a saturated single-slot agent never reaches it.
+      await enforceQueuedRunBackpressureForAgent(agentId, policy, cutoff);
       const runningCount = await countRunningRunsForAgent(agentId);
       const availableSlots = Math.max(0, policy.maxConcurrentRuns - runningCount);
       if (availableSlots <= 0) return [];

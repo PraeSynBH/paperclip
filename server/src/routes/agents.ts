@@ -61,6 +61,8 @@ import {
 } from "../services/index.js";
 import { badRequest, conflict, forbidden, HttpError, notFound, unprocessable } from "../errors.js";
 import { PAPERCLIP_CORE_SKILL_KEYS } from "../services/company-skills.js";
+// PRA-6499: per-agent heartbeat queue depth/age, readable without per-row client filtering.
+import { resolveQueuedRunReapBoundSec, summariseAgentQueue } from "../services/queued-run-backpressure.js";
 import { createRunSecretRedactionRegistry } from "../services/run-secret-redaction.js";
 import { assertAuthenticated, assertBoard, assertCompanyAccess, assertInstanceAdmin, buildActorSecretContext, getAccessibleResource, getActorInfo, hasCompanyAccess } from "./authz.js";
 import { runAdapterLoginStartSpine } from "./adapter-login-route-spine.js";
@@ -5108,6 +5110,84 @@ export function agentRoutes(
     const summary = req.query.summary === "true" || req.query.summary === "1";
     const runs = await heartbeat.list(companyId, agentId, limit, { summary });
     res.json(await Promise.all(runs.map((run) => runRedactions.redactForRun(companyId, run.id, run))));
+  });
+
+  // PRA-6499 (expose): per-agent queued-run depth and age, so a single-slot agent
+  // sitting on 30 never-started rows is visible in one call instead of reading 120
+  // run rows and filtering by hand. `?agentId=` narrows to one agent.
+  router.get("/companies/:companyId/heartbeat-queue", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    assertCompanyAccess(req, companyId);
+    const agentIdFilter =
+      typeof req.query.agentId === "string" && req.query.agentId.trim().length > 0
+        ? req.query.agentId.trim()
+        : null;
+
+    const rows = await db
+      .select({
+        id: heartbeatRuns.id,
+        agentId: heartbeatRuns.agentId,
+        status: heartbeatRuns.status,
+        startedAt: heartbeatRuns.startedAt,
+        createdAt: heartbeatRuns.createdAt,
+        contextSnapshot: heartbeatRuns.contextSnapshot,
+      })
+      .from(heartbeatRuns)
+      .where(
+        and(
+          eq(heartbeatRuns.companyId, companyId),
+          inArray(heartbeatRuns.status, ["queued", "running"]),
+          agentIdFilter ? eq(heartbeatRuns.agentId, agentIdFilter) : undefined,
+        ),
+      );
+
+    const agentRows = await db
+      .select({ id: agentsTable.id, name: agentsTable.name, runtimeConfig: agentsTable.runtimeConfig })
+      .from(agentsTable)
+      .where(
+        and(
+          eq(agentsTable.companyId, companyId),
+          agentIdFilter ? eq(agentsTable.id, agentIdFilter) : undefined,
+        ),
+      );
+
+    const rowsByAgent = new Map<string, typeof rows>();
+    for (const row of rows) {
+      const bucket = rowsByAgent.get(row.agentId);
+      if (bucket) bucket.push(row);
+      else rowsByAgent.set(row.agentId, [row]);
+    }
+
+    const now = new Date();
+    const agentsSummary = agentRows
+      .map((agent) => {
+        const heartbeat = parseObject(parseObject(agent.runtimeConfig).heartbeat);
+        const intervalSec = Math.max(0, Number(heartbeat.intervalSec) || 0);
+        const maxConcurrentRuns = Math.max(1, Math.floor(Number(heartbeat.maxConcurrentRuns) || 1));
+        return summariseAgentQueue({
+          agentId: agent.id,
+          agentName: agent.name,
+          maxConcurrentRuns,
+          intervalSec,
+          rows: rowsByAgent.get(agent.id) ?? [],
+          now,
+          boundSec: resolveQueuedRunReapBoundSec(intervalSec),
+        });
+      })
+      // Agents with nothing queued and nothing running carry no signal here.
+      .filter((entry) => entry.queueDepth > 0 || entry.runningCount > 0)
+      .sort(
+        (left, right) =>
+          right.queueDepth - left.queueDepth || right.oldestAgeSec - left.oldestAgeSec,
+      );
+
+    res.json({
+      companyId,
+      generatedAt: now.toISOString(),
+      totalQueued: agentsSummary.reduce((sum, entry) => sum + entry.queueDepth, 0),
+      totalRunning: agentsSummary.reduce((sum, entry) => sum + entry.runningCount, 0),
+      agents: agentsSummary,
+    });
   });
 
   router.get("/companies/:companyId/live-runs", async (req, res) => {

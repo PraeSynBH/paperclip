@@ -702,6 +702,28 @@ On server startup:
    - reads full log stream via `RunLogStore` (or redirects/presigned URL for object store)
 8. `GET /api/companies/:companyId/events/ws`
    - websocket stream
+9. `GET /api/companies/:companyId/heartbeat-queue[?agentId=]` (PRA-6499)
+   - per-agent `queueDepth`, `runningCount`, `oldestQueuedAt`/`oldestAge`, `neverStartedCount`,
+     `overBoundCount`, `reapBoundSec`, `saturated`, `queuedByIssue`, so a saturated agent's
+     never-started backlog is readable in one call instead of by filtering run rows.
+
+## 13.1.1 Queued-run backpressure
+
+A `queued` row whose issue is still assigned, open and unblocked is never stale by the
+issue-state staleness rules, so on a single-slot agent it is immortal. Every drain path
+(`claimQueuedRun`, `resumeQueuedRuns` -> `startNextQueuedRunForAgent`) returns at the slot
+gate, so the backlog grows without bound and is replayed at the host when the slot frees.
+
+`enforceQueuedRunBackpressureForAgent` runs inside `startNextQueuedRunForAgent` **before** the
+slot gate (bookkeeping only: one select, one conditional update per row, no agent turn) and
+applies two rules from `services/queued-run-backpressure.ts`:
+
+1. Reap — a queued row that never started and is older than `max(2 x heartbeat.intervalSec, 1h)`
+   is cancelled with `error_code=queued_run_expired`.
+2. Coalesce — at most one queued row per `(agent, issue)` survives; older duplicates are
+   cancelled with `error_code=superseded_by_newer_wake`. Issue-less (timer) wakes group per agent.
+3. Reap is evaluated before coalesce, and both cancellations are a compare-and-set on
+   `status='queued'`, so a run another path claimed keeps its real outcome.
 
 ## 13.2 Mutation logging
 
