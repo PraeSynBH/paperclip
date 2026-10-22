@@ -1112,12 +1112,14 @@ export async function createApp(
   // uptime monitor, so it answers before the `/api` router.
   app.get("/api/diagnostics/api-base-rewrites", (req, res) => {
     res.set("Cache-Control", "no-store");
-    // An actor without an operator or agent identity gets counts and alarm state
-    // only: no ledger path, no request paths, no company ids.
+    // Board access is the operator context for this instance. An agent is scoped
+    // to its own company, and this payload is cross-company (request paths and the
+    // last company id), so an agent gets the counts-only view. So does an
+    // anonymous caller.
     res.json(
-      req.actor?.type === "none"
-        ? apiBaseRewrites.publicSnapshot()
-        : apiBaseRewrites.snapshot(),
+      req.actor?.type === "board"
+        ? apiBaseRewrites.snapshot()
+        : apiBaseRewrites.publicSnapshot(),
     );
   });
   app.use("/api", api);
