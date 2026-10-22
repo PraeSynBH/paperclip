@@ -1111,14 +1111,14 @@ export async function createApp(
   // Read-only counts and paths (no request bodies); polled by the instance's
   // uptime monitor, so it answers before the `/api` router.
   app.get("/api/diagnostics/api-base-rewrites", (req, res) => {
-    const snapshot = apiBaseRewrites.snapshot();
     res.set("Cache-Control", "no-store");
-    // Anonymous callers get the counts they need and not the last company id.
-    if (req.actor?.type === "none") {
-      res.json({ ...snapshot, rescues: { ...snapshot.rescues, lastCompanyId: null } });
-      return;
-    }
-    res.json(snapshot);
+    // An actor without an operator or agent identity gets counts and alarm state
+    // only: no ledger path, no request paths, no company ids.
+    res.json(
+      req.actor?.type === "none"
+        ? apiBaseRewrites.publicSnapshot()
+        : apiBaseRewrites.snapshot(),
+    );
   });
   app.use("/api", api);
   app.use("/api", (_req, res) => {

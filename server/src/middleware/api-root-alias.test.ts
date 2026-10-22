@@ -206,7 +206,7 @@ describe("api-root-alias guard", () => {
       createShorthandUnresolvedSinceStart: 1,
       totalSinceStart: 4,
       byPathSinceStart: { "/issues": 2, "/api/issues": 2, "/issues/abc/comments": 1 },
-      byMethodSinceStart: { POST: 1 },
+      byMethodSinceStart: { POST: 5 },
       lastPath: "/issues/abc/comments",
       lastKind: "root-alias",
       lastCompanyId: "c1",
@@ -266,6 +266,35 @@ describe("api-root-alias guard", () => {
     expect(alarm.threshold).toBe(5);
     expect(alarm.windowMinutes).toBe(10);
     expect(alarm.lastAlarmAt).toBe(new Date(now).toISOString());
+
+    // The alarm tracks the window, so it clears once the burst ages out. The
+    // repeat-suppression timestamp stays, so the next burst can alarm again.
+    now += 11 * 60 * 1000;
+    const cleared = clocked.guard.snapshot().alarm;
+    expect(cleared.active).toBe(false);
+    expect(cleared.lastAlarmAt).toBe(new Date(Date.parse(alarm.lastAlarmAt ?? "")).toISOString());
+  });
+
+  it("serves a redacted snapshot to callers without an operator actor", async () => {
+    await request(ctx.app).post("/issues").send({ companyId: "c0", title: "t" });
+
+    const full = ctx.guard.snapshot();
+    expect(full.ledgerPath).toBe(ctx.ledgerPath);
+    expect(full.rescues.byPathSinceStart).toEqual({ "/issues": 1 });
+    expect(full.rescues.lastCompanyId).toBe("c0");
+
+    const publicView = ctx.guard.publicSnapshot();
+    expect(publicView.rescues).toMatchObject({
+      totalSinceStart: 1,
+      createShorthandSinceStart: 1,
+      last24h: 1,
+    });
+    expect(publicView).not.toHaveProperty("ledgerPath");
+    expect(publicView.rescues).not.toHaveProperty("byPathSinceStart");
+    expect(publicView.rescues).not.toHaveProperty("byPathLast24h");
+    expect(publicView.rescues).not.toHaveProperty("lastCompanyId");
+    expect(publicView.rescues).not.toHaveProperty("lastPath");
+    expect(publicView.canonicalCreateRoute).toBe("POST /api/companies/{companyId}/issues");
   });
 
   it("does not raise the alarm when the fifth hit falls outside the window", async () => {

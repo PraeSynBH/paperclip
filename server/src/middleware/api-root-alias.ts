@@ -74,9 +74,19 @@ const ALARM_THRESHOLD = 5;
 const ALARM_REPEAT_MS = 30 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
-// The ledger is the only durable history; bound the rows we re-read per snapshot
-// so a pathological day cannot make the diagnostics endpoint read forever.
+// The ledger is the only durable history. Both ends are bounded so the
+// diagnostics endpoint cannot become an amplification path: a snapshot reads at
+// most the last LEDGER_TAIL_BYTES of the file (then at most LEDGER_MAX_LINES
+// rows), and the file itself is compacted back to LEDGER_COMPACT_KEEP_LINES once
+// it passes LEDGER_COMPACT_BYTES.
 const LEDGER_MAX_LINES = 20000;
+const LEDGER_TAIL_BYTES = 1 << 20;
+const LEDGER_COMPACT_BYTES = 4 << 20;
+const LEDGER_COMPACT_EVERY = 500;
+const LEDGER_COMPACT_KEEP_LINES = 20000;
+// At most one ledger read per second; the in-memory counters stay live for every
+// request, so a caller cannot turn polling into disk work.
+const LEDGER_READ_THROTTLE_MS = 1000;
 
 export type ApiBaseRewriteKind =
   | "root-alias"
@@ -123,6 +133,26 @@ export interface ApiBaseRewriteSnapshot {
   canonicalCreateRoute: string;
 }
 
+/**
+ * The subset served to callers without an operator actor: counts and alarm state
+ * only. No ledger path, request paths or company ids.
+ */
+export interface PublicApiBaseRewriteSnapshot {
+  ok: true;
+  generatedAt: string;
+  rescues: {
+    totalSinceStart: number;
+    rootAliasSinceStart: number;
+    createShorthandSinceStart: number;
+    createShorthandUnresolvedSinceStart: number;
+    lastHour: number;
+    last24h: number;
+    windowCount: number;
+  };
+  alarm: ApiBaseRewriteSnapshot["alarm"];
+  canonicalCreateRoute: string;
+}
+
 export interface ApiBaseRewriteGuardOptions {
   /** Overrides the ledger location; defaults to `<paperclip home>/state/api-base-rewrites.jsonl`. */
   ledgerPath?: string;
@@ -135,8 +165,10 @@ export interface ApiBaseRewriteGuardOptions {
 export interface ApiBaseRewriteGuard {
   /** Express middleware; mount it at the app root BEFORE `app.use("/api", api)`. */
   guard: (req: Request, res: Response, next: NextFunction) => void;
-  /** The payload served on `GET /api/diagnostics/api-base-rewrites`. */
+  /** The payload served on `GET /api/diagnostics/api-base-rewrites` to operators. */
   snapshot: () => ApiBaseRewriteSnapshot;
+  /** The redacted payload served to callers without an operator actor. */
+  publicSnapshot: () => PublicApiBaseRewriteSnapshot;
 }
 
 interface BudgetedMap {
@@ -169,6 +201,14 @@ function stripCompanyIdFromQuery(rawQuery: string): string {
   return serialized ? `?${serialized}` : "";
 }
 
+function mergeCounts(...maps: Array<Map<string, number>>): Record<string, number> {
+  const merged: Record<string, number> = {};
+  for (const map of maps) {
+    for (const [key, count] of map) merged[key] = (merged[key] ?? 0) + count;
+  }
+  return merged;
+}
+
 function stringField(value: unknown, key: string): string | undefined {
   if (!value || typeof value !== "object") return undefined;
   const candidate = (value as Record<string, unknown>)[key];
@@ -189,7 +229,12 @@ export function createApiBaseRewriteGuard(
   const nowMs = options.now ?? Date.now;
 
   const rootAliases: BudgetedMap = { total: 0, byPath: new Map(), byMethod: new Map() };
-  const createShorthands = { total: 0, unresolved: 0, byPath: new Map<string, number>() };
+  const createShorthands: BudgetedMap & { unresolved: number } = {
+    total: 0,
+    unresolved: 0,
+    byPath: new Map(),
+    byMethod: new Map(),
+  };
   const state: {
     firstSeenAt: string | null;
     lastSeenAt: string | null;
@@ -198,9 +243,10 @@ export function createApiBaseRewriteGuard(
     lastKind: ApiBaseRewriteKind | null;
     lastCompanyId: string | null;
     windowHits: number[];
-    alarmActive: boolean;
     lastAlarmAt: string | null;
     ledgerWarned: boolean;
+    appendsSinceCompact: number;
+    ledgerCache: { at: number; lastHour: ApiBaseRewriteLedgerCounts; last24h: ApiBaseRewriteLedgerCounts } | null;
   } = {
     firstSeenAt: null,
     lastSeenAt: null,
@@ -209,15 +255,108 @@ export function createApiBaseRewriteGuard(
     lastKind: null,
     lastCompanyId: null,
     windowHits: [],
-    alarmActive: false,
     lastAlarmAt: null,
     ledgerWarned: false,
+    appendsSinceCompact: 0,
+    ledgerCache: null,
   };
+
+  function emptyCounts(): ApiBaseRewriteLedgerCounts {
+    return { count: 0, byPath: {}, createShorthands: 0, unresolvedShorthands: 0 };
+  }
+
+  /**
+   * Reads at most the tail of the ledger as text, dropping a partial first line
+   * when the tail starts mid-row. A caller that can append rows therefore cannot
+   * make a snapshot read more than LEDGER_TAIL_BYTES.
+   */
+  function readLedgerTailLines(): string[] {
+    try {
+      const size = fs.statSync(ledgerPath).size;
+      if (size === 0) return [];
+      const start = Math.max(0, size - LEDGER_TAIL_BYTES);
+      const length = size - start;
+      const buffer = Buffer.alloc(length);
+      const fd = fs.openSync(ledgerPath, "r");
+      try {
+        fs.readSync(fd, buffer, 0, length, start);
+      } finally {
+        fs.closeSync(fd);
+      }
+      let text = buffer.toString("utf8");
+      if (start > 0) {
+        const firstNewline = text.indexOf("\n");
+        text = firstNewline === -1 ? "" : text.slice(firstNewline + 1);
+      }
+      return text.split("\n").filter(Boolean).slice(-LEDGER_MAX_LINES);
+    } catch {
+      return [];
+    }
+  }
+
+  // One pass over the tail fills both windows, so the endpoint never reads the
+  // ledger twice. Results are reused for LEDGER_READ_THROTTLE_MS.
+  function readLedgerWindows(now: number): {
+    lastHour: ApiBaseRewriteLedgerCounts;
+    last24h: ApiBaseRewriteLedgerCounts;
+  } {
+    if (state.ledgerCache && now - state.ledgerCache.at < LEDGER_READ_THROTTLE_MS) {
+      return { lastHour: state.ledgerCache.lastHour, last24h: state.ledgerCache.last24h };
+    }
+    const hourStart = now - HOUR_MS;
+    const dayStart = now - DAY_MS;
+    const lastHour = emptyCounts();
+    const last24h = emptyCounts();
+    for (const line of readLedgerTailLines()) {
+      let record: Record<string, unknown>;
+      try {
+        record = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      const ts = Date.parse(typeof record.ts === "string" ? record.ts : "");
+      if (!Number.isFinite(ts) || ts < dayStart) continue;
+      const inHour = ts >= hourStart;
+      for (const bucket of inHour ? [last24h, lastHour] : [last24h]) {
+        bucket.count += 1;
+        if (record.kind === "create-shorthand") bucket.createShorthands += 1;
+        if (record.kind === "create-shorthand-unresolved") bucket.unresolvedShorthands += 1;
+        if (typeof record.path === "string") {
+          bucket.byPath[record.path] = (bucket.byPath[record.path] ?? 0) + 1;
+        }
+      }
+    }
+    state.ledgerCache = { at: now, lastHour, last24h };
+    return { lastHour, last24h };
+  }
+
+  /**
+   * Keeps the ledger file bounded. Compaction is checked at most once every
+   * LEDGER_COMPACT_EVERY appends and rewrites the file to its last
+   * LEDGER_COMPACT_KEEP_LINES rows through a temp file plus rename, so a reader
+   * never sees a partial ledger.
+   */
+  function maybeCompactLedger(): void {
+    state.appendsSinceCompact += 1;
+    if (state.appendsSinceCompact < LEDGER_COMPACT_EVERY) return;
+    state.appendsSinceCompact = 0;
+    try {
+      if (fs.statSync(ledgerPath).size <= LEDGER_COMPACT_BYTES) return;
+      const keep = readLedgerTailLines().slice(-LEDGER_COMPACT_KEEP_LINES);
+      const tmpPath = `${ledgerPath}.compact`;
+      fs.writeFileSync(tmpPath, keep.length ? `${keep.join("\n")}\n` : "");
+      fs.renameSync(tmpPath, ledgerPath);
+      state.ledgerCache = null;
+    } catch {
+      // Compaction is best effort; the counters are unaffected.
+    }
+  }
 
   function appendLedger(entry: Record<string, unknown>): void {
     try {
       fs.mkdirSync(path.dirname(ledgerPath), { recursive: true });
       fs.appendFileSync(ledgerPath, `${JSON.stringify(entry)}\n`);
+      maybeCompactLedger();
     } catch (err) {
       if (!state.ledgerWarned) {
         state.ledgerWarned = true;
@@ -227,39 +366,6 @@ export function createApiBaseRewriteGuard(
         );
       }
     }
-  }
-
-  function readLedgerCounts(sinceMs: number): ApiBaseRewriteLedgerCounts {
-    let lines: string[];
-    try {
-      lines = fs.readFileSync(ledgerPath, "utf8").split("\n").filter(Boolean).slice(-LEDGER_MAX_LINES);
-    } catch {
-      return { count: 0, byPath: {}, createShorthands: 0, unresolvedShorthands: 0 };
-    }
-    let count = 0;
-    let createShorthandRows = 0;
-    let unresolvedShorthandRows = 0;
-    const byPath: Record<string, number> = {};
-    for (const line of lines) {
-      let record: Record<string, unknown>;
-      try {
-        record = JSON.parse(line) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
-      const ts = Date.parse(typeof record.ts === "string" ? record.ts : "");
-      if (!Number.isFinite(ts) || ts < sinceMs) continue;
-      count += 1;
-      if (record.kind === "create-shorthand") createShorthandRows += 1;
-      if (record.kind === "create-shorthand-unresolved") unresolvedShorthandRows += 1;
-      if (typeof record.path === "string") byPath[record.path] = (byPath[record.path] ?? 0) + 1;
-    }
-    return {
-      count,
-      byPath,
-      createShorthands: createShorthandRows,
-      unresolvedShorthands: unresolvedShorthandRows,
-    };
   }
 
   function countHit(
@@ -277,9 +383,11 @@ export function createApiBaseRewriteGuard(
     } else if (kind === "create-shorthand") {
       createShorthands.total += 1;
       createShorthands.byPath.set(pathname, (createShorthands.byPath.get(pathname) ?? 0) + 1);
+      createShorthands.byMethod.set(method, (createShorthands.byMethod.get(method) ?? 0) + 1);
     } else {
       createShorthands.unresolved += 1;
       createShorthands.byPath.set(pathname, (createShorthands.byPath.get(pathname) ?? 0) + 1);
+      createShorthands.byMethod.set(method, (createShorthands.byMethod.get(method) ?? 0) + 1);
     }
     state.firstSeenAt ??= nowIso;
     state.lastSeenAt = nowIso;
@@ -322,7 +430,6 @@ export function createApiBaseRewriteGuard(
       windowCount >= ALARM_THRESHOLD &&
       (state.lastAlarmAt === null || now - Date.parse(state.lastAlarmAt) >= ALARM_REPEAT_MS);
     if (shouldAlarm) {
-      state.alarmActive = true;
       state.lastAlarmAt = new Date(now).toISOString();
       logger.error(
         {
@@ -420,9 +527,9 @@ export function createApiBaseRewriteGuard(
 
   function snapshot(): ApiBaseRewriteSnapshot {
     const now = nowMs();
-    const last24h = readLedgerCounts(now - DAY_MS);
-    const lastHour = readLedgerCounts(now - HOUR_MS);
+    const { lastHour, last24h } = readLedgerWindows(now);
     state.windowHits = state.windowHits.filter((ts) => now - ts <= ALARM_WINDOW_MS);
+    const windowCount = state.windowHits.length;
     return {
       ok: true,
       generatedAt: new Date(now).toISOString(),
@@ -435,13 +542,13 @@ export function createApiBaseRewriteGuard(
         last24h: last24h.count,
         createShorthandLast24h: last24h.createShorthands,
         unresolvedShorthandLast24h: last24h.unresolvedShorthands,
-        byPathSinceStart: {
-          ...Object.fromEntries(rootAliases.byPath),
-          ...Object.fromEntries(createShorthands.byPath),
-        },
-        byMethodSinceStart: Object.fromEntries(rootAliases.byMethod),
+        // Summed, not spread: the same method or path can be rescued as a root
+        // alias and as a create shorthand, and the breakdown must add up to the
+        // reported total.
+        byPathSinceStart: mergeCounts(rootAliases.byPath, createShorthands.byPath),
+        byMethodSinceStart: mergeCounts(rootAliases.byMethod, createShorthands.byMethod),
         byPathLast24h: last24h.byPath,
-        windowCount: state.windowHits.length,
+        windowCount,
         firstSeenAt: state.firstSeenAt,
         lastSeenAt: state.lastSeenAt,
         lastPath: state.lastPath,
@@ -450,7 +557,9 @@ export function createApiBaseRewriteGuard(
         lastCompanyId: state.lastCompanyId,
       },
       alarm: {
-        active: state.alarmActive,
+        // Derived from the current window, so the alarm clears when the burst
+        // ages out instead of staying active until the next restart.
+        active: windowCount >= ALARM_THRESHOLD,
         windowMinutes: ALARM_WINDOW_MS / 60000,
         threshold: ALARM_THRESHOLD,
         lastAlarmAt: state.lastAlarmAt,
@@ -460,5 +569,28 @@ export function createApiBaseRewriteGuard(
     };
   }
 
-  return { guard, snapshot };
+  /**
+   * The payload for callers without an operator actor: the counts an uptime
+   * monitor needs, and none of the server paths, request paths or company ids.
+   */
+  function publicSnapshot(): PublicApiBaseRewriteSnapshot {
+    const full = snapshot();
+    return {
+      ok: true,
+      generatedAt: full.generatedAt,
+      rescues: {
+        totalSinceStart: full.rescues.totalSinceStart,
+        rootAliasSinceStart: full.rescues.rootAliasSinceStart,
+        createShorthandSinceStart: full.rescues.createShorthandSinceStart,
+        createShorthandUnresolvedSinceStart: full.rescues.createShorthandUnresolvedSinceStart,
+        lastHour: full.rescues.lastHour,
+        last24h: full.rescues.last24h,
+        windowCount: full.rescues.windowCount,
+      },
+      alarm: full.alarm,
+      canonicalCreateRoute: full.canonicalCreateRoute,
+    };
+  }
+
+  return { guard, snapshot, publicSnapshot };
 }
