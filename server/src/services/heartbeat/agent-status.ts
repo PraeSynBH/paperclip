@@ -18,6 +18,10 @@ function errorReason(reason: string | null | undefined) {
 }
 
 function settledStatus(outcome: string | undefined, keepIdleOnFailure = false) {
+  // A deferred run was never admitted (the profile's serve-slot ceiling was
+  // full): it is a wait, not a failure, so the agent settles idle and never
+  // takes an error badge with a null reason (PRX-5995).
+  if (outcome === "deferred") return "idle";
   return outcome === "failed" || outcome === "timed_out"
     ? keepIdleOnFailure && outcome === "failed" ? "idle" : "error"
     : "idle";
@@ -89,10 +93,13 @@ export function createHeartbeatAgentStatus(db: Db) {
         eq(heartbeatRuns.agentId, agentId), eq(heartbeatRuns.status, "running"),
       )).limit(1);
       const nextStatus = running ? "running" : settledStatus(outcome, options?.keepIdleOnFailure);
+      // A deferral carries no failure: never let a caller's message (or a stale
+      // run error) paint `error_reason` on a run that never failed (PRX-5995).
+      const failureReasonForStatus = outcome === "deferred" ? null : failureReason;
       const now = new Date();
       const [updated] = await tx.update(agents).set({
         status: nextStatus,
-        errorReason: nextStatus === "error" ? errorReason(failureReason) : null,
+        errorReason: nextStatus === "error" ? errorReason(failureReasonForStatus) : null,
         lastHeartbeatAt: now,
         updatedAt: now,
       }).where(and(eq(agents.id, agentId), eq(agents.companyId, existing.companyId),
