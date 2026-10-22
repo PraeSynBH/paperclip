@@ -6,7 +6,7 @@ import { logActivity, publishActivity, type ActivityPublication } from "../activ
 import { publishLiveEvent } from "../live-events.js";
 import { finishedIdleRun, finishedIdleWake, finishedFailedIdleLease } from "../idle-work-proof.js";
 
-type Outcome = "succeeded" | "interrupted" | "failed" | "cancelled" | "timed_out";
+type Outcome = "succeeded" | "interrupted" | "failed" | "cancelled" | "timed_out" | "deferred";
 
 const RECONCILIATION_GRACE_MS = 5 * 60_000;
 const RECONCILIATION_BATCH_SIZE = 25;

@@ -859,7 +859,13 @@ export function normalizeSessionParams(
 }
 
 export type RunSessionOutcome =
-  "succeeded" | "interrupted" | "failed" | "cancelled" | "timed_out";
+  | "succeeded"
+  | "interrupted"
+  | "failed"
+  | "cancelled"
+  | "timed_out"
+  /** The turn was never admitted (serve-slot ceiling); the run is parked as a wait. */
+  | "deferred";
 
 const HERMES_ADAPTER_TYPE = "hermes_local";
 

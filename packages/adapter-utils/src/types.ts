@@ -114,6 +114,14 @@ export interface AdapterExecutionResult {
   errorCode?: string | null;
   errorFamily?: AdapterExecutionErrorFamily | null;
   retryNotBefore?: string | null;
+  /**
+   * A capacity deferral: the turn was never admitted (a settled serve-slot
+   * ceiling), so the run is a wait, not a failure. `retryAfterS` is the wait the
+   * runtime asked for; `deferredProfile` names the parked profile.
+   */
+  retryAfterS?: number | null;
+  retryable?: boolean;
+  deferredProfile?: string | null;
   errorMeta?: Record<string, unknown>;
   usage?: UsageSummary;
   /** Complete per-model receipts, when supplied by the runtime. Their sums must match the run totals. */

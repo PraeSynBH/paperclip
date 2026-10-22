@@ -1,4 +1,4 @@
-export type HeartbeatRunOutcome = "succeeded" | "interrupted" | "failed" | "cancelled" | "timed_out";
+export type HeartbeatRunOutcome = "succeeded" | "interrupted" | "failed" | "cancelled" | "timed_out" | "deferred";
 
 export type HeartbeatRunStopReason =
   | "completed"
@@ -10,6 +10,8 @@ export type HeartbeatRunStopReason =
   | "max_turns_exhausted"
   | "process_lost"
   | "unmanaged_background_task_stopped"
+  /** The turn was never admitted (serve-slot ceiling); the run is parked as a wait. */
+  | "profile_deferred_capacity"
   | "adapter_failed";
 
 export interface HeartbeatRunTimeoutPolicy {
@@ -86,6 +88,7 @@ export function inferHeartbeatRunStopReason(input: {
 }): HeartbeatRunStopReason {
   if (input.outcome === "succeeded") return "completed";
   if (input.outcome === "interrupted") return "interrupted";
+  if (input.outcome === "deferred") return "profile_deferred_capacity";
   const maxTurnStopReason = normalizeMaxTurnStopReason(input.errorCode);
   if (maxTurnStopReason) return maxTurnStopReason;
   if (input.outcome === "timed_out") return "timeout";
