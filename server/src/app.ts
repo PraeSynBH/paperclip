@@ -222,6 +222,7 @@ import {
 } from "./http/body-limits.js";
 import { COMPANY_IMPORT_API_PATH } from "./routes/company-import-paths.js";
 import { apiCompression } from "./middleware/api-compression.js";
+import { createApiBaseRewriteGuard } from "./middleware/api-root-alias.js";
 import { chatWebhookBodyParser } from "./middleware/chat-webhook-body.js";
 import { createChatWebhookDiagnostics } from "./services/chat-webhook-diagnostics.js";
 
@@ -1099,6 +1100,26 @@ export async function createApp(
 
   api.use(museBoardRoutes(db, opts.authPublicBaseUrl));
   api.use(museQualificationRoutes(db));
+  // Agent reports aimed at the server root or at the natural `POST /issues`
+  // shorthand used to die as opaque text/html 404s, which callers cannot
+  // distinguish from success. Mounted before `/api` so the rewrite happens ahead
+  // of the router, the board mutation guard and every route-level authz check:
+  // the rescued request is still authorized as the canonical one.
+  const apiBaseRewrites = createApiBaseRewriteGuard();
+  app.use(apiBaseRewrites.guard);
+  // The counter that makes a day of rescued reports visible instead of greppable.
+  // Read-only counts and paths (no request bodies); polled by the instance's
+  // uptime monitor, so it answers before the `/api` router.
+  app.get("/api/diagnostics/api-base-rewrites", (req, res) => {
+    const snapshot = apiBaseRewrites.snapshot();
+    res.set("Cache-Control", "no-store");
+    // Anonymous callers get the counts they need and not the last company id.
+    if (req.actor?.type === "none") {
+      res.json({ ...snapshot, rescues: { ...snapshot.rescues, lastCompanyId: null } });
+      return;
+    }
+    res.json(snapshot);
+  });
   app.use("/api", api);
   app.use("/api", (_req, res) => {
     res.status(404).json({ error: "API route not found" });
