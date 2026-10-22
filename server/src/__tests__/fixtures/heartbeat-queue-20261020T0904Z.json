@@ -1,0 +1,1222 @@
+{
+ "note": "PRA-6499 replay fixture: the CTO agent (cccf9a46) heartbeat_runs rows captured live from GET /api/companies/{cid}/heartbeat-runs?limit=200 at 2026-10-20T09:04Z, trimmed to the fields the classifier reads. Source: ~/.paperclip/patches/pra6499-20261020/evidence-heartbeat-runs-20261020T0904Z.json",
+ "capturedAt": "2026-10-20T09:04:00Z",
+ "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+ "runs": [
+  {
+   "id": "0094879c-fa23-4af7-9f47-5be4cd45aa87",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T18:09:39.818Z",
+   "createdAt": "2026-10-19T16:42:32.526Z",
+   "wakeupRequestId": "5f99ee51-6b78-4f82-af10-adf5cf89ba0c",
+   "contextSnapshot": {
+    "issueId": "fc20db4d-dbbb-4c0a-86d9-7825ea3fef6a",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "f27ccdb2-8459-4539-afe0-0075548c6e62",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T18:44:05.285Z",
+   "createdAt": "2026-10-19T16:54:15.235Z",
+   "wakeupRequestId": "edfce011-9492-40a4-bc7f-7691bfc73e44",
+   "contextSnapshot": {
+    "issueId": "81a965b6-a2c5-4d4b-a117-a36cbd22aea0",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "4946bc11-c256-4780-833b-771085913665",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "cancelled",
+   "startedAt": null,
+   "createdAt": "2026-10-19T17:05:39.475Z",
+   "wakeupRequestId": "2777bccd-216a-4182-a92d-fe06e358893d",
+   "contextSnapshot": {
+    "issueId": "7890ee2c-8188-4f42-97d3-3539ceca5446",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "b35ca656-b6e6-403f-819c-6bebb7f15a6b",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T18:16:49.853Z",
+   "createdAt": "2026-10-19T17:27:36.350Z",
+   "wakeupRequestId": "ca285276-6adc-4733-8870-c4910932d503",
+   "contextSnapshot": {
+    "issueId": "c95e02dc-28d4-4d9d-9fb1-d99ef9145317",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "e8894660-b96d-4191-beb9-836d29839f64",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T18:49:05.877Z",
+   "createdAt": "2026-10-19T18:01:08.182Z",
+   "wakeupRequestId": "60b58ca3-0fd7-4722-b303-45b33444dd43",
+   "contextSnapshot": {
+    "issueId": "944c3a0e-c7ba-4763-b806-dda6c03155bf",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "22d6add4-05e0-426c-aead-8ab6602f52e0",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T19:16:09.936Z",
+   "createdAt": "2026-10-19T18:10:51.382Z",
+   "wakeupRequestId": "9751929c-a166-4f11-82b3-67c9c53ea0ef",
+   "contextSnapshot": {
+    "issueId": "996d071c-9b2a-4b52-bf67-5ad1b79b659e",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "830a5d77-69ee-4ce8-8a15-e1d7c87a2c39",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T18:46:27.885Z",
+   "createdAt": "2026-10-19T18:46:27.325Z",
+   "wakeupRequestId": "b7cc3d48-62ad-4c8c-b8c6-a5988520e317",
+   "contextSnapshot": {
+    "issueId": "81a965b6-a2c5-4d4b-a117-a36cbd22aea0",
+    "wakeReason": "missing_issue_comment"
+   }
+  },
+  {
+   "id": "b7fa729e-c599-4c30-ada9-bf0bca39f558",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T20:37:15.791Z",
+   "createdAt": "2026-10-19T18:48:22.290Z",
+   "wakeupRequestId": "a28a16fe-7cfc-4a96-8a42-44f2c0e5dd42",
+   "contextSnapshot": {
+    "issueId": "c0f0386e-a3aa-442f-90dc-9ab80f4fd2af",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "60e985df-4c8e-46d1-b16c-e2c99dd680ec",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T20:39:44.292Z",
+   "createdAt": "2026-10-19T19:26:52.529Z",
+   "wakeupRequestId": "8131545d-a0b2-42fd-b7b7-b23f1fcfaa2d",
+   "contextSnapshot": {
+    "issueId": "944c3a0e-c7ba-4763-b806-dda6c03155bf",
+    "wakeReason": "issue_unblock_requested"
+   }
+  },
+  {
+   "id": "e94c5569-b906-43fb-8c69-e376d4b40003",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T19:29:53.364Z",
+   "createdAt": "2026-10-19T19:28:41.307Z",
+   "wakeupRequestId": "ea6d691f-7cdc-4560-8177-f628d4f6891b",
+   "contextSnapshot": {
+    "issueId": "fc20db4d-dbbb-4c0a-86d9-7825ea3fef6a",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "7ad7fdb2-df81-470a-b765-b46d33c43b45",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:59:24.915Z",
+   "createdAt": "2026-10-19T19:29:53.310Z",
+   "wakeupRequestId": "21322ebf-2288-4f46-bafd-faa872122cb5",
+   "contextSnapshot": {
+    "issueId": "944c3a0e-c7ba-4763-b806-dda6c03155bf",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "b465c761-bb08-48c8-bd63-86f402505548",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T19:58:23.481Z",
+   "createdAt": "2026-10-19T19:52:08.332Z",
+   "wakeupRequestId": "4c65152c-d55e-4edd-b8fa-8411bec8a57a",
+   "contextSnapshot": {
+    "issueId": "a5c9fe1d-6b02-4e06-879b-c01dd2a07308",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "c1ab8347-c072-45cb-b591-c30dd15d78a1",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T20:00:58.294Z",
+   "createdAt": "2026-10-19T19:52:08.379Z",
+   "wakeupRequestId": "059cdf43-271a-4f10-a89e-ad5b8c5c33c6",
+   "contextSnapshot": {
+    "issueId": "463873c7-0d7a-43ec-9dcb-73e8a246f966",
+    "wakeReason": "task_watchdog_stopped_subtree"
+   }
+  },
+  {
+   "id": "42f77569-a487-4808-84af-899741278c78",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T20:34:56.273Z",
+   "createdAt": "2026-10-19T20:00:58.213Z",
+   "wakeupRequestId": "d91183fc-fa46-4e75-9aff-c25fd6caa846",
+   "contextSnapshot": {
+    "issueId": "fc20db4d-dbbb-4c0a-86d9-7825ea3fef6a",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "6f840583-226e-4d1a-9b9b-c448ced46304",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:07:25.643Z",
+   "createdAt": "2026-10-19T20:02:52.914Z",
+   "wakeupRequestId": "2dcc2ad3-03ae-4e06-9585-abe427f37b76",
+   "contextSnapshot": {
+    "issueId": "5e1f584d-3fc0-47fa-a3c4-ea706a735308",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "eb9f5ff5-1cdd-42a2-9c6b-fd99144726c6",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T20:55:51.343Z",
+   "createdAt": "2026-10-19T20:42:54.283Z",
+   "wakeupRequestId": "712518f8-3cb9-4561-9012-6e765b5c8abc",
+   "contextSnapshot": {
+    "issueId": "c0f0386e-a3aa-442f-90dc-9ab80f4fd2af",
+    "wakeReason": "issue_continuation_needed"
+   }
+  },
+  {
+   "id": "891d7ea4-5cc0-4473-b69e-4560c8f7bee5",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:10:06.327Z",
+   "createdAt": "2026-10-19T20:49:11.905Z",
+   "wakeupRequestId": "4a41b947-5e3d-4a43-9a12-a0ce4619aaa9",
+   "contextSnapshot": {
+    "issueId": "827e8361-9caa-4753-89af-aa21c7e04217",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "edf86bcc-2eb7-4c9e-9dc2-4f6cf3a3781a",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:36:05.473Z",
+   "createdAt": "2026-10-19T20:58:44.453Z",
+   "wakeupRequestId": "2d766da1-35b1-4b7b-9d50-e2bd98cdde77",
+   "contextSnapshot": {
+    "issueId": "4e7b397c-dd45-4e02-aaf5-0d65675e059a",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "829aa73d-cf3f-4010-8b69-2130aa01e1eb",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:08:43.359Z",
+   "createdAt": "2026-10-19T21:08:43.213Z",
+   "wakeupRequestId": "5b91a0ca-bcdb-4f2e-96d1-5808e69edc37",
+   "contextSnapshot": {
+    "issueId": "5e1f584d-3fc0-47fa-a3c4-ea706a735308",
+    "wakeReason": "missing_issue_comment"
+   }
+  },
+  {
+   "id": "05e11276-4a2d-4839-9d1a-90ea6fae17ce",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:12:33.220Z",
+   "createdAt": "2026-10-19T21:12:33.095Z",
+   "wakeupRequestId": "4b247fa9-aaf6-4b9c-891f-4320c62e897c",
+   "contextSnapshot": {
+    "issueId": "827e8361-9caa-4753-89af-aa21c7e04217",
+    "wakeReason": "missing_issue_comment"
+   }
+  },
+  {
+   "id": "c2901c76-f11e-49b7-aa23-9d92a7f75e65",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T21:37:38.107Z",
+   "createdAt": "2026-10-19T21:36:03.685Z",
+   "wakeupRequestId": "e80a638d-e4e6-4fa9-a197-e6d7a403ac73",
+   "contextSnapshot": {
+    "issueId": "827e8361-9caa-4753-89af-aa21c7e04217",
+    "wakeReason": "issue_continuation_needed"
+   }
+  },
+  {
+   "id": "a2b7f8f8-2079-4fe8-8bca-3e50d4850057",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:36:05.902Z",
+   "createdAt": "2026-10-19T21:36:04.785Z",
+   "wakeupRequestId": "ba8aa542-6750-439e-9ad3-22b3a6b73f0b",
+   "contextSnapshot": {
+    "issueId": "c0f0386e-a3aa-442f-90dc-9ab80f4fd2af",
+    "wakeReason": "issue_unblock_requested"
+   }
+  },
+  {
+   "id": "11542934-8fb1-4e49-956c-411ca40bb0b2",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T21:37:38.783Z",
+   "createdAt": "2026-10-19T21:37:38.698Z",
+   "wakeupRequestId": "0bb9cfe3-ffe7-4003-8d7c-88aafc382b5c",
+   "contextSnapshot": {
+    "issueId": "4e7b397c-dd45-4e02-aaf5-0d65675e059a",
+    "wakeReason": "issue_review_path_lost"
+   }
+  },
+  {
+   "id": "4178e4e5-b9fc-4139-9262-f748bf7b67d2",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:58:31.015Z",
+   "createdAt": "2026-10-19T21:47:00.157Z",
+   "wakeupRequestId": "b6fee634-8f40-4e44-bfb3-6062296a2984",
+   "contextSnapshot": {
+    "issueId": "c0f0386e-a3aa-442f-90dc-9ab80f4fd2af",
+    "wakeReason": "issue_continuation_needed"
+   }
+  },
+  {
+   "id": "569a71f3-22e2-484e-a3f5-fded6e4ec6a3",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:59:06.505Z",
+   "createdAt": "2026-10-19T21:48:19.109Z",
+   "wakeupRequestId": "2c26ac50-3e55-4fce-91f4-b3140a137cba",
+   "contextSnapshot": {
+    "issueId": "a5c9fe1d-6b02-4e06-879b-c01dd2a07308",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "5aa5c56c-b0b2-4086-b4a8-43a67ab4f531",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T21:59:16.812Z",
+   "createdAt": "2026-10-19T21:59:02.383Z",
+   "wakeupRequestId": "a8c748ea-d6c8-407f-a971-2d0117095fe1",
+   "contextSnapshot": {
+    "issueId": "fc20db4d-dbbb-4c0a-86d9-7825ea3fef6a",
+    "wakeReason": "issue_unblock_requested"
+   }
+  },
+  {
+   "id": "642cc1ea-fc2f-4fb3-b0be-5976728ca94b",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T22:05:55.885Z",
+   "createdAt": "2026-10-19T22:05:55.849Z",
+   "wakeupRequestId": "0556055a-a12d-4ab3-889f-3cb98c3ec95d",
+   "contextSnapshot": {
+    "issueId": "83ed6266-1413-4f83-9ecb-ebd1d75dccf9",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "56ad8cf4-b350-458d-b7d0-2330d0e26ef2",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T22:15:12.123Z",
+   "createdAt": "2026-10-19T22:15:12.086Z",
+   "wakeupRequestId": "b743bd7a-3d53-46a0-9d6d-372248176670",
+   "contextSnapshot": {
+    "issueId": "57812b89-fca8-4c5b-b522-836afa18cafe",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "b952d64a-fc2d-45ed-b3d4-dfc16e771805",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-19T23:00:17.808Z",
+   "createdAt": "2026-10-19T22:29:55.134Z",
+   "wakeupRequestId": "25f5b6c2-098d-464c-a473-f20f50cbbccd",
+   "contextSnapshot": {
+    "wakeReason": "heartbeat_timer"
+   }
+  },
+  {
+   "id": "4184a3ac-383b-4cab-8b90-cff3c4ecc379",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T22:41:22.407Z",
+   "createdAt": "2026-10-19T22:31:01.863Z",
+   "wakeupRequestId": "a7329199-a8cd-4179-95e5-f2e67257f8c8",
+   "contextSnapshot": {
+    "issueId": "1275fe0b-48b6-412c-adf5-aca04ab4453e",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "6ed98794-830c-4903-9adf-7cc8a1395941",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T22:35:13.847Z",
+   "createdAt": "2026-10-19T22:35:13.804Z",
+   "wakeupRequestId": "f73dc251-3504-41fa-b228-88cd8c54a1cb",
+   "contextSnapshot": {
+    "issueId": "57812b89-fca8-4c5b-b522-836afa18cafe",
+    "wakeReason": "issue_reopened_via_comment"
+   }
+  },
+  {
+   "id": "3fd28cf1-26c9-4f09-911e-19c2da4b6907",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T22:46:32.333Z",
+   "createdAt": "2026-10-19T22:45:57.449Z",
+   "wakeupRequestId": "b4110a72-46d2-4c63-8423-078e02604117",
+   "contextSnapshot": {
+    "issueId": "7b607f2c-0968-4b07-b77c-19a5842be354",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "81f41f5a-e6fc-4f46-94dd-eb58b5fef09e",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T23:35:25.651Z",
+   "createdAt": "2026-10-19T23:35:25.555Z",
+   "wakeupRequestId": "cc85b02f-6605-46ee-bdc5-60ecf7d4a2f3",
+   "contextSnapshot": {
+    "wakeReason": "heartbeat_timer"
+   }
+  },
+  {
+   "id": "92d0353f-2a8c-4181-978c-f43719847331",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-19T23:40:30.939Z",
+   "createdAt": "2026-10-19T23:40:30.775Z",
+   "wakeupRequestId": "6ad96dc8-614c-4535-bcb5-61e3bc6efec6",
+   "contextSnapshot": {
+    "issueId": "a954aacd-1cd9-4028-b50d-241a2c796e49",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "8c8cf72b-c923-4db6-b37b-7d13a6232faa",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T00:09:30.415Z",
+   "createdAt": "2026-10-19T23:40:46.699Z",
+   "wakeupRequestId": "2c6e9619-bc67-405a-88f3-07518eb0cf87",
+   "contextSnapshot": {
+    "issueId": "a5c9fe1d-6b02-4e06-879b-c01dd2a07308",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "8218d680-7b7c-4be9-975d-c35e47281f9a",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T00:17:45.965Z",
+   "createdAt": "2026-10-19T23:52:44.180Z",
+   "wakeupRequestId": "199d0f48-a004-4b75-8c91-7ea3c445f450",
+   "contextSnapshot": {
+    "issueId": "105b2a44-2005-48c2-8ed4-3903d2e70e1a",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "4a4c0c57-1ba5-4941-912c-d68b78a8fcea",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T00:15:20.165Z",
+   "createdAt": "2026-10-19T23:53:00.336Z",
+   "wakeupRequestId": "9c24c728-e900-4d16-aefe-7292698f6c6f",
+   "contextSnapshot": {
+    "issueId": "fc20db4d-dbbb-4c0a-86d9-7825ea3fef6a",
+    "wakeReason": "issue_unblock_requested"
+   }
+  },
+  {
+   "id": "4a8fc172-11ce-4e26-bde6-13b2cf32fe51",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T00:19:09.669Z",
+   "createdAt": "2026-10-20T00:19:09.250Z",
+   "wakeupRequestId": "c47254f8-0df7-4246-ba4a-4fe9e75a6468",
+   "contextSnapshot": {
+    "issueId": "105b2a44-2005-48c2-8ed4-3903d2e70e1a",
+    "wakeReason": "missing_issue_comment"
+   }
+  },
+  {
+   "id": "710222db-29a2-4f4f-aefe-528a3d022c9d",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T00:26:15.104Z",
+   "createdAt": "2026-10-20T00:26:15.072Z",
+   "wakeupRequestId": "b411d4c2-b898-4952-9f4e-67e330bc2c0a",
+   "contextSnapshot": {
+    "issueId": "86bc2001-c047-456b-af48-4e58bd82c95e",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "d4638bca-fbf6-4a67-9929-8edeab213002",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T00:34:19.985Z",
+   "createdAt": "2026-10-20T00:34:19.955Z",
+   "wakeupRequestId": "136f900d-2851-4e81-9553-92c32ae4b371",
+   "contextSnapshot": {
+    "issueId": "d874cf70-f9d1-4140-a8f9-de1bb95dcf69",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "cccb84f3-4115-4940-a999-24cd700657fe",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T01:05:57.197Z",
+   "createdAt": "2026-10-20T01:05:57.137Z",
+   "wakeupRequestId": "c5c22719-b32c-45e8-b5b4-a102e3706410",
+   "contextSnapshot": {
+    "wakeReason": "heartbeat_timer"
+   }
+  },
+  {
+   "id": "6934899b-57ff-4e59-8cc0-c204523fd732",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T01:12:13.879Z",
+   "createdAt": "2026-10-20T01:10:20.755Z",
+   "wakeupRequestId": "b85a8989-c19a-4bab-8bb8-a5c85e705eb3",
+   "contextSnapshot": {
+    "issueId": "fc20db4d-dbbb-4c0a-86d9-7825ea3fef6a",
+    "wakeReason": "issue_unblock_requested"
+   }
+  },
+  {
+   "id": "6dcddc5d-ebd0-4451-94cf-555b151bd99e",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T01:45:07.452Z",
+   "createdAt": "2026-10-20T01:10:51.833Z",
+   "wakeupRequestId": "c4a286fa-45c0-473f-807d-366c9ab404dd",
+   "contextSnapshot": {
+    "issueId": "670519d5-04ae-4c38-afad-f97fc96fee23",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "48cbbea0-948b-40fe-9203-321a5496404a",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T01:59:42.164Z",
+   "createdAt": "2026-10-20T01:14:35.809Z",
+   "wakeupRequestId": "8942e000-a992-41af-9e3c-99732856feb4",
+   "contextSnapshot": {
+    "issueId": "4a374ba9-a822-4c65-bc2d-32faf5bf9d76",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "37804c58-9fac-4f26-93f6-3e440159cc3d",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "timed_out",
+   "startedAt": "2026-10-20T02:14:01.935Z",
+   "createdAt": "2026-10-20T01:57:01.324Z",
+   "wakeupRequestId": "c6ba3259-cad3-4184-bcd8-d2fad90f782e",
+   "contextSnapshot": {
+    "issueId": "935ce297-56d9-4934-b27e-206a61212922",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "c835df3d-b4bc-4a24-9afb-67dfef1c015f",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T03:04:45.258Z",
+   "createdAt": "2026-10-20T03:04:45.198Z",
+   "wakeupRequestId": "6048d521-a749-4f8e-ad01-1fa32367a822",
+   "contextSnapshot": {
+    "issueId": "8f85781a-a9b9-4073-8792-69aa49c48fe8",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "89fd4551-928d-4d07-bd18-c303f7bab567",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T03:14:07.742Z",
+   "createdAt": "2026-10-20T03:04:57.772Z",
+   "wakeupRequestId": "c7ddbe2a-869c-4dd8-8679-478afe69bfad",
+   "contextSnapshot": {
+    "wakeReason": "heartbeat_timer"
+   }
+  },
+  {
+   "id": "1e394ab3-ea61-41fb-b849-61ef451891a0",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T03:20:13.947Z",
+   "createdAt": "2026-10-20T03:20:13.896Z",
+   "wakeupRequestId": "dda827b7-de0c-40bb-92da-eda4a8654850",
+   "contextSnapshot": {
+    "issueId": "83077fea-40ee-4444-b60d-6be36735a935",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "c7bdffe9-b7f4-4bd8-94e1-1ef7e62e70c2",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T03:28:27.567Z",
+   "createdAt": "2026-10-20T03:28:27.538Z",
+   "wakeupRequestId": "7eedc6e9-d4de-4a55-8e92-c154b5b1bb33",
+   "contextSnapshot": {
+    "issueId": "fc20db4d-dbbb-4c0a-86d9-7825ea3fef6a",
+    "wakeReason": "issue_unblock_requested"
+   }
+  },
+  {
+   "id": "37461827-abca-4abb-b301-2a20c18eb8c9",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "cancelled",
+   "startedAt": null,
+   "createdAt": "2026-10-20T03:38:18.524Z",
+   "wakeupRequestId": "2ce0c7e9-41db-4f67-9fcd-f69e04e8bb4e",
+   "contextSnapshot": {
+    "issueId": "e859bf7a-85b6-4f1e-a098-d28f9b330c2f",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "1c297eca-e872-43c2-959f-3d90c1fa54f6",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "cancelled",
+   "startedAt": null,
+   "createdAt": "2026-10-20T03:40:00.645Z",
+   "wakeupRequestId": "1e2ef15e-59ef-40b8-996b-44cdf7abc348",
+   "contextSnapshot": {
+    "issueId": "3ee7b176-bfc6-4e2e-af66-bd1c846fe545",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "64b6c412-1baa-4bdd-a13b-524da1a05b81",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "cancelled",
+   "startedAt": null,
+   "createdAt": "2026-10-20T03:42:04.416Z",
+   "wakeupRequestId": "38d75f3e-cbb0-40e4-96c1-e151d0814a41",
+   "contextSnapshot": {
+    "issueId": "6eb97a95-750d-41c0-b860-f1367b05214a",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "9cced1e9-f109-489f-8c06-4ac14d887564",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T03:47:57.019Z",
+   "createdAt": "2026-10-20T03:47:03.602Z",
+   "wakeupRequestId": "0c9fb30b-3f64-4dca-9900-f7991d32d87c",
+   "contextSnapshot": {
+    "issueId": "1373342c-13c4-4eeb-8094-bc13d157b648",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "bbe49fb3-5cd7-41c7-aa2b-b02f85dc3584",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T04:21:58.715Z",
+   "createdAt": "2026-10-20T04:21:58.677Z",
+   "wakeupRequestId": "f4f8c3a6-1f2e-4000-a47b-0d9c5491f1af",
+   "contextSnapshot": {
+    "wakeReason": "heartbeat_timer"
+   }
+  },
+  {
+   "id": "1d706271-8fd6-425c-87f8-4f6de306c470",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T04:22:12.924Z",
+   "createdAt": "2026-10-20T04:22:12.841Z",
+   "wakeupRequestId": "060f757f-84a7-4e59-ade2-82eaf5c04f14",
+   "contextSnapshot": {
+    "issueId": "081ba5f8-5684-4171-8dd3-42df97d0b893",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "9703b8bf-39ff-42b1-9daf-f6a60f6b9284",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T04:24:32.599Z",
+   "createdAt": "2026-10-20T04:24:32.370Z",
+   "wakeupRequestId": "4635f63b-cc1f-4801-934d-175ee379883c",
+   "contextSnapshot": {
+    "issueId": "081ba5f8-5684-4171-8dd3-42df97d0b893",
+    "wakeReason": "missing_issue_comment"
+   }
+  },
+  {
+   "id": "6b297eae-6592-4968-b9e1-8380d06dd495",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T05:01:29.163Z",
+   "createdAt": "2026-10-20T05:01:29.127Z",
+   "wakeupRequestId": "36ae7b01-2087-4953-91c0-47f2fcb6bb88",
+   "contextSnapshot": {
+    "wakeReason": "heartbeat_timer"
+   }
+  },
+  {
+   "id": "58e67a52-6f2c-42ec-8d8e-bcf520a764f0",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T05:41:39.495Z",
+   "createdAt": "2026-10-20T05:41:39.458Z",
+   "wakeupRequestId": "03d17cdc-b78c-4a94-8db8-b15c4f8e2fd8",
+   "contextSnapshot": {
+    "issueId": "a954aacd-1cd9-4028-b50d-241a2c796e49",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "b5b7e3a8-dd29-498b-9fbb-7b62ac6fc08a",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T05:45:29.513Z",
+   "createdAt": "2026-10-20T05:45:29.399Z",
+   "wakeupRequestId": "440c746d-35c6-4753-a667-a66543eb300d",
+   "contextSnapshot": {
+    "wakeReason": "heartbeat_timer"
+   }
+  },
+  {
+   "id": "20fc19d7-5559-4087-b263-e520f658d40e",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T06:31:29.493Z",
+   "createdAt": "2026-10-20T06:31:29.458Z",
+   "wakeupRequestId": "6b14da67-0c3d-4cc7-a2a4-429a3246e28b",
+   "contextSnapshot": {
+    "wakeReason": "heartbeat_timer"
+   }
+  },
+  {
+   "id": "ffab2a25-c132-4f77-b774-5d5e1f288af6",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T06:35:44.072Z",
+   "createdAt": "2026-10-20T06:35:43.913Z",
+   "wakeupRequestId": "85b93c88-a654-4dd6-8bcb-1122ee83235b",
+   "contextSnapshot": {
+    "issueId": "34a9fa90-ab3a-476a-bd1f-b63ed49ee67e",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "d28c9630-1cda-479a-80d8-9c493854a7a6",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T06:41:48.372Z",
+   "createdAt": "2026-10-20T06:38:31.272Z",
+   "wakeupRequestId": "4b338f75-2e39-437b-9cd9-6cf04fd14927",
+   "contextSnapshot": {
+    "issueId": "3d1222d7-1fcc-4c69-a4ac-be03d54695fa",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "8ff5eeaf-7322-4835-8519-0833fd089c39",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T07:09:16.172Z",
+   "createdAt": "2026-10-20T06:38:56.623Z",
+   "wakeupRequestId": "7195316a-646b-4576-8e6f-d326421f5d28",
+   "contextSnapshot": {
+    "issueId": "a7eaa41e-451d-40d2-98ed-38c280c62ee5",
+    "wakeReason": "issue_unblock_requested"
+   }
+  },
+  {
+   "id": "4c8e92e5-51ae-4cf3-a12b-7818c29f5d20",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T07:20:08.416Z",
+   "createdAt": "2026-10-20T06:52:12.368Z",
+   "wakeupRequestId": "7ba328d3-078e-48cb-a81b-5c1944e14f63",
+   "contextSnapshot": {
+    "issueId": "86bc2001-c047-456b-af48-4e58bd82c95e",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "cc50009c-e504-4c55-8691-35cf9c4aafdf",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "timed_out",
+   "startedAt": "2026-10-20T07:26:54.155Z",
+   "createdAt": "2026-10-20T07:04:53.701Z",
+   "wakeupRequestId": "9b8445c2-b602-4a90-a5ef-e2dacc54ca0f",
+   "contextSnapshot": {
+    "issueId": "22ee4df5-16ce-4735-82fb-8038ae6b29b4",
+    "wakeReason": "issue_assigned"
+   }
+  },
+  {
+   "id": "8d22dba7-5523-468b-ae48-b6722e5bd844",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:11:40.849Z",
+   "wakeupRequestId": "de0d1971-1f41-4c3c-9683-1b4609e9ccb6",
+   "contextSnapshot": {
+    "issueId": "a954aacd-1cd9-4028-b50d-241a2c796e49",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "ee3d1211-1c83-43d0-8f7d-7a12b34698c3",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T07:24:52.398Z",
+   "createdAt": "2026-10-20T07:21:34.502Z",
+   "wakeupRequestId": "ddbee40f-265f-4a99-a32c-65dd58f245a3",
+   "contextSnapshot": {
+    "issueId": "1e3ca359-06a4-4610-a306-b1a3f8fc5a28",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "c29d06ea-7f33-4ee2-9566-e032d478d9db",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:22:19.584Z",
+   "wakeupRequestId": "97889a6d-cdcc-499b-87ce-4547dca95729",
+   "contextSnapshot": {
+    "issueId": "1cdd0001-3dd2-47ab-806d-45a8060c03e4",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "2b1517e3-e493-413a-8e32-51fe0fb43114",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "cancelled",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:22:19.718Z",
+   "wakeupRequestId": "efc953e6-4bf4-47c8-a94b-f07a2344d32b",
+   "contextSnapshot": {
+    "issueId": "156c3e12-0acf-46cf-8d13-f4eb98c702b5",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "c19f1593-f5c2-42c1-b9df-63b4ff80124b",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:22:19.822Z",
+   "wakeupRequestId": "1d3a1ba4-3144-427a-adea-365487ff89e1",
+   "contextSnapshot": {
+    "issueId": "73c2dae6-21d4-438d-98ae-d92881331dd5",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "2675dd20-45f6-4097-bdbb-f36e9d9dd57f",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:22:19.919Z",
+   "wakeupRequestId": "d82dbad2-eeb1-49ef-8058-752abeb5f0f6",
+   "contextSnapshot": {
+    "issueId": "0d13257e-c04c-45d0-a992-112fd79d55d4",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "996e9c14-b3bd-494e-8939-4be42e9ac6b4",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:22:20.015Z",
+   "wakeupRequestId": "3e85789d-7639-474b-9959-9700e3b9d516",
+   "contextSnapshot": {
+    "issueId": "105b2a44-2005-48c2-8ed4-3903d2e70e1a",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "7ea7aac4-e6ef-414c-a4fb-244dc47e0004",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T08:17:03.713Z",
+   "createdAt": "2026-10-20T07:22:20.151Z",
+   "wakeupRequestId": "63731831-f745-4b36-9a53-648c9ab3ffa0",
+   "contextSnapshot": {
+    "issueId": "1bf875c1-c00c-4407-8325-c734ed3409be",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "4971c95e-6382-4fe5-9877-64805687b7bb",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T08:32:04.734Z",
+   "createdAt": "2026-10-20T07:22:20.369Z",
+   "wakeupRequestId": "9d1b7d49-bb99-4967-9099-f78514f89b75",
+   "contextSnapshot": {
+    "issueId": "dcf2e622-b898-4e8a-8b64-3d0d9c56ef83",
+    "wakeReason": "issue_unblock_requested"
+   }
+  },
+  {
+   "id": "6ed80bcb-b2a5-48b7-8443-c1ac850b0ab9",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T08:35:29.343Z",
+   "createdAt": "2026-10-20T07:22:20.493Z",
+   "wakeupRequestId": "e3b641d2-9736-48ad-940b-5e3a11299945",
+   "contextSnapshot": {
+    "issueId": "d16dd00f-7e26-4f56-8b92-9df96412414b",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "579c0631-0f01-4597-95bc-bb4a07821e1d",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T08:39:08.812Z",
+   "createdAt": "2026-10-20T07:22:20.703Z",
+   "wakeupRequestId": "06a6decc-411f-4b61-870e-8ed7160c4cc4",
+   "contextSnapshot": {
+    "issueId": "17c604fe-eb87-4eaf-be26-1a8970a848b8",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "3c9228fd-a9f5-421a-b709-e0a15d86d7b1",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:22:21.293Z",
+   "wakeupRequestId": "87969718-ae83-4b8b-97c3-4d965c5891d1",
+   "contextSnapshot": {
+    "issueId": "a7eaa41e-451d-40d2-98ed-38c280c62ee5",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "e40374cc-7e56-41f5-88ca-33733600f26d",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:22:21.411Z",
+   "wakeupRequestId": "b2798ae2-ea07-4c39-ad3c-c284fbe965c5",
+   "contextSnapshot": {
+    "issueId": "08c6c9a8-9a0c-40a7-bb58-17e21bb0b37e",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "6cc3bf87-28d9-466d-9e67-e9fd9291691e",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:22:21.577Z",
+   "wakeupRequestId": "f52a2fd3-3160-4493-90bd-15a23fd68d19",
+   "contextSnapshot": {
+    "issueId": "81a965b6-a2c5-4d4b-a117-a36cbd22aea0",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "d9e90749-5f2c-418c-8dba-310121bd0acf",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:22:21.845Z",
+   "wakeupRequestId": "fef3bbf4-e4d3-45ab-838a-ef04b8329941",
+   "contextSnapshot": {
+    "issueId": "5e1f584d-3fc0-47fa-a3c4-ea706a735308",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "95332dd2-8708-42cd-a0ad-14c8b1c8a14e",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:23:09.148Z",
+   "wakeupRequestId": "2241d41f-b9fc-4352-80c3-8677664890a1",
+   "contextSnapshot": {
+    "issueId": "c0f0386e-a3aa-442f-90dc-9ab80f4fd2af",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "5e5845d8-a80d-4364-b0da-5301211eaaab",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:23:09.310Z",
+   "wakeupRequestId": "1b45dce9-8e0f-400b-a8c2-bafb3290eb80",
+   "contextSnapshot": {
+    "issueId": "8b87557b-a2a5-4aaf-8377-c98188bc7ba2",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "b41351bf-0d23-40df-ac89-f2f2ba98661a",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:23:09.414Z",
+   "wakeupRequestId": "4a0cf777-3998-4bc1-8a04-5ebe81505a5f",
+   "contextSnapshot": {
+    "issueId": "fb7efa88-f1e9-4b05-95a6-b6ab0b114047",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "95d63651-0771-42bf-9ebe-b2f35b93db62",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:23:09.610Z",
+   "wakeupRequestId": "821ecf0c-92f6-43a3-823e-dc5aca270b8d",
+   "contextSnapshot": {
+    "issueId": "b14561c4-97ad-4ba5-b283-fadceb02c760",
+    "wakeReason": "issue_recovery_action_restored"
+   }
+  },
+  {
+   "id": "d7c431f8-9f14-474a-bd4c-edfa9abe6725",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T07:29:40.673Z",
+   "createdAt": "2026-10-20T07:29:40.611Z",
+   "wakeupRequestId": "5ab01631-560d-4506-8516-5332957d7343",
+   "contextSnapshot": {
+    "issueId": "1e3ca359-06a4-4610-a306-b1a3f8fc5a28",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "a5989594-e6fa-4c03-be46-3f801282cd58",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:30:24.561Z",
+   "wakeupRequestId": "93eb4f28-c1d9-4453-b307-69d1020e3fb8",
+   "contextSnapshot": {
+    "issueId": "86bc2001-c047-456b-af48-4e58bd82c95e",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "cc445b80-f1b1-49e5-9612-838773e17596",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T08:14:02.696Z",
+   "createdAt": "2026-10-20T07:53:00.637Z",
+   "wakeupRequestId": "01c954f5-8643-4a71-bdb0-cb9b4d2b7cf5",
+   "contextSnapshot": {
+    "issueId": "081ba5f8-5684-4171-8dd3-42df97d0b893",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "714255eb-4af2-4548-81ba-1382ea12f91b",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T07:59:59.857Z",
+   "wakeupRequestId": "7561c64b-e82e-45e5-bd73-1a27b79859ba",
+   "contextSnapshot": {
+    "wakeReason": "heartbeat_timer"
+   }
+  },
+  {
+   "id": "f0e7c7d9-950e-444f-9cb9-a08f6a39f10f",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T08:26:56.010Z",
+   "createdAt": "2026-10-20T08:26:55.743Z",
+   "wakeupRequestId": "b1f1fdba-dd16-4a0d-a00a-642a144bcc94",
+   "contextSnapshot": {
+    "issueId": "22ee4df5-16ce-4735-82fb-8038ae6b29b4",
+    "wakeReason": "missing_issue_comment"
+   }
+  },
+  {
+   "id": "536a0380-3b1c-4155-bb7a-4404a1f17158",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T08:32:04.600Z",
+   "wakeupRequestId": "bed69874-427b-41b3-85f4-1dd1dc229a3a",
+   "contextSnapshot": {
+    "issueId": "1bf875c1-c00c-4407-8325-c734ed3409be",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "15cae935-bc4b-4371-8d96-efa6ec0d624b",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T08:35:29.246Z",
+   "wakeupRequestId": "fb5f5b86-78ae-460d-9eec-30ab437b5ab7",
+   "contextSnapshot": {
+    "issueId": "dcf2e622-b898-4e8a-8b64-3d0d9c56ef83",
+    "wakeReason": "issue_reopened_via_comment"
+   }
+  },
+  {
+   "id": "d9e22989-5099-4cb6-838e-209435ec0fad",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T08:39:08.804Z",
+   "createdAt": "2026-10-20T08:39:08.754Z",
+   "wakeupRequestId": "8e48ae5a-db20-48c3-9ba9-198ed2e6f4d4",
+   "contextSnapshot": {
+    "issueId": "22ee4df5-16ce-4735-82fb-8038ae6b29b4",
+    "wakeReason": "run_liveness_continuation"
+   }
+  },
+  {
+   "id": "d644182f-374e-4221-8438-d8610246a6e8",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "interrupted",
+   "startedAt": "2026-10-20T08:44:10.959Z",
+   "createdAt": "2026-10-20T08:44:10.672Z",
+   "wakeupRequestId": "23913bb2-a563-48a3-b020-e69e55370a80",
+   "contextSnapshot": {
+    "issueId": "17c604fe-eb87-4eaf-be26-1a8970a848b8",
+    "wakeReason": "process_lost_retry"
+   }
+  },
+  {
+   "id": "ab88560c-3c4c-44a7-b204-a0f53167287f",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "succeeded",
+   "startedAt": "2026-10-20T08:44:11.345Z",
+   "createdAt": "2026-10-20T08:44:11.300Z",
+   "wakeupRequestId": "e93e85e0-e395-47c0-bda9-820703656439",
+   "contextSnapshot": {
+    "issueId": "22ee4df5-16ce-4735-82fb-8038ae6b29b4",
+    "wakeReason": "process_lost_retry"
+   }
+  },
+  {
+   "id": "619f8bd2-ffba-44ab-9450-2cad60db49a8",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T08:44:37.379Z",
+   "wakeupRequestId": "864bc356-0e9d-4700-8f80-77775afec07f",
+   "contextSnapshot": {
+    "issueId": "d16dd00f-7e26-4f56-8b92-9df96412414b",
+    "wakeReason": "issue_commented"
+   }
+  },
+  {
+   "id": "4d4a64d6-105a-40be-9a1f-315d86a81ffc",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T08:46:38.945Z",
+   "createdAt": "2026-10-20T08:45:04.951Z",
+   "wakeupRequestId": "1c092970-7d53-4172-8522-b210b328934b",
+   "contextSnapshot": {
+    "issueId": "35cc61e4-1e01-49fc-b737-58107aad7098",
+    "wakeReason": "issue_reopened_via_comment"
+   }
+  },
+  {
+   "id": "f4b8524c-0a8e-4856-aac1-82d6d209c9eb",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T08:46:39.197Z",
+   "createdAt": "2026-10-20T08:46:38.964Z",
+   "wakeupRequestId": "0007d658-173d-4108-9646-daff8b27e3a1",
+   "contextSnapshot": {
+    "issueId": "17c604fe-eb87-4eaf-be26-1a8970a848b8",
+    "wakeReason": "process_lost_retry"
+   }
+  },
+  {
+   "id": "29195c7d-9331-4135-ab60-13af679b7c46",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T08:55:46.878Z",
+   "createdAt": "2026-10-20T08:46:39.122Z",
+   "wakeupRequestId": "49f8577f-370d-40f6-bd1a-b04b84678ca6",
+   "contextSnapshot": {
+    "issueId": "22ee4df5-16ce-4735-82fb-8038ae6b29b4",
+    "wakeReason": "run_liveness_continuation"
+   }
+  },
+  {
+   "id": "214cb529-fbd6-45bd-aa8c-d44ed522eab5",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "failed",
+   "startedAt": "2026-10-20T08:55:46.616Z",
+   "createdAt": "2026-10-20T08:55:46.168Z",
+   "wakeupRequestId": "ea29aadb-5c0f-4a4d-a966-5c0a0bf4f944",
+   "contextSnapshot": {
+    "issueId": "35cc61e4-1e01-49fc-b737-58107aad7098",
+    "wakeReason": "process_lost_retry"
+   }
+  },
+  {
+   "id": "044404b6-f952-467a-86a1-4d6b55709cb2",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "running",
+   "startedAt": "2026-10-20T09:04:59.757Z",
+   "createdAt": "2026-10-20T08:55:46.702Z",
+   "wakeupRequestId": "f33588b9-91c7-4202-ba47-9623a57980ad",
+   "contextSnapshot": {
+    "issueId": "17c604fe-eb87-4eaf-be26-1a8970a848b8",
+    "wakeReason": "issue_continuation_needed"
+   }
+  },
+  {
+   "id": "c429dd64-6bdd-42f7-af77-1210419550a6",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "running",
+   "startedAt": "2026-10-20T09:04:59.480Z",
+   "createdAt": "2026-10-20T09:04:58.952Z",
+   "wakeupRequestId": "4558e106-2f1c-4f04-805f-24d19c9c5faf",
+   "contextSnapshot": {
+    "issueId": "35cc61e4-1e01-49fc-b737-58107aad7098",
+    "wakeReason": "issue_continuation_needed"
+   }
+  },
+  {
+   "id": "c9addb64-f1f4-465c-b87e-081bdd101685",
+   "agentId": "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b",
+   "status": "queued",
+   "startedAt": null,
+   "createdAt": "2026-10-20T09:04:59.680Z",
+   "wakeupRequestId": "6f8b2b10-50f9-49f4-a24d-971dcf987132",
+   "contextSnapshot": {
+    "issueId": "22ee4df5-16ce-4735-82fb-8038ae6b29b4",
+    "wakeReason": "process_lost_retry"
+   }
+  }
+ ]
+}
