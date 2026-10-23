@@ -90,7 +90,11 @@ jobs:
           "${{ github.event.pull_request.head.sha }}"
 
       - name: Validate Dockerfile deps stage
-        run: node ./scripts/check-docker-deps-stage.mjs
+        # The checker proves manifest coverage; the companion test proves the
+        # postinstall half of the same contract (PRX-6120 D1).
+        run: |
+          node ./scripts/check-docker-deps-stage.mjs
+          node "$CI_NODE_TEST" ./scripts/docker-deps-postinstall.test.mjs
 
       - name: Validate Node version policy
         run: pnpm check:node-version
@@ -588,7 +592,11 @@ jobs:
     # Preserve the legacy required-check name while the underlying work runs in parallel.
     name: verify
     if: ${{ always() }}
-    needs: [gate, policy, typecheck_release_registry, general_tests, verify_paperclip_runner, build, docker_context_integrity]
+    # `policy` is deliberately absent: this aggregator reports on its own split
+    # lanes only. Gating it on `needs.policy.result` made a policy red print
+    # "fail if any split verify lane failed" over a lane set that was all green,
+    # so a red here no longer told anyone where the failure was (PRX-6120 D4).
+    needs: [gate, typecheck_release_registry, general_tests, verify_paperclip_runner, build, docker_context_integrity]
     runs-on: ${{ needs.gate.outputs.runner }}
     timeout-minutes: 5
 
@@ -596,14 +604,12 @@ jobs:
       - name: Fail if any split verify lane failed
         env:
           FULL_CI: ${{ needs.gate.outputs.full_ci }}
-          POLICY_RESULT: ${{ needs.policy.result }}
           TYPECHECK_RELEASE_REGISTRY_RESULT: ${{ needs.typecheck_release_registry.result }}
           GENERAL_TESTS_RESULT: ${{ needs.general_tests.result }}
           RUNNER_VERIFICATION_RESULT: ${{ needs.verify_paperclip_runner.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           DOCKER_CONTEXT_INTEGRITY_RESULT: ${{ needs.docker_context_integrity.result }}
         run: |
-          test "$POLICY_RESULT" = "success"
           case "$FULL_CI" in
             true)
               test "$TYPECHECK_RELEASE_REGISTRY_RESULT" = "success"
@@ -1062,6 +1068,15 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # The production image starts the server straight from `pnpm build`
+      # output (Dockerfile CMD), so prove that artifact boots: start it against
+      # a throwaway embedded instance and wait for /api/health to report ok.
+      # This repository has no `dist-runtime` bundle, so the smoke runs the
+      # exact command the image runs (PRX-6120 D2).
+      - name: Boot the built server
+        run: scripts/server-boot-smoke.sh node --import ./server/node_modules/tsx/dist/loader.mjs server/dist/index.js
+        timeout-minutes: 5
 
       # This verification only needs `pnpm build` output (the verifier stages
       # the public packages' dist and reuses ui/dist itself), yet it ran at the
@@ -1614,7 +1629,9 @@ jobs:
     # across the matrix above (same pattern as the `verify` aggregate).
     name: e2e
     if: ${{ always() }}
-    needs: [gate, policy, e2e_shards]
+    # Same rule as `verify`: report on the shards this job owns. A policy red
+    # must not redden an all-green shard set (PRX-6120 D4).
+    needs: [gate, e2e_shards]
     runs-on: ${{ needs.gate.outputs.runner }}
     timeout-minutes: 5
 
@@ -1622,10 +1639,8 @@ jobs:
       - name: Fail if any e2e shard failed
         env:
           FULL_CI: ${{ needs.gate.outputs.full_ci }}
-          POLICY_RESULT: ${{ needs.policy.result }}
           E2E_SHARDS_RESULT: ${{ needs.e2e_shards.result }}
         run: |
-          test "$POLICY_RESULT" = "success"
           case "$FULL_CI" in
             true) test "$E2E_SHARDS_RESULT" = "success" ;;
             false) test "$E2E_SHARDS_RESULT" = "skipped" ;;
