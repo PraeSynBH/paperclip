@@ -299,13 +299,13 @@ describe("classifyQueuedRunWakeability — descriptor-parked", () => {
     contextSnapshot: { issueId },
   });
 
-  it("cancels a blocked issue parked on a human/board unblock action, keeps agent-owned ones", () => {
+  it("cancels a blocked issue parked on any unblock action, whatever the owner type", () => {
     const issueById = new Map([
-      ["issue-human", { status: "blocked", unblockDescriptorOwner: "user" as const, unblockDescriptorAction: "Sign in to the SendGrid console and reissue the key" }],
-      ["issue-board", { status: "blocked", unblockDescriptorOwner: "board" as const, unblockDescriptorAction: "Approve the migration window" }],
-      ["issue-agent", { status: "blocked", unblockDescriptorOwner: "agent" as const, unblockDescriptorAction: "Re-run the failing suite" }],
+      ["issue-human", { status: "blocked", hasUnblockDescriptor: true, unblockDescriptorOwner: "user" as const, unblockDescriptorAction: "Sign in to the SendGrid console and reissue the key" }],
+      ["issue-board", { status: "blocked", hasUnblockDescriptor: true, unblockDescriptorOwner: "board" as const, unblockDescriptorAction: "Approve the migration window" }],
+      ["issue-agent", { status: "blocked", hasUnblockDescriptor: true, unblockDescriptorOwner: "agent" as const, unblockDescriptorAction: "On resume: re-read the card and merge when green" }],
       // Descriptor left behind on a non-blocked issue must not park it.
-      ["issue-todo", { status: "todo", unblockDescriptorOwner: "board" as const, unblockDescriptorAction: "stale" }],
+      ["issue-todo", { status: "todo", hasUnblockDescriptor: true, unblockDescriptorOwner: "board" as const, unblockDescriptorAction: "stale" }],
     ]);
     const verdict = classifyQueuedRunWakeability({
       rows: [row("run-human", "issue-human"), row("run-board", "issue-board"), row("run-agent", "issue-agent"), row("run-todo", "issue-todo")],
@@ -316,10 +316,12 @@ describe("classifyQueuedRunWakeability — descriptor-parked", () => {
     expect(byRunId.get("run-human")?.errorCode).toBe("issue_parked_on_unblock_action");
     expect(byRunId.get("run-human")?.reason).toContain("owned by user");
     expect(byRunId.get("run-board")?.errorCode).toBe("issue_parked_on_unblock_action");
-    // An agent still owns an action here, so the queued run stays work.
-    expect(byRunId.has("run-agent")).toBe(false);
+    // Agent-owned descriptors are the fleet norm (1380 of 1552) and a "wait for X, then do Y"
+    // parking state is just as un-wakeable by an arbitrary automation wake.
+    expect(byRunId.get("run-agent")?.errorCode).toBe("issue_parked_on_unblock_action");
+    expect(byRunId.get("run-agent")?.reason).toContain("owned by agent");
     expect(byRunId.has("run-todo")).toBe(false);
-    expect(verdict.keep.sort()).toEqual(["run-agent", "run-todo"]);
+    expect(verdict.keep).toEqual(["run-todo"]);
   });
 });
 
