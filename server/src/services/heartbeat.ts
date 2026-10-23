@@ -174,10 +174,13 @@ import { toolAccessService } from "./tool-access.js";
 import { visibleIssueCondition } from "./issue-visibility.js";
 import { ISSUE_BLOCKERS_RESOLVED_WAKE_REASON } from "./issue-dependency-wakeups.js";
 // PRA-6499: queued runs must be reaped by age and coalesced per (agent, issue).
+// PRX-6045: and cancelled by reason when their issue is no longer wakeable.
 import {
   classifyQueuedRunBackpressure,
+  classifyQueuedRunWakeability,
   resolveQueuedRunReapBoundSec,
   type QueuedRunBackpressureDecision,
+  type QueuedRunNotWakeableDecision,
 } from "./queued-run-backpressure.js";
 import {
   buildIssueMonitorClearedPatch,
@@ -14091,8 +14094,9 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
   // The update is a compare-and-set on status='queued', so a run that another path
   // claimed in the meantime keeps its real outcome instead of being overwritten.
   async function cancelQueuedRunForBackpressure(
-    decision: QueuedRunBackpressureDecision,
-    boundSec: number,
+    decision: QueuedRunBackpressureDecision | QueuedRunNotWakeableDecision,
+    boundSec: number | null,
+    timeoutSource: string = "queued_run_backpressure",
   ) {
     const now = new Date();
     const write = await setRunStatusFromLive(decision.runId, "cancelled", ["queued"], {
@@ -14102,10 +14106,10 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       resultJson: {
         stopReason: decision.errorCode,
         queuedAgeSec: decision.ageSec,
-        queueReapBoundSec: boundSec,
+        ...(boundSec === null ? {} : { queueReapBoundSec: boundSec }),
         effectiveTimeoutSec: 0,
         timeoutConfigured: false,
-        timeoutSource: "queued_run_backpressure",
+        timeoutSource,
         timeoutFired: false,
       },
     });
@@ -14132,6 +14136,87 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
     return cancelled;
   }
 
+  // PRX-6045: cancel-by-reason for queued runs whose issue can no longer be woken.
+  //
+  // `claimQueuedRun` already refuses to start a queued run whose issue is
+  // terminal, missing, or parked behind unresolved blockers — but it is behind the
+  // slot gate, so on a saturated agent the row is never examined and simply ages
+  // into `queued_run_expired`. Measured 2026-10-23T07:0xZ: of the 531 rows
+  // cancelled as `queued_run_expired` in the previous 24 h, the issue was
+  // `blocked` for 264, `done` for 136, `cancelled` for 8 and missing for 68 — 476
+  // (90 %) were not wakeable work, and the age rule was the only thing that
+  // eventually cleared them.
+  //
+  // This sweep is the same predicate set, moved before the slot gate and run for
+  // every queued row of the agent. It is bookkeeping only: one select, one batched
+  // dependency-readiness lookup, one compare-and-set per doomed row.
+  async function sweepNotWakeableQueuedRunsForAgent(
+    agent: { id: string; companyId: string },
+    cutoff?: Date | null,
+  ) {
+    const agentId = agent.id;
+    const queued = await db
+      .select()
+      .from(heartbeatRuns)
+      .where(
+        and(
+          eq(heartbeatRuns.agentId, agentId),
+          eq(heartbeatRuns.status, "queued"),
+          cutoff ? gte(heartbeatRuns.createdAt, cutoff) : undefined,
+        ),
+      );
+    if (queued.length === 0) return { cancelled: 0 };
+
+    // Rows whose wake is explicitly still meaningful stay: an issue interaction
+    // wake can legitimately target a closed issue, and a resume intent or a fresh
+    // comment is new input the run exists to serve.
+    const candidates = queued.filter((run) => {
+      const context = parseObject(run.contextSnapshot);
+      if (!issueIdFromRunContext(run.contextSnapshot)) return false;
+      if (allowsIssueInteractionWake(context)) return false;
+      const resumeIntent = context.resumeIntent === true || context.followUpRequested === true;
+      if (resumeIntent) return false;
+      if (deriveCommentId(context, null)) return false;
+      return true;
+    });
+    if (candidates.length === 0) return { cancelled: 0 };
+
+    const issueIds = [...new Set(
+      candidates
+        .map((run) => issueIdFromRunContext(run.contextSnapshot))
+        .filter((issueId): issueId is string => Boolean(issueId)),
+    )];
+    const issueRows = await db
+      .select({ id: issues.id, status: issues.status })
+      .from(issues)
+      .where(and(eq(issues.companyId, agent.companyId), inArray(issues.id, issueIds)));
+    const readiness = await listQueuedRunDependencyReadiness(agent.companyId, candidates);
+    const issueById = new Map<string, { status: string | null; unresolvedBlockerCount: number; unresolvedBlockerIssueIds: string[] } | null>(
+      issueIds.map((issueId) => [issueId, null]),
+    );
+    for (const row of issueRows) {
+      const readinessRow = readiness.get(row.id);
+      issueById.set(row.id, {
+        status: row.status ?? null,
+        unresolvedBlockerCount: readinessRow?.unresolvedBlockerCount ?? 0,
+        unresolvedBlockerIssueIds: readinessRow?.unresolvedBlockerIssueIds ?? [],
+      });
+    }
+
+    const verdict = classifyQueuedRunWakeability({ rows: candidates, issueById, now: new Date() });
+    let cancelled = 0;
+    for (const decision of verdict.cancel) {
+      const row = await cancelQueuedRunForBackpressure(decision, null, "queued_run_wakeability_sweep");
+      if (!row) continue;
+      cancelled += 1;
+      logger.info(
+        { runId: decision.runId, issueId: decision.issueId, errorCode: decision.errorCode, source: "wakeability_sweep" },
+        "sweepNotWakeableQueuedRunsForAgent: cancelled not-wakeable queued run",
+      );
+    }
+    return { cancelled };
+  }
+
   async function startNextQueuedRunForAgent(agentId: string) {
     if ((await getSchedulingSuppression()).suppressed) return [];
     const cutoff = await getWorktreeExecutionCutoff();
@@ -14147,6 +14232,9 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         return [];
       }
       const policy = parseHeartbeatPolicy(agent);
+      // PRX-6045: cancel-by-reason first, so a row that can never start is
+      // attributed to the real cause instead of being reaped by age below.
+      await sweepNotWakeableQueuedRunsForAgent(agent, cutoff);
       // PRA-6499: age-reap + per-(agent, issue) coalesce runs before the slot gate,
       // otherwise a saturated single-slot agent never reaches it.
       await enforceQueuedRunBackpressureForAgent(agentId, policy, cutoff);
