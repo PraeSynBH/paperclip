@@ -178,6 +178,8 @@ import { ISSUE_BLOCKERS_RESOLVED_WAKE_REASON } from "./issue-dependency-wakeups.
 import {
   classifyQueuedRunBackpressure,
   classifyQueuedRunWakeability,
+  compareQueuedRunsForPromotion,
+  QUEUED_RUN_ISSUE_BLOCKED_ERROR_CODE,
   resolveQueuedRunReapBoundSec,
   type QueuedRunBackpressureDecision,
   type QueuedRunNotWakeableDecision,
@@ -14187,25 +14189,66 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         .filter((issueId): issueId is string => Boolean(issueId)),
     )];
     const issueRows = await db
-      .select({ id: issues.id, status: issues.status })
+      .select({
+        id: issues.id,
+        status: issues.status,
+        unblockDescriptor: issues.unblockDescriptor,
+      })
       .from(issues)
       .where(and(eq(issues.companyId, agent.companyId), inArray(issues.id, issueIds)));
     const readiness = await listQueuedRunDependencyReadiness(agent.companyId, candidates);
-    const issueById = new Map<string, { status: string | null; unresolvedBlockerCount: number; unresolvedBlockerIssueIds: string[] } | null>(
-      issueIds.map((issueId) => [issueId, null]),
-    );
+    const issueById = new Map<
+      string,
+      {
+        status: string | null;
+        unresolvedBlockerCount: number;
+        unresolvedBlockerIssueIds: string[];
+        unblockDescriptorOwner: "board" | "user" | "agent" | null;
+        unblockDescriptorAction: string | null;
+      } | null
+    >(issueIds.map((issueId) => [issueId, null]));
     for (const row of issueRows) {
       const readinessRow = readiness.get(row.id);
+      // IssueUnblockOwner is `{ agentId } | { userId } | "board"`: only a human or board
+      // owner parks the issue against an agent wake (see the classifier).
+      const descriptorOwner = row.unblockDescriptor?.owner ?? null;
+      const descriptorOwnerKind: "board" | "user" | "agent" | null =
+        descriptorOwner === "board"
+          ? "board"
+          : descriptorOwner && typeof descriptorOwner === "object" && "agentId" in descriptorOwner
+            ? "agent"
+            : descriptorOwner && typeof descriptorOwner === "object" && "userId" in descriptorOwner
+              ? "user"
+              : null;
       issueById.set(row.id, {
         status: row.status ?? null,
         unresolvedBlockerCount: readinessRow?.unresolvedBlockerCount ?? 0,
         unresolvedBlockerIssueIds: readinessRow?.unresolvedBlockerIssueIds ?? [],
+        unblockDescriptorOwner: descriptorOwnerKind,
+        unblockDescriptorAction: row.unblockDescriptor?.action ?? null,
       });
     }
 
     const verdict = classifyQueuedRunWakeability({ rows: candidates, issueById, now: new Date() });
+    const runById = new Map(candidates.map((run) => [run.id, run]));
     let cancelled = 0;
     for (const decision of verdict.cancel) {
+      // Unresolved blockers already have a claim-time implementation with its own code and
+      // message (`issue_dependencies_blocked`). Reuse it rather than growing a second
+      // vocabulary for the same condition.
+      const run = runById.get(decision.runId);
+      if (!run) continue;
+      if (decision.errorCode === QUEUED_RUN_ISSUE_BLOCKED_ERROR_CODE) {
+        const unresolvedBlockerIssueIds = issueById.get(decision.issueId)?.unresolvedBlockerIssueIds ?? [];
+        const blocked = await cancelQueuedRunForBlockedDependencies(run, decision.issueId, unresolvedBlockerIssueIds);
+        if (!blocked) continue;
+        cancelled += 1;
+        logger.info(
+          { runId: decision.runId, issueId: decision.issueId, errorCode: decision.errorCode, source: "wakeability_sweep" },
+          "sweepNotWakeableQueuedRunsForAgent: cancelled blocked queued run",
+        );
+        continue;
+      }
       const row = await cancelQueuedRunForBackpressure(decision, null, "queued_run_wakeability_sweep");
       if (!row) continue;
       cancelled += 1;
@@ -14273,23 +14316,26 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         );
       const issueById = new Map(issueRows.map((row) => [row.id, row]));
       const companyAgents = await listCompanyAgentOrgRows(agent.companyId);
-      const prioritizedRuns = [...queuedRuns].sort((left, right) => {
-        const leftIssueId = readNonEmptyString(parseObject(left.contextSnapshot).issueId);
-        const rightIssueId = readNonEmptyString(parseObject(right.contextSnapshot).issueId);
-        const leftReadiness = leftIssueId ? dependencyReadiness.get(leftIssueId) : null;
-        const rightReadiness = rightIssueId ? dependencyReadiness.get(rightIssueId) : null;
-        const leftReady = leftIssueId ? (leftReadiness?.isDependencyReady ?? true) : true;
-        const rightReady = rightIssueId ? (rightReadiness?.isDependencyReady ?? true) : true;
-        const leftIssue = leftIssueId ? issueById.get(leftIssueId) : null;
-        const rightIssue = rightIssueId ? issueById.get(rightIssueId) : null;
-        const leftRank = leftIssueId ? (leftReady ? (leftIssue?.status === "in_progress" ? 0 : 1) : 3) : 2;
-        const rightRank = rightIssueId ? (rightReady ? (rightIssue?.status === "in_progress" ? 0 : 1) : 3) : 2;
-        if (leftRank !== rightRank) return leftRank - rightRank;
-        const leftPriorityRank = issueRunPriorityRank(leftIssue?.priority);
-        const rightPriorityRank = issueRunPriorityRank(rightIssue?.priority);
-        if (leftPriorityRank !== rightPriorityRank) return leftPriorityRank - rightPriorityRank;
-        return left.createdAt.getTime() - right.createdAt.getTime();
-      });
+      // PRX-6045: oldest-wakeable-first. The old order ranked `in_progress` above every
+      // other status and then by priority, which reorders around older rows — and with a
+      // constant reap bound that is the same as choosing which row reaps. See
+      // compareQueuedRunsForPromotion for the arithmetic and the PRX-5554 case.
+      const promotionEntry = (run: typeof heartbeatRuns.$inferSelect) => {
+        const issueId = readNonEmptyString(parseObject(run.contextSnapshot).issueId);
+        const issue = issueId ? issueById.get(issueId) ?? null : null;
+        const readiness = issueId ? dependencyReadiness.get(issueId) ?? null : null;
+        return {
+          runId: run.id,
+          createdAtMs: run.createdAt.getTime(),
+          hasIssueId: Boolean(issueId),
+          issueReady: issueId ? (readiness?.isDependencyReady ?? true) : true,
+          issueStatus: issue?.status ?? null,
+          priorityRank: issueRunPriorityRank(issue?.priority),
+        };
+      };
+      const prioritizedRuns = [...queuedRuns].sort((left, right) =>
+        compareQueuedRunsForPromotion(promotionEntry(left), promotionEntry(right)),
+      );
 
       const claimedRuns: Array<typeof heartbeatRuns.$inferSelect> = [];
       for (const queuedRun of prioritizedRuns) {

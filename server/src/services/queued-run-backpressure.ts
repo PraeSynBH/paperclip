@@ -38,7 +38,8 @@ export const QUEUED_RUN_SUPERSEDED_ERROR_CODE = "superseded_by_newer_wake";
 // as `queued_run_expired` (the age rule, which says nothing about why).
 export const QUEUED_RUN_ISSUE_NOT_FOUND_ERROR_CODE = "issue_not_found";
 export const QUEUED_RUN_ISSUE_TERMINAL_ERROR_CODE = "issue_terminal_status";
-export const QUEUED_RUN_ISSUE_BLOCKED_ERROR_CODE = "issue_blocked_by_dependencies";
+export const QUEUED_RUN_ISSUE_BLOCKED_ERROR_CODE = "issue_dependencies_blocked";
+export const QUEUED_RUN_ISSUE_DESCRIPTOR_PARKED_ERROR_CODE = "issue_parked_on_unblock_action";
 
 export type QueuedRunTerminalErrorCode =
   | typeof QUEUED_RUN_EXPIRED_ERROR_CODE
@@ -47,7 +48,8 @@ export type QueuedRunTerminalErrorCode =
 export type QueuedRunNotWakeableErrorCode =
   | typeof QUEUED_RUN_ISSUE_NOT_FOUND_ERROR_CODE
   | typeof QUEUED_RUN_ISSUE_TERMINAL_ERROR_CODE
-  | typeof QUEUED_RUN_ISSUE_BLOCKED_ERROR_CODE;
+  | typeof QUEUED_RUN_ISSUE_BLOCKED_ERROR_CODE
+  | typeof QUEUED_RUN_ISSUE_DESCRIPTOR_PARKED_ERROR_CODE;
 
 /**
  * The subset of a `heartbeat_runs` row the classifier needs. Deliberately
@@ -311,7 +313,7 @@ export function summariseAgentQueue(input: {
  * they can be classified without touching the database:
  *
  *   - `done` / `cancelled`  -> `issue_terminal_status`
- *   - unresolved blockers   -> `issue_blocked_by_dependencies`
+ *   - unresolved blockers   -> `issue_dependencies_blocked`
  *   - row points at nothing -> `issue_not_found`
  *
  * Everything else is `keep`. A `blocked` issue whose blockers are all resolved is
@@ -327,6 +329,14 @@ export interface QueuedRunWakeabilityIssueLike {
   status?: string | null;
   unresolvedBlockerCount?: number | null;
   unresolvedBlockerIssueIds?: ReadonlyArray<string> | null;
+  /**
+   * The issue's `unblockDescriptor` owner, when it has one. A descriptor names the
+   * single action that unparks the issue. Only human/board-owned descriptors park the
+   * issue against an agent wake: an agent-owned descriptor means an agent still has
+   * work to do, so queued runs for it stay wakeable.
+   */
+  unblockDescriptorOwner?: "board" | "user" | "agent" | null;
+  unblockDescriptorAction?: string | null;
 }
 
 export interface QueuedRunNotWakeableDecision {
@@ -402,6 +412,29 @@ export function classifyQueuedRunWakeability(input: {
       continue;
     }
 
+    // Descriptor-parked: `blocked` with a human/board-owned unblock action pending. No
+    // agent wake can make progress on it — the wake just queues behind work that can and
+    // then reaps. Measured on the Praxis CTO queue 2026-10-23T08:19Z: 2 of its 3 queued
+    // rows were descriptor-parked `blocked` issues carrying fresh automation wakes, and
+    // both sat ahead of a decided `todo` card (PRX-5554) that had already been reaped
+    // three times.
+    const descriptorOwner = issue.unblockDescriptorOwner ?? null;
+    if (
+      status === "blocked" &&
+      (descriptorOwner === "board" || descriptorOwner === "user")
+    ) {
+      const action = typeof issue.unblockDescriptorAction === "string" ? issue.unblockDescriptorAction.trim() : "";
+      verdict.cancel.push({
+        ...base,
+        errorCode: QUEUED_RUN_ISSUE_DESCRIPTOR_PARKED_ERROR_CODE,
+        reason:
+          `Cancelled because the issue is parked on an unblock action owned by ${descriptorOwner}` +
+          (action ? ` (${action.slice(0, 160)})` : "") +
+          `, so an agent wake cannot make progress on it (waited ${describeQueuedAge(ageSec)})`,
+      });
+      continue;
+    }
+
     const unresolvedBlockerCount = Number(issue.unresolvedBlockerCount ?? 0);
     if (Number.isFinite(unresolvedBlockerCount) && unresolvedBlockerCount > 0) {
       const blockerIds = Array.isArray(issue.unresolvedBlockerIssueIds)
@@ -422,4 +455,53 @@ export function classifyQueuedRunWakeability(input: {
   }
 
   return verdict;
+}
+
+/**
+ * PRX-6045 (follow-up from the 2026-10-23T07:58Z Praxis CTO measurement) — promotion
+ * order for a freed slot.
+ *
+ * The reap bound is a constant (`max(2 x interval, 1h)`) while the queue is not, and an
+ * agent's service time is a step function (~30 min for the Praxis CTO: p50 22.9 min on
+ * successes, exactly 30.0 min on timeouts). So a row that sits 3 deep is already
+ * guaranteed to reap: 3 x 30 min = 90 min > 60 min bound. Any ordering that reorders
+ * *around* a queued row therefore hands that row a guaranteed expiry — which is exactly
+ * what "in_progress first, then priority" did to PRX-5554 (reaped three times at 05:49,
+ * 06:50 and again at 07:58, behind two descriptor-parked automation wakes).
+ *
+ * The rule is the one the card asks for: **promote the oldest run for an issue that is
+ * still wakeable**. Readiness stays a hard partition (a not-ready row is never promoted
+ * ahead of a ready one — claim would cancel it anyway), and issue-less timer wakes sort
+ * after issue work. Inside a partition, age wins; priority only breaks exact-age ties, so
+ * it can still order two wakes created in the same millisecond.
+ *
+ * Consequence worth stating: under sustained saturation this is FIFO, and priority no
+ * longer reorders the queue. That is deliberate — with a constant bound, reordering is
+ * just choosing which row reaps.
+ */
+export interface QueuedRunPromotionEntry {
+  runId: string;
+  createdAtMs: number;
+  hasIssueId: boolean;
+  issueReady: boolean;
+  issueStatus?: string | null;
+  priorityRank: number;
+}
+
+export function promotionRankClass(entry: QueuedRunPromotionEntry): number {
+  if (entry.hasIssueId && !entry.issueReady) return 3;
+  if (!entry.hasIssueId) return 2;
+  return 0;
+}
+
+export function compareQueuedRunsForPromotion(
+  left: QueuedRunPromotionEntry,
+  right: QueuedRunPromotionEntry,
+): number {
+  const leftClass = promotionRankClass(left);
+  const rightClass = promotionRankClass(right);
+  if (leftClass !== rightClass) return leftClass - rightClass;
+  if (left.createdAtMs !== right.createdAtMs) return left.createdAtMs - right.createdAtMs;
+  if (left.priorityRank !== right.priorityRank) return left.priorityRank - right.priorityRank;
+  return String(left.runId).localeCompare(String(right.runId));
 }

@@ -11,6 +11,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyQueuedRunBackpressure,
   classifyQueuedRunWakeability,
+  compareQueuedRunsForPromotion,
   describeQueuedAge,
   resolveQueuedRunReapBoundSec,
   summariseAgentQueue,
@@ -261,7 +262,7 @@ describe("classifyQueuedRunWakeability", () => {
     const byRunId = new Map(verdict.cancel.map((decision) => [decision.runId, decision]));
     expect(byRunId.get("run-done")?.errorCode).toBe("issue_terminal_status");
     expect(byRunId.get("run-cancelled")?.errorCode).toBe("issue_terminal_status");
-    expect(byRunId.get("run-blocked")?.errorCode).toBe("issue_blocked_by_dependencies");
+    expect(byRunId.get("run-blocked")?.errorCode).toBe("issue_dependencies_blocked");
     expect(byRunId.get("run-blocked")?.reason).toContain("2 unresolved blockers");
     expect(byRunId.get("run-blocked")?.reason).toContain("PRX-1");
     expect(byRunId.get("run-missing")?.errorCode).toBe("issue_not_found");
@@ -281,5 +282,86 @@ describe("classifyQueuedRunWakeability", () => {
     });
     expect(verdict.cancel).toHaveLength(0);
     expect(verdict.keep).toEqual([]);
+  });
+});
+
+// PRX-6045 (2nd pass, after the 2026-10-23T07:58Z Praxis CTO measurement):
+// descriptor-parked issues are not wakeable by an agent wake, and promotion is
+// oldest-wakeable-first rather than status/priority-first.
+describe("classifyQueuedRunWakeability — descriptor-parked", () => {
+  const row = (id: string, issueId: string): QueuedRunRowLike => ({
+    id,
+    agentId: "agent-a",
+    status: "queued",
+    startedAt: null,
+    createdAt: "2026-10-23T07:00:00Z",
+    wakeupRequestId: `${id}-wake`,
+    contextSnapshot: { issueId },
+  });
+
+  it("cancels a blocked issue parked on a human/board unblock action, keeps agent-owned ones", () => {
+    const issueById = new Map([
+      ["issue-human", { status: "blocked", unblockDescriptorOwner: "user" as const, unblockDescriptorAction: "Sign in to the SendGrid console and reissue the key" }],
+      ["issue-board", { status: "blocked", unblockDescriptorOwner: "board" as const, unblockDescriptorAction: "Approve the migration window" }],
+      ["issue-agent", { status: "blocked", unblockDescriptorOwner: "agent" as const, unblockDescriptorAction: "Re-run the failing suite" }],
+      // Descriptor left behind on a non-blocked issue must not park it.
+      ["issue-todo", { status: "todo", unblockDescriptorOwner: "board" as const, unblockDescriptorAction: "stale" }],
+    ]);
+    const verdict = classifyQueuedRunWakeability({
+      rows: [row("run-human", "issue-human"), row("run-board", "issue-board"), row("run-agent", "issue-agent"), row("run-todo", "issue-todo")],
+      issueById,
+      now: new Date("2026-10-23T08:00:00Z"),
+    });
+    const byRunId = new Map(verdict.cancel.map((decision) => [decision.runId, decision]));
+    expect(byRunId.get("run-human")?.errorCode).toBe("issue_parked_on_unblock_action");
+    expect(byRunId.get("run-human")?.reason).toContain("owned by user");
+    expect(byRunId.get("run-board")?.errorCode).toBe("issue_parked_on_unblock_action");
+    // An agent still owns an action here, so the queued run stays work.
+    expect(byRunId.has("run-agent")).toBe(false);
+    expect(byRunId.has("run-todo")).toBe(false);
+    expect(verdict.keep.sort()).toEqual(["run-agent", "run-todo"]);
+  });
+});
+
+describe("compareQueuedRunsForPromotion", () => {
+  const entry = (over: Partial<Parameters<typeof compareQueuedRunsForPromotion>[0]> & { runId: string }) => ({
+    createdAtMs: Date.parse("2026-10-23T07:00:00Z"),
+    hasIssueId: true,
+    issueReady: true,
+    issueStatus: "todo",
+    priorityRank: 2,
+    ...over,
+  });
+
+  it("promotes the oldest wakeable run even when a newer one is in_progress and higher priority", () => {
+    // The PRX-5554 shape: a decided `todo` card queued at 00:58 behind fresh
+    // automation wakes on `in_progress` issues. Under the old status/priority rank the
+    // card was passed over on every slot and reaped at 60 min, three times.
+    const praxisCto = [
+      entry({ runId: "newer-in-progress", createdAtMs: Date.parse("2026-10-23T07:31:00Z"), issueStatus: "in_progress", priorityRank: 0 }),
+      entry({ runId: "prx-5554", createdAtMs: Date.parse("2026-10-23T06:58:00Z"), issueStatus: "todo", priorityRank: 2 }),
+      entry({ runId: "oldest-todo", createdAtMs: Date.parse("2026-10-23T06:25:00Z"), issueStatus: "todo", priorityRank: 3 }),
+    ];
+    const order = [...praxisCto].sort(compareQueuedRunsForPromotion).map((run) => run.runId);
+    expect(order).toEqual(["oldest-todo", "prx-5554", "newer-in-progress"]);
+  });
+
+  it("never promotes a not-ready run ahead of a ready one, and puts timer wakes after issue work", () => {
+    const rows = [
+      entry({ runId: "blocked-issue", createdAtMs: Date.parse("2026-10-23T05:00:00Z"), issueReady: false, issueStatus: "todo" }),
+      entry({ runId: "timer-wake", createdAtMs: Date.parse("2026-10-23T05:30:00Z"), hasIssueId: false }),
+      entry({ runId: "ready", createdAtMs: Date.parse("2026-10-23T07:00:00Z") }),
+    ];
+    const order = [...rows].sort(compareQueuedRunsForPromotion).map((run) => run.runId);
+    expect(order).toEqual(["ready", "timer-wake", "blocked-issue"]);
+  });
+
+  it("uses priority only to break an exact-age tie", () => {
+    const sameMs = Date.parse("2026-10-23T07:00:00Z");
+    const rows = [
+      entry({ runId: "low", createdAtMs: sameMs, priorityRank: 3 }),
+      entry({ runId: "critical", createdAtMs: sameMs, priorityRank: 0 }),
+    ];
+    expect([...rows].sort(compareQueuedRunsForPromotion).map((run) => run.runId)).toEqual(["critical", "low"]);
   });
 });
