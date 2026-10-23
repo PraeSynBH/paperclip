@@ -627,4 +627,77 @@ describe("issue graph liveness classifier", () => {
       recoveryIssueId: reviewIssueId,
     });
   });
+
+  // PRX-6126: a monitor whose due time just passed is still going to run — the
+  // scheduler only claims due checks on its next tick. Treating that window as
+  // "no path" is what blocked PRX-5921 24 s before its own monitor fired.
+  describe("due-but-unclaimed issue monitors", () => {
+    const reviewIssueId = "review-monitor-1";
+    const now = new Date("2026-10-23T21:10:00.000Z");
+
+    function reviewIssueWithMonitor(nextCheckAt: Date) {
+      return issue({
+        id: reviewIssueId,
+        identifier: "PAP-5921",
+        title: "Root API-base rescue",
+        status: "in_review",
+        assigneeAgentId: coderId,
+        executionState: null,
+        monitorNextCheckAt: nextCheckAt,
+        monitorAttemptCount: 3,
+        executionPolicy: {
+          version: 1,
+          monitor: {
+            nextCheckAt: nextCheckAt.toISOString(),
+            maxAttempts: 24,
+            recoveryPolicy: "wake_owner",
+            notes: "poll the landed build",
+          },
+        },
+      });
+    }
+
+    it("keeps a monitor 60 s past due as a live path, so no false incident is raised", () => {
+      const findings = classifyIssueGraphLiveness({
+        issues: [reviewIssueWithMonitor(new Date(now.getTime() - 60_000))],
+        relations: [],
+        agents: [agent(), manager],
+        now,
+      });
+
+      expect(findings).toHaveLength(0);
+    });
+
+    it("still reports in_review_without_action_path once the same monitor is an hour past due", () => {
+      const findings = classifyIssueGraphLiveness({
+        issues: [reviewIssueWithMonitor(new Date(now.getTime() - 60 * 60_000))],
+        relations: [],
+        agents: [agent(), manager],
+        now,
+      });
+
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toMatchObject({
+        issueId: reviewIssueId,
+        state: "in_review_without_action_path",
+        recoveryIssueId: reviewIssueId,
+      });
+    });
+
+    it("does not extend the grace to an exhausted monitor", () => {
+      const stale = reviewIssueWithMonitor(new Date(now.getTime() - 60_000));
+      const findings = classifyIssueGraphLiveness({
+        issues: [{ ...stale, monitorAttemptCount: 24 }],
+        relations: [],
+        agents: [agent(), manager],
+        now,
+      });
+
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toMatchObject({
+        issueId: reviewIssueId,
+        state: "in_review_without_action_path",
+      });
+    });
+  });
 });
