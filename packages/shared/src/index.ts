@@ -1266,6 +1266,7 @@ export type {
   BudgetPolicySummary,
   BudgetIncident,
   BudgetOverview,
+  AgentBudgetDrift,
   BudgetPolicyUpsertInput,
   BudgetIncidentResolutionInput,
   CostEvent,
