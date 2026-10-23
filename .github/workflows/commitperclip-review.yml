@@ -16,6 +16,13 @@ jobs:
   review:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    env:
+      # The bot key is a repository secret. On a fork it is usually absent, and
+      # a job that fails on the missing key reddens every pull request without
+      # saying anything about the change (PRX-6120 D3). The gate steps below
+      # run only when the key exists; otherwise the job states that the review
+      # gate is not configured here and passes.
+      COMMITPERCLIP_KEY: ${{ secrets.COMMITPERCLIP_KEY }}
     steps:
       - name: Checkout base branch (never PR code)
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -50,18 +57,29 @@ jobs:
         with:
           node-version: '24'
 
+      - name: Report an unconfigured review gate
+        if: env.COMMITPERCLIP_KEY == ''
+        run: |
+          echo "::warning title=commitperclip review gate not configured::$COMMITPERCLIP_KEY is not set in this repository. The quality gates did not run. Set the COMMITPERCLIP_KEY secret to enable them."
+          {
+            echo "### commitperclip review gate not configured"
+            echo
+            echo "This repository has no \`COMMITPERCLIP_KEY\` secret, so the quality gates did not run."
+            echo "Set that secret to enable the gate. A missing secret is not a failed pull request,"
+            echo "so this job reports the gap instead of a red check."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Generate commitperclip token
         id: token
+        if: env.COMMITPERCLIP_KEY != ''
         run: |
           TOKEN=$(node .github/scripts/get-bot-token.mjs)
           echo "::add-mask::$TOKEN"
           echo "value=$TOKEN" >> $GITHUB_OUTPUT
-        env:
-          COMMITPERCLIP_KEY: ${{ secrets.COMMITPERCLIP_KEY }}
 
       - name: Run quality gates
         id: quality
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        if: env.COMMITPERCLIP_KEY != '' && github.event.pull_request.user.login != 'dependabot[bot]'
         run: node .github/scripts/run-quality-gates.mjs
         continue-on-error: true
         env:
@@ -73,6 +91,7 @@ jobs:
 
       - name: Fail if quality gates failed
         if: >-
+          env.COMMITPERCLIP_KEY != '' &&
           github.event.pull_request.user.login != 'dependabot[bot]' &&
           steps.quality.outcome == 'failure'
         run: |
