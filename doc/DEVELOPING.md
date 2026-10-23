@@ -28,8 +28,24 @@ GitHub Actions owns `pnpm-lock.yaml`.
 
 ## Trusted PR Workflow
 
-The PR caller uses `paperclipai/paperclip/.github/workflows/pr-trusted.yml@master`.
-The AWS runner group `paperclip-public-pr` must allow
+The PR caller (`.github/workflows/pr.yml`) uses this repository's own
+`./.github/workflows/pr-trusted.yml`. It used to call
+`paperclipai/paperclip/.github/workflows/pr-trusted.yml@master`, which cannot be
+edited from this repository. That upstream copy required artifacts this tree does
+not carry, so `ci / policy` and `ci / Build` were red on every pull request. Its
+`verify` and `e2e` aggregates also started with `test "$POLICY_RESULT" =
+"success"`, so one policy red printed two more reds over lanes that had all
+passed. Both defects now have in-repo fixes: `scripts/docker-deps-postinstall.test.mjs`
+and `scripts/server-boot-smoke.sh` exist here, and each aggregate reports only
+its own lanes.
+
+If this repository ever accepts untrusted contributors, pin the callee to a
+commit SHA on `master` and refresh it by pull request, as the AWS runner group
+below does for `ci-routing.yml`. `.github/**` stays CODEOWNERS-gated so that the
+CI definition is still reviewed before it runs.
+
+If the caller returns to an upstream reference, the AWS runner group
+`paperclip-public-pr` must allow
 `paperclipai/paperclip/.github/workflows/pr-trusted.yml@refs/heads/master`.
 New workflow versions merged into master then receive runner access without a
 separate SHA allowlist update. Dependabot leaves this first-party reference on
