@@ -124,6 +124,7 @@ const budgetOverviewFixture: BudgetOverview = {
   companyId: COMPANY_ID,
   policies: [],
   activeIncidents: [],
+  agentBudgetDrift: [],
   pausedAgentCount: 0,
   pausedProjectCount: 0,
   pendingApprovalCount: 0,

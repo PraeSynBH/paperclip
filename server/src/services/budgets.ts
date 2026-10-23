@@ -14,6 +14,7 @@ import {
   projects,
 } from "@paperclipai/db";
 import type {
+  AgentBudgetDrift,
   BudgetIncident,
   BudgetIncidentResolutionInput,
   BudgetMetric,
@@ -219,6 +220,66 @@ async function computeObservedSpends(db: Db, policies: SpendPolicy[]): Promise<O
 
 export async function computeObservedSpend(db: Db, policy: SpendPolicy) {
   return (await computeObservedSpends(db, [policy]))[0];
+}
+
+/**
+ * Agent rows whose mirrored monthly limit disagrees with the policy dispatch
+ * enforces. The policy is authoritative at dispatch, so a drifted row is a lie
+ * in whichever direction it points:
+ *
+ * - `agent_row_higher` — the agent looks funded, dispatch hard-stops earlier
+ *   (the PRX-5585 freeze: $100,000 on the row, $500 enforced).
+ * - `policy_higher` — the row reads "$0/month" while dispatch allows the policy
+ *   amount, so nothing warns anyone that the lane is funded.
+ *
+ * Only the shape the agent column actually mirrors is compared: `agent`-scope,
+ * `billed_cents`, `calendar_month_utc`. A disabled policy's effective limit is
+ * `0`, matching `buildPolicySummary`, so a saved-but-disabled amount is not
+ * reported as drift.
+ *
+ * Both write paths reconcile (see `upsertPolicy` and
+ * `completeAgentConfiguration`), so a row here means an out-of-band write, a
+ * partial hire, or a write that predates the reconciliation. This read is the
+ * backstop that makes those states visible instead of silent.
+ */
+export async function listAgentBudgetDrift(db: Db, companyId: string): Promise<AgentBudgetDrift[]> {
+  const rows = await db
+    .select({
+      companyId: budgetPolicies.companyId,
+      agentId: agents.id,
+      agentName: agents.name,
+      agentStatus: agents.status,
+      agentRowAmount: agents.budgetMonthlyCents,
+      agentUpdatedAt: agents.updatedAt,
+      policyId: budgetPolicies.id,
+      policyAmount: budgetPolicies.amount,
+      policyIsActive: budgetPolicies.isActive,
+      policyUpdatedAt: budgetPolicies.updatedAt,
+      hardStopEnabled: budgetPolicies.hardStopEnabled,
+    })
+    .from(budgetPolicies)
+    .innerJoin(
+      agents,
+      and(eq(agents.id, budgetPolicies.scopeId), eq(agents.companyId, budgetPolicies.companyId)),
+    )
+    .where(and(
+      eq(budgetPolicies.companyId, companyId),
+      eq(budgetPolicies.scopeType, "agent"),
+      eq(budgetPolicies.metric, "billed_cents"),
+      eq(budgetPolicies.windowKind, "calendar_month_utc"),
+      sql`(case when ${budgetPolicies.isActive} then ${budgetPolicies.amount} else 0 end) <> ${agents.budgetMonthlyCents}`,
+    ))
+    .orderBy(desc(budgetPolicies.updatedAt), desc(agents.id));
+
+  return rows.map((row) => {
+    const policyEffectiveAmount = row.policyIsActive ? row.policyAmount : 0;
+    return {
+      ...row,
+      policyEffectiveAmount,
+      direction: policyEffectiveAmount > row.agentRowAmount ? "policy_higher" as const : "agent_row_higher" as const,
+      difference: Math.abs(policyEffectiveAmount - row.agentRowAmount),
+    };
+  });
 }
 
 function observedBlocks(policy: PolicyRow, observed: Awaited<ReturnType<typeof computeObservedSpend>>) {
@@ -764,6 +825,7 @@ export function budgetServiceInTransaction(db: Db, publications: ActivityPublica
         companyId,
         policies,
         activeIncidents,
+        agentBudgetDrift: await listAgentBudgetDrift(db, companyId),
         pausedAgentCount: new Set(policies.filter((policy) => policy.scopeType === "agent" && policy.paused).map((policy) => policy.scopeId)).size,
         pausedProjectCount: new Set(policies.filter((policy) => policy.scopeType === "project" && policy.paused).map((policy) => policy.scopeId)).size,
         pendingApprovalCount: activeIncidents.filter((incident) => incident.approvalStatus === "pending").length,

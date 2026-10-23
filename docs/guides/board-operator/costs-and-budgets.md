@@ -48,6 +48,32 @@ Paperclip enforces budgets automatically:
 
 An auto-paused agent can be resumed by increasing its budget or waiting for the next calendar month.
 
+### Two numbers, one limit
+
+An agent's monthly limit is stored twice:
+
+- `agents.budget_monthly_cents` — what every agent-facing surface shows (agent page, roster, dashboard).
+- an agent-scope `budget_policies` row (`metric: billed_cents`, `window_kind: calendar_month_utc`) — **what dispatch actually enforces.**
+
+Dispatch reads the policy. If the two disagree, the agent page can advertise one limit while the
+scheduler refuses (or allows) another. Both write paths reconcile the pair — patching
+`budgetMonthlyCents` upserts the policy, and upserting the policy writes the agent column — so the
+normal product surfaces cannot leave them apart. Rows written out-of-band (direct SQL, an
+older release, a hire that failed between the two writes) can still disagree, so the company
+attention feed carries a **Budget drift** row for every agent whose two numbers disagree, naming
+both amounts and which way they point. `GET /api/companies/{companyId}/budgets/overview` returns
+the same list as `agentBudgetDrift`.
+
+Two enforcement facts that are easy to get wrong when reading a stuck lane:
+
+- The **policy wins at dispatch**, not the agent row. Raising the agent row alone never lifts a
+  hard stop.
+- `hardStopEnabled: false` on a policy lets the scope spend **past** its cap — the cap still shows
+  in the UI, and the only stop left is the escalation threshold. Disable it deliberately.
+
+A hard stop whose recovery is board-owned cannot be cleared by an agent; it needs a budget change
+from the board.
+
 ## Viewing Costs
 
 ### Dashboard

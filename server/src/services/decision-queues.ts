@@ -4,6 +4,7 @@ import {
   agents,
   approvals,
   budgetIncidents,
+  budgetPolicies,
   decisionQueueItems,
   decisionQueues,
   decisions,
@@ -280,6 +281,19 @@ async function sourceIssueId(
         .then((rows) => rows[0] ?? null);
       return { exists: Boolean(row), issueId: null };
     }
+    case "budget_drift": {
+      // The source id is the budget policy whose amount disagrees with the
+      // agent row; the agent is the entity an operator acts on.
+      const row = await db.select({ id: budgetPolicies.id, agentId: budgetPolicies.scopeId })
+        .from(budgetPolicies)
+        .where(and(
+          eq(budgetPolicies.companyId, companyId),
+          eq(budgetPolicies.id, sourceId),
+          eq(budgetPolicies.scopeType, "agent"),
+        ))
+        .then((rows) => rows[0] ?? null);
+      return { exists: Boolean(row), issueId: null, agentId: row?.agentId ?? null };
+    }
   }
 }
 
@@ -310,8 +324,9 @@ export async function canReadDecisionSource(
     return source.ownerAgentId === actor.agentId;
   }
 
-  // Join requests, unlinked approvals, and budget incidents are board-only
-  // governance data. Same-company existence is deliberately not authority.
+  // Join requests, unlinked approvals, budget incidents, and budget drift are
+  // board-only governance data. Same-company existence is deliberately not
+  // authority.
   if (actor.type !== "board") return false;
   return (await authz.decide({
     actor,
