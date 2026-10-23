@@ -12,6 +12,7 @@ import {
 import type {
   BudgetIncident,
   BudgetIncidentResolutionInput,
+  BudgetIncidentTrigger,
   BudgetMetric,
   BudgetOverview,
   PauseReason,
@@ -165,14 +166,64 @@ async function computeObservedAmount(
   return Number(row?.total ?? 0);
 }
 
+function formatCents(cents: number) {
+  return `$${(cents / 100).toFixed(2)}`;
+}
+
+/**
+ * One-line reading of an incident that names the trigger (PRX-5485). Without this,
+ * a `policy_rearm` row is indistinguishable from a `cost_event` row and reads as
+ * "the gate let spend through" when it actually means "a cap was armed on spend
+ * that was booked while the cap was off".
+ */
+function describeIncident(input: {
+  scopeName: string;
+  thresholdType: BudgetThresholdType;
+  amountObserved: number;
+  amountLimit: number;
+  trigger: BudgetIncidentTrigger;
+}) {
+  const observed = formatCents(input.amountObserved);
+  const limit = formatCents(input.amountLimit);
+  const percent = input.amountLimit > 0
+    ? `${((input.amountObserved / input.amountLimit) * 100).toFixed(1)}%`
+    : "n/a";
+
+  if (input.trigger === "policy_rearm") {
+    return `${input.thresholdType === "hard" ? "Hard stop" : "Soft threshold"} armed on existing spend: `
+      + `${input.scopeName} already had ${observed} booked in this window when the cap was set to ${limit} `
+      + `(${percent} of cap). The budget was disarmed while that spend was recorded, so no gate admitted it — `
+      + `this is a re-arm on existing spend, not an over-cap crossing.`;
+  }
+  if (input.trigger === "cost_event") {
+    return `${input.thresholdType === "hard" ? "Hard cap crossed by a cost event" : "Soft threshold reached by a cost event"}: `
+      + `${input.scopeName} booked ${observed} against a ${limit} cap (${percent}), admitted by the pre-run gate.`;
+  }
+  if (input.trigger === "window_reset") {
+    return `${input.thresholdType === "hard" ? "Hard stop" : "Soft threshold"} evaluated at a window roll: `
+      + `${input.scopeName} shows ${observed} against a ${limit} cap (${percent}).`;
+  }
+  return `${input.scopeName} is at ${observed} against a ${limit} cap (${percent}); `
+    + `the trigger for this incident was not recorded (row predates trigger tracking).`;
+}
+
 function buildApprovalPayload(input: {
   policy: PolicyRow;
   scopeName: string;
   thresholdType: BudgetThresholdType;
   amountObserved: number;
+  trigger: BudgetIncidentTrigger;
   windowStart: Date;
   windowEnd: Date;
 }) {
+  const summary = describeIncident({
+    scopeName: input.scopeName,
+    thresholdType: input.thresholdType,
+    amountObserved: input.amountObserved,
+    amountLimit: input.policy.amount,
+    trigger: input.trigger,
+  });
+  const rearm = input.trigger === "policy_rearm";
   return {
     scopeType: input.policy.scopeType,
     scopeId: input.policy.scopeId,
@@ -180,13 +231,19 @@ function buildApprovalPayload(input: {
     metric: input.policy.metric,
     windowKind: input.policy.windowKind,
     thresholdType: input.thresholdType,
+    trigger: input.trigger,
     budgetAmount: input.policy.amount,
     observedAmount: input.amountObserved,
     warnPercent: input.policy.warnPercent,
     windowStart: input.windowStart.toISOString(),
     windowEnd: input.windowEnd.toISOString(),
     policyId: input.policy.id,
-    guidance: "Raise the budget and resume the scope, or keep the scope paused.",
+    summary,
+    incidentText: summary,
+    guidance: rearm
+      ? "The scope crossed its cap when the budget was armed, not by a gated run. "
+        + "Raise the budget above the already-booked spend and resume, or keep the scope paused until the window rolls."
+      : "Raise the budget and resume the scope, or keep the scope paused.",
   };
 }
 
@@ -351,6 +408,7 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
     policy: PolicyRow,
     thresholdType: BudgetThresholdType,
     amountObserved: number,
+    trigger: BudgetIncidentTrigger,
   ) {
     const { start, end } = resolveWindow(policy.windowKind as BudgetWindowKind);
     const existing = await db
@@ -373,6 +431,7 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
       scopeName: normalizeScopeName(policy.scopeType as BudgetScopeType, scope.name),
       thresholdType,
       amountObserved,
+      trigger,
       windowStart: start,
       windowEnd: end,
     });
@@ -406,6 +465,7 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
         thresholdType,
         amountLimit: policy.amount,
         amountObserved,
+        trigger,
         status: "open",
         approvalId: approval?.id ?? null,
       })
@@ -469,13 +529,15 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
     return Promise.all(
       rows.map(async (row) => {
         const scope = await resolveScopeRecord(db, row.scopeType as BudgetScopeType, row.scopeId);
+        const scopeName = normalizeScopeName(row.scopeType as BudgetScopeType, scope.name);
+        const trigger = row.trigger as BudgetIncidentTrigger;
         return {
           id: row.id,
           companyId: row.companyId,
           policyId: row.policyId,
           scopeType: row.scopeType as BudgetScopeType,
           scopeId: row.scopeId,
-          scopeName: normalizeScopeName(row.scopeType as BudgetScopeType, scope.name),
+          scopeName,
           metric: row.metric as BudgetMetric,
           windowKind: row.windowKind as BudgetWindowKind,
           windowStart: row.windowStart,
@@ -483,6 +545,14 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
           thresholdType: row.thresholdType as BudgetThresholdType,
           amountLimit: row.amountLimit,
           amountObserved: row.amountObserved,
+          trigger,
+          summary: describeIncident({
+            scopeName,
+            thresholdType: row.thresholdType as BudgetThresholdType,
+            amountObserved: row.amountObserved,
+            amountLimit: row.amountLimit,
+            trigger,
+          }),
           status: row.status as BudgetIncident["status"],
           approvalId: row.approvalId ?? null,
           approvalStatus: row.approvalId ? approvalStatusById.get(row.approvalId) ?? null : null,
@@ -595,12 +665,14 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
           await resolveOpenIncidentsForPolicy(row.id, actorUserId ? "approved" : null, actorUserId);
         } else {
           const softThreshold = Math.ceil((row.amount * row.warnPercent) / 100);
+          // PRX-5485: this evaluation runs at arm time over the whole window, so the
+          // incident is a re-arm-on-existing-spend, never a cost-event crossing.
           if (row.notifyEnabled && observedAmount >= softThreshold) {
-            await createIncidentIfNeeded(row, "soft", observedAmount);
+            await createIncidentIfNeeded(row, "soft", observedAmount, "policy_rearm");
           }
           if (row.hardStopEnabled && observedAmount >= row.amount) {
             await resolveOpenSoftIncidents(row.id);
-            await createIncidentIfNeeded(row, "hard", observedAmount);
+            await createIncidentIfNeeded(row, "hard", observedAmount, "policy_rearm");
             await pauseAndCancelScopeForBudget(row);
           }
         }
@@ -671,7 +743,7 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
         const softThreshold = Math.ceil((policy.amount * policy.warnPercent) / 100);
 
         if (policy.notifyEnabled && observedAmount >= softThreshold) {
-          const softIncident = await createIncidentIfNeeded(policy, "soft", observedAmount);
+          const softIncident = await createIncidentIfNeeded(policy, "soft", observedAmount, "cost_event");
           if (softIncident?.created) {
             await logActivity(db, {
               companyId: policy.companyId,
@@ -692,7 +764,7 @@ export function budgetService(db: Db, hooks: BudgetServiceHooks = {}) {
 
         if (policy.hardStopEnabled && observedAmount >= policy.amount) {
           await resolveOpenSoftIncidents(policy.id);
-          const hardIncident = await createIncidentIfNeeded(policy, "hard", observedAmount);
+          const hardIncident = await createIncidentIfNeeded(policy, "hard", observedAmount, "cost_event");
           await pauseAndCancelScopeForBudget(policy);
           if (hardIncident?.created) {
             await logActivity(db, {
