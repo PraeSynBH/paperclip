@@ -14203,14 +14203,16 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         status: string | null;
         unresolvedBlockerCount: number;
         unresolvedBlockerIssueIds: string[];
+        hasUnblockDescriptor: boolean;
         unblockDescriptorOwner: "board" | "user" | "agent" | null;
         unblockDescriptorAction: string | null;
       } | null
     >(issueIds.map((issueId) => [issueId, null]));
     for (const row of issueRows) {
       const readinessRow = readiness.get(row.id);
-      // IssueUnblockOwner is `{ agentId } | { userId } | "board"`: only a human or board
-      // owner parks the issue against an agent wake (see the classifier).
+      // IssueUnblockOwner is `{ agentId } | { userId } | "board"`. The owner kind is kept
+      // for the cancellation message only: any descriptor parks the issue against an
+      // arbitrary agent wake (89 % of them on this instance are agent-owned).
       const descriptorOwner = row.unblockDescriptor?.owner ?? null;
       const descriptorOwnerKind: "board" | "user" | "agent" | null =
         descriptorOwner === "board"
@@ -14224,6 +14226,7 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         status: row.status ?? null,
         unresolvedBlockerCount: readinessRow?.unresolvedBlockerCount ?? 0,
         unresolvedBlockerIssueIds: readinessRow?.unresolvedBlockerIssueIds ?? [],
+        hasUnblockDescriptor: row.unblockDescriptor !== null && row.unblockDescriptor !== undefined,
         unblockDescriptorOwner: descriptorOwnerKind,
         unblockDescriptorAction: row.unblockDescriptor?.action ?? null,
       });

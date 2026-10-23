@@ -330,11 +330,17 @@ export interface QueuedRunWakeabilityIssueLike {
   unresolvedBlockerCount?: number | null;
   unresolvedBlockerIssueIds?: ReadonlyArray<string> | null;
   /**
-   * The issue's `unblockDescriptor` owner, when it has one. A descriptor names the
-   * single action that unparks the issue. Only human/board-owned descriptors park the
-   * issue against an agent wake: an agent-owned descriptor means an agent still has
-   * work to do, so queued runs for it stay wakeable.
+   * A `blocked` issue carrying an `unblockDescriptor` is parked on a named action: the
+   * descriptor says "wait for X, then do Y" and the wake that resumes it is the one
+   * carrying that signal (an interaction/comment/resume wake, which the caller filters
+   * out before classifying). Any other queued wake cannot move it.
+   *
+   * Measured on this instance 2026-10-23T10:3xZ: of 1552 issues with a descriptor, 1380
+   * are owned by an agent, 164 by the board and 8 by a user — so an owner-type filter
+   * would have exempted 89 % of exactly the rows this rule exists for, including
+   * PRX-5508 (CTO-owned, promoted to `running` and burned a turn on a parked card).
    */
+  hasUnblockDescriptor?: boolean | null;
   unblockDescriptorOwner?: "board" | "user" | "agent" | null;
   unblockDescriptorAction?: string | null;
 }
@@ -412,23 +418,20 @@ export function classifyQueuedRunWakeability(input: {
       continue;
     }
 
-    // Descriptor-parked: `blocked` with a human/board-owned unblock action pending. No
-    // agent wake can make progress on it — the wake just queues behind work that can and
-    // then reaps. Measured on the Praxis CTO queue 2026-10-23T08:19Z: 2 of its 3 queued
-    // rows were descriptor-parked `blocked` issues carrying fresh automation wakes, and
-    // both sat ahead of a decided `todo` card (PRX-5554) that had already been reaped
-    // three times.
+    // Descriptor-parked: `blocked` with an unblock action pending. No agent wake can make
+    // progress on it — the wake just queues behind work that can and then reaps. Measured
+    // on the Praxis CTO queue 2026-10-23T08:19Z: 2 of its 3 queued rows were
+    // descriptor-parked `blocked` issues carrying fresh automation wakes, and both sat
+    // ahead of a decided `todo` card (PRX-5554) that had already been reaped three times.
     const descriptorOwner = issue.unblockDescriptorOwner ?? null;
-    if (
-      status === "blocked" &&
-      (descriptorOwner === "board" || descriptorOwner === "user")
-    ) {
+    if (status === "blocked" && issue.hasUnblockDescriptor === true) {
       const action = typeof issue.unblockDescriptorAction === "string" ? issue.unblockDescriptorAction.trim() : "";
       verdict.cancel.push({
         ...base,
         errorCode: QUEUED_RUN_ISSUE_DESCRIPTOR_PARKED_ERROR_CODE,
         reason:
-          `Cancelled because the issue is parked on an unblock action owned by ${descriptorOwner}` +
+          `Cancelled because the issue is parked on an unblock action` +
+          (descriptorOwner ? ` owned by ${descriptorOwner}` : "") +
           (action ? ` (${action.slice(0, 160)})` : "") +
           `, so an agent wake cannot make progress on it (waited ${describeQueuedAge(ageSec)})`,
       });
