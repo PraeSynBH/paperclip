@@ -50,8 +50,14 @@ test("Docker Hub mirrors apply to both image builders without widening publicati
   assert.match(docker, /platform: linux\/amd64/);
   assert.match(docker, /platform: linux\/arm64/);
   assert.match(docker, /permissions:\n\s+contents: read\n\s+packages: write/);
-  assert.match(docker, /outputs: type=image,name=ghcr\.io\/\$\{\{ github\.repository \}\},push-by-digest=true,name-canonical=true,push=true/);
-  assert.match(docker, /cache-to: type=registry,ref=ghcr\.io\/\$\{\{ github\.repository \}\}:buildcache-\$\{\{ matrix\.arch \}\},mode=max/);
+  // Container-registry references are lowercase-only, and `github.repository`
+  // keeps the owner's casing (`PraeSynBH/paperclip` here), so both refs come
+  // from the job's lowercased GITHUB_REPOSITORY instead.
+  assert.match(docker, /Normalize image repository\n\s+run: echo "IMAGE_REPO=ghcr\.io\/\$\{GITHUB_REPOSITORY,,\}" >> "\$GITHUB_ENV"/);
+  assert.match(docker, /outputs: type=image,name=\$\{\{ env\.IMAGE_REPO \}\},push-by-digest=true,name-canonical=true,push=true/);
+  assert.match(docker, /cache-to: type=registry,ref=\$\{\{ env\.IMAGE_REPO \}\}:buildcache-\$\{\{ matrix\.arch \}\},mode=max/);
+  assert.doesNotMatch(docker, /ghcr\.io\/\$\{\{ github\.repository \}\}/,
+    "a registry reference must never be built from the case-preserving repository slug");
   assert.match(preview, /permissions:\n\s+contents: read\n\s+steps:/);
   assert.match(preview, /platforms: linux\/amd64\n\s+push: false/);
   assert.match(preview, /outputs: type=docker,dest=\$\{\{ runner\.temp \}\}\/preview-image\.tar/);

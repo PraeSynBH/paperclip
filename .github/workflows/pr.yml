@@ -14,6 +14,20 @@ permissions:
 jobs:
   ci:
     if: github.event.action != 'labeled' || github.event.label.name == 'profile-ci'
-    # Master requires CODEOWNERS review for .github/**, including this workflow.
-    # The AWS runner group permits pr-trusted.yml@refs/heads/master.
-    uses: paperclipai/paperclip/.github/workflows/pr-trusted.yml@master
+    # This fork runs its OWN reusable workflow, not
+    # paperclipai/paperclip/...@master, for three verified reasons (PRX-6120):
+    #   1. The upstream copy requires artifacts this tree does not have
+    #      (`server` `build:runtime`, a `dist-runtime` bundle), so `ci / Build`
+    #      was red on every PR with exit 127.
+    #   2. Its `verify` and `e2e` aggregators begin with
+    #      `test "$POLICY_RESULT" = "success"`, so a single policy red printed
+    #      two more reds over lane sets where every lane had passed.
+    #   3. A defect there can only be fixed upstream, which leaves this
+    #      repository with a permanently untruthful board.
+    #
+    # Trust note: caller and callee live in the same repository, so a pull
+    # request that edits .github/workflows/** does change the CI that runs on
+    # it. .github/** is CODEOWNERS-gated and this repository only accepts
+    # reviewed commits; if it is ever opened to untrusted contributors, pin the
+    # callee to a commit SHA on master and refresh it by PR.
+    uses: ./.github/workflows/pr-trusted.yml
