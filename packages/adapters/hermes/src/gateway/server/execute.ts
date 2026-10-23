@@ -749,15 +749,6 @@ interface TerminalResultCode {
   deferredProfile?: string | null;
 }
 
-/**
- * Terminal result code with the capacity-deferral class (PRX-5973).
- *
- * A run whose turn was never admitted because the profile's serve-slot ceiling
- * is full terminates as `failed` with `exit_code: 75` (EX_TEMPFAIL) and the
- * `profile_deferred_capacity` reason code. Book it as a deferral carrying
- * `retryAfterS` instead of `hermes_gateway_run_failed`, so the server parks the
- * run as a wait rather than an adapter failure.
- */
 function resolveTerminalResultCode(terminal: TerminalState): TerminalResultCode {
   const mapped = terminalResultCode(terminal.status);
   if (terminal.status === "completed") return mapped;

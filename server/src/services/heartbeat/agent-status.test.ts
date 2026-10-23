@@ -318,9 +318,6 @@ describePostgres("heartbeat agent status", () => {
     expect(await agent(agentId)).toMatchObject({ status: "idle", errorReason: null });
   });
 
-  // PRX-5995: a capacity deferral is a wait, not a failure. The fleet showed the
-  // inverse — `status=error` with `error_reason=NULL` on both a CEO and a Design
-  // Agent that had exited 0 and completed their window.
   it("settles a deferred run idle and never paints an error with a null reason", async () => {
     const { agentId } = await seed("scheduled_retry");
     await db.update(agents).set({ status: "running", errorReason: "Timed out" }).where(eq(agents.id, agentId));
@@ -333,8 +330,6 @@ describePostgres("heartbeat agent status", () => {
   });
 
   it("keeps a parked deferral as live work during reconciliation", async () => {
-    // A deferred run holds a retry deadline, so it is unsettled work: the sweep
-    // must not settle the card while the re-admission is still pending.
     const { agentId } = await seed("scheduled_retry");
     await db.update(heartbeatRuns).set({ scheduledRetryAt: new Date(Date.now() + 60_000) }).where(eq(heartbeatRuns.agentId, agentId));
     expect(await reconcile()).toEqual([]);

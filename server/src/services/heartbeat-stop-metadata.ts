@@ -10,7 +10,6 @@ export type HeartbeatRunStopReason =
   | "max_turns_exhausted"
   | "process_lost"
   | "unmanaged_background_task_stopped"
-  /** The turn was never admitted (serve-slot ceiling); the run is parked as a wait. */
   | "profile_deferred_capacity"
   | "adapter_failed";
 

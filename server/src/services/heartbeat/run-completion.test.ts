@@ -189,8 +189,6 @@ describe.skipIf(!support.supported)("heartbeat run completion boundary", () => {
       resultJson: { stopReason: "profile_deferred_capacity" },
     });
     expect(deferred.errorCode).not.toBe("adapter_failed");
-    // First deferral waits exactly the ceiling's retryAfterS; the promotion sweep
-    // then re-admits the run, so no failure path may run here.
     expect(deferred.scheduledRetryAt?.getTime()).toBeGreaterThanOrEqual(before + 300_000);
     expect(f.deps.finalizeIssueCommentPolicy).not.toHaveBeenCalled();
     expect(f.deps.releaseIssueExecutionAndPromote).not.toHaveBeenCalled();
@@ -199,6 +197,32 @@ describe.skipIf(!support.supported)("heartbeat run completion boundary", () => {
     expect(f.deps.setWakeupStatus).toHaveBeenCalledWith(f.wake.id, "queued", expect.any(Object));
     expect(f.deps.finalizeAgentStatus).toHaveBeenCalledWith(f.agent.id, "deferred", null, expect.any(Object));
   });
+
+  it.each(["timedOut", "cancelled"] as const)(
+    "keeps the terminal finish time when a %s run also carries a deferral code",
+    async terminal => {
+      const f = await fixture();
+      Object.assign(f.input.adapterResult, {
+        exitCode: 75,
+        errorCode: "hermes_profile_deferred_capacity",
+        retryAfterS: 300,
+        retryable: true,
+        errorMessage: "Gateway deferred: profile_deferred_capacity (retryAfterS=300)",
+        ...(terminal === "timedOut"
+          ? { timedOut: true }
+          : { resultJson: { status: "cancelled" } }),
+      });
+      await f.completion.completeRun(f.input);
+
+      const stopped = await read(f.run.id);
+      expect(stopped).toMatchObject({
+        status: terminal === "timedOut" ? "timed_out" : "cancelled",
+        scheduledRetryAt: null,
+        scheduledRetryReason: null,
+      });
+      expect(stopped.finishedAt).not.toBeNull();
+    },
+  );
 
   it.each(["completeRun", "failRun"] as const)("waits for an owned Stop before %s can write a competing outcome", async operation => {
     const f = await fixture();

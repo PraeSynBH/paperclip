@@ -397,9 +397,6 @@ export function createHeartbeatRunCompletion(db: Db, dependencies: HeartbeatRunC
       failedProcessRunCancellations.get(run.id);
     await processCancellation?.settled;
     let outcome: RunSessionOutcome;
-    // A capacity deferral is a wait, not a failure: the adapter says the turn
-    // was never admitted (settled serve-slot ceiling), so the run is re-booked
-    // as a scheduled retry instead of booking adapter_failed.
     const profileDeferral = readProfileDeferralFromAdapterResult(adapterResult);
     const latestRun = await getRun(run.id);
     if (isHeartbeatRunTerminalStatus(latestRun?.status)) {
@@ -481,9 +478,7 @@ export function createHeartbeatRunCompletion(db: Db, dependencies: HeartbeatRunC
                 recordedResponsibleUserDenialCode ??
                 "adapter_failed")
               : null;
-    // A deferred run parks itself: the wait deadline is what the scheduled-retry
-    // promotion sweep reads to re-admit it, so no recovery path has to run.
-    const profileDeferralBooking = profileDeferral
+    const profileDeferralBooking = outcome === "deferred" && profileDeferral
       ? resolveProfileDeferralBooking({
           retryAfterS: profileDeferral.retryAfterS,
           attempt: latestRun?.scheduledRetryAttempt ?? run.scheduledRetryAttempt ?? 0,
@@ -653,8 +648,6 @@ export function createHeartbeatRunCompletion(db: Db, dependencies: HeartbeatRunC
       // Accounting must acknowledge even a proven pre-provider failure:
       // that transaction releases the reservation without creating a charge.
       costAccountingPending: true,
-      // A deferred run stays live: no finishedAt, and the wait deadline plus its
-      // reason are stamped for the scheduled-retry promotion sweep.
       finishedAt: profileDeferralBooking ? null : new Date(),
       ...(profileDeferralBooking
         ? {
@@ -997,11 +990,6 @@ export function createHeartbeatRunCompletion(db: Db, dependencies: HeartbeatRunC
         );
       }
       if (outcome === "deferred") {
-        // The run parked itself as a wait, so none of the failure paths apply: no
-        // missing-issue-comment retry, no issue-lock release, no review or liveness
-        // continuation, no handoff escalation. The issue keeps this run as its
-        // execution owner and `promoteDueScheduledRetries` re-admits it when the
-        // wait elapses.
         await appendRunEvent(livenessRun, {
           eventType: "lifecycle",
           stream: "system",

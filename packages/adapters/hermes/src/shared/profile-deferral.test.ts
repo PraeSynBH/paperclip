@@ -80,9 +80,6 @@ describe("readProfileDeferral", () => {
     expect(readProfileDeferral({ exitCode: 0, stderr: "" })).toBeNull();
   });
 
-  // PRX-5995: a completed run that merely *mentions* the token is a success. The
-  // fleet cases were runs whose own `psql` board listing quoted PRX-5973's title
-  // ("book `profile_deferred_capacity` as a deferral"), booked as waits.
   describe("never classifies prose that mentions the reason code", () => {
     const BOARD_LISTING = [
       "ERROR | PRX-5973 | Adapter/server: book `profile_deferred_capacity` as a deferral, not adapter_failed",

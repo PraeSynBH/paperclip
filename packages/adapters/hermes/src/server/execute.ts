@@ -618,12 +618,6 @@ export async function execute(
     executionResult.errorMessage = `Hermes exited with code ${result.exitCode}`;
   }
 
-  // ── Capacity deferral classification (PRX-5973) ────────────────────────
-  // A turn that never reached the model because the profile's serve-slot
-  // ceiling is full exits 75 (EX_TEMPFAIL) / reports
-  // `profile_deferred_capacity`. That is a wait, not an adapter failure: report
-  // a deferral errorCode + retryAfterS so the server books it as a deferral
-  // instead of `adapter_failed`.
   const profileDeferral = readProfileDeferral({
     exitCode: result.exitCode,
     stdout: result.stdout,
