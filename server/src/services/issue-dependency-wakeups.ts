@@ -23,10 +23,24 @@ export function shouldWakeOnRestoredBlockedDependency(input: {
   previousAssigneeAgentId: string | null;
   nextAssigneeAgentId: string | null;
   blockerSetEdited: boolean;
+  hasUnblockDescriptor: boolean;
   actorType: string;
   actorAgentId: string | null;
 }): boolean {
   if (input.nextStatus !== "blocked" || !input.nextAssigneeAgentId) return false;
+  // A row that carries an unblock descriptor is parked on judgement, so the
+  // dependency that just became ready is not what it waits for. Use the same
+  // rule as the other emit paths: the descriptor-owner wake
+  // (`issue_unblock_requested`) owns this row, and a resolved-dependency wake
+  // for it only queues a run that expires unstarted.
+  if (
+    !classifyResolvedDependencyWakeTarget({
+      status: input.nextStatus,
+      hasUnblockDescriptor: input.hasUnblockDescriptor,
+    }).emit
+  ) {
+    return false;
+  }
   const assigneeChanged = input.previousAssigneeAgentId !== input.nextAssigneeAgentId;
   if (input.previousStatus === "blocked" && !input.blockerSetEdited && !assigneeChanged) return false;
   const selfBlockedByAssignee =
