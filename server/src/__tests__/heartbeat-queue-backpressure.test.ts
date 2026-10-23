@@ -279,6 +279,18 @@ describeEmbeddedPostgres("heartbeat queue backpressure", () => {
     const doneIssueId = await makeIssue("done", "Finished work");
     const resolvedIssueId = await makeIssue("blocked", "Blocked but resolved");
     const doneBlockerIssueId = await makeIssue("done", "Resolved blocker");
+    // Descriptor-parked: blocked pending a human action. No agent wake can progress it,
+    // so its queued run must die with a named code instead of aging out.
+    const parkedIssueId = await makeIssue("blocked", "Parked on a human action");
+    await db
+      .update(issues)
+      .set({
+        unblockDescriptor: {
+          owner: { userId: "user-1" },
+          action: "Reissue the SendGrid key in the console",
+        } as never,
+      })
+      .where(eq(issues.id, parkedIssueId));
     await db.insert(issueRelations).values([
       { companyId, issueId: blockerIssueId, relatedIssueId: blockedIssueId, type: "blocks" },
       { companyId, issueId: doneBlockerIssueId, relatedIssueId: resolvedIssueId, type: "blocks" },
@@ -302,6 +314,7 @@ describeEmbeddedPostgres("heartbeat queue backpressure", () => {
     const resolvedBlockedRunId = randomUUID();
     const freshWakeableRunId = await makeIssue("in_progress", "Fresh wakeable work");
     const freshWakeableQueuedRunId = randomUUID();
+    const parkedRunId = randomUUID();
 
     await db.insert(heartbeatRuns).values([
       {
@@ -344,6 +357,15 @@ describeEmbeddedPostgres("heartbeat queue backpressure", () => {
         contextSnapshot: { issueId: resolvedIssueId, wakeReason: "issue_blockers_resolved" },
       },
       {
+        id: parkedRunId,
+        companyId,
+        agentId,
+        status: "queued",
+        invocationSource: "automation",
+        createdAt: new Date(now - 12_000),
+        contextSnapshot: { issueId: parkedIssueId, wakeReason: "issue_commented" },
+      },
+      {
         id: freshWakeableQueuedRunId,
         companyId,
         agentId,
@@ -369,15 +391,22 @@ describeEmbeddedPostgres("heartbeat queue backpressure", () => {
 
     expect(byId.get(blockedRunId)).toMatchObject({
       status: "cancelled",
-      errorCode: "issue_blocked_by_dependencies",
+      errorCode: "issue_dependencies_blocked",
     });
+    // The blocked-dependency rule reuses the claim-time implementation, so it keeps that
+    // implementation's `dependency_gate` marker and message instead of a second vocabulary.
     expect(byId.get(blockedRunId)?.resultJson).toMatchObject({
-      stopReason: "issue_blocked_by_dependencies",
-      timeoutSource: "queued_run_wakeability_sweep",
+      stopReason: "issue_dependencies_blocked",
+      timeoutSource: "dependency_gate",
     });
     expect(byId.get(doneRunId)).toMatchObject({
       status: "cancelled",
       errorCode: "issue_terminal_status",
+    });
+
+    expect(byId.get(parkedRunId)).toMatchObject({
+      status: "cancelled",
+      errorCode: "issue_parked_on_unblock_action",
     });
 
     expect(byId.get(resumeOnClosedRunId)?.status).toBe("queued");
@@ -388,7 +417,7 @@ describeEmbeddedPostgres("heartbeat queue backpressure", () => {
       .select({ message: heartbeatRunEvents.message })
       .from(heartbeatRunEvents)
       .where(eq(heartbeatRunEvents.runId, blockedRunId));
-    expect(blockedEvent.some((event) => /unresolved blocker/.test(event.message ?? ""))).toBe(true);
+    expect(blockedEvent.some((event) => /dependencies are still blocked/.test(event.message ?? ""))).toBe(true);
   }, 30_000);
 
   // PRX-6045 AC1: a second wake for an issue that already has a queued, unclaimed run
