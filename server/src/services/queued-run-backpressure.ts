@@ -32,9 +32,22 @@ export const NO_ISSUE_GROUP_KEY = "__no_issue__";
 export const QUEUED_RUN_EXPIRED_ERROR_CODE = "queued_run_expired";
 export const QUEUED_RUN_SUPERSEDED_ERROR_CODE = "superseded_by_newer_wake";
 
+// PRX-6045: codes for the *not-wakeable* half of the sweep. A queued run whose
+// issue can never be woken again is cancelled by reason, before the age bound is
+// consulted, so the churn is attributed to the real cause instead of showing up
+// as `queued_run_expired` (the age rule, which says nothing about why).
+export const QUEUED_RUN_ISSUE_NOT_FOUND_ERROR_CODE = "issue_not_found";
+export const QUEUED_RUN_ISSUE_TERMINAL_ERROR_CODE = "issue_terminal_status";
+export const QUEUED_RUN_ISSUE_BLOCKED_ERROR_CODE = "issue_blocked_by_dependencies";
+
 export type QueuedRunTerminalErrorCode =
   | typeof QUEUED_RUN_EXPIRED_ERROR_CODE
   | typeof QUEUED_RUN_SUPERSEDED_ERROR_CODE;
+
+export type QueuedRunNotWakeableErrorCode =
+  | typeof QUEUED_RUN_ISSUE_NOT_FOUND_ERROR_CODE
+  | typeof QUEUED_RUN_ISSUE_TERMINAL_ERROR_CODE
+  | typeof QUEUED_RUN_ISSUE_BLOCKED_ERROR_CODE;
 
 /**
  * The subset of a `heartbeat_runs` row the classifier needs. Deliberately
@@ -288,4 +301,125 @@ export function summariseAgentQueue(input: {
       return acc;
     }, {}),
   };
+}
+
+/**
+ * PRX-6045 — the "promote-or-cancel" half of the dispatch rules.
+ *
+ * A queued run can only ever start if its issue is still wakeable. Two of the
+ * three ways an issue stops being wakeable are decided by issue state alone, so
+ * they can be classified without touching the database:
+ *
+ *   - `done` / `cancelled`  -> `issue_terminal_status`
+ *   - unresolved blockers   -> `issue_blocked_by_dependencies`
+ *   - row points at nothing -> `issue_not_found`
+ *
+ * Everything else is `keep`. A `blocked` issue whose blockers are all resolved is
+ * wakeable again (PRX-6026 resolved-dependency gate), which is why the rule reads
+ * `unresolvedBlockerCount` and not the status string.
+ *
+ * Wake-protected rows (an issue interaction wake, a resume intent, a wake driven by
+ * a fresh comment) are filtered by the caller: this module has no access to the
+ * context predicates that decide that, and silently dropping them here would lose
+ * legitimate work on a closed issue.
+ */
+export interface QueuedRunWakeabilityIssueLike {
+  status?: string | null;
+  unresolvedBlockerCount?: number | null;
+  unresolvedBlockerIssueIds?: ReadonlyArray<string> | null;
+}
+
+export interface QueuedRunNotWakeableDecision {
+  runId: string;
+  agentId: string | null;
+  issueId: string;
+  wakeupRequestId: string | null;
+  ageSec: number;
+  errorCode: QueuedRunNotWakeableErrorCode;
+  reason: string;
+}
+
+export interface QueuedRunWakeabilityVerdict {
+  cancel: QueuedRunNotWakeableDecision[];
+  keep: string[];
+}
+
+export function describeUnresolvedBlockers(count: number): string {
+  return count === 1 ? "1 unresolved blocker" : `${count} unresolved blockers`;
+}
+
+export function classifyQueuedRunWakeability(input: {
+  rows: ReadonlyArray<QueuedRunRowLike | null | undefined>;
+  /**
+   * Lookup for every issue id referenced by `rows`. An explicit `null` means "no
+   * such issue" (cancel as `issue_not_found`); `undefined`/absent means "not
+   * resolved in this pass" and is left alone rather than guessed at.
+   */
+  issueById: ReadonlyMap<string, QueuedRunWakeabilityIssueLike | null | undefined>;
+  now: Date | number;
+}): QueuedRunWakeabilityVerdict {
+  const { rows, issueById, now } = input;
+  const nowMs = now instanceof Date ? now.getTime() : Number(now);
+  const verdict: QueuedRunWakeabilityVerdict = { cancel: [], keep: [] };
+  if (!Array.isArray(rows) || rows.length === 0 || !Number.isFinite(nowMs)) return verdict;
+
+  for (const row of rows) {
+    if (!row || row.status !== "queued") continue;
+    const issueId = readQueuedIssueId(row);
+    if (!issueId) continue;
+    if (!issueById.has(issueId)) continue;
+    const issue = issueById.get(issueId) ?? null;
+    const createdAtMs = readCreatedAtMs(row);
+    const ageSec = createdAtMs === null ? 0 : Math.max(0, Math.round((nowMs - createdAtMs) / 1000));
+    const base = {
+      runId: row.id,
+      agentId: row.agentId ?? null,
+      issueId,
+      wakeupRequestId: row.wakeupRequestId ?? null,
+      ageSec,
+    };
+
+    if (!issue) {
+      verdict.cancel.push({
+        ...base,
+        errorCode: QUEUED_RUN_ISSUE_NOT_FOUND_ERROR_CODE,
+        reason:
+          `Cancelled because the target issue no longer exists, so this queued run can never start ` +
+          `(waited ${describeQueuedAge(ageSec)})`,
+      });
+      continue;
+    }
+
+    const status = typeof issue.status === "string" ? issue.status.trim() : "";
+    if (status === "done" || status === "cancelled") {
+      verdict.cancel.push({
+        ...base,
+        errorCode: QUEUED_RUN_ISSUE_TERMINAL_ERROR_CODE,
+        reason:
+          `Cancelled because the issue reached terminal status (${status}) before this queued run ` +
+          `could start (waited ${describeQueuedAge(ageSec)})`,
+      });
+      continue;
+    }
+
+    const unresolvedBlockerCount = Number(issue.unresolvedBlockerCount ?? 0);
+    if (Number.isFinite(unresolvedBlockerCount) && unresolvedBlockerCount > 0) {
+      const blockerIds = Array.isArray(issue.unresolvedBlockerIssueIds)
+        ? issue.unresolvedBlockerIssueIds.filter((id): id is string => typeof id === "string" && id.length > 0)
+        : [];
+      verdict.cancel.push({
+        ...base,
+        errorCode: QUEUED_RUN_ISSUE_BLOCKED_ERROR_CODE,
+        reason:
+          `Cancelled because the issue is parked behind ${describeUnresolvedBlockers(unresolvedBlockerCount)}` +
+          (blockerIds.length > 0 ? ` (${blockerIds.slice(0, 5).join(", ")})` : "") +
+          `, so this queued run cannot start until they resolve (waited ${describeQueuedAge(ageSec)})`,
+      });
+      continue;
+    }
+
+    verdict.keep.push(row.id);
+  }
+
+  return verdict;
 }

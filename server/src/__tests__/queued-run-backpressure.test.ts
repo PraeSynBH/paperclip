@@ -10,10 +10,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   classifyQueuedRunBackpressure,
+  classifyQueuedRunWakeability,
   describeQueuedAge,
   resolveQueuedRunReapBoundSec,
   summariseAgentQueue,
   type QueuedRunRowLike,
+  type QueuedRunWakeabilityIssueLike,
 } from "../services/queued-run-backpressure.js";
 
 const NOW = new Date("2026-10-20T09:06:00Z");
@@ -198,5 +200,86 @@ describe("replaying the real measured backlog", () => {
     expect(summary.runningCount).toBe(rows.filter((entry) => entry.status === "running").length);
     expect(summary.reapBoundSec).toBe(BOUND);
     expect(Object.keys(summary.queuedByIssue).length).toBe(summary.queueDepth);
+  });
+});
+
+// PRX-6045: cancel-by-reason for queued runs whose issue can no longer be woken.
+// These run without a database: the classifier is given the issue projection the
+// heartbeat sweep fetches (status + unresolved blocker count) and nothing else.
+describe("classifyQueuedRunWakeability", () => {
+  const queuedRow = (
+    id: string,
+    issueId: string,
+    createdAt: string,
+    extra: Record<string, unknown> = {},
+  ): QueuedRunRowLike => ({
+    id,
+    agentId: "agent-a",
+    status: "queued",
+    startedAt: null,
+    createdAt,
+    wakeupRequestId: `${id}-wake`,
+    contextSnapshot: { issueId, ...extra },
+  });
+
+  const issue = (
+    overrides: Partial<QueuedRunWakeabilityIssueLike> = {},
+  ): QueuedRunWakeabilityIssueLike => ({
+    status: "todo",
+    unresolvedBlockerCount: 0,
+    unresolvedBlockerIssueIds: [],
+    ...overrides,
+  });
+
+  it("cancels terminal, blocked and missing issues with a named code, and keeps wakeable work", () => {
+    const rows = [
+      queuedRow("run-done", "issue-done", "2026-10-22T23:00:00Z"),
+      queuedRow("run-cancelled", "issue-cancelled", "2026-10-22T23:01:00Z"),
+      queuedRow("run-blocked", "issue-blocked", "2026-10-22T23:02:00Z"),
+      queuedRow("run-missing", "issue-missing", "2026-10-22T23:03:00Z"),
+      queuedRow("run-todo", "issue-todo", "2026-10-22T23:04:00Z"),
+      // A blocked issue whose blockers all resolved is wakeable again (PRX-6026).
+      queuedRow("run-unblocked", "issue-unblocked", "2026-10-22T23:05:00Z"),
+      // A row with no issue id is a timer wake: not this rule's business.
+      { ...queuedRow("run-no-issue", "issue-todo", "2026-10-22T23:06:00Z"), contextSnapshot: {} },
+    ];
+    const issueById = new Map<string, QueuedRunWakeabilityIssueLike | null>([
+      ["issue-done", issue({ status: "done" })],
+      ["issue-cancelled", issue({ status: "cancelled" })],
+      ["issue-blocked", issue({ status: "blocked", unresolvedBlockerCount: 2, unresolvedBlockerIssueIds: ["PRX-1", "PRX-2"] })],
+      ["issue-missing", null],
+      ["issue-todo", issue()],
+      ["issue-unblocked", issue({ status: "blocked", unresolvedBlockerCount: 0 })],
+    ]);
+
+    const verdict = classifyQueuedRunWakeability({
+      rows,
+      issueById,
+      now: new Date("2026-10-23T05:00:00Z"),
+    });
+
+    const byRunId = new Map(verdict.cancel.map((decision) => [decision.runId, decision]));
+    expect(byRunId.get("run-done")?.errorCode).toBe("issue_terminal_status");
+    expect(byRunId.get("run-cancelled")?.errorCode).toBe("issue_terminal_status");
+    expect(byRunId.get("run-blocked")?.errorCode).toBe("issue_blocked_by_dependencies");
+    expect(byRunId.get("run-blocked")?.reason).toContain("2 unresolved blockers");
+    expect(byRunId.get("run-blocked")?.reason).toContain("PRX-1");
+    expect(byRunId.get("run-missing")?.errorCode).toBe("issue_not_found");
+    // 5h58m old (23:02Z -> 05:00Z), but the reason is the issue state, not the age.
+    expect(byRunId.get("run-blocked")?.ageSec).toBe(5 * 3600 + 58 * 60);
+
+    // Issue-less (timer) rows are not this rule's business: neither cancelled nor
+    // reported as kept.
+    expect(verdict.keep.sort()).toEqual(["run-todo", "run-unblocked"].sort());
+  });
+
+  it("leaves rows alone when the issue projection was not fetched", () => {
+    const verdict = classifyQueuedRunWakeability({
+      rows: [queuedRow("run-x", "issue-x", "2026-10-22T23:00:00Z")],
+      issueById: new Map(),
+      now: new Date("2026-10-23T05:00:00Z"),
+    });
+    expect(verdict.cancel).toHaveLength(0);
+    expect(verdict.keep).toEqual([]);
   });
 });
