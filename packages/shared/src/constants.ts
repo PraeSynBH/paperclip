@@ -887,6 +887,18 @@ export type BudgetThresholdType = (typeof BUDGET_THRESHOLD_TYPES)[number];
 export const BUDGET_INCIDENT_STATUSES = ["open", "resolved", "dismissed"] as const;
 export type BudgetIncidentStatus = (typeof BUDGET_INCIDENT_STATUSES)[number];
 
+/**
+ * What triggered the evaluation that created a budget incident (PRX-5485).
+ * `cost_event`   — the gate evaluated a freshly reported cost event.
+ * `policy_rearm` — a policy was created/re-armed and evaluated the spend already
+ *                  accumulated in the window (an arm-on-existing-spend crossing,
+ *                  not a gate that let spend through).
+ * `window_reset` — reserved for a window-roll evaluation; no path emits it today.
+ * `unknown`      — row predates the field; never inferred from timing.
+ */
+export const BUDGET_INCIDENT_TRIGGERS = ["cost_event", "policy_rearm", "window_reset", "unknown"] as const;
+export type BudgetIncidentTrigger = (typeof BUDGET_INCIDENT_TRIGGERS)[number];
+
 export const BUDGET_INCIDENT_RESOLUTION_ACTIONS = [
   "keep_paused",
   "raise_budget_and_resume",

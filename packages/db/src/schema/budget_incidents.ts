@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { index, integer, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
+import { check, index, integer, pgTable, text, timestamp, uuid, uniqueIndex } from "drizzle-orm/pg-core";
 import { approvals } from "./approvals.js";
 import { budgetPolicies } from "./budget_policies.js";
 import { companies } from "./companies.js";
@@ -19,6 +19,12 @@ export const budgetIncidents = pgTable(
     thresholdType: text("threshold_type").notNull(),
     amountLimit: integer("amount_limit").notNull(),
     amountObserved: integer("amount_observed").notNull(),
+    // What triggered the evaluation that produced this incident (PRX-5485).
+    // `cost_event`  — evaluateCostEvent, fired when a run reports its cost.
+    // `policy_rearm` — upsertPolicy, evaluating already-accumulated spend at arm time.
+    // `window_reset` — reserved for a window-roll evaluation; no path emits it today.
+    // `unknown`     — pre-PRX-5485 rows; never inferred from timing (see issue backfill rule).
+    trigger: text("trigger").notNull().default("unknown"),
     status: text("status").notNull().default("open"),
     approvalId: uuid("approval_id").references(() => approvals.id),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
@@ -32,6 +38,10 @@ export const budgetIncidents = pgTable(
       table.scopeType,
       table.scopeId,
       table.status,
+    ),
+    triggerCheck: check(
+      "budget_incidents_trigger_check",
+      sql`${table.trigger} in ('cost_event', 'policy_rearm', 'window_reset', 'unknown')`,
     ),
     policyWindowIdx: uniqueIndex("budget_incidents_policy_window_threshold_idx").on(
       table.policyId,

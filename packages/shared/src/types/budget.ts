@@ -1,6 +1,7 @@
 import type {
   BudgetIncidentResolutionAction,
   BudgetIncidentStatus,
+  BudgetIncidentTrigger,
   BudgetMetric,
   BudgetScopeType,
   BudgetThresholdType,
@@ -63,6 +64,9 @@ export interface BudgetIncident {
   thresholdType: BudgetThresholdType;
   amountLimit: number;
   amountObserved: number;
+  trigger: BudgetIncidentTrigger;
+  /** One-line reading of the incident; distinguishes a re-arm-on-existing-spend from an over-cap crossing. */
+  summary: string;
   status: BudgetIncidentStatus;
   approvalId: string | null;
   approvalStatus: string | null;

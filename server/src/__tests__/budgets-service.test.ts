@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   agents,
@@ -636,5 +637,159 @@ describeEmbeddedPostgres("budgetService release gate enforcement", () => {
       pauseReason: null,
     });
     expect(overviewAfterResume.activeIncidents).toHaveLength(0);
+  });
+
+  // PRX-5485: an incident row must say which path created it. Before this, the
+  // cost-event gate and the arm-time re-evaluation wrote identical rows, which is
+  // how incident 139d8730 ($808 vs a $500 cap) got read as "the gate let $308
+  // through" when it was actually a cap armed on spend booked while disarmed.
+  it("records trigger=cost_event when the gate evaluates a reported cost event", async () => {
+    const { companyId, agentId } = await createBudgetFixture();
+    const service = budgetService(db, { cancelWorkForScope: vi.fn().mockResolvedValue(undefined) });
+
+    await db.insert(budgetPolicies).values({
+      companyId,
+      scopeType: "agent",
+      scopeId: agentId,
+      metric: "billed_cents",
+      windowKind: "calendar_month_utc",
+      amount: 50000,
+      warnPercent: 80,
+      hardStopEnabled: true,
+      notifyEnabled: true,
+      isActive: true,
+    });
+
+    const event = await insertCostEvent({ companyId, agentId, costCents: 51000 });
+    await service.evaluateCostEvent(event);
+
+    const [hardIncident] = await db
+      .select()
+      .from(budgetIncidents)
+      .where(eq(budgetIncidents.thresholdType, "hard"));
+    expect(hardIncident).toMatchObject({
+      trigger: "cost_event",
+      thresholdType: "hard",
+      amountLimit: 50000,
+      amountObserved: 51000,
+    });
+
+    const [approval] = await db.select().from(approvals);
+    expect(approval?.payload).toMatchObject({
+      trigger: "cost_event",
+      thresholdType: "hard",
+      observedAmount: 51000,
+    });
+    expect(String((approval?.payload as { incidentText?: string }).incidentText))
+      .toContain("Hard cap crossed by a cost event");
+
+    const overview = await service.overview(companyId);
+    expect(overview.activeIncidents).toHaveLength(1);
+    expect(overview.activeIncidents[0]).toMatchObject({
+      trigger: "cost_event",
+      amountLimit: 50000,
+      amountObserved: 51000,
+    });
+    expect(overview.activeIncidents[0]!.summary).toContain("Hard cap crossed by a cost event");
+  });
+
+  it("records trigger=policy_rearm and reads as arm-on-existing-spend when a cap is armed over booked spend", async () => {
+    const { companyId, agentId } = await createBudgetFixture();
+    const service = budgetService(db, { cancelWorkForScope: vi.fn().mockResolvedValue(undefined) });
+
+    // The PRX-5347 shape: policy exists but disarmed (amount 0) while the scope books spend.
+    await db.insert(budgetPolicies).values({
+      companyId,
+      scopeType: "agent",
+      scopeId: agentId,
+      metric: "billed_cents",
+      windowKind: "calendar_month_utc",
+      amount: 0,
+      warnPercent: 80,
+      hardStopEnabled: true,
+      notifyEnabled: true,
+      isActive: false,
+    });
+    await insertCostEvent({ companyId, agentId, costCents: 40000 });
+    await insertCostEvent({ companyId, agentId, costCents: 40800 });
+
+    // 34 h later, someone arms a $500 cap on the same scope.
+    await service.upsertPolicy(companyId, { scopeType: "agent", scopeId: agentId, amount: 50000 }, null);
+
+    const [hardIncident] = await db
+      .select()
+      .from(budgetIncidents)
+      .where(eq(budgetIncidents.thresholdType, "hard"));
+    expect(hardIncident).toMatchObject({
+      trigger: "policy_rearm",
+      thresholdType: "hard",
+      amountLimit: 50000,
+      amountObserved: 80800,
+    });
+
+    const [approval] = await db.select().from(approvals);
+    const payload = approval?.payload as {
+      trigger?: string;
+      incidentText?: string;
+      guidance?: string;
+    };
+    expect(payload.trigger).toBe("policy_rearm");
+    expect(payload.incidentText).toContain("re-arm on existing spend");
+    expect(payload.incidentText).not.toContain("admitted by the pre-run gate");
+    expect(payload.guidance).toContain("when the budget was armed");
+
+    const overview = await service.overview(companyId);
+    expect(overview.activeIncidents).toHaveLength(1);
+    expect(overview.activeIncidents[0]).toMatchObject({
+      trigger: "policy_rearm",
+      thresholdType: "hard",
+      amountLimit: 50000,
+      amountObserved: 80800,
+    });
+    expect(overview.activeIncidents[0]!.summary).toContain("Hard stop armed on existing spend");
+    expect(overview.pausedAgentCount).toBe(1);
+  });
+
+  it("defaults the trigger to unknown for rows written without one (pre-PRX-5485 backfill stays honest)", async () => {
+    const { companyId, agentId } = await createBudgetFixture();
+    const [policy] = await db
+      .insert(budgetPolicies)
+      .values({
+        companyId,
+        scopeType: "agent",
+        scopeId: agentId,
+        metric: "billed_cents",
+        windowKind: "calendar_month_utc",
+        amount: 50000,
+        warnPercent: 80,
+        hardStopEnabled: true,
+        notifyEnabled: true,
+        isActive: true,
+      })
+      .returning();
+
+    const windowStart = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+    const windowEnd = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth() + 1, 1));
+    await db.insert(budgetIncidents).values({
+      companyId,
+      policyId: policy!.id,
+      scopeType: "agent",
+      scopeId: agentId,
+      metric: "billed_cents",
+      windowKind: "calendar_month_utc",
+      windowStart,
+      windowEnd,
+      thresholdType: "hard",
+      amountLimit: 50000,
+      amountObserved: 80800,
+      status: "open",
+    });
+
+    const [row] = await db.select().from(budgetIncidents);
+    expect(row?.trigger).toBe("unknown");
+
+    const overview = await budgetService(db).overview(companyId);
+    expect(overview.activeIncidents[0]!.trigger).toBe("unknown");
+    expect(overview.activeIncidents[0]!.summary).toContain("trigger for this incident was not recorded");
   });
 });
