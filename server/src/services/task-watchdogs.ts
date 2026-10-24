@@ -38,6 +38,14 @@ const TASK_WATCHDOG_TERMINAL_RUN_STATUSES = ["succeeded", "interrupted", "failed
 // false-positive stopped-subtree review. The periodic watchdog reconciler
 // re-evaluates after the window, so a genuinely idle issue still triggers.
 const TASK_WATCHDOG_FIRST_RUN_GRACE_MS = 15_000;
+// How far past its due time a monitor still counts as a scheduled wake. The
+// monitor scheduler only claims a due check on a tick, so between the due time
+// and the claiming tick the leaf is due, unconsumed, and still going to run.
+// Without this window a just-due monitor reads as "no live path" and the
+// watchdog reviews a leaf whose own wake is about to fire. Bounded so a monitor
+// nobody ever claims still reads as stopped. Mirrors
+// ISSUE_MONITOR_DUE_GRACE_MS in recovery/issue-graph-liveness.ts.
+const TASK_WATCHDOG_MONITOR_DUE_GRACE_MS = 15 * 60 * 1000;
 
 type ActorFields = {
   agentId?: string | null;
@@ -74,6 +82,10 @@ export type TaskWatchdogClassifierIssue = Pick<
   latestCommentAt?: Date | string | null;
   latestDocumentAt?: Date | string | null;
   latestWorkProductAt?: Date | string | null;
+  // An armed monitor (a scheduled monitor check in the future) is a durable
+  // waiting path owned by the board, not a stopped leaf. See the
+  // monitor-waiting branch in `classifyTaskWatchdogSubtree`.
+  monitorNextCheckAt?: Date | string | null;
 };
 
 export type TaskWatchdogClassifierPath = {
@@ -95,6 +107,10 @@ export type TaskWatchdogClassifierRelation = {
   companyId: string;
   blockerIssueId: string;
   blockedIssueId: string;
+  // Origin kind of the blocking issue when the caller can resolve it. A
+  // `task_watchdog` blocker is the watchdog's own review artifact and is not
+  // counted as a real blocker of the watched leaf.
+  blockerOriginKind?: string | null;
 };
 
 export type TaskWatchdogClassifierConfig = Pick<
@@ -165,6 +181,12 @@ export type TaskWatchdogClassifierResult =
     reason: string;
     includedIssueIds: string[];
     pendingIssueIds: string[];
+  }
+  | {
+    state: "waiting_on_monitor";
+    reason: string;
+    includedIssueIds: string[];
+    monitorIssueIds: string[];
   }
   | {
     state: "already_reviewed";
@@ -463,6 +485,13 @@ export function classifyTaskWatchdogSubtree(input: TaskWatchdogClassifierInput):
   for (const relation of input.blockers ?? []) {
     if (relation.companyId !== input.watchdog.companyId) continue;
     if (!includedIdSet.has(relation.blockedIssueId)) continue;
+    // A task-watchdog review issue is the watchdog's own review artifact, not
+    // blocking work for the watched leaf. Counting it as a blocker makes the
+    // material fingerprint depend on the review lifecycle: opening a review
+    // covers the leaf, closing it uncovers the leaf, and every flip mints a
+    // "new" stopped state that dispatches the next review. Excluding it keeps
+    // the fingerprint stable for an unchanged leaf.
+    if (relation.blockerOriginKind === TASK_WATCHDOG_ORIGIN_KIND) continue;
     const list = blockersByIssueId.get(relation.blockedIssueId) ?? [];
     list.push(relation.blockerIssueId);
     blockersByIssueId.set(relation.blockedIssueId, list);
@@ -484,10 +513,28 @@ export function classifyTaskWatchdogSubtree(input: TaskWatchdogClassifierInput):
       .sort((left, right) => left.id.localeCompare(right.id))] as const)
     .filter(([, waits]) => waits.length > 0));
 
-  const leaves = included
+  // A non-terminal leaf with an armed external monitor check (a scheduled
+  // monitor wake in the future) is waiting on a condition the board owns, not
+  // stopped and not out of live paths. A monitored alert-tracker issue
+  // re-opens itself every time the alert re-fires, so classifying that
+  // `todo` state as stopped turns each monitor re-fire into a fresh watchdog
+  // dispatch.
+  const evaluationNowMs = evaluatedAtMs ?? Date.now();
+  const hasArmedMonitor = (issue: TaskWatchdogClassifierIssue) => {
+    const nextCheckAtMs = toEpochMs(issue.monitorNextCheckAt);
+    return nextCheckAtMs != null && nextCheckAtMs > evaluationNowMs - TASK_WATCHDOG_MONITOR_DUE_GRACE_MS;
+  };
+  const leafCandidates = included
     .filter((issue) => (includedChildrenByParentId.get(issue.id) ?? []).length === 0)
     .filter((issue) => !isTerminalIssueStatus(issue.status))
-    .sort((left, right) => left.id.localeCompare(right.id))
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const monitorWaitingLeafIds = leafCandidates
+    .filter((issue) => hasArmedMonitor(issue))
+    .map((issue) => issue.id)
+    .sort();
+  const monitorWaitingLeafIdSet = new Set(monitorWaitingLeafIds);
+  const leaves = leafCandidates
+    .filter((issue) => !monitorWaitingLeafIdSet.has(issue.id))
     .map((issue) => ({
       issueId: issue.id,
       identifier: issue.identifier,
@@ -516,6 +563,16 @@ export function classifyTaskWatchdogSubtree(input: TaskWatchdogClassifierInput):
     materialLeaves,
     waitsByIssueId,
   };
+
+  if (leaves.length === 0 && monitorWaitingLeafIds.length > 0) {
+    return {
+      state: "waiting_on_monitor",
+      reason:
+        "Every non-terminal leaf in the watched subtree is waiting on an armed external monitor check, which is a scheduled wake rather than a stopped subtree.",
+      includedIssueIds: includedIds,
+      monitorIssueIds: monitorWaitingLeafIds,
+    };
+  }
 
   if (
     input.watchdog.lastReviewedFingerprint === stopFingerprint ||
@@ -886,6 +943,7 @@ export function taskWatchdogService(db: Db, deps: TaskWatchdogServiceDeps = {}) 
           assignee_agent_id,
           assignee_user_id,
           origin_kind,
+          monitor_next_check_at,
           updated_at,
           created_at,
           0 AS depth
@@ -905,6 +963,7 @@ export function taskWatchdogService(db: Db, deps: TaskWatchdogServiceDeps = {}) 
           child.assignee_agent_id,
           child.assignee_user_id,
           child.origin_kind,
+          child.monitor_next_check_at,
           child.updated_at,
           child.created_at,
           watched_issues.depth + 1
@@ -926,6 +985,7 @@ export function taskWatchdogService(db: Db, deps: TaskWatchdogServiceDeps = {}) 
         assignee_agent_id AS "assigneeAgentId",
         assignee_user_id AS "assigneeUserId",
         origin_kind AS "originKind",
+        monitor_next_check_at AS "monitorNextCheckAt",
         updated_at AS "updatedAt",
         created_at AS "createdAt"
       FROM watched_issues
@@ -1017,8 +1077,18 @@ export function taskWatchdogService(db: Db, deps: TaskWatchdogServiceDeps = {}) 
           companyId: issueRelations.companyId,
           blockerIssueId: issueRelations.issueId,
           blockedIssueId: issueRelations.relatedIssueId,
+          // Resolve the blocker's origin kind so the classifier can ignore
+          // this watchdog's own review issues as blockers of the watched leaf.
+          blockerOriginKind: issues.originKind,
         })
         .from(issueRelations)
+        .leftJoin(
+          issues,
+          and(
+            eq(issues.companyId, issueRelations.companyId),
+            eq(issues.id, issueRelations.issueId),
+          ),
+        )
         .where(and(
           eq(issueRelations.companyId, companyId),
           eq(issueRelations.type, "blocks"),
@@ -1762,6 +1832,7 @@ export function taskWatchdogService(db: Db, deps: TaskWatchdogServiceDeps = {}) 
         triggered: 0,
         live: 0,
         pendingFirstRun: 0,
+        waitingOnMonitor: 0,
         alreadyReviewed: 0,
         skipped: 0,
         watchdogIssueIds: [] as string[],
@@ -1780,6 +1851,8 @@ export function taskWatchdogService(db: Db, deps: TaskWatchdogServiceDeps = {}) 
           result.live += 1;
         } else if (evaluated.state === "pending_first_run") {
           result.pendingFirstRun += 1;
+        } else if (evaluated.state === "waiting_on_monitor") {
+          result.waitingOnMonitor += 1;
         } else if (evaluated.state === "already_reviewed") {
           result.alreadyReviewed += 1;
         } else {
@@ -1799,6 +1872,7 @@ export function taskWatchdogService(db: Db, deps: TaskWatchdogServiceDeps = {}) 
         checked: 0,
         triggered: 0,
         pendingFirstRun: 0,
+        waitingOnMonitor: 0,
         skipped: 0,
         watchdogIssueIds: [] as string[],
       };
@@ -1810,6 +1884,8 @@ export function taskWatchdogService(db: Db, deps: TaskWatchdogServiceDeps = {}) 
           result.watchdogIssueIds.push(evaluated.watchdogIssueId);
         } else if (evaluated.state === "pending_first_run") {
           result.pendingFirstRun += 1;
+        } else if (evaluated.state === "waiting_on_monitor") {
+          result.waitingOnMonitor += 1;
         } else if (
           evaluated.state === "watchdog_review_open" ||
           evaluated.state === "watchdog_live" ||
