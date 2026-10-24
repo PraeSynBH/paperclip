@@ -7,6 +7,7 @@ const base = {
   previousAssigneeAgentId: "agent-1",
   nextAssigneeAgentId: "agent-1",
   blockerSetEdited: false,
+  hasUnblockDescriptor: false,
   actorType: "user",
   actorAgentId: null,
 };
@@ -30,6 +31,32 @@ describe("shouldWakeOnRestoredBlockedDependency", () => {
         ...base,
         actorType: "agent",
         actorAgentId: "agent-2",
+        previousAssigneeAgentId: "agent-1",
+        nextAssigneeAgentId: "agent-2",
+      }),
+    ).toBe(true);
+  });
+
+  it("does not wake a row parked on an unblock descriptor, on either road into the wake", () => {
+    const parked = { ...base, hasUnblockDescriptor: true };
+    // board or another actor blocks it while its blockers are already ready
+    expect(shouldWakeOnRestoredBlockedDependency(parked)).toBe(false);
+    expect(
+      shouldWakeOnRestoredBlockedDependency({ ...parked, actorType: "agent", actorAgentId: "agent-2" }),
+    ).toBe(false);
+    // a new assignee takes the parked row
+    expect(
+      shouldWakeOnRestoredBlockedDependency({
+        ...parked,
+        previousAssigneeAgentId: "agent-1",
+        nextAssigneeAgentId: "agent-2",
+      }),
+    ).toBe(false);
+    // the same edit on a relation-blocked row (no descriptor) still wakes, so
+    // the gate is the descriptor, not the assignee change
+    expect(
+      shouldWakeOnRestoredBlockedDependency({
+        ...base,
         previousAssigneeAgentId: "agent-1",
         nextAssigneeAgentId: "agent-2",
       }),
