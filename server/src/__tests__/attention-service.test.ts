@@ -124,6 +124,9 @@ describeEmbeddedPostgres("attention service", () => {
         adapterConfig: {},
         runtimeConfig: {},
         permissions: {},
+        // Matches the agent-scope policy seeded below, so this baseline carries
+        // no budget drift (PRX-5589). Drift gets its own test.
+        budgetMonthlyCents: 100,
       },
       {
         id: reviewerId,
@@ -714,6 +717,77 @@ describeEmbeddedPostgres("attention service", () => {
       agentName: "Broken Agent",
       failureReasonExcerpt: "adapter config missing",
     });
+  });
+
+  it("surfaces an agent budget that disagrees with the policy dispatch enforces (PRX-5589)", async () => {
+    const { companyId, workerId } = await seedCompany("ATD");
+    // The 2026-10-23 live shape: the agent row reads $0/month while dispatch
+    // enforces a $1,000 policy.
+    const policyId = randomUUID();
+    await db.insert(budgetPolicies).values({
+      id: policyId,
+      companyId,
+      scopeType: "agent",
+      scopeId: workerId,
+      metric: "billed_cents",
+      windowKind: "calendar_month_utc",
+      amount: 100_000,
+      hardStopEnabled: false,
+    });
+    await db.update(agents).set({ budgetMonthlyCents: 0 }).where(eq(agents.id, workerId));
+
+    const feed = await attentionService(db).list(companyId, { userId: "board-user" });
+
+    const driftItems = feed.items.filter((item) => item.sourceKind === "budget_drift");
+    expect(driftItems).toHaveLength(1);
+    expect(driftItems[0]).toMatchObject({
+      dedupKey: `budget_drift:${policyId}`,
+      severity: "medium",
+      subject: expect.objectContaining({ kind: "agent", id: workerId, title: "Worker" }),
+      detail: {
+        kind: "budget_drift",
+        agentName: "Worker",
+        agentRowAmount: 0,
+        amountLimit: 100_000,
+        direction: "policy_higher",
+        hardStopEnabled: false,
+      },
+    });
+    expect(feed.countsBySourceKind.budget_drift).toBe(1);
+
+    // Reconciling the row clears the item: the check is a read, not a snapshot.
+    await db.update(agents).set({ budgetMonthlyCents: 100_000 }).where(eq(agents.id, workerId));
+    const afterReconcile = await attentionService(db).list(companyId, { userId: "board-user" });
+    expect(afterReconcile.items.filter((item) => item.sourceKind === "budget_drift")).toHaveLength(0);
+  });
+
+  it("marks drift caused by an over-funded agent row as a high-severity hard-stop risk", async () => {
+    const { companyId, workerId } = await seedCompany("ATF2");
+    await db.insert(budgetPolicies).values({
+      companyId,
+      scopeType: "agent",
+      scopeId: workerId,
+      metric: "billed_cents",
+      windowKind: "calendar_month_utc",
+      amount: 50_000,
+      hardStopEnabled: true,
+    });
+    await db.update(agents).set({ budgetMonthlyCents: 10_000_000 }).where(eq(agents.id, workerId));
+
+    const feed = await attentionService(db).list(companyId, { userId: "board-user" });
+
+    const item = feed.items.find((entry) => entry.sourceKind === "budget_drift");
+    expect(item).toMatchObject({
+      severity: "high",
+      detail: {
+        kind: "budget_drift",
+        agentRowAmount: 10_000_000,
+        amountLimit: 50_000,
+        direction: "agent_row_higher",
+        hardStopEnabled: true,
+      },
+    });
+    expect(item?.whyNow).toContain("hard-stop");
   });
 
   it("returns addressed interactions to board attention after addressee pause or termination", async () => {

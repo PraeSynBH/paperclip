@@ -17,6 +17,7 @@ export const ATTENTION_SOURCE_KINDS = [
   "review",
   "failed_run",
   "budget_alert",
+  "budget_drift",
   "agent_error_alert",
 ] as const;
 
@@ -172,6 +173,22 @@ export type AttentionItemDetail =
       observedPercent: number;
       amountObserved: number;
       amountLimit: number;
+      images: AttentionDetailImage[];
+    }
+  | {
+      /**
+       * An agent's monthly limit appears twice — the agent row the UI shows and
+       * the policy dispatch enforces — and the two disagree. `amountLimit` is
+       * what dispatch enforces; `agentRowAmount` is what every agent surface
+       * shows.
+       */
+      kind: "budget_drift";
+      agentName: string | null;
+      agentRowAmount: number;
+      amountLimit: number;
+      direction: "policy_higher" | "agent_row_higher";
+      hardStopEnabled: boolean;
+      summaryExcerpt: string | null;
       images: AttentionDetailImage[];
     }
   | {

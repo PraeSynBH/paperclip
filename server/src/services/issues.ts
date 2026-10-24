@@ -18,6 +18,7 @@ import { retryIdempotentDatabaseOperation } from "../database-retry.js";
 import { externalConversationStateSql, nonIdleSlackIssueCondition, resumeSlackConversation } from "./slack-conversation-state.js";
 import { documentService } from "./documents.js";
 import { parseTaskSearch, taskSearchCtes, taskSearchScore } from "./task-search.js";
+import { parseIssueIdentifierFilter } from "./issue-identifier-filter.js";
 import { createdFromIssueCondition } from "./issue-creation-origin.js";
 import { executionProjectionsForRuns } from "./execution-projection.js";
 import type { ExecutionProjection } from "@paperclipai/shared";
@@ -1815,6 +1816,12 @@ export function parseStatusFilter(
 export interface IssueFilters {
   attention?: "blocked";
   status?: string | readonly string[];
+  /**
+   * Match issues by identifier (`PRA-6493`, case-insensitive, comma-separated
+   * for several). This is the lookup a caller uses to confirm a card exists;
+   * it must filter, never be dropped.
+   */
+  identifier?: string | readonly string[];
   /**
    * Filter by assignee agent ID.
    * - `string` (UUID): match issues assigned to that agent.
@@ -6244,6 +6251,12 @@ async function blockedInboxIssueConditions(
   if (filters?.createdFromIssueId) {
     conditions.push(createdFromIssueCondition(companyId, filters.createdFromIssueId));
   }
+  const identifierFilters = parseIssueIdentifierFilter(filters?.identifier);
+  if (identifierFilters.length === 1) {
+    conditions.push(eq(issues.identifier, identifierFilters[0]!));
+  } else if (identifierFilters.length > 1) {
+    conditions.push(inArray(issues.identifier, identifierFilters));
+  }
   if (filters?.descendantOf) {
     conditions.push(sql<boolean>`
       ${issues.id} IN (
@@ -7996,6 +8009,12 @@ export function issueService(db: Db) {
         }
       }
       if (filters?.afterId) conditions.push(gt(issues.id, filters.afterId));
+      const identifierFilters = parseIssueIdentifierFilter(filters?.identifier);
+      if (identifierFilters.length === 1) {
+        conditions.push(eq(issues.identifier, identifierFilters[0]!));
+      } else if (identifierFilters.length > 1) {
+        conditions.push(inArray(issues.identifier, identifierFilters));
+      }
       if (filters?.readCondition) conditions.push(filters.readCondition);
       const creationCondition = creationVisibilityCondition(companyId, filters);
       if (creationCondition) conditions.push(creationCondition);

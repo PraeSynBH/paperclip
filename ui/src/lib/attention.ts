@@ -59,6 +59,7 @@ const SOURCE_META: Record<AttentionSourceKind, SourceMeta> = {
   review: { label: "Review" },
   failed_run: { label: "Failed run" },
   budget_alert: { label: "Budget" },
+  budget_drift: { label: "Budget drift" },
   agent_error_alert: { label: "Agent error" },
 };
 
@@ -127,6 +128,7 @@ export function attentionKind(item: AttentionItem): AttentionKind {
     case "blocker_attention":
     case "recovery_action":
     case "budget_alert":
+    case "budget_drift":
       return "blocking";
     case "approval":
     case "issue_thread_interaction":
@@ -241,6 +243,10 @@ export function attentionDetailLine(item: AttentionItem): string | null {
     }
     case "budget":
       return `${Math.round(detail.observedPercent)}% of budget used ($${detail.amountObserved} / $${detail.amountLimit})`;
+    case "budget_drift":
+      return detail.direction === "agent_row_higher"
+        ? `Agent row $${detail.agentRowAmount} vs enforced $${detail.amountLimit} — hard stop lands earlier than the row says`
+        : `Agent row $${detail.agentRowAmount} vs enforced $${detail.amountLimit} — the real limit is higher than the row says`;
     case "generic":
       return quote(detail.summaryExcerpt);
     default:

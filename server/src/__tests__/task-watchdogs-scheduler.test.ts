@@ -13,6 +13,7 @@ import {
   issueComments,
   issueDocuments,
   issueApprovals,
+  issueRelations,
   issueThreadInteractions,
   issueWorkProducts,
   issues,
@@ -112,6 +113,7 @@ describeEmbeddedPostgres("task watchdog scheduler", () => {
       originId: overrides.originId,
       originFingerprint: overrides.originFingerprint,
       updatedAt: overrides.updatedAt,
+      monitorNextCheckAt: overrides.monitorNextCheckAt,
       // Default to an "established" issue (created well before the first-run
       // grace window) so the pending-first-run guard does not defer it. Tests
       // exercising the create-race pass an explicit recent `createdAt`.
@@ -491,6 +493,68 @@ describeEmbeddedPostgres("task watchdog scheduler", () => {
       .where(eq(issueComments.issueId, watchdogIssueId));
     expect(comments.some((comment) => comment.body.includes("Stopped fingerprint"))).toBe(true);
     expect(wakes.length).toBe(2);
+  });
+
+  it("does not dispatch another review when the completed review left the watched leaf unchanged", async () => {
+    // PRA-6985 reproduction: the reviewed leaf never changes, but the review
+    // lifecycle used to move the fingerprint. PRA-6893 fired 10 times on
+    // PRA-2111 for exactly this reason.
+    const companyId = await seedCompany();
+    const agentId = await seedAgent(companyId);
+    const sourceId = await seedIssue(companyId, {
+      identifier: "WDOG-LOOP",
+      status: "blocked",
+      assigneeAgentId: agentId,
+    });
+    await seedWatchdog(companyId, sourceId, agentId);
+    const { service, wakes } = createService();
+
+    const first = await service.reconcileTaskWatchdogs({ companyId });
+    expect(first).toMatchObject({ checked: 1, triggered: 1 });
+    const [triggeredWatchdog] = await db.select().from(issueWatchdogs).where(eq(issueWatchdogs.issueId, sourceId));
+    const watchdogIssueId = triggeredWatchdog!.watchdogIssueId!;
+
+    // While the review is open, recovery parks the watched leaf on the
+    // watchdog's own review issue (blockedByIssueIds -> the review task).
+    await db.insert(issueRelations).values({
+      companyId,
+      issueId: watchdogIssueId,
+      relatedIssueId: sourceId,
+      type: "blocks",
+    });
+
+    // The review completes and mutates nothing on the watched leaf.
+    await db.update(issues).set({ status: "done", updatedAt: new Date() }).where(eq(issues.id, watchdogIssueId));
+    const reviewed = await service.reconcileTaskWatchdogs({ companyId });
+
+    expect(reviewed).toMatchObject({ checked: 1, triggered: 0, alreadyReviewed: 1 });
+    const [afterReview] = await db.select().from(issueWatchdogs).where(eq(issueWatchdogs.issueId, sourceId));
+    expect(afterReview?.lastReviewedFingerprint).toBe(triggeredWatchdog?.lastObservedFingerprint);
+    expect(afterReview?.triggerCount).toBe(1);
+    expect(wakes).toHaveLength(1);
+
+    // The next tick for the same unchanged leaf stays quiet too.
+    const settled = await service.reconcileTaskWatchdogs({ companyId });
+    expect(settled).toMatchObject({ checked: 1, triggered: 0 });
+    expect(wakes).toHaveLength(1);
+  });
+
+  it("does not raise a stopped-subtree review for a leaf waiting on an armed monitor", async () => {
+    const companyId = await seedCompany();
+    const agentId = await seedAgent(companyId);
+    const sourceId = await seedIssue(companyId, {
+      identifier: "WDOG-MONITOR",
+      status: "blocked",
+      assigneeAgentId: agentId,
+      monitorNextCheckAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    await seedWatchdog(companyId, sourceId, agentId);
+    const { service, wakes } = createService();
+
+    const result = await service.reconcileTaskWatchdogs({ companyId });
+
+    expect(result).toMatchObject({ checked: 1, triggered: 0, waitingOnMonitor: 1 });
+    expect(wakes).toHaveLength(0);
   });
 
   it("suppresses a shrink-only stop after review when the snapshot round-trips through jsonb", async () => {

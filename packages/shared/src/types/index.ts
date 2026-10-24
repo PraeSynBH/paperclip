@@ -825,6 +825,7 @@ export type {
 export type { Goal } from "./goal.js";
 export type { Approval, ApprovalComment } from "./approval.js";
 export type {
+  AgentBudgetDrift,
   BudgetPolicy,
   BudgetPolicySummary,
   BudgetIncident,

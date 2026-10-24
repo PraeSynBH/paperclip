@@ -7506,6 +7506,89 @@ describeEmbeddedPostgres("heartbeat orphaned process recovery", () => {
     );
   });
 
+  it("does not park a continuation on the watchdog's own review issue (PRA-6985)", async () => {
+    const { companyId, issueId } = await seedStrandedIssueFixture({
+      status: "in_progress",
+      runStatus: "cancelled",
+      retryReason: "issue_continuation_needed",
+      runErrorCode: "issue_continuation_waiting_on_review",
+      runError: "Continuation parked: issue is waiting on review/approval",
+    });
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+    const watchdogChildId = randomUUID();
+    const manualChildId = randomUUID();
+
+    await db.insert(issues).values([
+      {
+        id: watchdogChildId,
+        companyId,
+        parentId: issueId,
+        title: "Watchdog review for the watched issue",
+        status: "todo",
+        priority: "medium",
+        issueNumber: 30,
+        identifier: `${issuePrefix}-30`,
+        originKind: "task_watchdog",
+        originId: issueId,
+      },
+      {
+        id: manualChildId,
+        companyId,
+        parentId: issueId,
+        title: "Sub-task still to do",
+        status: "todo",
+        priority: "medium",
+        issueNumber: 31,
+        identifier: `${issuePrefix}-31`,
+      },
+    ]);
+
+    const heartbeat = heartbeatService(db);
+    const result = await heartbeat.reconcileStrandedAssignedIssues();
+
+    expect(result.waitingOnReviewResolved).toBe(1);
+    // Only real work becomes a first-class blocker. The watchdog's review
+    // issue must not become a dependency edge on the watched leaf: that edge
+    // covers the leaf while a review is open and uncovers it when the review
+    // closes, which re-arms the next watchdog review.
+    const blockers = await sourceBlockerIssueIds(companyId, issueId);
+    expect(blockers).toEqual([manualChildId]);
+
+    const comments = await selectRecoveryCommentsForIssue(issueId);
+    expect(comments[0]?.body).toContain(`${issuePrefix}-31`);
+    expect(comments[0]?.body).not.toContain(`${issuePrefix}-30`);
+  });
+
+  it("does not create a dependency edge on a watchdog review issue when it is the only open child", async () => {
+    const { companyId, issueId } = await seedStrandedIssueFixture({
+      status: "in_progress",
+      runStatus: "cancelled",
+      retryReason: "issue_continuation_needed",
+      runErrorCode: "issue_continuation_waiting_on_review",
+      runError: "Continuation parked: issue is waiting on review/approval",
+    });
+    const issuePrefix = `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`;
+
+    await db.insert(issues).values({
+      id: randomUUID(),
+      companyId,
+      parentId: issueId,
+      title: "Watchdog review for the watched issue",
+      status: "todo",
+      priority: "medium",
+      issueNumber: 32,
+      identifier: `${issuePrefix}-32`,
+      originKind: "task_watchdog",
+      originId: issueId,
+    });
+
+    const heartbeat = heartbeatService(db);
+    const result = await heartbeat.reconcileStrandedAssignedIssues();
+
+    expect(result.waitingOnReviewResolved).toBe(0);
+    await expect(sourceBlockerIssueIds(companyId, issueId)).resolves.toEqual([]);
+  });
+
   it("repairs the PAP-16986 deliberate wait through the original owner when no target exists", async () => {
     const { companyId, agentId, issueId } = await seedStrandedIssueFixture({
       status: "in_progress",

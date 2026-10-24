@@ -4,6 +4,7 @@ import { enqueueFastResponse } from "../services/fast-responses.js";
 import { hasRequiredWorkspaceRecovery, LEGACY_WORKSPACE_RECOVERY_SCHEMA } from "../services/workspace-restore-recovery-state.js";
 import { hasUnverifiedNativeWorkspaceFinalizationOwner } from "../services/native-runtime/native-workspace-finalization-recovery-state.js";
 import { monitorPoliciesEqual, applyActorMonitorScheduledBy, assertCanManageIssueMonitor, summarizeIssueMonitor } from "../services/issue-monitors.js";
+import { parseIssueIdentifierFilter } from "../services/issue-identifier-filter.js";
 import type { IssuePrivacyConstraints } from "@paperclipai/shared";
 import { canActorReadHeartbeatRun } from "../services/heartbeat-run-privacy.js";
 import {
@@ -569,6 +570,7 @@ function noopTaskWatchdogService(): TaskWatchdogService {
       triggered: 0,
       live: 0,
       pendingFirstRun: 0,
+      waitingOnMonitor: 0,
       alreadyReviewed: 0,
       skipped: 0,
       watchdogIssueIds: [],
@@ -577,6 +579,7 @@ function noopTaskWatchdogService(): TaskWatchdogService {
       checked: 0,
       triggered: 0,
       pendingFirstRun: 0,
+      waitingOnMonitor: 0,
       skipped: 0,
       watchdogIssueIds: [],
     }),
@@ -8383,8 +8386,11 @@ export function issueRoutes(
       rawLimit !== undefined &&
       (parsedLimit === null ||
         !Number.isInteger(parsedLimit) ||
-        parsedLimit <= 0)
+        parsedLimit <= 0 ||
+        parsedLimit > ISSUE_LIST_MAX_LIMIT)
     ) {
+      // Never clamp an out-of-range limit silently: a caller that asks for more
+      // rows than the server returns cannot tell a short page from a full list.
       res.status(400).json({
         error: `limit must be a positive integer up to ${ISSUE_LIST_MAX_LIMIT}`,
       });
@@ -8455,11 +8461,26 @@ export function issueRoutes(
       return;
     }
     const offset = parsedOffset ?? 0;
+    const rawIdentifier = req.query.identifier as string | string[] | undefined;
+    let identifierFilters: string[] = [];
+    try {
+      identifierFilters = parseIssueIdentifierFilter(rawIdentifier);
+    } catch (err) {
+      res.status(400).json({
+        error:
+          err instanceof Error
+            ? err.message
+            : "identifier must look like PRA-1234",
+      });
+      return;
+    }
 
     const listFilters: IssueFilters = {
       readCondition: await issueReadSqlCondition(db, req.actor),
       attention: attention === "blocked" ? "blocked" : undefined,
       status: req.query.status as string | string[] | undefined,
+      identifier:
+        identifierFilters.length === 0 ? undefined : identifierFilters,
       assigneeAgentId,
       participantAgentId: req.query.participantAgentId as string | undefined,
       assigneeUserId,

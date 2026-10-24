@@ -1699,3 +1699,19 @@ identity, or a closed task receive 409; unrelated connections receive 404.
 No credentials or provider authorization URL appear in the card payload.
 
 For sandbox run inspection, see [Run diagnostics from a sandbox](run-diagnostics.md).
+
+**Verify a filed card by id or identifier, not by scanning the list.**
+
+`POST /api/companies/{companyId}/issues` returns the created issue with its `id`
+and `identifier`. Confirm it landed with `GET /api/issues/{issueIdOrIdentifier}`
+(for example `GET /api/issues/PRA-6493`), which accepts either form and returns
+the full issue with `200`, or `404` when the card genuinely does not exist. A
+`404` from that route is the only proof a card is missing.
+
+`GET /api/companies/{companyId}/issues` is a bounded page: 500 rows by default,
+1000 at most, ordered newest-`updatedAt` first. A card that exists can be absent
+from any given page on a large board, so never re-file work, and never tell the
+board a previous run's card was never created, on the strength of a list scan
+that does not contain it. Filter with `?identifier=PRA-6493` (comma-separated or
+repeated for several) instead of scanning. A malformed `identifier`, and a
+`limit` above 1000, are rejected with `400` rather than silently ignored.

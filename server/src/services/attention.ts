@@ -49,7 +49,7 @@ import type {
 } from "@paperclipai/shared";
 import { badRequest } from "../errors.js";
 import { listAttentionExhaustedRuns } from "./attention-exhausted-runs.js";
-import { budgetService } from "./budgets.js";
+import { budgetService, listAgentBudgetDrift } from "./budgets.js";
 import {
   BLOCKER_ATTENTION_MAX_DEPTH,
   BLOCKER_ATTENTION_MAX_NODES,
@@ -78,6 +78,7 @@ const ATTENTION_SOURCE_KINDS: AttentionSourceKind[] = [
   "review",
   "failed_run",
   "budget_alert",
+  "budget_drift",
   "agent_error_alert",
 ];
 
@@ -92,14 +93,15 @@ const SOURCE_RANK: Record<AttentionSourceKind, number> = {
   failed_run: 0,
   recovery_action: 1,
   blocker_attention: 2,
-  budget_alert: 3,
-  agent_error_alert: 4,
-  approval: 5,
-  decision: 6,
-  issue_thread_interaction: 7,
-  review: 8,
-  productivity_review: 9,
-  join_request: 10,
+  budget_drift: 3,
+  budget_alert: 4,
+  agent_error_alert: 5,
+  approval: 6,
+  decision: 7,
+  issue_thread_interaction: 8,
+  review: 9,
+  productivity_review: 10,
+  join_request: 11,
 };
 
 const PENDING_INTERACTION_STATUSES = ["pending"] as const;
@@ -1860,6 +1862,61 @@ export function attentionService(db: Db, serviceOptions: AttentionServiceOptions
             observedPercent,
             amountObserved: incident.amountObserved,
             amountLimit: incident.amountLimit,
+            images: [],
+          },
+        }));
+      }
+
+      for (const drift of await listAgentBudgetDrift(db, companyId)) {
+        const policyLower = drift.direction === "agent_row_higher";
+        const dedupKey = `budget_drift:${drift.policyId}`;
+        add(createItem({
+          companyId,
+          sourceKind: "budget_drift",
+          subject: {
+            kind: "agent",
+            id: drift.agentId,
+            companyId,
+            title: drift.agentName,
+            identifier: null,
+            status: drift.agentStatus,
+            href: `/${prefix}/costs`,
+            metadata: {
+              policyId: drift.policyId,
+              agentRowAmount: drift.agentRowAmount,
+              policyAmount: drift.policyAmount,
+              policyEffectiveAmount: drift.policyEffectiveAmount,
+              direction: drift.direction,
+              difference: drift.difference,
+              hardStopEnabled: drift.hardStopEnabled,
+            },
+          },
+          whyNow: policyLower
+            ? `The agent row shows $${drift.agentRowAmount / 100}/mo but dispatch enforces the $${drift.policyEffectiveAmount / 100} policy, so this lane will hard-stop early with no warning.`
+            : `The agent row shows $${drift.agentRowAmount / 100}/mo while dispatch enforces the $${drift.policyEffectiveAmount / 100} policy, so the real limit is invisible on every agent surface.`,
+          decisionVerbs: decisionVerbs(
+            { id: "inspect", label: "Inspect", description: "Compare the agent row with the policy dispatch enforces." },
+            { id: "dismiss", label: "Dismiss", description: "Dismiss this drift row without reconciling the two limits." },
+          ),
+          inlineResolvable: true,
+          entryRule: "agent-scope billed_cents calendar_month_utc policy (isActive ? amount : 0) <> agents.budget_monthly_cents",
+          exitRule: "The two values agree again or the row is dismissed.",
+          dedupKey,
+          severity: policyLower ? "high" : "medium",
+          activityAt: toIso(drift.agentUpdatedAt > drift.policyUpdatedAt ? drift.agentUpdatedAt : drift.policyUpdatedAt),
+          createdAt: toIso(drift.agentUpdatedAt),
+          updatedAt: toIso(drift.agentUpdatedAt > drift.policyUpdatedAt ? drift.agentUpdatedAt : drift.policyUpdatedAt),
+          relatedIssue: null,
+          detail: {
+            kind: "budget_drift",
+            agentName: drift.agentName,
+            agentRowAmount: drift.agentRowAmount,
+            amountLimit: drift.policyEffectiveAmount,
+            direction: drift.direction,
+            hardStopEnabled: drift.hardStopEnabled,
+            summaryExcerpt: excerpt(
+              `agent row $${drift.agentRowAmount} vs enforced policy $${drift.policyEffectiveAmount}`,
+            ),
             images: [],
           },
         }));

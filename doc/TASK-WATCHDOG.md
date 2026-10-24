@@ -86,12 +86,19 @@ For each active watchdog the tick:
 
 1. **Walks the watched subtree.** Starts at the configured issue and follows `parent_id` downward, excluding every issue whose `originKind = 'task_watchdog'` and everything below it. This excludes the watchdog's own review tasks so it cannot trigger itself.
 2. **Checks for live paths.** If any included issue has a live run (`queued`, `running`, `scheduled_retry`), a queued wake request, or a scheduled retry, the subtree is **live** and the watchdog does not fire.
-3. **Computes a stop fingerprint.** A SHA-256 hash over the stopped leaves' identifiers, statuses, blockers, pending interactions, and the current watchdog configuration. The configuration is part of the fingerprint, so changing the agent or instructions invalidates the previously reviewed state.
+3. **Computes a stop fingerprint.** A SHA-256 hash over the stopped leaves' identifiers, statuses, owners, blockers, pending interactions, and the current watchdog configuration. The configuration is part of the fingerprint, so changing the agent or instructions invalidates the previously reviewed state.
+
+   Two exclusions keep the fingerprint a function of the watched work rather than of the watchdog's own bookkeeping:
+
+   - A blocker edge pointing at a task-watchdog review issue does not count. The review issue is the watchdog's artifact, so opening and closing a review must not look like a change in the watched leaf.
+   - A non-terminal leaf with an armed monitor check (`monitorNextCheckAt` in the future) is waiting, not stopped. If every stopped leaf in the subtree is waiting that way, the tick returns `waiting_on_monitor` and the watchdog is not woken. A monitored alert-tracker issue re-opens itself each time its alert re-fires, and that re-open is not a fresh stop.
 4. **Compares against `lastReviewedFingerprint`.** Match → suppress (the watchdog already saw this exact stopped state). New → proceed.
 5. **Ensures a review task exists.** Creates (or reopens) one child issue with `originKind = 'task_watchdog'` and `originId = watchedIssueId`. Idempotent per watchdog — only one review task is ever live at a time.
 6. **Wakes the watchdog agent.** Sends a wake with `wakeReason = task_watchdog_stopped_subtree`, the stop fingerprint, the leaf summaries, the default mandate, and any custom instructions. The idempotency key is `(watchdogId, stopFingerprint)`, so retries cannot stack duplicate wakes.
 
 When the subtree changes between scans (someone restarts work, adds a blocker, or accepts an interaction) the stop fingerprint changes too, and the watchdog will be woken again for the new state — even if the previous run already disposed of an earlier fingerprint.
+
+Completing a review is not one of those changes. The review task is excluded from the subtree walk and from the watched leaf's blocker set, and recovery never parks the watched leaf as blocked on its own watchdog review, so a review that mutates nothing leaves the fingerprint exactly where it was and the next tick suppresses.
 
 ---
 
