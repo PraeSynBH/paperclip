@@ -79,6 +79,7 @@ import {
   nativeRunnerOwnershipNotHeldCondition,
 } from "../native-runtime/native-runner-ownership.js";
 import { visibleIssueCondition } from "../issue-visibility.js";
+import { TASK_WATCHDOG_ORIGIN_KIND } from "../task-watchdog-scope.js";
 import { forbidden, notFound } from "../../errors.js";
 import { logger } from "../../middleware/logger.js";
 import {
@@ -2919,7 +2920,7 @@ export function recoveryService(
 
   async function openChildIssues(issue: typeof issues.$inferSelect) {
     return db
-      .select({ id: issues.id, identifier: issues.identifier })
+      .select({ id: issues.id, identifier: issues.identifier, originKind: issues.originKind })
       .from(issues)
       .where(
         and(
@@ -2963,10 +2964,18 @@ export function recoveryService(
   async function resolveContinuationWaitingOnReview(
     issue: typeof issues.$inferSelect,
   ) {
-    const [existingBlockers, openChildren] = await Promise.all([
+    const [existingBlockers, openChildRows] = await Promise.all([
       existingUnresolvedBlockerIssues(issue.companyId, issue.id),
       openChildIssues(issue),
     ]);
+    // A task-watchdog review issue is the watchdog's own review artifact, not
+    // work the watched issue waits on. Converting a parked continuation into a
+    // dependency wait on its own review issue would park the watched leaf as
+    // `blocked` every time a review opens and unpark it every time a review
+    // closes, which is exactly the state churn the watchdog then re-detects.
+    const openChildren = openChildRows.filter(
+      (child) => child.originKind !== TASK_WATCHDOG_ORIGIN_KIND,
+    );
     const blockedByIssueIds = [
       ...new Set([
         ...existingBlockers.map((row) => row.id),

@@ -306,6 +306,122 @@ describe("task watchdog subtree classifier", () => {
     expect(result.includedIssueIds).toEqual([sourceId]);
   });
 
+  it("does not re-mint the stop fingerprint when the watchdog's own review issue blocks the leaf", () => {
+    // PRA-6985: recovery parks the watched leaf as blocked on the watchdog's
+    // review issue, so the review lifecycle used to move the fingerprint.
+    const withoutReviewBlocker = classify({ issues: [issue({ status: "blocked" })] });
+    expect(withoutReviewBlocker.state).toBe("stopped");
+    if (withoutReviewBlocker.state !== "stopped") return;
+
+    const reviewOpened = classify({
+      watchdog: {
+        companyId,
+        issueId: sourceId,
+        lastReviewedFingerprint: withoutReviewBlocker.stopFingerprint,
+        lastReviewedStopSnapshot: withoutReviewBlocker.stopSnapshot,
+      },
+      issues: [issue({ status: "blocked" })],
+      blockers: [{
+        companyId,
+        blockerIssueId: watchdogId,
+        blockedIssueId: sourceId,
+        blockerOriginKind: "task_watchdog",
+      }],
+    });
+
+    expect(reviewOpened.state).toBe("already_reviewed");
+    if (reviewOpened.state !== "already_reviewed") return;
+    expect(reviewOpened.stopFingerprint).toBe(withoutReviewBlocker.stopFingerprint);
+    expect(reviewOpened.stoppedLeaves[0]?.blockerIssueIds).toEqual([]);
+  });
+
+  it("still counts a real blocker of the watched leaf in the fingerprint", () => {
+    const initial = classify({ issues: [issue({ status: "blocked" })] });
+    expect(initial.state).toBe("stopped");
+    if (initial.state !== "stopped") return;
+
+    const realBlocker = classify({
+      watchdog: {
+        companyId,
+        issueId: sourceId,
+        lastReviewedFingerprint: initial.stopFingerprint,
+        lastReviewedStopSnapshot: initial.stopSnapshot,
+      },
+      issues: [issue({ status: "blocked" })],
+      blockers: [{
+        companyId,
+        blockerIssueId: "blocker-1",
+        blockedIssueId: sourceId,
+        blockerOriginKind: "manual",
+      }],
+    });
+
+    expect(realBlocker.state).toBe("stopped");
+    if (realBlocker.state !== "stopped") return;
+    expect(realBlocker.stopFingerprint).not.toBe(initial.stopFingerprint);
+    expect(realBlocker.stoppedLeaves[0]?.blockerIssueIds).toEqual(["blocker-1"]);
+  });
+
+  it("treats a leaf waiting on an armed external monitor as waiting, not stopped", () => {
+    const result = classify({
+      issues: [issue({
+        status: "todo",
+        monitorNextCheckAt: new Date("2026-06-17T21:00:00.000Z"),
+      })],
+      evaluatedAt: new Date("2026-06-17T20:00:00.000Z"),
+    });
+
+    expect(result.state).toBe("waiting_on_monitor");
+    if (result.state !== "waiting_on_monitor") return;
+    expect(result.monitorIssueIds).toEqual([sourceId]);
+  });
+
+  it("keeps a just-due but unclaimed monitor as a waiting path", () => {
+    // The monitor scheduler claims a due check on a tick, so a monitor a minute
+    // past due is still going to fire.
+    const result = classify({
+      issues: [issue({
+        status: "todo",
+        monitorNextCheckAt: new Date("2026-06-17T19:59:00.000Z"),
+      })],
+      evaluatedAt: new Date("2026-06-17T20:00:00.000Z"),
+    });
+
+    expect(result.state).toBe("waiting_on_monitor");
+  });
+
+  it("still stops a monitored leaf once its monitor check is long past due", () => {
+    const result = classify({
+      issues: [issue({
+        status: "todo",
+        monitorNextCheckAt: new Date("2026-06-17T19:00:00.000Z"),
+      })],
+      evaluatedAt: new Date("2026-06-17T20:00:00.000Z"),
+    });
+
+    expect(result.state).toBe("stopped");
+  });
+
+  it("keeps triggering for stopped siblings while another leaf waits on a monitor", () => {
+    const result = classify({
+      issues: [
+        issue({ status: "in_progress" }),
+        issue({
+          id: childId,
+          parentId: sourceId,
+          status: "todo",
+          monitorNextCheckAt: new Date("2026-06-17T21:00:00.000Z"),
+        }),
+        issue({ id: "child-2", parentId: sourceId, status: "blocked" }),
+      ],
+      evaluatedAt: new Date("2026-06-17T20:00:00.000Z"),
+    });
+
+    expect(result.state).toBe("stopped");
+    if (result.state !== "stopped") return;
+    expect(result.stoppedLeaves.map((leaf) => leaf.issueId)).toEqual(["child-2"]);
+  });
+
   it("defers a stopped verdict for an issue created inside the first-run grace window", () => {
     const createdAt = new Date("2026-06-18T16:32:45.731Z");
     const result = classify({
