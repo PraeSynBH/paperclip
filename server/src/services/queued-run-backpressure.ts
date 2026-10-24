@@ -491,6 +491,144 @@ export interface QueuedRunPromotionEntry {
   priorityRank: number;
 }
 
+/**
+ * PRA-6975: a reaped wake must not be re-offered inside the window that just proved
+ * the agent cannot drain it.
+ *
+ * The stranded-issue sweeper offers `issue_assignment_recovery` for a `todo` issue
+ * whose latest run is terminal. A run cancelled as `queued_run_expired` is terminal,
+ * so the reaper's own output re-arms the sweeper: the work is offered twice to an
+ * agent that has just failed to start the first offer, and the replacement wake
+ * competes for the same saturated slots and can itself expire. Measured on the CTO
+ * (`cccf9a46`), 24 h to 2026-10-24T07:52Z: **68 of 68** `issue_assignment_recovery`
+ * runs followed a `queued_run_expired` on the same issue, and all 68 fell inside the
+ * bound the reaper had applied (1 h). The count tracks the expiry count, not demand.
+ *
+ * The suppression is a read of the reap record the reaper already wrote — the bound
+ * it applied is in `heartbeat_runs.result_json.queueReapBoundSec`, the moment it
+ * applied it is `finished_at`. No new table, no new column.
+ *
+ * The window is deliberately finite and anchored on the reap: while `now` is still
+ * inside `reapedAt + boundSec` the offer is withheld, and the first sweep after the
+ * window offers again. So a reaped issue delays by at most one bound and never loses
+ * its only offer — the sweeper is periodic and this predicate has no other suppressor.
+ *
+ * `superseded_by_newer_wake` is not consulted: that path already coalesces to the
+ * newest wake, and suppressing on it would drop real work (the newer wake is the one
+ * that survives).
+ */
+export const RECOVERY_OFFER_SUPPRESSED_REASON = "reaped_wake_within_bound" as const;
+
+/** `result_json` key the reaper records the age bound it applied under. */
+export const QUEUE_REAP_BOUND_RESULT_KEY = "queueReapBoundSec";
+
+export interface ReapedRecoveryRunLike {
+  id?: string | null;
+  status?: string | null;
+  errorCode?: string | null;
+  finishedAt?: Date | string | null;
+  resultJson?: unknown;
+  contextSnapshot?: unknown;
+}
+
+export type RecoveryOfferSuppressionDecision =
+  | { suppress: false; reason: "not_reaped" | "outside_reap_window" }
+  | {
+      suppress: true;
+      reason: typeof RECOVERY_OFFER_SUPPRESSED_REASON;
+      reapedRunId: string | null;
+      reapedAtIso: string;
+      windowSec: number;
+      remainingSec: number;
+      suppressedUntilIso: string;
+    };
+
+function readTimestampMs(raw: unknown): number | null {
+  if (raw instanceof Date) return raw.getTime();
+  if (raw === null || raw === undefined) return null;
+  const parsed = Date.parse(String(raw));
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+function readRecord(raw: unknown): Record<string, unknown> | null {
+  let value: unknown = raw;
+  if (typeof value === "string") {
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return null;
+    }
+  }
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
+}
+
+/**
+ * Decide whether an `issue_assignment_recovery` offer must be withheld because the
+ * run it is about to replace was reaped as `queued_run_expired` inside its own reap
+ * bound.
+ *
+ * `run` is the reap record to test (the caller passes the newest reaped run for the
+ * same agent+issue). Rows that are not `queued_run_expired`, or that belong to a
+ * different issue/agent, never suppress — that is what keeps a recovery for a
+ * different issue untouched.
+ */
+export function evaluateReapedRecoveryOfferSuppression(input: {
+  run: ReapedRecoveryRunLike | null | undefined;
+  agentId?: string | null;
+  issueId?: string | null;
+  now?: Date | number;
+  /** Bound to apply when the reap record did not carry one. */
+  defaultBoundSec?: number | null;
+}): RecoveryOfferSuppressionDecision {
+  const { run, agentId, issueId } = input;
+  const nowMs = input.now === undefined
+    ? Date.now()
+    : input.now instanceof Date
+      ? input.now.getTime()
+      : Number(input.now);
+  if (!run || !Number.isFinite(nowMs)) return { suppress: false, reason: "not_reaped" };
+  if (run.errorCode !== QUEUED_RUN_EXPIRED_ERROR_CODE) return { suppress: false, reason: "not_reaped" };
+
+  const reapedAtMs = readTimestampMs(run.finishedAt);
+  if (reapedAtMs === null) return { suppress: false, reason: "not_reaped" };
+
+  // The record must be about the same work. A mismatch means the caller handed us
+  // another issue's (or agent's) reap, which must never withhold this offer.
+  const snapshot = readRecord(run.contextSnapshot);
+  const runIssueId = snapshot && typeof snapshot.issueId === "string" ? snapshot.issueId.trim() : null;
+  const runAgentId = snapshot && typeof snapshot.agentId === "string" ? snapshot.agentId.trim() : null;
+  if (issueId && runIssueId && runIssueId !== issueId) return { suppress: false, reason: "not_reaped" };
+  if (agentId && runAgentId && runAgentId !== agentId) return { suppress: false, reason: "not_reaped" };
+
+  const result = readRecord(run.resultJson);
+  const recordedBound = Number(result?.[QUEUE_REAP_BOUND_RESULT_KEY]);
+  const fallbackBound = Number(input.defaultBoundSec);
+  const windowSec = Number.isFinite(recordedBound) && recordedBound > 0
+    ? recordedBound
+    : Number.isFinite(fallbackBound) && fallbackBound > 0
+      ? fallbackBound
+      : resolveQueuedRunReapBoundSec(null);
+
+  const elapsedMs = nowMs - reapedAtMs;
+  // A reap timestamp in the future is clock skew, not evidence that the work cannot
+  // drain; never withhold an offer on it.
+  if (elapsedMs < 0) return { suppress: false, reason: "outside_reap_window" };
+  const windowMs = windowSec * 1000;
+  if (elapsedMs >= windowMs) return { suppress: false, reason: "outside_reap_window" };
+
+  const suppressedUntilMs = reapedAtMs + windowMs;
+  return {
+    suppress: true,
+    reason: RECOVERY_OFFER_SUPPRESSED_REASON,
+    reapedRunId: typeof run.id === "string" ? run.id : null,
+    reapedAtIso: new Date(reapedAtMs).toISOString(),
+    windowSec,
+    remainingSec: Math.max(0, Math.round((suppressedUntilMs - nowMs) / 1000)),
+    suppressedUntilIso: new Date(suppressedUntilMs).toISOString(),
+  };
+}
+
 export function promotionRankClass(entry: QueuedRunPromotionEntry): number {
   if (entry.hasIssueId && !entry.issueReady) return 3;
   if (!entry.hasIssueId) return 2;

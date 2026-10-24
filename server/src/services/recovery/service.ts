@@ -56,6 +56,10 @@ import {
 import { evaluateAgentInvokabilityFromDb } from "../agent-invokability.js";
 import { isHeartbeatWakeOnDemandEnabled } from "../heartbeat-policy.js";
 import {
+  QUEUED_RUN_EXPIRED_ERROR_CODE,
+  evaluateReapedRecoveryOfferSuppression,
+} from "../queued-run-backpressure.js";
+import {
   evaluateInfraRetryGate,
   isInfraCausedFailure,
   probeGatewayHealth,
@@ -1045,6 +1049,44 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
       )
       .limit(1)
       .then((rows) => Boolean(rows[0]));
+  }
+
+  /**
+   * PRA-6975: the newest run for this (agent, issue) that the queue reaper cancelled
+   * as `queued_run_expired`, with the bound it applied.
+   *
+   * Read-only: `finished_at` is the moment the offer was proven undrainable and
+   * `result_json.queueReapBoundSec` is the window the reaper itself used, so the
+   * suppression reuses the reap record instead of re-deriving a bound or adding a
+   * table. Callers gate on the error code first so this costs nothing for agents
+   * that are not reaping.
+   */
+  async function getLatestReapedQueuedRun(input: {
+    companyId: string;
+    agentId: string;
+    issueId: string;
+  }) {
+    const rows = await db
+      .select({
+        id: heartbeatRuns.id,
+        status: heartbeatRuns.status,
+        errorCode: heartbeatRuns.errorCode,
+        finishedAt: heartbeatRuns.finishedAt,
+        resultJson: heartbeatRuns.resultJson,
+        contextSnapshot: heartbeatRuns.contextSnapshot,
+      })
+      .from(heartbeatRuns)
+      .where(
+        and(
+          eq(heartbeatRuns.companyId, input.companyId),
+          eq(heartbeatRuns.agentId, input.agentId),
+          eq(heartbeatRuns.errorCode, QUEUED_RUN_EXPIRED_ERROR_CODE),
+          sql`${heartbeatRuns.contextSnapshot} ->> 'issueId' = ${input.issueId}`,
+        ),
+      )
+      .orderBy(desc(heartbeatRuns.finishedAt), desc(heartbeatRuns.createdAt))
+      .limit(1);
+    return rows[0] ?? null;
   }
 
   async function getLatestAcceptedContinuationInteraction(companyId: string, issueId: string) {
@@ -3868,6 +3910,9 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
     const result = {
       assignmentDispatched: 0,
       dispatchRequeued: 0,
+      // PRA-6975: offers withheld because the run they would replace was reaped
+      // inside its own reap bound (a re-offer the saturated agent cannot drain).
+      reapedRecoverySuppressed: 0,
       continuationRequeued: 0,
       dispositionRepairRequeued: 0,
       productiveContinuationObserved: 0,
@@ -4397,6 +4442,47 @@ export function recoveryService(db: Db, deps: { enqueueWakeup: RecoveryWakeup })
         if (await isInvocationBudgetBlocked(issue, agentId)) {
           result.skipped += 1;
           continue;
+        }
+
+        // PRA-6975: the run this offer would replace was cancelled by the queue reaper,
+        // i.e. this agent already proved it could not start the same issue's wake. The
+        // reaper's own output re-arms this sweeper (a reaped run is terminal), so
+        // re-offering inside the reap window is a retry storm on a saturated queue:
+        // measured on the CTO, 68 of 68 recovery offers followed a reap on the same
+        // issue and all 68 fell inside the bound the reaper had applied. Withhold this
+        // one offer; the first sweep after `reapedAt + bound` offers again, so the issue
+        // never loses its only offer — it waits at most one bound.
+        if (latestRun.errorCode === QUEUED_RUN_EXPIRED_ERROR_CODE) {
+          const reapedRun = await getLatestReapedQueuedRun({
+            companyId: issue.companyId,
+            agentId,
+            issueId: issue.id,
+          });
+          const suppression = evaluateReapedRecoveryOfferSuppression({
+            run: reapedRun,
+            agentId,
+            issueId: issue.id,
+            now: new Date(),
+          });
+          if (suppression.suppress) {
+            result.reapedRecoverySuppressed += 1;
+            logger.info(
+              {
+                companyId: issue.companyId,
+                issueId: issue.id,
+                identifier: issue.identifier,
+                agentId,
+                reapedRunId: suppression.reapedRunId,
+                reapedAt: suppression.reapedAtIso,
+                reapBoundSec: suppression.windowSec,
+                offerDeferredSec: suppression.remainingSec,
+                offerAllowedAt: suppression.suppressedUntilIso,
+                skipReason: suppression.reason,
+              },
+              "reconcileStrandedAssignedIssues: withheld a recovery offer inside the reap window (PRA-6975)",
+            );
+            continue;
+          }
         }
 
         const queued = await enqueueStrandedIssueRecovery({

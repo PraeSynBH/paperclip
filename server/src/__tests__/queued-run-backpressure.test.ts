@@ -9,10 +9,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 import {
+  RECOVERY_OFFER_SUPPRESSED_REASON,
   classifyQueuedRunBackpressure,
   classifyQueuedRunWakeability,
   compareQueuedRunsForPromotion,
   describeQueuedAge,
+  evaluateReapedRecoveryOfferSuppression,
   resolveQueuedRunReapBoundSec,
   summariseAgentQueue,
   type QueuedRunRowLike,
@@ -365,5 +367,238 @@ describe("compareQueuedRunsForPromotion", () => {
       entry({ runId: "critical", createdAtMs: sameMs, priorityRank: 0 }),
     ];
     expect([...rows].sort(compareQueuedRunsForPromotion).map((run) => run.runId)).toEqual(["critical", "low"]);
+  });
+});
+
+// PRA-6975: a reaped wake must not be re-offered inside the window that just proved
+// the agent cannot drain it. The predicate is pure so the real 24 h window can be
+// replayed from a captured fixture, exactly like the PRA-6499 backlog replay above.
+describe("evaluateReapedRecoveryOfferSuppression", () => {
+  const AGENT = "cccf9a46-318f-4ec9-b938-1cd7f2d9fc1b";
+  const ISSUE = "8486fbd8-46f1-4c90-b9bd-a8d0d0744744";
+  const reaped = (extra: Record<string, unknown> = {}) => ({
+    id: "run-reaped",
+    status: "cancelled",
+    errorCode: "queued_run_expired",
+    finishedAt: new Date("2026-10-24T00:15:03Z"),
+    resultJson: { stopReason: "queued_run_expired", queueReapBoundSec: 3600 },
+    contextSnapshot: { issueId: ISSUE, taskId: ISSUE },
+    ...extra,
+  });
+  const tenMinutesAfterReap = new Date("2026-10-24T00:25:03Z");
+
+  it("withholds one offer for the same (agent, issue) inside the reap bound", () => {
+    const decision = evaluateReapedRecoveryOfferSuppression({
+      run: reaped(),
+      agentId: AGENT,
+      issueId: ISSUE,
+      now: tenMinutesAfterReap,
+    });
+    expect(decision.suppress).toBe(true);
+    if (!decision.suppress) throw new Error("unreachable");
+    expect(decision.reason).toBe(RECOVERY_OFFER_SUPPRESSED_REASON);
+    expect(decision.reapedRunId).toBe("run-reaped");
+    expect(decision.windowSec).toBe(3600);
+    // 3600s window, 600s elapsed.
+    expect(decision.remainingSec).toBe(3000);
+    expect(decision.suppressedUntilIso).toBe("2026-10-24T01:15:03.000Z");
+  });
+
+  it("leaves a recovery for a different issue untouched", () => {
+    const decision = evaluateReapedRecoveryOfferSuppression({
+      run: reaped(),
+      agentId: AGENT,
+      issueId: "f174baaf-85e4-4c70-85f7-631f62515723",
+      now: tenMinutesAfterReap,
+    });
+    expect(decision).toEqual({ suppress: false, reason: "not_reaped" });
+  });
+
+  it("leaves a recovery for a different agent untouched", () => {
+    const decision = evaluateReapedRecoveryOfferSuppression({
+      run: reaped({ contextSnapshot: { issueId: ISSUE, agentId: "some-other-agent" } }),
+      agentId: AGENT,
+      issueId: ISSUE,
+      now: tenMinutesAfterReap,
+    });
+    expect(decision).toEqual({ suppress: false, reason: "not_reaped" });
+  });
+
+  it("offers again once the reap bound has elapsed, so no issue loses its only offer", () => {
+    const atBoundary = evaluateReapedRecoveryOfferSuppression({
+      run: reaped(),
+      agentId: AGENT,
+      issueId: ISSUE,
+      now: new Date("2026-10-24T01:15:03Z"),
+    });
+    expect(atBoundary).toEqual({ suppress: false, reason: "outside_reap_window" });
+    const later = evaluateReapedRecoveryOfferSuppression({
+      run: reaped(),
+      agentId: AGENT,
+      issueId: ISSUE,
+      now: new Date("2026-10-24T02:00:00Z"),
+    });
+    expect(later.suppress).toBe(false);
+  });
+
+  it("uses the bound the reaper recorded, not a re-derived one", () => {
+    const decision = evaluateReapedRecoveryOfferSuppression({
+      run: reaped({ resultJson: { stopReason: "queued_run_expired", queueReapBoundSec: 21600 } }),
+      agentId: AGENT,
+      issueId: ISSUE,
+      now: tenMinutesAfterReap,
+    });
+    expect(decision.suppress).toBe(true);
+    if (!decision.suppress) throw new Error("unreachable");
+    expect(decision.windowSec).toBe(21600);
+  });
+
+  it("falls back to the reap floor when the record carries no bound", () => {
+    const decision = evaluateReapedRecoveryOfferSuppression({
+      run: reaped({ resultJson: { stopReason: "queued_run_expired" } }),
+      agentId: AGENT,
+      issueId: ISSUE,
+      now: tenMinutesAfterReap,
+    });
+    expect(decision.suppress).toBe(true);
+    if (!decision.suppress) throw new Error("unreachable");
+    expect(decision.windowSec).toBe(resolveQueuedRunReapBoundSec(null));
+  });
+
+  it("does not suppress on superseded_by_newer_wake (that path already coalesces)", () => {
+    const decision = evaluateReapedRecoveryOfferSuppression({
+      run: reaped({ errorCode: "superseded_by_newer_wake", resultJson: {} }),
+      agentId: AGENT,
+      issueId: ISSUE,
+      now: tenMinutesAfterReap,
+    });
+    expect(decision).toEqual({ suppress: false, reason: "not_reaped" });
+  });
+
+  it("does not suppress on a run that was never reaped, or on a missing timestamp", () => {
+    expect(
+      evaluateReapedRecoveryOfferSuppression({
+        run: reaped({ errorCode: "timeout" }),
+        agentId: AGENT,
+        issueId: ISSUE,
+        now: tenMinutesAfterReap,
+      }).suppress,
+    ).toBe(false);
+    expect(
+      evaluateReapedRecoveryOfferSuppression({
+        run: reaped({ finishedAt: null }),
+        agentId: AGENT,
+        issueId: ISSUE,
+        now: tenMinutesAfterReap,
+      }).suppress,
+    ).toBe(false);
+    expect(
+      evaluateReapedRecoveryOfferSuppression({ run: null, agentId: AGENT, issueId: ISSUE, now: tenMinutesAfterReap })
+        .suppress,
+    ).toBe(false);
+  });
+
+  it("never withholds an offer on a reap timestamp from the future (clock skew)", () => {
+    const decision = evaluateReapedRecoveryOfferSuppression({
+      run: reaped({ finishedAt: new Date("2026-10-24T09:00:00Z") }),
+      agentId: AGENT,
+      issueId: ISSUE,
+      now: tenMinutesAfterReap,
+    });
+    expect(decision).toEqual({ suppress: false, reason: "outside_reap_window" });
+  });
+});
+
+describe("replaying the real CTO reap window (24 h to 2026-10-24T07:52Z)", () => {
+  // Captured from the live instance: every `issue_assignment_recovery` run for the
+  // CTO in the 24 h window, and every `queued_run_expired` run for the same agent in
+  // the 30 h ending at the same moment (so a reap older than the window is included
+  // when it is still the one a windowed offer would have followed).
+  const window = JSON.parse(
+    readFileSync(
+      fileURLToPath(new URL("./fixtures/cto-reap-window-20261024T0752Z.json", import.meta.url)),
+      "utf8",
+    ),
+  ) as {
+    agentId: string;
+    offers: Array<{ runId: string; issueId: string; offeredAt: string }>;
+    reaps: Array<{ runId: string; issueId: string; finishedAt: string; boundSec: number | null }>;
+  };
+
+  const reapsByIssue = new Map<string, typeof window.reaps>();
+  for (const reap of window.reaps) {
+    const list = reapsByIssue.get(reap.issueId) ?? [];
+    list.push(reap);
+    reapsByIssue.set(reap.issueId, list);
+  }
+  for (const list of reapsByIssue.values()) {
+    list.sort((left, right) => Date.parse(left.finishedAt) - Date.parse(right.finishedAt));
+  }
+
+  /** The reap an offer at `offeredAt` would have followed: newest one at or before it. */
+  function reapPreceding(issueId: string, offeredAt: string) {
+    const offeredMs = Date.parse(offeredAt);
+    const preceding = (reapsByIssue.get(issueId) ?? []).filter(
+      (reap) => Date.parse(reap.finishedAt) <= offeredMs,
+    );
+    return preceding.length > 0 ? preceding[preceding.length - 1] : null;
+  }
+
+  const replay = window.offers.map((offer) => {
+    const reap = reapPreceding(offer.issueId, offer.offeredAt);
+    const decision = evaluateReapedRecoveryOfferSuppression({
+      run: reap
+        ? {
+            id: reap.runId,
+            status: "cancelled",
+            errorCode: "queued_run_expired",
+            finishedAt: reap.finishedAt,
+            resultJson: { queueReapBoundSec: reap.boundSec },
+            contextSnapshot: { issueId: reap.issueId },
+          }
+        : null,
+      agentId: window.agentId,
+      issueId: offer.issueId,
+      now: new Date(offer.offeredAt),
+    });
+    return { offer, decision };
+  });
+
+  it("drops the recovery offers from 68 to <= 5 (AC1)", () => {
+    expect(window.offers.length).toBe(68);
+    const survivors = replay.filter((entry) => !entry.decision.suppress);
+    expect(survivors.length).toBeLessThanOrEqual(5);
+    // The measured defect: every offer in the window follows a reaped wake.
+    expect(survivors).toHaveLength(0);
+  });
+
+  it("withholds only offers that are about the reaped issue (nothing unrelated)", () => {
+    for (const entry of replay) {
+      if (!entry.decision.suppress) continue;
+      const issueReaps = reapsByIssue.get(entry.offer.issueId) ?? [];
+      expect(issueReaps.some((reap) => reap.runId === entry.decision.reapedRunId)).toBe(true);
+    }
+  });
+
+  it("re-offers every suppressed issue once the window closes (no lost offer)", () => {
+    for (const entry of replay) {
+      if (!entry.decision.suppress) continue;
+      const reap = reapPreceding(entry.offer.issueId, entry.offer.offeredAt);
+      if (!reap) throw new Error("unreachable");
+      const afterWindow = evaluateReapedRecoveryOfferSuppression({
+        run: {
+          id: reap.runId,
+          status: "cancelled",
+          errorCode: "queued_run_expired",
+          finishedAt: reap.finishedAt,
+          resultJson: { queueReapBoundSec: reap.boundSec },
+          contextSnapshot: { issueId: reap.issueId },
+        },
+        agentId: window.agentId,
+        issueId: entry.offer.issueId,
+        now: new Date(entry.decision.suppressedUntilIso),
+      });
+      expect(afterWindow.suppress).toBe(false);
+    }
   });
 });
