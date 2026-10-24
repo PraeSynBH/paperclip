@@ -212,10 +212,27 @@ export function hasUnconsumedIssueMonitorPath(issue: IssueLivenessIssueInput, no
   return true;
 }
 
+/**
+ * How long past its due time a monitor still counts as a live waiting path.
+ *
+ * The scheduler only claims a due check on a tick (`tickDueIssueMonitors`,
+ * `monitorNextCheckAt <= now`), so between the due time and the claiming tick
+ * the row is due, unconsumed, and still going to run. Under fleet load that lag
+ * is tens of seconds to minutes, and the previous strict `nextCheckAt > now`
+ * test read the whole window as "no path" — which is how PRX-6125 blocked
+ * PRX-5921 24 s before the monitor it declared dead actually fired.
+ *
+ * The grace is bounded so a monitor that is genuinely stuck (claimed by nobody
+ * for a long time) still surfaces as a finding.
+ */
+export const ISSUE_MONITOR_DUE_GRACE_MS = 15 * 60 * 1000;
+
 export function hasScheduledIssueMonitorPath(issue: IssueLivenessIssueInput, now: Date | string | number) {
   const nowMs = typeof now === "number" ? now : readDateMs(now) ?? Date.now();
   const nextCheckAtMs = readDateMs(issue.monitorNextCheckAt);
-  return nextCheckAtMs !== null && nextCheckAtMs > nowMs && hasUnconsumedIssueMonitorPath(issue, nowMs);
+  return nextCheckAtMs !== null &&
+    nextCheckAtMs > nowMs - ISSUE_MONITOR_DUE_GRACE_MS &&
+    hasUnconsumedIssueMonitorPath(issue, nowMs);
 }
 
 export function classifyIssueReviewPaths(
